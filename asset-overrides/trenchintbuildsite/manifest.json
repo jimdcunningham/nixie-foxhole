@@ -1,0 +1,17 @@
+{
+  "categoryId": "bunker",
+  "buildOrder": 1,
+  "upgradeStructureCodeName": "TrenchIntT1",
+  "name": {
+    "id": "foxhole:structure:trenchintbuildsite:name",
+    "fallback": "Trench Intersection Dig Site"
+  },
+  "nameLocalizedValues": {
+    "en": "Trench Intersection Dig Site",
+    "de": "Schützengraben Kreuzung-Baustelle",
+    "fr": "Site de construction d'Intersection de Tranchée",
+    "pt": "Local de Escavação de Intersecção de Trincheira",
+    "ru": "Место копания соединительной траншеи",
+    "zh": "战壕交汇点挖掘区"
+  }
+}

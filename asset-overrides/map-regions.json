@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "kind": "foxwatch-bootstrap"
+  },
+  "maps": {
+    "AllodsBightHex": {
+      "showForResistance": true,
+      "regionId": 21
+    },
+    "CallahansPassageHex": {
+      "showForResistance": true,
+      "regionId": 4
+    },
+    "ClahstraHex": {
+      "showForResistance": true,
+      "regionId": 46
+    },
+    "DeadLandsHex": {
+      "showForResistance": true,
+      "regionId": 3
+    },
+    "DrownedValeHex": {
+      "showForResistance": true,
+      "regionId": 23
+    },
+    "EndlessShoreHex": {
+      "showForResistance": true,
+      "regionId": 20
+    },
+    "FarranacCoastHex": {
+      "showForResistance": true,
+      "regionId": 13
+    },
+    "GreatMarchHex": {
+      "showForResistance": true,
+      "regionId": 17
+    },
+    "HeartlandsHex": {
+      "showForResistance": true,
+      "regionId": 8
+    },
+    "KingsCageHex": {
+      "showForResistance": true,
+      "regionId": 44
+    },
+    "LinnMercyHex": {
+      "showForResistance": true,
+      "regionId": 10
+    },
+    "LochMorHex": {
+      "showForResistance": true,
+      "regionId": 9
+    },
+    "MarbanHollow": {
+      "showForResistance": true,
+      "regionId": 5
+    },
+    "MooringCountyHex": {
+      "showForResistance": true,
+      "regionId": 7
+    },
+    "ReachingTrailHex": {
+      "showForResistance": true,
+      "regionId": 11
+    },
+    "SableportHex": {
+      "showForResistance": true,
+      "regionId": 43
+    },
+    "ShackledChasmHex": {
+      "showForResistance": true,
+      "regionId": 24
+    },
+    "StlicanShelfHex": {
+      "showForResistance": true,
+      "regionId": 45
+    },
+    "StonecradleHex": {
+      "showForResistance": true,
+      "regionId": 12
+    },
+    "UmbralWildwoodHex": {
+      "showForResistance": true,
+      "regionId": 6
+    },
+    "ViperPitHex": {
+      "showForResistance": true,
+      "regionId": 25
+    },
+    "WeatheredExpanseHex": {
+      "showForResistance": true,
+      "regionId": 22
+    },
+    "WestgateHex": {
+      "showForResistance": true,
+      "regionId": 14
+    },
+    "TempestIslandHex": {
+      "regionId": 18
+    },
+    "GodcroftsHex": {
+      "regionId": 19
+    },
+    "NevishLineHex": {
+      "regionId": 29
+    },
+    "AcrithiaHex": {
+      "regionId": 30
+    },
+    "RedRiverHex": {
+      "regionId": 31
+    },
+    "CallumsCapeHex": {
+      "regionId": 32
+    },
+    "SpeakingWoodsHex": {
+      "regionId": 33
+    },
+    "BasinSionnachHex": {
+      "regionId": 34
+    },
+    "HowlCountyHex": {
+      "regionId": 35
+    },
+    "ClansheadValleyHex": {
+      "regionId": 36
+    },
+    "MorgensCrossingHex": {
+      "regionId": 37
+    },
+    "TheFingersHex": {
+      "regionId": 38
+    },
+    "TerminusHex": {
+      "regionId": 39
+    },
+    "KalokaiHex": {
+      "regionId": 40
+    },
+    "AshFieldsHex": {
+      "regionId": 41
+    },
+    "OriginHex": {
+      "regionId": 42
+    },
+    "ReaversPassHex": {
+      "regionId": 47
+    },
+    "StemaLandingHex": {
+      "regionId": 48
+    },
+    "OarbreakerHex": {
+      "regionId": 16
+    },
+    "FishermansRowHex": {
+      "regionId": 15
+    },
+    "OlavisWakeHex": {
+      "regionId": 49
+    },
+    "PariPeakHex": {
+      "regionId": 50
+    },
+    "KuuraStrandHex": {
+      "regionId": 52
+    },
+    "PalantineBermHex": {
+      "regionId": 51
+    },
+    "GutterHex": {
+      "regionId": 53
+    },
+    "LykosIsleHex": {
+      "regionId": 56
+    },
+    "WrestaHex": {
+      "regionId": 54
+    },
+    "OnyxHex": {
+      "regionId": 55
+    },
+    "TyrantFoothillsHex": {
+      "regionId": 57
+    },
+    "PipersEnclaveHex": {
+      "regionId": 58
+    }
+  }
+}

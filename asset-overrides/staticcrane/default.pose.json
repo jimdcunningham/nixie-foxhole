@@ -1,0 +1,225 @@
+{
+  "type": "foxhole-bone-pose",
+  "bones": [
+    {
+      "name": "root",
+      "parentIndex": -1,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        3.0512601684492657e-17,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "horizontalRotation",
+      "parentIndex": 0,
+      "location": [
+        0.0,
+        0.0,
+        -3.3881317132865545e-23
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "arm_Pivot",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        -4.1961669694501325e-07,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.4214690625667572,
+        0.0,
+        0.0,
+        0.9068427681922913
+      ],
+      "scale": [
+        1.0,
+        0.9987949132919312,
+        0.9987949132919312
+      ]
+    },
+    {
+      "name": "arm_partA",
+      "parentIndex": 2,
+      "location": [
+        0.0,
+        1.7166136956348055e-07,
+        -3.758908271789551
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "arm_partB",
+      "parentIndex": 3,
+      "location": [
+        0.0,
+        -1.8119811784345075e-07,
+        -4.4891037940979
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "arm_partC",
+      "parentIndex": 4,
+      "location": [
+        0.0,
+        1.6212463549436507e-07,
+        -4.481361389160156
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "arm_partD",
+      "parentIndex": 5,
+      "location": [
+        0.0,
+        -1.1444091541079615e-07,
+        -3.262634754180908
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "arm_hookAim",
+      "parentIndex": 6,
+      "location": [
+        0.0,
+        0.0,
+        3.0517577442878974e-07
+      ],
+      "rotationQuaternion": [
+        0.4214659035205841,
+        0.0,
+        0.0,
+        0.9068442583084106
+      ],
+      "scale": [
+        1.0,
+        0.9987948536872864,
+        0.9987948536872864
+      ]
+    },
+    {
+      "name": "counterweight",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        -4.1961669694501325e-07,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.4214422106742859,
+        0.0,
+        0.0,
+        0.9068552255630493
+      ],
+      "scale": [
+        1.0,
+        0.9987950325012207,
+        0.9987950325012207
+      ]
+    },
+    {
+      "name": "hook",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        4.799999713897705,
+        -18.5
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "hook_end",
+      "parentIndex": 9,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

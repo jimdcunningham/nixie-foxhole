@@ -1,0 +1,40 @@
+{
+  "previewDirection": "sw",
+  "categoryId": "armor",
+  "spotlights": [
+    {
+      "name": "SpotLight_L",
+      "componentType": "SpotLightComponent",
+      "lightType": "spot",
+      "x": 295.128,
+      "y": -59.925,
+      "z": -47.335,
+      "rotation": 0,
+      "outerConeAngle": 55,
+      "innerConeAngle": 5,
+      "attenuationRadius": 2275,
+      "intensity": 20,
+      "lightColor": "ffdea4",
+      "sourceRadius": 0,
+      "softSourceRadius": 0,
+      "sourceLength": 0
+    },
+    {
+      "name": "SpotLight_R",
+      "componentType": "SpotLightComponent",
+      "lightType": "spot",
+      "x": 295.065,
+      "y": 61.47,
+      "z": -47.393,
+      "rotation": 0,
+      "outerConeAngle": 55,
+      "innerConeAngle": 5,
+      "attenuationRadius": 2275,
+      "intensity": 20,
+      "lightColor": "ffdea4",
+      "sourceRadius": 0,
+      "softSourceRadius": 0,
+      "sourceLength": 0
+    }
+  ]
+}

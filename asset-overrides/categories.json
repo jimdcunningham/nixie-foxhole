@@ -1,0 +1,279 @@
+{
+  "schemaVersion": "1.0.0",
+  "categories": [
+    {
+      "legacyId": "",
+      "id": "new",
+      "name": "New",
+      "iconUrl": null,
+      "order": -1,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "defenses",
+      "id": "defense",
+      "name": "Defenses",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterDefense.webp",
+      "isBunker": true,
+      "isFacility": true,
+      "order": 0,
+      "buildCategory": "Defense"
+    },
+    {
+      "legacyId": "entrenchments",
+      "id": "bunker",
+      "name": "Entrenchments",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterBunker.webp",
+      "isBunker": true,
+      "order": 1,
+      "buildCategory": "Bunker"
+    },
+    {
+      "legacyId": "misc",
+      "id": "misc",
+      "name": "Utilities",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterGeneral.webp",
+      "isBunker": true,
+      "isFacility": true,
+      "order": 2,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "factories",
+      "id": "facility",
+      "name": "Facilities",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterFacility.webp",
+      "isFacility": true,
+      "order": 3,
+      "buildCategory": "Facility"
+    },
+    {
+      "legacyId": "harvesters",
+      "id": "mining",
+      "name": "Harvesters",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterMining.webp",
+      "isFacility": true,
+      "order": 4,
+      "buildCategory": "Mining"
+    },
+    {
+      "legacyId": "power",
+      "id": "power",
+      "name": "Power",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterPower.webp",
+      "isFacility": true,
+      "order": 5,
+      "buildCategory": "Power"
+    },
+    {
+      "legacyId": "liquids",
+      "id": "liquids",
+      "name": "Liquid",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterLiquid.webp",
+      "isFacility": true,
+      "order": 6,
+      "buildCategory": "Liquids"
+    },
+    {
+      "legacyId": "foundations",
+      "id": "foundation",
+      "name": "Foundations",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterFoundation.webp",
+      "isFacility": true,
+      "order": 7,
+      "buildCategory": "Foundation"
+    },
+    {
+      "legacyId": "shippables",
+      "id": "shippables",
+      "name": "Shippables",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterShippingContainer.webp",
+      "isBunker": true,
+      "isFacility": true,
+      "order": 8,
+      "buildCategory": "Shippables"
+    },
+    {
+      "legacyId": "weaponry",
+      "id": "weaponry",
+      "name": "Weaponry",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/FieldArtilleryColVehicleIcon.webp",
+      "order": 9,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "vehicles",
+      "id": "vehicles",
+      "name": "Vehicles",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterVehicle.webp",
+      "order": 10,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "armor",
+      "id": "armor",
+      "name": "Armory",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/ArmoredCarVehicleIcon.webp",
+      "order": 11,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "tank",
+      "id": "tank",
+      "name": "Tanks",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/BattleTankWarDefensiveVehicleIcon.webp",
+      "order": 12,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "trains",
+      "id": "trains",
+      "name": "Locomotives",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/SmallGaugeEngineVehicleIcon.webp",
+      "isFacility": true,
+      "order": 13,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "naval",
+      "id": "naval",
+      "name": "Aquatic",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/Motorboat.webp",
+      "order": 14,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "aircraft",
+      "id": "aircraft",
+      "name": "Aircraft",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterAircraft.webp",
+      "order": 15,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "relics",
+      "id": "relics",
+      "name": "Relics",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/VehicleIcons/RelicApc.webp",
+      "order": 16,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "logistics",
+      "id": "logistics",
+      "name": "Logistics",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/CustomIcons/FactoryIcon.webp",
+      "isFacility": true,
+      "isWorldStructure": true,
+      "order": 17,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "fortifications",
+      "id": "fortifications",
+      "name": "Fortifications",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/CustomIcons/TownWSmall1Icon.webp",
+      "isWorldStructure": true,
+      "order": 18,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "garrisons",
+      "id": "garrisons",
+      "name": "Garrisoned Houses",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterGarrisonHouse.webp",
+      "isWorldStructure": true,
+      "order": 19,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "world",
+      "id": "world",
+      "name": "References",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/CustomIcons/TreeIcon.webp",
+      "isWorldStructure": true,
+      "order": 20,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "smallarms",
+      "id": "smallarms",
+      "name": "Small Arms",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterSmallWeapons.webp",
+      "order": 21,
+      "itemCategory": "SmallArms",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "heavyarms",
+      "id": "heavyarms",
+      "name": "Heavy Arms",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterHeavyWeapons.webp",
+      "order": 22,
+      "itemCategory": "HeavyArms",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "heavyammo",
+      "id": "heavyammo",
+      "name": "Heavy Ammo",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterHeavyAmmunition.webp",
+      "order": 23,
+      "itemCategory": "HeavyAmmo",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "utility",
+      "id": "utility",
+      "name": "Utility",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterUtility.webp",
+      "order": 24,
+      "itemCategory": "Utility",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "deployable",
+      "id": "deployable",
+      "name": "Deployables",
+      "iconUrl": "/foxhole/assets/types/items/tripod/tripod.icon.default.webp",
+      "order": 25,
+      "buildCategory": null
+    },
+    {
+      "legacyId": "medical",
+      "id": "medical",
+      "name": "Medical",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterMedical.webp",
+      "order": 26,
+      "itemCategory": "Medical",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "supplies",
+      "id": "supplies",
+      "name": "Supplies",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterResource.webp",
+      "order": 27,
+      "itemCategory": "Supplies",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "parts",
+      "id": "parts",
+      "name": "Aircraft Parts",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterAircraft.webp",
+      "order": 28,
+      "itemCategory": "Parts",
+      "buildCategory": null
+    },
+    {
+      "legacyId": "uniforms",
+      "id": "uniforms",
+      "name": "Uniforms",
+      "iconUrl": "/assets/foxhole/game/Textures/UI/Menus/IconFilterUniforms.webp",
+      "order": 29,
+      "itemCategory": "Uniforms",
+      "buildCategory": null
+    }
+  ]
+}

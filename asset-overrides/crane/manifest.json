@@ -1,0 +1,10 @@
+{
+  "previewDirection": "sw",
+  "ranges": [
+    {
+      "type": "crane",
+      "min": 6,
+      "max": 17.5
+    }
+  ]
+}

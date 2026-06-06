@@ -1,0 +1,5 @@
+{
+  "categoryId": "deployable",
+  "buildOrder": 10,
+  "previewDirection": "sw"
+}

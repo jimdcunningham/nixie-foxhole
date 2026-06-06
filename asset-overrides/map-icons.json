@@ -1,0 +1,243 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "kind": "foxwatch-bootstrap"
+  },
+  "mapIcons": {
+    "11": {
+      "textureName": "MapIconHospital",
+      "name": "Hospital",
+      "key": "hospital"
+    },
+    "12": {
+      "textureName": "MapIconVehicle",
+      "name": "Vehicle Factory",
+      "key": "vehiclefactory"
+    },
+    "17": {
+      "textureName": "MapIconManufacturing",
+      "name": "Refinery",
+      "key": "refinery"
+    },
+    "18": {
+      "textureName": "Shipyard",
+      "name": "Shipyard",
+      "key": "shipyard"
+    },
+    "19": {
+      "textureName": "MapIconTechCenter",
+      "name": "Tech Center",
+      "key": "engineeringcenter"
+    },
+    "20": {
+      "textureName": "SalvageMapIcon",
+      "name": "Salvage Field",
+      "category": "resources",
+      "color": "0xA0522D",
+      "key": "resourcefield"
+    },
+    "21": {
+      "textureName": "MapIconComponents",
+      "name": "Component Field",
+      "category": "resources",
+      "color": "0x7D8E8A",
+      "key": "resourcefield_component"
+    },
+    "23": {
+      "textureName": "MapIconSulfur",
+      "name": "Sulfur Field",
+      "category": "resources",
+      "color": "0xFED34E",
+      "key": "resourcefield_sulfur"
+    },
+    "27": {
+      "textureName": "MapIconsKeep",
+      "name": "Keep",
+      "category": "bases",
+      "key": "keep"
+    },
+    "28": {
+      "textureName": "MapIconObservationTower",
+      "name": "Observation Tower",
+      "key": "observationtower"
+    },
+    "32": {
+      "textureName": "MapIconSulfurMine",
+      "name": "Sulfur Mine",
+      "category": "resources",
+      "color": "0xFFDA67",
+      "key": "sulfurmine"
+    },
+    "33": {
+      "textureName": "MapIconStorageFacility",
+      "name": "Storage Depot",
+      "key": "storagefacility"
+    },
+    "34": {
+      "textureName": "MapIconFactory",
+      "name": "Factory",
+      "key": "factory"
+    },
+    "35": {
+      "textureName": "MapIconSafehouse",
+      "name": "Safe House",
+      "category": "bases",
+      "key": "townclargegarrisongs1"
+    },
+    "37": {
+      "textureName": "MapIconRocketSite",
+      "name": "A0E-9 Rocket Platform",
+      "key": "rocketsite"
+    },
+    "38": {
+      "textureName": "MapIconScrapMine",
+      "name": "Salvage Mine",
+      "category": "resources",
+      "color": "0xFF9968",
+      "key": "scrapmine"
+    },
+    "39": {
+      "textureName": "MapIconConstructionYard",
+      "name": "Construction Yard",
+      "key": "constructionyard"
+    },
+    "40": {
+      "textureName": "MapIconComponentMine",
+      "name": "Component Mine",
+      "category": "resources",
+      "color": "0x9FBCB5",
+      "key": "componentmine"
+    },
+    "45": {
+      "textureName": "MapIconRelicBase",
+      "name": "Relic Base",
+      "category": "bases",
+      "key": "relicbase1"
+    },
+    "51": {
+      "textureName": "MapIconMassProductionFactory",
+      "name": "Mass Production Factory",
+      "key": "massproduction"
+    },
+    "52": {
+      "textureName": "MapIconSeaport",
+      "name": "Seaport",
+      "key": "seaport"
+    },
+    "53": {
+      "textureName": "MapIconCoastalGun",
+      "name": "Coastal Gun",
+      "key": "coastalgun"
+    },
+    "55": {
+      "textureName": "MapIconBorderBase",
+      "name": "Border Base",
+      "category": "bases",
+      "key": "borderbase"
+    },
+    "56": {
+      "textureName": "MapIconTownBaseTier1",
+      "name": "Town Base (Tier 1)",
+      "category": "bases",
+      "key": "townbase1"
+    },
+    "57": {
+      "textureName": "MapIconTownBaseTier2",
+      "name": "Town Base (Tier 2)",
+      "category": "bases",
+      "key": "townbase1"
+    },
+    "58": {
+      "textureName": "MapIconTownBaseTier3",
+      "name": "Town Base (Tier 3)",
+      "category": "bases",
+      "key": "townbase1"
+    },
+    "59": {
+      "textureName": "MapIconStormcannon",
+      "name": "Storm Cannon",
+      "key": "lrartillery"
+    },
+    "60": {
+      "textureName": "MapIconIntelcenter",
+      "name": "Intel Center",
+      "key": "intelcenter"
+    },
+    "61": {
+      "textureName": "MapIconCoal",
+      "name": "Coal Field",
+      "category": "resources",
+      "color": "0x555555",
+      "key": "resourcefield_coal"
+    },
+    "62": {
+      "textureName": "MapIconFuel",
+      "name": "Oil Field",
+      "category": "resources",
+      "color": "0xB05BFF",
+      "key": "oilfield"
+    },
+    "70": {
+      "textureName": "MapIconRocketTarget",
+      "name": "Rocket Target"
+    },
+    "71": {
+      "textureName": "MapIconRocketGroundZero",
+      "name": "Rocket Ground Zero"
+    },
+    "72": {
+      "textureName": "MapIconRocketSiteWithRocket",
+      "name": "A0E-9 Rocket Platform",
+      "key": "rocketsite"
+    },
+    "75": {
+      "textureName": "MapIconFacilityMineOilRig",
+      "name": "Offshore Platform",
+      "category": "resources",
+      "key": "facilitymineoilrig"
+    },
+    "83": {
+      "textureName": "MapIconWeatherStation",
+      "name": "Weather Station",
+      "key": "weatherstation"
+    },
+    "84": {
+      "textureName": "MapIconMortarHouse",
+      "name": "Mortar House",
+      "color": "0x8E8E8E",
+      "key": "townwsmall1"
+    },
+    "88": {
+      "textureName": "MapIconAircraftDepot",
+      "name": "Aircraft Depot",
+      "key": "aircraftdepot"
+    },
+    "89": {
+      "textureName": "MapIconAircraftFactory",
+      "name": "Aircraft Factory",
+      "key": "aircraftfactory"
+    },
+    "90": {
+      "textureName": "MapIconFortLargeRadar",
+      "name": "Aircraft Radar",
+      "key": "fortlargeradar"
+    },
+    "91": {
+      "textureName": "MapIconAircraftRunwayT1",
+      "name": "Aircraft Runway (T1)",
+      "key": "aircraftrunwayt1"
+    },
+    "92": {
+      "textureName": "MapIconAircraftRunwayT2",
+      "name": "Aircraft Runway (T2)",
+      "key": "aircraftrunwayt2"
+    },
+    "-2": {
+      "textureName": "MapIconWaterWell",
+      "name": "Water Well",
+      "description": "Wells provide an infinite source of water that can be used to refill Water Buckets and cannot be destroyed.",
+      "category": "resources",
+      "color": "0x18B3D5"
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "type": "foxhole-bone-pose",
+  "bones": [
+    {
+      "name": "root",
+      "parentIndex": -1,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        3.0512601684492657e-17,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "water_offset",
+      "parentIndex": 0,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "winch_pivot",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "frontDoor_pivot",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "frontDoor_extension01",
+      "parentIndex": 3,
+      "location": [
+        5.684341759025859e-16,
+        -1.1444091541079615e-07,
+        2.4491708278656006
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "frontDoor_extension02",
+      "parentIndex": 4,
+      "location": [
+        0.0,
+        2.3841868479479444e-09,
+        2.445591449737549
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

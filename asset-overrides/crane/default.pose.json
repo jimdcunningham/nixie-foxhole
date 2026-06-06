@@ -1,0 +1,445 @@
+{
+  "type": "foxhole-bone-pose",
+  "bones": [
+    {
+      "name": "root",
+      "parentIndex": -1,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        3.0512601684492657e-17,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "body",
+      "parentIndex": 0,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "horizontal_pivot",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        -3.814697180359872e-08,
+        -2.1175823208040965e-24
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "crane_base",
+      "parentIndex": 2,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.5063589215278625,
+        0.0,
+        0.0,
+        0.8623228073120117
+      ],
+      "scale": [
+        1.0,
+        0.9982609748840332,
+        0.9982609748840332
+      ]
+    },
+    {
+      "name": "crane_armSegment_01",
+      "parentIndex": 3,
+      "location": [
+        0.0,
+        2.2411346378703456e-07,
+        -1.6854443550109863
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "crane_armSegment_02",
+      "parentIndex": 4,
+      "location": [
+        0.0,
+        -1.907348590179936e-08,
+        -4.163642883300781
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "crane_armSegment_03",
+      "parentIndex": 5,
+      "location": [
+        0.0,
+        1.335144048653092e-07,
+        -4.102681636810303
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "crane_armSegment_04",
+      "parentIndex": 6,
+      "location": [
+        0.0,
+        -1.7166136956348055e-07,
+        -3.475179672241211
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "telescopic_arm_end",
+      "parentIndex": 7,
+      "location": [
+        0.0,
+        -2.0772218078946025e-07,
+        2.288818308215923e-07
+      ],
+      "rotationQuaternion": [
+        0.5063589215278625,
+        0.0,
+        0.0,
+        0.8623228073120117
+      ],
+      "scale": [
+        1.0,
+        0.9982609748840332,
+        0.9982609748840332
+      ]
+    },
+    {
+      "name": "rope_start",
+      "parentIndex": 8,
+      "location": [
+        0.0,
+        7.629394360719743e-08,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "rope_end",
+      "parentIndex": 9,
+      "location": [
+        -9.424194757912119e-09,
+        -1.2964088916778564,
+        -4.441443479663576e-08
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "hook",
+      "parentIndex": 10,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "armCable_rotationFixer_end",
+      "parentIndex": 8,
+      "location": [
+        0.0,
+        1.5258788721439487e-07,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.3384074866771698,
+        0.0,
+        0.0,
+        0.9409996867179871
+      ],
+      "scale": [
+        1.0,
+        0.9992228150367737,
+        0.9992228150367737
+      ]
+    },
+    {
+      "name": "ropeCable_rotationFixer_end",
+      "parentIndex": 8,
+      "location": [
+        0.0,
+        7.629394360719743e-08,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.38967564702033997,
+        0.0,
+        0.0,
+        0.9209521412849426
+      ],
+      "scale": [
+        1.0,
+        0.9989697933197021,
+        0.9989697933197021
+      ]
+    },
+    {
+      "name": "rope_rotationPivot",
+      "parentIndex": 8,
+      "location": [
+        0.0,
+        7.629394360719743e-08,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "armCable_rotationFixer_origin",
+      "parentIndex": 2,
+      "location": [
+        0.0,
+        3.0517577442878974e-07,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.25850212574005127,
+        0.0,
+        0.0,
+        0.9660106897354126
+      ],
+      "scale": [
+        1.0,
+        0.999546468257904,
+        0.999546468257904
+      ]
+    },
+    {
+      "name": "ropeCable_rotationFixer_origin",
+      "parentIndex": 2,
+      "location": [
+        0.0,
+        3.0517577442878974e-07,
+        0.0
+      ],
+      "rotationQuaternion": [
+        -0.33621057868003845,
+        0.0,
+        0.0,
+        0.9417868256568909
+      ],
+      "scale": [
+        1.0,
+        0.9992330074310303,
+        0.9992330074310303
+      ]
+    },
+    {
+      "name": "piston_pivot_back",
+      "parentIndex": 1,
+      "location": [
+        0.0,
+        -9.53674295089968e-09,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "piston_back",
+      "parentIndex": 17,
+      "location": [
+        0.0,
+        0.0,
+        7.629394360719743e-08
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "treads_pivot",
+      "parentIndex": 0,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "treads_l",
+      "parentIndex": 19,
+      "location": [
+        0.0,
+        0.0,
+        -9.030847735124249e-18
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "treads_r",
+      "parentIndex": 19,
+      "location": [
+        0.0,
+        0.0,
+        -9.030847735124249e-18
+      ],
+      "rotationQuaternion": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}
