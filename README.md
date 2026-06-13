@@ -10,11 +10,14 @@ FoxWatch primarily works with two output areas:
 - `tools/foxwatch/tmp/` for intermediate manifests, extracted assets, render scenes, diagnostics, and temporary outputs
 - `apps/foxhole-planner/public/foxhole/assets/` for published planner assets that the app serves locally
 
+The published assets directory is a separate private git repository. The nixie monorepo ignores it, so asset snapshots are tracked there instead of in the main codebase. See `apps/foxhole-planner/public/foxhole/README.md` for clone and setup instructions.
+
 Common paths:
 - `tools/foxwatch/tmp/foxwatch-manifest.v1.json`: raw generated source manifest
 - `tools/foxwatch/tmp/renders/`: generated Blender render scene bundles
 - `tools/foxwatch/tmp/assets/`: extracted mesh and material outputs used during rendering
 - `apps/foxhole-planner/public/foxhole/assets/manifest.v1.json`: published planner manifest
+- `apps/foxhole-planner/public/foxhole/assets/planner-compat.json`: CI metadata tying assets to planner version and schema versions
 
 ## Prerequisites
 
@@ -147,7 +150,7 @@ Use this after generating a full manifest:
 npm run foxwatch -- publish-manifest
 ```
 
-This writes the published manifest and related published asset metadata into `apps/foxhole-planner/public/foxhole/assets`.
+This writes the published manifest and related published asset metadata into `apps/foxhole-planner/public/foxhole/assets`, including `planner-compat.json` for the assets repo release workflow.
 
 ### 4. Targeted refresh during iteration
 
@@ -299,3 +302,4 @@ You do not need Blender for `generate-manifest`, `generate-map-data`, `find-asse
 ## Related docs
 
 - `tools/foxwatch/blender/README.md` for Blender scene import and render bundle details
+- `apps/foxhole-planner/public/foxhole/assets/README.md` for the private assets repo release model

@@ -10,7 +10,8 @@ const foxholePlannerRoot = resolve(repositoryRoot, 'apps', 'foxhole-planner');
 const foxholeDataDirectory = resolve(process.env.FOXHOLE_DATA_DIR ?? resolve(repositoryRoot, 'tools', 'foxwatch', 'tmp', 'pak-assets'));
 const rawFoxWatchMapDataPath = resolve(repositoryRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-map-data.v1.json');
 const mapIconsOverridePath = resolve(repositoryRoot, 'tools', 'foxwatch', 'asset-overrides', 'map-icons.json');
-const publishedMapRoot = resolve(foxholePlannerRoot, 'public', 'foxhole', 'assets', 'maps');
+const publishedAssetsRoot = resolve(foxholePlannerRoot, 'public', 'foxhole', 'assets');
+const publishedMapRoot = resolve(publishedAssetsRoot, 'maps');
 const publishedMapDataPath = resolve(publishedMapRoot, 'map-data.v1.json');
 const fixtureMapDataPath = resolve(repositoryRoot, 'tests', 'fixtures', 'foxhole', 'map-data.v1.fixture.json');
 const maskPath = resolve(currentDir, 'RegionMask.png');
@@ -141,7 +142,7 @@ async function exportAllSourceMapIconsToTmp() {
 function readTrackedFileFromGit(relativePath) {
     try {
         return execFileSync('git', ['show', `HEAD:${relativePath.replace(/\\/g, '/')}`], {
-            cwd: repositoryRoot,
+            cwd: publishedAssetsRoot,
             encoding: null,
             maxBuffer: 20 * 1024 * 1024,
             stdio: ['ignore', 'pipe', 'ignore'],
@@ -166,12 +167,9 @@ async function buildExistingIconFallbacks(mapIconsOverride) {
             continue;
         }
 
-        let trackedBuffer = readTrackedFileFromGit(`apps/foxhole-planner/public/foxhole/assets/maps/MapIcons/${textureName}.webp`);
+        let trackedBuffer = readTrackedFileFromGit(`maps/MapIcons/${textureName}.webp`);
         if (!trackedBuffer) {
-            trackedBuffer = readTrackedFileFromGit(`apps/foxhole-planner/public/foxhole/assets/game/Textures/UI/MapIcons/${textureName}.webp`);
-        }
-        if (!trackedBuffer) {
-            trackedBuffer = readTrackedFileFromGit(`apps/foxhole-planner/public/foxhole/assets/game/Textures/UI/MapIcons/${textureName}.webp`);
+            trackedBuffer = readTrackedFileFromGit(`game/Textures/UI/MapIcons/${textureName}.webp`);
         }
         if (trackedBuffer) {
             fallbacks.set(textureName, trackedBuffer);

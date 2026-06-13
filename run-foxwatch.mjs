@@ -30,6 +30,7 @@ const rawFoxWatchManifestPath = path.join(repoRoot, "tools", "foxwatch", "tmp", 
 const blueprintTargetIndexPath = path.join(repoRoot, "tools", "foxwatch", "tmp", "foxwatch-blueprint-target-index.v1.json");
 const blenderExecutable = process.env.BLENDER_PATH || "blender";
 const publishManifestScriptPath = path.join(repoRoot, "tools", "foxwatch", "scripts", "publish-manifest.mjs");
+const publishPlannerCompatScriptPath = path.join(repoRoot, "tools", "foxwatch", "scripts", "publish-planner-compat.mjs");
 const runnerScriptPath = path.join(repoRoot, "tools", "foxwatch", "run-foxwatch.mjs");
 const inheritNpmConfigArguments = Boolean(process.env.npm_lifecycle_event);
 const defaultIconOverrideExtensions = [".webp", ".png", ".jpg", ".jpeg"];
@@ -48,6 +49,7 @@ appendNpmConfigArgument(args, "skip-existing-assets");
 if (command === "publish-manifest") {
   const parsedArgs = parseCliArgs(args);
   await run("node", ["--experimental-strip-types", publishManifestScriptPath, ...args]);
+  await publishPlannerCompat();
   await syncMissingStructureDefaultIcons(
     resolveSourceManifestPath(parsedArgs),
     getNormalizedValues(parsedArgs, "only"),
@@ -70,6 +72,7 @@ if (command === "refresh") {
       : refreshExecution.onlyIds,
   }));
   await run("node", ["--experimental-strip-types", publishManifestScriptPath, ...refreshExecution.publishArgs]);
+  await publishPlannerCompat();
   await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
     skipExistingAssets: hasCliFlag(parsedArgs, "skip-existing-assets"),
   });
@@ -109,6 +112,7 @@ if (command === "open-pose-editor") {
     await run("dotnet", [dllPath, "generate-render-scenes", ...refreshArgs]);
     await run(blenderExecutable, buildBlenderArgs(args));
     await run("node", ["--experimental-strip-types", publishManifestScriptPath, ...await buildPublishArgs(args)]);
+    await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, [structureId], {
       skipExistingAssets: hasCliFlag(parsedArgs, "skip-existing-assets"),
     });
@@ -1193,6 +1197,10 @@ function runQuietCapture(executable, commandArgs) {
       resolve(trimmedOutput || null);
     });
   });
+}
+
+async function publishPlannerCompat() {
+  await run("node", [publishPlannerCompatScriptPath]);
 }
 
 async function readFileSignature(filePath) {
