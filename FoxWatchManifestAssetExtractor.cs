@@ -3220,6 +3220,10 @@ public class FoxWatchManifestAssetExtractor
             var arc = ComputeYawArcDegrees(mountDynamicData.MinYaw, mountDynamicData.MaxYaw);
             var rotation = NormalizeDegrees(facingYawDegrees + (mountDynamicData.YawOffset ?? 0) + yawCenter);
 
+            var maxDistance = mountComponentMetadata?.ExtendedMaxDistance is > 0
+                ? mountComponentMetadata.ExtendedMaxDistance
+                : mountDynamicData.MaxDistance;
+
             return new FoxWatchManifestRange
             {
                 Type = rangeType,
@@ -3229,7 +3233,7 @@ public class FoxWatchManifestAssetExtractor
                 Rotation = arc is > 0 and < 360 ? RoundRangeValue(rotation) : null,
                 Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value) : null,
                 Min = RoundRangeDistance(mountDynamicData.MinDistance),
-                Max = RoundRangeDistance(mountDynamicData.MaxDistance),
+                Max = RoundRangeDistance(maxDistance),
                 Reach = RoundRangeDistance(mountDynamicData.MaxReachability),
             };
         }
@@ -4511,8 +4515,8 @@ public class FoxWatchManifestAssetExtractor
             try
             {
                 var package = _fileProvider.LoadPackage(packagePath);
-                var defaultObject = package.GetExports()
-                    .Cast<object>()
+                var exports = package.GetExports().Cast<object>().ToArray();
+                var defaultObject = exports
                     .FirstOrDefault(export => NormalizeString(ExtractText(GetNamedValue(export, "Name"))).StartsWith("Default__", StringComparison.OrdinalIgnoreCase));
                 if (defaultObject != null)
                 {
@@ -4529,6 +4533,7 @@ public class FoxWatchManifestAssetExtractor
                         ?? GetNamedValue(defaultObject, "Icon")
                         ?? GetNamedValue(defaultObject, "DisplayIcon")
                         ?? GetNamedValue(defaultObject, "ItemIcon");
+                    var ammoName = NormalizeString(ExtractText(GetNamedValue(defaultObject, "AmmoName")));
 
                     metadata = new FoxWatchMountComponentMetadata
                     {
@@ -4538,9 +4543,10 @@ public class FoxWatchManifestAssetExtractor
                         IconUrl = string.IsNullOrWhiteSpace(baseAssetsUrl)
                             ? null
                             : ExportReferencedIcon(iconTextureReference, $"{codeName}-mount", baseAssetsUrl, iconOutputDirectory),
-                        AmmoName = NormalizeString(ExtractText(GetNamedValue(defaultObject, "AmmoName"))),
+                        AmmoName = ammoName,
                         CompatibleAmmoNames = compatibleAmmoNames,
                         IsMultiWeapon = ExtractBoolValue(GetNamedValue(defaultObject, "bIsMultiWeapon")) == true,
+                        ExtendedMaxDistance = ExtractDouble(GetNamedValue(defaultObject, "ExtendedMaxDistance")),
                     };
                 }
             }
@@ -10380,6 +10386,8 @@ public class FoxWatchManifestAssetExtractor
             public IReadOnlyList<string> CompatibleAmmoNames { get; set; } = [];
 
             public bool IsMultiWeapon { get; set; }
+
+            public double? ExtendedMaxDistance { get; set; }
         }
 
         private sealed class FoxWatchReferencedAssetMetadata
