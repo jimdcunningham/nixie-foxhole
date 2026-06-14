@@ -1793,6 +1793,34 @@ function applyTargetFilter(manifest, filter) {
     });
 }
 
+const EXTRACTOR_FALLBACK_CATEGORY_ORDER = 2147483647;
+
+function isExtractorFallbackCategoryOrder(order) {
+    return Number(order) >= EXTRACTOR_FALLBACK_CATEGORY_ORDER;
+}
+
+function mergeCategoryEntry(baseCategory, partialCategory) {
+    if (!partialCategory) {
+        return baseCategory;
+    }
+
+    if (!baseCategory) {
+        return partialCategory;
+    }
+
+    const partialOrder = partialCategory.order ?? 0;
+    const baseOrder = baseCategory.order ?? 0;
+    const preferBaseOrder = isExtractorFallbackCategoryOrder(partialOrder)
+        && !isExtractorFallbackCategoryOrder(baseOrder);
+
+    return {
+        ...baseCategory,
+        ...partialCategory,
+        iconUrl: partialCategory.iconUrl ?? baseCategory.iconUrl,
+        order: preferBaseOrder ? baseOrder : partialOrder,
+    };
+}
+
 function mergeLocalizationBundles(baseBundles, nextBundles) {
     const merged = new Map();
 
@@ -1805,12 +1833,18 @@ function mergeLocalizationBundles(baseBundles, nextBundles) {
 
     for (const bundle of normalizeLocalizationBundles(nextBundles)) {
         const existing = merged.get(bundle.locale) ?? { locale: bundle.locale, strings: {} };
+        const nextStrings = { ...bundle.strings };
+        for (const [key, value] of Object.entries(nextStrings)) {
+            if (key.startsWith('category:') && key.endsWith(':name') && existing.strings[key]) {
+                continue;
+            }
+
+            existing.strings[key] = value;
+        }
+
         merged.set(bundle.locale, {
             locale: bundle.locale,
-            strings: sortObjectEntries({
-                ...existing.strings,
-                ...bundle.strings,
-            }),
+            strings: sortObjectEntries(existing.strings),
         });
     }
 
@@ -1943,7 +1977,7 @@ function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds 
         }
 
         seenCategoryIds.add(categoryId);
-        categories.push(partialCategoriesById.get(categoryId) ?? category);
+        categories.push(mergeCategoryEntry(category, partialCategoriesById.get(categoryId)));
     }
 
     for (const [categoryId, category] of partialCategoriesById) {
@@ -2011,6 +2045,102 @@ function getExplicitlyRemovedStructureIds(filter, partialManifest) {
         .filter(Boolean));
 
     return new Set([...filter.only].filter(id => !presentIds.has(id)));
+}
+
+function normalizeStructureReferenceCodeName(value) {
+    const normalized = String(value ?? '').trim();
+    return normalized || null;
+}
+
+function buildPublishedStructureReferenceLookup(assets) {
+    const availableReferences = new Set();
+    for (const structure of assets ?? []) {
+        const codeName = normalizeStructureReferenceCodeName(structure?.codeName);
+        if (codeName) {
+            availableReferences.add(normalizeId(codeName));
+        }
+
+        const structureId = normalizeId(structure?.id);
+        if (structureId) {
+            availableReferences.add(structureId);
+        }
+    }
+
+    return availableReferences;
+}
+
+function removeDanglingStructureReferences(manifest) {
+    const availableReferences = buildPublishedStructureReferenceLookup(manifest?.assets);
+    let removedReferenceCount = 0;
+
+    const assets = (manifest?.assets ?? []).map((structure) => {
+        if (!isPlainObject(structure)) {
+            return structure;
+        }
+
+        let nextStructure = structure;
+        const structureLabel = String(structure.id ?? structure.codeName ?? 'unknown');
+
+        const normalizedUpgradeStructureCodeName = normalizeStructureReferenceCodeName(structure.upgradeStructureCodeName);
+        if (normalizedUpgradeStructureCodeName && !availableReferences.has(normalizeId(normalizedUpgradeStructureCodeName))) {
+            console.warn(`removed dangling upgradeStructureCodeName ${normalizedUpgradeStructureCodeName} from ${structureLabel}`);
+            removedReferenceCount += 1;
+            nextStructure = {
+                ...nextStructure,
+                upgradeStructureCodeName: null,
+            };
+        }
+
+        const conversionCodeNames = Array.isArray(structure.conversionCodeNames) ? structure.conversionCodeNames : [];
+        if (conversionCodeNames.length > 0) {
+            const validatedConversionCodeNames = [];
+            for (const codeName of conversionCodeNames) {
+                const normalizedCodeName = normalizeStructureReferenceCodeName(codeName);
+                if (!normalizedCodeName) {
+                    continue;
+                }
+
+                if (availableReferences.has(normalizeId(normalizedCodeName))) {
+                    validatedConversionCodeNames.push(normalizedCodeName);
+                    continue;
+                }
+
+                console.warn(`removed dangling conversionCodeName ${normalizedCodeName} from ${structureLabel}`);
+                removedReferenceCount += 1;
+            }
+
+            if (validatedConversionCodeNames.length !== conversionCodeNames.length
+                || validatedConversionCodeNames.some((codeName, index) => codeName !== conversionCodeNames[index])) {
+                nextStructure = {
+                    ...nextStructure,
+                    conversionCodeNames: validatedConversionCodeNames,
+                };
+            }
+        }
+
+        const normalizedDestroyedStructureCodeName = normalizeStructureReferenceCodeName(structure.destroyedStructureCodeName);
+        if (normalizedDestroyedStructureCodeName && !availableReferences.has(normalizeId(normalizedDestroyedStructureCodeName))) {
+            console.warn(`removed dangling destroyedStructureCodeName ${normalizedDestroyedStructureCodeName} from ${structureLabel}`);
+            removedReferenceCount += 1;
+            nextStructure = {
+                ...nextStructure,
+                destroyedStructureCodeName: null,
+            };
+        }
+
+        return nextStructure;
+    });
+
+    if (removedReferenceCount > 0) {
+        console.warn(`removed ${removedReferenceCount} dangling structure reference(s) from published manifest`);
+    }
+
+    return removedReferenceCount > 0
+        ? {
+            ...manifest,
+            assets,
+        }
+        : manifest;
 }
 
 function assertSafeUnfilteredPublish(sourceManifest, publishedManifestBeforeWrite, sourceManifestPath) {
@@ -2198,6 +2328,51 @@ async function syncPublishedIconsToPublicDirectoryByKey(directory, publicDirecto
             console.warn(`skipping fallback icon ${fileKey}: ${error}`);
         }
     }
+}
+
+function resolveCategoryIconKey(iconUrl) {
+    const normalizedIconUrl = String(iconUrl ?? '').trim();
+    if (!normalizedIconUrl) {
+        return null;
+    }
+
+    const foxholeIconsPrefix = `${createFoxholeAssetsBaseUrl('/')}icons/`;
+    if (normalizedIconUrl.startsWith(foxholeIconsPrefix)) {
+        return normalizeId(basename(normalizedIconUrl, extname(normalizedIconUrl)));
+    }
+
+    const legacyPrefix = '/assets/foxhole/game/';
+    if (normalizedIconUrl.startsWith(legacyPrefix)) {
+        const relativePath = normalizedIconUrl.slice(legacyPrefix.length);
+        return normalizeId(basename(relativePath, extname(relativePath)));
+    }
+
+    return null;
+}
+
+function collectCategoryIconKeys(manifest) {
+    const categoryIconKeys = new Set();
+    for (const category of manifest?.categories ?? []) {
+        const iconKey = resolveCategoryIconKey(category?.iconUrl);
+        if (iconKey) {
+            categoryIconKeys.add(iconKey);
+        }
+    }
+
+    return categoryIconKeys;
+}
+
+async function syncCategoryIconAssets(manifest) {
+    const categoryIconKeys = collectCategoryIconKeys(manifest);
+    if (categoryIconKeys.size === 0) {
+        return;
+    }
+
+    await syncPublishedIconsToPublicDirectoryByKey(
+        generatedIconsDirectory,
+        publicIconsDirectory,
+        categoryIconKeys,
+    );
 }
 
 function resolveRawRenderedAssetPublicOutputPath(filePath) {
@@ -6198,9 +6373,9 @@ try {
         ...removedPublishedStructureIds,
         ...removedUpgradeStructureIds,
     ]);
-    const prunedMergedManifest = normalizePublishedModificationPath(pruneSharedModificationEntries(
+    const prunedMergedManifest = removeDanglingStructureReferences(normalizePublishedModificationPath(pruneSharedModificationEntries(
         pruneRemovedStructureLocalizations(normalizePublishedModificationPath(mergedManifestWithoutUnavailableDestroyedVisuals), removedStructureIds),
-    ));
+    )));
     await removeStructureArtifactsByIds(removedPublishedStructureIds);
     await removeStructureArtifactsByIds(removedUpgradeStructureIds);
     await removeOrphanPublishedAssetDirectories(prunedMergedManifest);
@@ -6209,6 +6384,8 @@ try {
     if (referencedSharedGeneratedIconKeys.size > 0) {
         await syncPublishedIconsToPublicDirectoryByKey(generatedIconsDirectory, publicIconsDirectory, referencedSharedGeneratedIconKeys);
     }
+
+    await syncCategoryIconAssets(prunedMergedManifest);
 
     await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
 

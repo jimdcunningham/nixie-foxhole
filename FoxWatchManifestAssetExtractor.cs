@@ -1079,6 +1079,163 @@ public class FoxWatchManifestAssetExtractor
             return ExportStructureIcon(fileNameBase, iconTexture, baseAssetsUrl, iconOutputDirectory);
         }
 
+        public int ExportCategoryIcons(
+            IReadOnlyList<FoxWatchManifestCategory> categories,
+            string? iconOutputDirectory)
+        {
+            if (categories.Count == 0 || string.IsNullOrWhiteSpace(iconOutputDirectory))
+            {
+                return 0;
+            }
+
+            var importedCategoriesById = LoadImportedCategoryDefinitions();
+            if (importedCategoriesById.Count == 0)
+            {
+                return 0;
+            }
+
+            var exportedCount = 0;
+            foreach (var category in categories)
+            {
+                if (string.IsNullOrWhiteSpace(category.Id))
+                {
+                    continue;
+                }
+
+                if (!importedCategoriesById.TryGetValue(
+                        FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id),
+                        out var importedCategory))
+                {
+                    continue;
+                }
+
+                var iconTexturePath = ResolveCategoryIconTexturePath(importedCategory);
+                if (string.IsNullOrWhiteSpace(iconTexturePath))
+                {
+                    continue;
+                }
+
+                var iconTexture = ResolveTextureProperty(iconTexturePath);
+                if (iconTexture == null)
+                {
+                    continue;
+                }
+
+                var fileNameBase = NormalizeModificationIdSegment(Path.GetFileNameWithoutExtension(iconTexturePath));
+                if (string.IsNullOrWhiteSpace(fileNameBase))
+                {
+                    fileNameBase = FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id);
+                }
+
+                if (ExportStructureIcon(fileNameBase, iconTexture, "/foxhole/assets/", iconOutputDirectory) != null)
+                {
+                    exportedCount += 1;
+                }
+            }
+
+            return exportedCount;
+        }
+
+        private static Dictionary<string, FoxWatchImportedCategoryDefinition> LoadImportedCategoryDefinitions()
+        {
+            var categoryCatalogPath = FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.ImportedCategoryCatalogRelativePath);
+            if (string.IsNullOrWhiteSpace(categoryCatalogPath) || !File.Exists(categoryCatalogPath))
+            {
+                return new Dictionary<string, FoxWatchImportedCategoryDefinition>(StringComparer.Ordinal);
+            }
+
+            try
+            {
+                var json = File.ReadAllText(categoryCatalogPath);
+                var categoryCatalog = System.Text.Json.JsonSerializer.Deserialize<FoxWatchImportedCategoryCatalog>(
+                    json,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                    });
+                var categoriesById = new Dictionary<string, FoxWatchImportedCategoryDefinition>(StringComparer.Ordinal);
+                foreach (var category in categoryCatalog?.Categories ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(category.Id))
+                    {
+                        continue;
+                    }
+
+                    categoriesById[FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id)] = category;
+                    if (!string.IsNullOrWhiteSpace(category.LegacyId))
+                    {
+                        categoriesById[FoxWatchManifestCategoryNormalizer.NormalizeKey(category.LegacyId)] = category;
+                    }
+                }
+
+                return categoriesById;
+            }
+            catch
+            {
+                return new Dictionary<string, FoxWatchImportedCategoryDefinition>(StringComparer.Ordinal);
+            }
+        }
+
+        private static string? ResolveCategoryIconTexturePath(FoxWatchImportedCategoryDefinition category)
+        {
+            if (!string.IsNullOrWhiteSpace(category.IconTexturePath))
+            {
+                return NormalizeCategoryIconTexturePath(category.IconTexturePath);
+            }
+
+            return DeriveCategoryIconTexturePathFromPublishedUrl(category.IconUrl);
+        }
+
+        private static string? DeriveCategoryIconTexturePathFromPublishedUrl(string? iconUrl)
+        {
+            var normalizedIconUrl = NormalizeString(iconUrl)?.Replace('\\', '/');
+            if (string.IsNullOrWhiteSpace(normalizedIconUrl))
+            {
+                return null;
+            }
+
+            const string legacyPrefix = "/assets/foxhole/game/";
+            if (!normalizedIconUrl.StartsWith(legacyPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var relativePath = normalizedIconUrl[legacyPrefix.Length..];
+            var withoutExtension = Path.ChangeExtension(relativePath, null)?.Replace('\\', '/');
+            return string.IsNullOrWhiteSpace(withoutExtension)
+                ? null
+                : NormalizeCategoryIconTexturePath($"War/Content/{withoutExtension}");
+        }
+
+        private static string NormalizeCategoryIconTexturePath(string value)
+        {
+            var normalized = NormalizeString(value)?.Replace('\\', '/').Trim('/') ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return string.Empty;
+            }
+
+            if (normalized.StartsWith("War/Textures/", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = $"War/Content/{normalized["War/".Length..]}";
+            }
+            else if (!normalized.StartsWith("War/", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = $"War/Content/{normalized}";
+            }
+            else if (normalized.StartsWith("War/Content/", StringComparison.OrdinalIgnoreCase) == false)
+            {
+                normalized = $"War/Content/{normalized["War/".Length..]}";
+            }
+
+            if (!normalized.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized += ".uasset";
+            }
+
+            return normalized;
+        }
+
         private static bool IsExplicitAssetIconAllowed(string? packagePath)
         {
             var normalizedPackagePath = NormalizePackageComparisonPath(packagePath);

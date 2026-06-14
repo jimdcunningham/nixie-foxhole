@@ -63,7 +63,14 @@ public sealed class FoxWatchManifestGenerator
                 var manifest = extractor.BuildStructureManifest(baseAssetsUrl, iconOutputDirectory, targetFilter);
                 manifest.Localizations[0].Strings["foxhole:meta:baseAssetsUrl"] = baseAssetsUrl;
                 _logger.LogInformation("Resolved {StructureCount} structures across {CategoryCount} categories from direct extraction", manifest.Assets.Count, manifest.Categories.Count);
-                return ApplyTargetFilter(_manifestReferenceHydrator.Hydrate(manifest), targetFilter);
+                manifest = _manifestReferenceHydrator.Hydrate(manifest);
+                var exportedCategoryIconCount = extractor.ExportCategoryIcons(manifest.Categories, iconOutputDirectory);
+                if (exportedCategoryIconCount > 0)
+                {
+                    _logger.LogInformation("Exported {ExportedCategoryIconCount} category icon(s) from pak textures", exportedCategoryIconCount);
+                }
+
+                return ApplyTargetFilter(manifest, targetFilter);
             }
             catch (Exception exception)
             {

@@ -1,3 +1,14 @@
 {
-  "previewDirection": "sw"
+  "previewDirection": "sw",
+  "ranges": [
+    {
+      "type": "killboxArty",
+      "codeName": "LongRangeArtillery",
+      "x": -0.234,
+      "y": 1.959,
+      "min": 400,
+      "max": 1000,
+      "reach": 40
+    }
+  ]
 }

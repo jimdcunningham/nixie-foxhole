@@ -865,8 +865,8 @@ public sealed class FoxWatchManifestReferenceHydrator
         }
 
         var relativeIconPath = Path.Combine(
-            "layers",
-            "foxhole",
+            "apps",
+            "foxhole-planner",
             "public",
             "foxhole",
             "assets",
@@ -1054,6 +1054,39 @@ public sealed class FoxWatchManifestReferenceHydrator
     }
 
 
+    private static bool ImportedCategoryMatchesCanonicalIds(
+        FoxWatchImportedCategoryDefinition category,
+        IReadOnlySet<string> canonicalCategoryIds)
+    {
+        var normalizedId = FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id);
+        if (!string.IsNullOrWhiteSpace(normalizedId) && canonicalCategoryIds.Contains(normalizedId))
+        {
+            return true;
+        }
+
+        var normalizedLegacyId = FoxWatchManifestCategoryNormalizer.NormalizeKey(category.LegacyId);
+        return !string.IsNullOrWhiteSpace(normalizedLegacyId) && canonicalCategoryIds.Contains(normalizedLegacyId);
+    }
+
+    private static bool ImportedCategoryCoversExtractedCategoryId(
+        FoxWatchImportedCategoryDefinition category,
+        string normalizedExtractedCategoryId)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedExtractedCategoryId))
+        {
+            return false;
+        }
+
+        return string.Equals(
+                FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id),
+                normalizedExtractedCategoryId,
+                StringComparison.Ordinal)
+            || string.Equals(
+                FoxWatchManifestCategoryNormalizer.NormalizeKey(category.LegacyId),
+                normalizedExtractedCategoryId,
+                StringComparison.Ordinal);
+    }
+
     private int HydrateCategories(FoxWatchManifest manifest, IReadOnlyDictionary<string, FoxWatchImportedCategoryDefinition> importedCategoriesById)
     {
         if (importedCategoriesById.Count == 0)
@@ -1086,10 +1119,13 @@ public sealed class FoxWatchManifestReferenceHydrator
                 .Where(categoryId => !string.IsNullOrWhiteSpace(categoryId)),
             StringComparer.Ordinal);
 
-        var canonicalCategories = importedCategoriesById.Values
+        var importedCategories = importedCategoriesById.Values
             .GroupBy(category => FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id), StringComparer.Ordinal)
             .Select(group => group.First())
-            .Where(category => canonicalCategoryIds.Contains(FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id)))
+            .ToList();
+
+        var canonicalCategories = importedCategories
+            .Where(category => ImportedCategoryMatchesCanonicalIds(category, canonicalCategoryIds))
             .OrderBy(category => category.Order)
             .ThenBy(category => category.Name, StringComparer.Ordinal)
             .Select(category => new FoxWatchManifestCategory
@@ -1115,9 +1151,15 @@ public sealed class FoxWatchManifestReferenceHydrator
             .Where(category =>
             {
                 var normalizedCategoryId = FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id);
-                return !string.IsNullOrWhiteSpace(normalizedCategoryId)
-                    && canonicalCategoryIds.Contains(normalizedCategoryId)
-                    && !canonicalCategoryKeys.Contains(normalizedCategoryId);
+                if (string.IsNullOrWhiteSpace(normalizedCategoryId)
+                    || !canonicalCategoryIds.Contains(normalizedCategoryId)
+                    || canonicalCategoryKeys.Contains(normalizedCategoryId))
+                {
+                    return false;
+                }
+
+                return !importedCategories.Any(importedCategory =>
+                    ImportedCategoryCoversExtractedCategoryId(importedCategory, normalizedCategoryId));
             })
             .GroupBy(category => FoxWatchManifestCategoryNormalizer.NormalizeKey(category.Id), StringComparer.Ordinal)
             .Select(group => group.First())
@@ -1826,6 +1868,8 @@ public sealed class FoxWatchImportedCategoryDefinition
     public string Name { get; set; } = string.Empty;
 
     public string? IconUrl { get; set; }
+
+    public string? IconTexturePath { get; set; }
 
     public bool IsBunker { get; set; }
 

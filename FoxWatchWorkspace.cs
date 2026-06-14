@@ -52,16 +52,29 @@ public static class FoxWatchWorkspace
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
+        string? packageJsonRoot = null;
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "package.json")))
+            var directoryPath = current.FullName;
+            if (IsRepositoryRoot(directoryPath))
             {
-                return current.FullName;
+                return directoryPath;
+            }
+
+            if (packageJsonRoot is null && File.Exists(Path.Combine(directoryPath, "package.json")))
+            {
+                packageJsonRoot = directoryPath;
             }
 
             current = current.Parent;
         }
 
-        return Directory.GetCurrentDirectory();
+        return packageJsonRoot ?? Directory.GetCurrentDirectory();
+    }
+
+    private static bool IsRepositoryRoot(string directoryPath)
+    {
+        return Directory.Exists(Path.Combine(directoryPath, "apps", "foxhole-planner"))
+            && Directory.Exists(Path.Combine(directoryPath, "tools", "foxwatch", "asset-overrides"));
     }
 }

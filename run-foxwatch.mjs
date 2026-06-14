@@ -201,9 +201,7 @@ function getPublishedAssetTypeName(asset) {
 
 function getPublishedAssetPath(assetType, assetId, fileName) {
   return path.join(
-    repoRoot,
-    "layers",
-    "foxhole",
+    foxholePlannerRoot,
     "public",
     "foxhole",
     "assets",
