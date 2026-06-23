@@ -1670,9 +1670,9 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                                         ...rawVariant,
                                     },
                                     variant?.previewDirection
-                                        ?? rawVariant?.previewDirection
-                                        ?? rawSourceModification?.previewDirection
-                                        ?? structure?.previewDirection,
+                                    ?? rawVariant?.previewDirection
+                                    ?? rawSourceModification?.previewDirection
+                                    ?? structure?.previewDirection,
                                 );
 
                             return [variantId, {
@@ -2073,7 +2073,7 @@ function removeDanglingStructureReferences(manifest) {
     const availableReferences = buildPublishedStructureReferenceLookup(manifest?.assets);
     let removedReferenceCount = 0;
 
-    const assets = (manifest?.assets ?? []).map((structure) => {
+    const assets = (manifest?.assets ?? []).map(structure => {
         if (!isPlainObject(structure)) {
             return structure;
         }
@@ -2609,7 +2609,7 @@ function normalizeId(value) {
 }
 
 function createOilfieldSlickSvg(size) {
-        return `
+    return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
     <defs>
         <filter id="blur-xl" x="-30%" y="-30%" width="160%" height="160%">
@@ -2688,71 +2688,71 @@ function createOilfieldSlickSvg(size) {
 }
 
 async function generateSyntheticOilfieldAssets(manifest) {
-        const hasOilfield = (manifest?.assets ?? []).some(structure => normalizeId(structure?.id) === 'oilfield');
-        if (!hasOilfield) {
-                return;
-        }
+    const hasOilfield = (manifest?.assets ?? []).some(structure => normalizeId(structure?.id) === 'oilfield');
+    if (!hasOilfield) {
+        return;
+    }
 
-        const outputDirectory = resolve(assetTypesDirectory, 'structures', 'oilfield');
-        await mkdir(outputDirectory, { recursive: true });
+    const outputDirectory = resolve(assetTypesDirectory, 'structures', 'oilfield');
+    await mkdir(outputDirectory, { recursive: true });
 
-        const texturePath = resolve(outputDirectory, 'oilfield.texture.webp');
-        const previewPath = resolve(outputDirectory, 'oilfield.preview.webp');
-        const renderedIconPath = resolve(outputDirectory, 'oilfield.icon.rendered.webp');
-        const textureSidecarPath = resolve(outputDirectory, 'oilfield.texture.json');
+    const texturePath = resolve(outputDirectory, 'oilfield.texture.webp');
+    const previewPath = resolve(outputDirectory, 'oilfield.preview.webp');
+    const renderedIconPath = resolve(outputDirectory, 'oilfield.icon.rendered.webp');
+    const textureSidecarPath = resolve(outputDirectory, 'oilfield.texture.json');
 
-        const reuseTexture = await shouldReuseExistingAssetOutput(texturePath);
-        const reusePreview = await shouldReuseExistingAssetOutput(previewPath);
-        const reuseRenderedIcon = await shouldReuseExistingAssetOutput(renderedIconPath);
-        const reuseTextureSidecar = await shouldReuseExistingAssetOutput(textureSidecarPath);
-        if (reuseTexture && reusePreview && reuseRenderedIcon && reuseTextureSidecar) {
-            return;
-        }
+    const reuseTexture = await shouldReuseExistingAssetOutput(texturePath);
+    const reusePreview = await shouldReuseExistingAssetOutput(previewPath);
+    const reuseRenderedIcon = await shouldReuseExistingAssetOutput(renderedIconPath);
+    const reuseTextureSidecar = await shouldReuseExistingAssetOutput(textureSidecarPath);
+    if (reuseTexture && reusePreview && reuseRenderedIcon && reuseTextureSidecar) {
+        return;
+    }
 
-        const baseSize = 640;
-        const baseBuffer = await sharp(Buffer.from(createOilfieldSlickSvg(baseSize)))
-                .webp({ quality: 96, alphaQuality: 100 })
-                .toBuffer();
+    const baseSize = 640;
+    const baseBuffer = await sharp(Buffer.from(createOilfieldSlickSvg(baseSize)))
+        .webp({ quality: 96, alphaQuality: 100 })
+        .toBuffer();
 
-        if (!reuseTexture) {
-            await writeFileWithRetries(texturePath, baseBuffer);
-        }
-        if (!reusePreview) {
-            await sharp(baseBuffer)
-                .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-                .webp({ quality: 96, alphaQuality: 100 })
-                .toFile(previewPath);
-        }
-        if (!reuseRenderedIcon) {
-            await sharp(baseBuffer)
-                .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-                .webp({ quality: 96, alphaQuality: 100 })
-                .toFile(renderedIconPath);
-        }
+    if (!reuseTexture) {
+        await writeFileWithRetries(texturePath, baseBuffer);
+    }
+    if (!reusePreview) {
+        await sharp(baseBuffer)
+            .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            .webp({ quality: 96, alphaQuality: 100 })
+            .toFile(previewPath);
+    }
+    if (!reuseRenderedIcon) {
+        await sharp(baseBuffer)
+            .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            .webp({ quality: 96, alphaQuality: 100 })
+            .toFile(renderedIconPath);
+    }
 
-        if (!reuseTextureSidecar) {
-            await writeTextFileIfChanged(textureSidecarPath, stringifyJsonAscii({
-                schemaVersion: '1.0.0',
-                structureId: 'oilfield',
-                outputKey: 'oilfield',
-                mode: 'topdown',
-                sceneVariant: null,
-                previewVariant: null,
-                width: baseSize,
-                height: baseSize,
-                pixelsPerMeter: 64,
-                anchorPixelX: baseSize / 2,
-                anchorPixelY: baseSize / 2,
-                imageCenterPixelX: baseSize / 2,
-                imageCenterPixelY: baseSize / 2,
-                geometryCenterPixelX: baseSize / 2,
-                geometryCenterPixelY: baseSize / 2,
-                offsetXPixels: 0,
-                offsetYPixels: 0,
-                offsetX: 0,
-                offsetY: 0,
-            }));
-        }
+    if (!reuseTextureSidecar) {
+        await writeTextFileIfChanged(textureSidecarPath, stringifyJsonAscii({
+            schemaVersion: '1.0.0',
+            structureId: 'oilfield',
+            outputKey: 'oilfield',
+            mode: 'topdown',
+            sceneVariant: null,
+            previewVariant: null,
+            width: baseSize,
+            height: baseSize,
+            pixelsPerMeter: 64,
+            anchorPixelX: baseSize / 2,
+            anchorPixelY: baseSize / 2,
+            imageCenterPixelX: baseSize / 2,
+            imageCenterPixelY: baseSize / 2,
+            geometryCenterPixelX: baseSize / 2,
+            geometryCenterPixelY: baseSize / 2,
+            offsetXPixels: 0,
+            offsetYPixels: 0,
+            offsetX: 0,
+            offsetY: 0,
+        }));
+    }
 }
 
 function getManifestAssetTypeName(asset) {
@@ -4217,7 +4217,7 @@ async function removeUnreferencedGeneratedModificationArtifactDirectories(manife
     for (const structureId of structureIds) {
         const modificationsDirectory = resolve(
             getPublishedAssetDirectory(structureId)
-                ?? resolve(assetTypesDirectory, resolvePublishedAssetTypeName(structureId), structureId),
+            ?? resolve(assetTypesDirectory, resolvePublishedAssetTypeName(structureId), structureId),
             'modifications',
         );
         if (!await pathExists(modificationsDirectory)) {
@@ -4851,245 +4851,194 @@ function applyStructureRenderUrls(
         assets: manifest.assets
             .filter(structure => !structure?.isUpgrade)
             .map(structure => {
-            const {
-                destroyed: _legacyDestroyed,
-                packaged: _legacyPackaged,
-                colors: _legacyColors,
-                ...structureWithoutLegacyIcons
-            } = structure;
-            const sceneMetadata = resolveStructureSceneMetadata(structureSceneMetadata, structure);
-            const isMeshlessScene = sceneMetadata?.hasMeshNodes === false;
-            const renderEntry = isMeshlessScene
-                ? null
-                : resolveStructureRenderEntry(entriesByKey, structure);
-            const structureColors = (Array.isArray(structure.colors) ? structure.colors : [])
-                .map(color => {
-                    const colorHex = normalizeId(color?.hex);
-                    if (!colorHex) {
-                        return null;
-                    }
+                const {
+                    destroyed: _legacyDestroyed,
+                    packaged: _legacyPackaged,
+                    colors: _legacyColors,
+                    ...structureWithoutLegacyIcons
+                } = structure;
+                const sceneMetadata = resolveStructureSceneMetadata(structureSceneMetadata, structure);
+                const isMeshlessScene = sceneMetadata?.hasMeshNodes === false;
+                const renderEntry = isMeshlessScene
+                    ? null
+                    : resolveStructureRenderEntry(entriesByKey, structure);
+                const structureColors = (Array.isArray(structure.colors) ? structure.colors : [])
+                    .map(color => {
+                        const colorHex = normalizeId(color?.hex);
+                        if (!colorHex) {
+                            return null;
+                        }
 
-                    const resolvedColor = renderEntry?.colors?.find(entry => normalizeId(entry?.hex) === colorHex) ?? null;
-                    return {
-                        ...color,
-                        hex: colorHex,
-                        ...(resolvedColor?.textureUrl ? { textureUrl: resolvedColor.textureUrl } : {}),
-                        ...(resolvedColor?.previewUrl ? { previewUrl: resolvedColor.previewUrl } : {}),
-                        ...(resolvedColor?.renderedIconUrl ? { renderedIconUrl: resolvedColor.renderedIconUrl } : {}),
-                    };
-                })
-                .filter(Boolean);
-            const defaultStructureColor = structureColors[0] ?? null;
-            const structureDefaultIconUrl = structure?.icons?.default ?? structure?.iconUrl ?? null;
-            const resolvedStructureDefaultIconUrl = structureDefaultIconUrl
-                ?? renderEntry?.defaultIconUrl
-                ?? null;
-            const structureRenderedIconUrl = defaultStructureColor?.renderedIconUrl ?? structure?.icons?.rendered ?? structure?.previewIconUrl ?? resolvedStructureDefaultIconUrl;
-            const meshlessFallbackUrl = isMeshlessScene ? structureDefaultIconUrl : null;
-            const textureUrl = defaultStructureColor?.textureUrl ?? renderEntry?.textureUrl ?? meshlessFallbackUrl;
-            const defaultTextureUrl = textureUrl ?? structure.variants.default?.textureUrl;
-            const colonialTextureUrl = textureUrl ?? structure.variants.c?.textureUrl;
-            const wardenTextureUrl = textureUrl ?? structure.variants.w?.textureUrl;
-            const previewUrl = defaultStructureColor?.previewUrl ?? renderEntry?.previewUrl ?? meshlessFallbackUrl ?? structure.previewUrl;
-            const previewDirection = renderEntry?.previewDirection
-                ?? sceneMetadata?.previewDirection
-                ?? structure.previewDirection;
-            const destroyedRenderEntry = renderEntry?.destroyed ?? null;
-            const destroyedDefaultIconUrl = structure?.destroyed?.icons?.default
-                ?? structure?.destroyed?.iconUrl
-                ?? structureDefaultIconUrl
-                ?? destroyedRenderEntry?.defaultIconUrl
-                ?? null;
-            const destroyedRenderedIconUrl = destroyedRenderEntry?.renderedIconUrl ?? structure?.destroyed?.icons?.rendered ?? structure?.destroyed?.previewIconUrl ?? destroyedDefaultIconUrl;
-            const destroyedPreviewUrl = destroyedRenderEntry?.previewUrl ?? structure?.destroyed?.previewUrl ?? null;
-            const destroyedTextureUrl = destroyedRenderEntry?.textureUrl ?? structure?.destroyed?.sprite?.source ?? structure?.destroyed?.textureUrl ?? null;
-            const destroyedPreviewDirection = destroyedRenderEntry?.previewDirection ?? structure?.destroyed?.previewDirection ?? null;
-            // Some vehicles expose a destroyed component without any renderable destroyed texture.
-            // Drop the entire destroyed payload unless we can emit a destroyed sprite block.
-            const hasPublishedDestroyedVisual = Boolean(destroyedTextureUrl);
-            const packagedRenderEntry = renderEntry?.packaged ?? null;
-            const packagedTextureUrl = packagedRenderEntry?.textureUrl
-                ?? structure?.packaged?.sprite?.source
-                ?? structure?.packaged?.textureUrl
-                ?? null;
-            const hasPublishedPackagedVisual = Boolean(
-                packagedTextureUrl
-                || structure?.packaged?.shippableType
-                || structure?.packaged?.palletOffset,
-            );
-            const structureLayerEntries = structureLayerEntriesByStructureId?.[normalizeId(structure.id)] ?? {};
-            const renderLayers = Object.values(structureLayerEntries)
-                .filter(entry => entry?.textureUrl)
-                .sort(compareStructureRenderLayers);
+                        const resolvedColor = renderEntry?.colors?.find(entry => normalizeId(entry?.hex) === colorHex) ?? null;
+                        return {
+                            ...color,
+                            hex: colorHex,
+                            ...(resolvedColor?.textureUrl ? { textureUrl: resolvedColor.textureUrl } : {}),
+                            ...(resolvedColor?.previewUrl ? { previewUrl: resolvedColor.previewUrl } : {}),
+                            ...(resolvedColor?.renderedIconUrl ? { renderedIconUrl: resolvedColor.renderedIconUrl } : {}),
+                        };
+                    })
+                    .filter(Boolean);
+                const defaultStructureColor = structureColors[0] ?? null;
+                const structureDefaultIconUrl = structure?.icons?.default ?? structure?.iconUrl ?? null;
+                const resolvedStructureDefaultIconUrl = structureDefaultIconUrl
+                    ?? renderEntry?.defaultIconUrl
+                    ?? null;
+                const structureRenderedIconUrl = defaultStructureColor?.renderedIconUrl ?? structure?.icons?.rendered ?? structure?.previewIconUrl ?? resolvedStructureDefaultIconUrl;
+                const meshlessFallbackUrl = isMeshlessScene ? structureDefaultIconUrl : null;
+                const textureUrl = defaultStructureColor?.textureUrl ?? renderEntry?.textureUrl ?? meshlessFallbackUrl;
+                const defaultTextureUrl = textureUrl ?? structure.variants.default?.textureUrl;
+                const colonialTextureUrl = textureUrl ?? structure.variants.c?.textureUrl;
+                const wardenTextureUrl = textureUrl ?? structure.variants.w?.textureUrl;
+                const previewUrl = defaultStructureColor?.previewUrl ?? renderEntry?.previewUrl ?? meshlessFallbackUrl ?? structure.previewUrl;
+                const previewDirection = renderEntry?.previewDirection
+                    ?? sceneMetadata?.previewDirection
+                    ?? structure.previewDirection;
+                const destroyedRenderEntry = renderEntry?.destroyed ?? null;
+                const destroyedDefaultIconUrl = structure?.destroyed?.icons?.default
+                    ?? structure?.destroyed?.iconUrl
+                    ?? structureDefaultIconUrl
+                    ?? destroyedRenderEntry?.defaultIconUrl
+                    ?? null;
+                const destroyedRenderedIconUrl = destroyedRenderEntry?.renderedIconUrl ?? structure?.destroyed?.icons?.rendered ?? structure?.destroyed?.previewIconUrl ?? destroyedDefaultIconUrl;
+                const destroyedPreviewUrl = destroyedRenderEntry?.previewUrl ?? structure?.destroyed?.previewUrl ?? null;
+                const destroyedTextureUrl = destroyedRenderEntry?.textureUrl ?? structure?.destroyed?.sprite?.source ?? structure?.destroyed?.textureUrl ?? null;
+                const destroyedPreviewDirection = destroyedRenderEntry?.previewDirection ?? structure?.destroyed?.previewDirection ?? null;
+                // Some vehicles expose a destroyed component without any renderable destroyed texture.
+                // Drop the entire destroyed payload unless we can emit a destroyed sprite block.
+                const hasPublishedDestroyedVisual = Boolean(destroyedTextureUrl);
+                const packagedRenderEntry = renderEntry?.packaged ?? null;
+                const packagedTextureUrl = packagedRenderEntry?.textureUrl
+                    ?? structure?.packaged?.sprite?.source
+                    ?? structure?.packaged?.textureUrl
+                    ?? null;
+                const hasPublishedPackagedVisual = Boolean(
+                    packagedTextureUrl
+                    || structure?.packaged?.shippableType
+                    || structure?.packaged?.palletOffset,
+                );
+                const structureLayerEntries = structureLayerEntriesByStructureId?.[normalizeId(structure.id)] ?? {};
+                const renderLayers = Object.values(structureLayerEntries)
+                    .filter(entry => entry?.textureUrl)
+                    .sort(compareStructureRenderLayers);
 
-            return {
-                ...structureWithoutLegacyIcons,
-                icons: {
-                    default: resolvedStructureDefaultIconUrl,
-                    rendered: renderEntry?.renderedIconUrl ?? structureRenderedIconUrl ?? meshlessFallbackUrl,
-                },
-                ...(hasPublishedDestroyedVisual
-                    ? {
-                        destroyed: {
-                            ...(structure?.destroyed?.componentName ? { componentName: structure.destroyed.componentName } : {}),
-                            ...((destroyedDefaultIconUrl || destroyedRenderedIconUrl)
-                                ? {
-                                    icons: {
-                                        ...(destroyedDefaultIconUrl ? { default: destroyedDefaultIconUrl } : {}),
-                                        ...(destroyedRenderedIconUrl ? { rendered: destroyedRenderedIconUrl } : {}),
-                                    },
-                                    ...(destroyedDefaultIconUrl ? { iconUrl: destroyedDefaultIconUrl } : {}),
-                                    ...(destroyedRenderedIconUrl ? { previewIconUrl: destroyedRenderedIconUrl } : {}),
-                                }
-                                : {}),
-                            ...(destroyedPreviewUrl ? { previewUrl: destroyedPreviewUrl } : {}),
-                            ...(destroyedPreviewDirection ? { previewDirection: destroyedPreviewDirection } : {}),
-                            ...(destroyedTextureUrl
-                                ? {
-                                    sprite: {
-                                        source: destroyedTextureUrl,
-                                        width: destroyedRenderEntry?.textureWidth ?? structure?.destroyed?.sprite?.width,
-                                        height: destroyedRenderEntry?.textureHeight ?? structure?.destroyed?.sprite?.height,
-                                        anchorX: destroyedRenderEntry?.anchorX ?? structure?.destroyed?.sprite?.anchorX,
-                                        anchorY: destroyedRenderEntry?.anchorY ?? structure?.destroyed?.sprite?.anchorY,
-                                        offsetX: destroyedRenderEntry?.offsetX ?? structure?.destroyed?.sprite?.offsetX,
-                                        offsetY: destroyedRenderEntry?.offsetY ?? structure?.destroyed?.sprite?.offsetY,
-                                    },
-                                    textureUrl: destroyedTextureUrl,
-                                    textureWidth: destroyedRenderEntry?.textureWidth ?? structure?.destroyed?.textureWidth,
-                                    textureHeight: destroyedRenderEntry?.textureHeight ?? structure?.destroyed?.textureHeight,
-                                    anchorX: destroyedRenderEntry?.anchorX ?? structure?.destroyed?.anchorX,
-                                    anchorY: destroyedRenderEntry?.anchorY ?? structure?.destroyed?.anchorY,
-                                    offsetX: destroyedRenderEntry?.offsetX ?? structure?.destroyed?.offsetX,
-                                    offsetY: destroyedRenderEntry?.offsetY ?? structure?.destroyed?.offsetY,
-                                }
-                                : {}),
-                        },
-                    }
-                    : {}),
-                ...(hasPublishedPackagedVisual
-                    ? {
-                        packaged: {
-                            ...(structure?.packaged?.shippableType ? { shippableType: structure.packaged.shippableType } : {}),
-                            ...(structure?.packaged?.palletOffset ? { palletOffset: structure.packaged.palletOffset } : {}),
-                            ...(packagedTextureUrl
-                                ? {
-                                    sprite: {
-                                        source: packagedTextureUrl,
-                                        width: packagedRenderEntry?.textureWidth ?? structure?.packaged?.sprite?.width,
-                                        height: packagedRenderEntry?.textureHeight ?? structure?.packaged?.sprite?.height,
-                                        anchorX: packagedRenderEntry?.anchorX ?? structure?.packaged?.sprite?.anchorX,
-                                        anchorY: packagedRenderEntry?.anchorY ?? structure?.packaged?.sprite?.anchorY,
-                                        offsetX: packagedRenderEntry?.offsetX ?? structure?.packaged?.sprite?.offsetX,
-                                        offsetY: packagedRenderEntry?.offsetY ?? structure?.packaged?.sprite?.offsetY,
-                                    },
-                                    textureUrl: packagedTextureUrl,
-                                    textureWidth: packagedRenderEntry?.textureWidth ?? structure?.packaged?.textureWidth,
-                                    textureHeight: packagedRenderEntry?.textureHeight ?? structure?.packaged?.textureHeight,
-                                    anchorX: packagedRenderEntry?.anchorX ?? structure?.packaged?.anchorX,
-                                    anchorY: packagedRenderEntry?.anchorY ?? structure?.packaged?.anchorY,
-                                    offsetX: packagedRenderEntry?.offsetX ?? structure?.packaged?.offsetX,
-                                    offsetY: packagedRenderEntry?.offsetY ?? structure?.packaged?.offsetY,
-                                }
-                                : {}),
-                        },
-                    }
-                    : {}),
-                previewUrl,
-                previewDirection,
-                ...(structureColors.length > 0 ? { colors: structureColors } : {}),
-                renderLayers: renderLayers.length > 0
-                    ? renderLayers.map(entry => ({
-                        id: entry.id,
-                        textureUrl: entry.textureUrl,
-                        ...(entry?.width ? { width: entry.width } : {}),
-                        ...(entry?.height ? { height: entry.height } : {}),
-                        ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
-                        ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
-                        ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
-                        ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
-                    }))
-                    : structure.renderLayers,
-                sprite: {
-                    ...structure.sprite,
-                    ...(renderEntry?.textureWidth ? { width: renderEntry.textureWidth } : {}),
-                    ...(renderEntry?.textureHeight ? { height: renderEntry.textureHeight } : {}),
-                    ...(renderEntry?.anchorX !== null && typeof renderEntry?.anchorX !== 'undefined' ? { anchorX: renderEntry.anchorX } : {}),
-                    ...(renderEntry?.anchorY !== null && typeof renderEntry?.anchorY !== 'undefined' ? { anchorY: renderEntry.anchorY } : {}),
-                    ...(renderEntry?.offsetX !== null && typeof renderEntry?.offsetX !== 'undefined' ? { offsetX: renderEntry.offsetX } : {}),
-                    ...(renderEntry?.offsetY !== null && typeof renderEntry?.offsetY !== 'undefined' ? { offsetY: renderEntry.offsetY } : {}),
-                },
-                variants: {
-                    ...(defaultTextureUrl ? { default: { textureUrl: defaultTextureUrl } } : {}),
-                    ...(colonialTextureUrl && colonialTextureUrl !== defaultTextureUrl ? { c: { textureUrl: colonialTextureUrl } } : {}),
-                    ...(wardenTextureUrl && wardenTextureUrl !== defaultTextureUrl ? { w: { textureUrl: wardenTextureUrl } } : {}),
-                },
-                modifications: Object.fromEntries(Object.entries(structure.modifications ?? {}).map(([modificationId, modification]) => {
-                    const modificationLookupKey = normalizeId(modification?.appliedModificationId ?? modificationId);
-                    const renderEntry = modificationEntriesByAssetId?.[normalizeId(structure.id)]?.[modificationLookupKey] ?? null;
-                    const preferredSharedModificationId = modification?.isUpgrade === true
-                        ? null
-                        : resolvePreferredSharedModificationId(
-                            modification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
-                            modificationLookupKey || modificationId,
-                            modification,
-                            renderEntry?.previewDirection ?? modification?.previewDirection ?? structure?.previewDirection,
-                        );
-                    return [modificationId, {
-                        ...modification,
-                        ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
-                        ...(renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
-                        ...(renderEntry?.previewUrl ? { previewUrl: renderEntry.previewUrl } : {}),
-                        ...(renderEntry?.previewDirection ? { previewDirection: renderEntry.previewDirection } : {}),
-                        ...(renderEntry?.textureWidth ? { textureWidth: renderEntry.textureWidth } : {}),
-                        ...(renderEntry?.textureHeight ? { textureHeight: renderEntry.textureHeight } : {}),
+                return {
+                    ...structureWithoutLegacyIcons,
+                    icons: {
+                        default: resolvedStructureDefaultIconUrl,
+                        rendered: renderEntry?.renderedIconUrl ?? structureRenderedIconUrl ?? meshlessFallbackUrl,
+                    },
+                    ...(hasPublishedDestroyedVisual
+                        ? {
+                            destroyed: {
+                                ...(structure?.destroyed?.componentName ? { componentName: structure.destroyed.componentName } : {}),
+                                ...((destroyedDefaultIconUrl || destroyedRenderedIconUrl)
+                                    ? {
+                                        icons: {
+                                            ...(destroyedDefaultIconUrl ? { default: destroyedDefaultIconUrl } : {}),
+                                            ...(destroyedRenderedIconUrl ? { rendered: destroyedRenderedIconUrl } : {}),
+                                        },
+                                        ...(destroyedDefaultIconUrl ? { iconUrl: destroyedDefaultIconUrl } : {}),
+                                        ...(destroyedRenderedIconUrl ? { previewIconUrl: destroyedRenderedIconUrl } : {}),
+                                    }
+                                    : {}),
+                                ...(destroyedPreviewUrl ? { previewUrl: destroyedPreviewUrl } : {}),
+                                ...(destroyedPreviewDirection ? { previewDirection: destroyedPreviewDirection } : {}),
+                                ...(destroyedTextureUrl
+                                    ? {
+                                        sprite: {
+                                            source: destroyedTextureUrl,
+                                            width: destroyedRenderEntry?.textureWidth ?? structure?.destroyed?.sprite?.width,
+                                            height: destroyedRenderEntry?.textureHeight ?? structure?.destroyed?.sprite?.height,
+                                            anchorX: destroyedRenderEntry?.anchorX ?? structure?.destroyed?.sprite?.anchorX,
+                                            anchorY: destroyedRenderEntry?.anchorY ?? structure?.destroyed?.sprite?.anchorY,
+                                            offsetX: destroyedRenderEntry?.offsetX ?? structure?.destroyed?.sprite?.offsetX,
+                                            offsetY: destroyedRenderEntry?.offsetY ?? structure?.destroyed?.sprite?.offsetY,
+                                        },
+                                        textureUrl: destroyedTextureUrl,
+                                        textureWidth: destroyedRenderEntry?.textureWidth ?? structure?.destroyed?.textureWidth,
+                                        textureHeight: destroyedRenderEntry?.textureHeight ?? structure?.destroyed?.textureHeight,
+                                        anchorX: destroyedRenderEntry?.anchorX ?? structure?.destroyed?.anchorX,
+                                        anchorY: destroyedRenderEntry?.anchorY ?? structure?.destroyed?.anchorY,
+                                        offsetX: destroyedRenderEntry?.offsetX ?? structure?.destroyed?.offsetX,
+                                        offsetY: destroyedRenderEntry?.offsetY ?? structure?.destroyed?.offsetY,
+                                    }
+                                    : {}),
+                            },
+                        }
+                        : {}),
+                    ...(hasPublishedPackagedVisual
+                        ? {
+                            packaged: {
+                                ...(structure?.packaged?.shippableType ? { shippableType: structure.packaged.shippableType } : {}),
+                                ...(structure?.packaged?.palletOffset ? { palletOffset: structure.packaged.palletOffset } : {}),
+                                ...(packagedTextureUrl
+                                    ? {
+                                        sprite: {
+                                            source: packagedTextureUrl,
+                                            width: packagedRenderEntry?.textureWidth ?? structure?.packaged?.sprite?.width,
+                                            height: packagedRenderEntry?.textureHeight ?? structure?.packaged?.sprite?.height,
+                                            anchorX: packagedRenderEntry?.anchorX ?? structure?.packaged?.sprite?.anchorX,
+                                            anchorY: packagedRenderEntry?.anchorY ?? structure?.packaged?.sprite?.anchorY,
+                                            offsetX: packagedRenderEntry?.offsetX ?? structure?.packaged?.sprite?.offsetX,
+                                            offsetY: packagedRenderEntry?.offsetY ?? structure?.packaged?.sprite?.offsetY,
+                                        },
+                                        textureUrl: packagedTextureUrl,
+                                        textureWidth: packagedRenderEntry?.textureWidth ?? structure?.packaged?.textureWidth,
+                                        textureHeight: packagedRenderEntry?.textureHeight ?? structure?.packaged?.textureHeight,
+                                        anchorX: packagedRenderEntry?.anchorX ?? structure?.packaged?.anchorX,
+                                        anchorY: packagedRenderEntry?.anchorY ?? structure?.packaged?.anchorY,
+                                        offsetX: packagedRenderEntry?.offsetX ?? structure?.packaged?.offsetX,
+                                        offsetY: packagedRenderEntry?.offsetY ?? structure?.packaged?.offsetY,
+                                    }
+                                    : {}),
+                            },
+                        }
+                        : {}),
+                    previewUrl,
+                    previewDirection,
+                    ...(structureColors.length > 0 ? { colors: structureColors } : {}),
+                    renderLayers: renderLayers.length > 0
+                        ? renderLayers.map(entry => ({
+                            id: entry.id,
+                            textureUrl: entry.textureUrl,
+                            ...(entry?.width ? { width: entry.width } : {}),
+                            ...(entry?.height ? { height: entry.height } : {}),
+                            ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
+                            ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
+                            ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
+                            ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
+                        }))
+                        : structure.renderLayers,
+                    sprite: {
+                        ...structure.sprite,
+                        ...(renderEntry?.textureWidth ? { width: renderEntry.textureWidth } : {}),
+                        ...(renderEntry?.textureHeight ? { height: renderEntry.textureHeight } : {}),
                         ...(renderEntry?.anchorX !== null && typeof renderEntry?.anchorX !== 'undefined' ? { anchorX: renderEntry.anchorX } : {}),
                         ...(renderEntry?.anchorY !== null && typeof renderEntry?.anchorY !== 'undefined' ? { anchorY: renderEntry.anchorY } : {}),
                         ...(renderEntry?.offsetX !== null && typeof renderEntry?.offsetX !== 'undefined' ? { offsetX: renderEntry.offsetX } : {}),
                         ...(renderEntry?.offsetY !== null && typeof renderEntry?.offsetY !== 'undefined' ? { offsetY: renderEntry.offsetY } : {}),
-                        ...(renderEntry?.isUpgrade ? { isUpgrade: true } : {}),
-                        ...(renderEntry?.upgradeName ? { upgradeName: renderEntry.upgradeName } : {}),
-                        ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
-                        ...(renderEntry?.rootStructureId ? { rootStructureId: renderEntry.rootStructureId } : {}),
-                        ...(renderEntry?.appliedModificationId ? { appliedModificationId: renderEntry.appliedModificationId } : {}),
-                        ...(preferredSharedModificationId ? { sharedModificationId: preferredSharedModificationId } : {}),
-                    }];
-                })),
-                modificationSlots: (structure.modificationSlots ?? []).map(slot => ({
-                    ...slot,
-                    variants: Object.fromEntries(Object.entries(slot.variants ?? {}).map(([variantId, variant]) => {
-                        const sourceModificationEntry = resolveSourceModification(structure, variantId, variant);
-                        const sourceModification = sourceModificationEntry?.[1] ?? null;
-                        const assetScopedEntries = modificationEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
-                        const assetScopedLookupKeys = [
-                            variantId,
-                            variant?.id,
-                            variant?.appliedModificationId,
-                        ]
-                            .map(normalizeId)
-                            .filter(Boolean);
-                        const renderEntry = assetScopedLookupKeys
-                            .map(lookupKey => assetScopedEntries?.[lookupKey])
-                            .find(Boolean)
-                            ?? modificationEntriesByKey?.[normalizeId(variantId)];
-                        const preferredSharedModificationId = normalizeId(variantId) === 'default' || variant?.isUpgrade === true || sourceModification?.isUpgrade === true
+                    },
+                    variants: {
+                        ...(defaultTextureUrl ? { default: { textureUrl: defaultTextureUrl } } : {}),
+                        ...(colonialTextureUrl && colonialTextureUrl !== defaultTextureUrl ? { c: { textureUrl: colonialTextureUrl } } : {}),
+                        ...(wardenTextureUrl && wardenTextureUrl !== defaultTextureUrl ? { w: { textureUrl: wardenTextureUrl } } : {}),
+                    },
+                    modifications: Object.fromEntries(Object.entries(structure.modifications ?? {}).map(([modificationId, modification]) => {
+                        const modificationLookupKey = normalizeId(modification?.appliedModificationId ?? modificationId);
+                        const renderEntry = modificationEntriesByAssetId?.[normalizeId(structure.id)]?.[modificationLookupKey] ?? null;
+                        const preferredSharedModificationId = modification?.isUpgrade === true
                             ? null
                             : resolvePreferredSharedModificationId(
-                                variant?.sharedModificationId ?? sourceModification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
-                                variantId,
-                                {
-                                    ...sourceModification,
-                                    ...variant,
-                                },
-                                renderEntry?.previewDirection
-                                    ?? variant?.previewDirection
-                                    ?? sourceModification?.previewDirection
-                                    ?? structure?.previewDirection,
+                                modification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
+                                modificationLookupKey || modificationId,
+                                modification,
+                                renderEntry?.previewDirection ?? modification?.previewDirection ?? structure?.previewDirection,
                             );
-                        return [variantId, {
-                            ...variant,
+                        return [modificationId, {
+                            ...modification,
                             ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
-                            ...(!variant?.iconUrl && renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
+                            ...(renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
                             ...(renderEntry?.previewUrl ? { previewUrl: renderEntry.previewUrl } : {}),
                             ...(renderEntry?.previewDirection ? { previewDirection: renderEntry.previewDirection } : {}),
                             ...(renderEntry?.textureWidth ? { textureWidth: renderEntry.textureWidth } : {}),
@@ -5106,9 +5055,60 @@ function applyStructureRenderUrls(
                             ...(preferredSharedModificationId ? { sharedModificationId: preferredSharedModificationId } : {}),
                         }];
                     })),
-                })),
-            };
-        }),
+                    modificationSlots: (structure.modificationSlots ?? []).map(slot => ({
+                        ...slot,
+                        variants: Object.fromEntries(Object.entries(slot.variants ?? {}).map(([variantId, variant]) => {
+                            const sourceModificationEntry = resolveSourceModification(structure, variantId, variant);
+                            const sourceModification = sourceModificationEntry?.[1] ?? null;
+                            const assetScopedEntries = modificationEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
+                            const assetScopedLookupKeys = [
+                                variantId,
+                                variant?.id,
+                                variant?.appliedModificationId,
+                            ]
+                                .map(normalizeId)
+                                .filter(Boolean);
+                            const renderEntry = assetScopedLookupKeys
+                                .map(lookupKey => assetScopedEntries?.[lookupKey])
+                                .find(Boolean)
+                                ?? modificationEntriesByKey?.[normalizeId(variantId)];
+                            const preferredSharedModificationId = normalizeId(variantId) === 'default' || variant?.isUpgrade === true || sourceModification?.isUpgrade === true
+                                ? null
+                                : resolvePreferredSharedModificationId(
+                                    variant?.sharedModificationId ?? sourceModification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
+                                    variantId,
+                                    {
+                                        ...sourceModification,
+                                        ...variant,
+                                    },
+                                    renderEntry?.previewDirection
+                                    ?? variant?.previewDirection
+                                    ?? sourceModification?.previewDirection
+                                    ?? structure?.previewDirection,
+                                );
+                            return [variantId, {
+                                ...variant,
+                                ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
+                                ...(!variant?.iconUrl && renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
+                                ...(renderEntry?.previewUrl ? { previewUrl: renderEntry.previewUrl } : {}),
+                                ...(renderEntry?.previewDirection ? { previewDirection: renderEntry.previewDirection } : {}),
+                                ...(renderEntry?.textureWidth ? { textureWidth: renderEntry.textureWidth } : {}),
+                                ...(renderEntry?.textureHeight ? { textureHeight: renderEntry.textureHeight } : {}),
+                                ...(renderEntry?.anchorX !== null && typeof renderEntry?.anchorX !== 'undefined' ? { anchorX: renderEntry.anchorX } : {}),
+                                ...(renderEntry?.anchorY !== null && typeof renderEntry?.anchorY !== 'undefined' ? { anchorY: renderEntry.anchorY } : {}),
+                                ...(renderEntry?.offsetX !== null && typeof renderEntry?.offsetX !== 'undefined' ? { offsetX: renderEntry.offsetX } : {}),
+                                ...(renderEntry?.offsetY !== null && typeof renderEntry?.offsetY !== 'undefined' ? { offsetY: renderEntry.offsetY } : {}),
+                                ...(renderEntry?.isUpgrade ? { isUpgrade: true } : {}),
+                                ...(renderEntry?.upgradeName ? { upgradeName: renderEntry.upgradeName } : {}),
+                                ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
+                                ...(renderEntry?.rootStructureId ? { rootStructureId: renderEntry.rootStructureId } : {}),
+                                ...(renderEntry?.appliedModificationId ? { appliedModificationId: renderEntry.appliedModificationId } : {}),
+                                ...(preferredSharedModificationId ? { sharedModificationId: preferredSharedModificationId } : {}),
+                            }];
+                        })),
+                    })),
+                };
+            }),
     });
 }
 
@@ -5310,9 +5310,9 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                                     || getStandaloneModificationIdentityText(sourceModification?.description),
                             },
                             renderEntry?.previewDirection
-                                ?? variant?.previewDirection
-                                ?? sourceModification?.previewDirection
-                                ?? structure?.previewDirection,
+                            ?? variant?.previewDirection
+                            ?? sourceModification?.previewDirection
+                            ?? structure?.previewDirection,
                             {
                                 structureId: normalizeId(structure?.id),
                                 structureCodeName: structure?.codeName ?? null,
@@ -5457,23 +5457,23 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
 
     function getCoLocatedStructureAssetFileName(structureId, assetKind) {
         switch (assetKind) {
-        case 'destroyed.icon.default':
-            return `${structureId}.destroyed.icon.default.webp`;
-        case 'destroyed.icon.rendered':
-            return `${structureId}.destroyed.icon.rendered.webp`;
-        case 'destroyed.preview':
-            return `${structureId}.destroyed.preview.webp`;
-        case 'destroyed.texture':
-            return `${structureId}.destroyed.texture.webp`;
-        case 'icon.rendered':
-            return `${structureId}.icon.rendered.webp`;
-        case 'preview':
-            return `${structureId}.preview.webp`;
-        case 'texture':
-            return `${structureId}.texture.webp`;
-        case 'icon.default':
-        default:
-            return `${structureId}.icon.default.webp`;
+            case 'destroyed.icon.default':
+                return `${structureId}.destroyed.icon.default.webp`;
+            case 'destroyed.icon.rendered':
+                return `${structureId}.destroyed.icon.rendered.webp`;
+            case 'destroyed.preview':
+                return `${structureId}.destroyed.preview.webp`;
+            case 'destroyed.texture':
+                return `${structureId}.destroyed.texture.webp`;
+            case 'icon.rendered':
+                return `${structureId}.icon.rendered.webp`;
+            case 'preview':
+                return `${structureId}.preview.webp`;
+            case 'texture':
+                return `${structureId}.texture.webp`;
+            case 'icon.default':
+            default:
+                return `${structureId}.icon.default.webp`;
         }
     }
 
@@ -5484,13 +5484,13 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
 
     function isSubtypeComposableStructureAssetKind(assetKind) {
         switch (assetKind) {
-        case 'icon.default':
-        case 'icon.rendered':
-        case 'destroyed.icon.default':
-        case 'destroyed.icon.rendered':
-            return true;
-        default:
-            return false;
+            case 'icon.default':
+            case 'icon.rendered':
+            case 'destroyed.icon.default':
+            case 'destroyed.icon.rendered':
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -5704,9 +5704,9 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
     async function resolveCoLocatedStructureAssetUrl(structureId, sourceUrl, assetKind = 'icon.default', subTypeIconUrl = null) {
         const normalizedSourceUrl = String(sourceUrl ?? '').trim();
         const normalizedSubTypeIconUrl = String(subTypeIconUrl ?? '').trim();
-            if (!normalizedSourceUrl) {
-                return null;
-            }
+        if (!normalizedSourceUrl) {
+            return null;
+        }
 
         const publishedSourceFilePath = getPublishedAssetFilePath(normalizedSourceUrl);
         const outputDirectory = getPublishedAssetDirectory(structureId) ?? resolve(assetTypesDirectory, 'structures', structureId);
@@ -5957,7 +5957,7 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
                 ))
                 : resolve(
                     getPublishedAssetDirectory(normalizedStructureId)
-                        ?? resolve(assetTypesDirectory, resolvePublishedAssetTypeName(normalizedStructureId), normalizedStructureId),
+                    ?? resolve(assetTypesDirectory, resolvePublishedAssetTypeName(normalizedStructureId), normalizedStructureId),
                     'modifications',
                     normalizedVariantId,
                 );
@@ -6184,12 +6184,14 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
                 previewUrl: fallbackPreviewUrl,
                 variants: {
                     ...structure.variants,
-                    ...(fallbackTextureUrl ? {
-                        default: {
-                            ...(structure.variants.default ?? {}),
-                            textureUrl: fallbackTextureUrl,
-                        },
-                    } : {}),
+                    ...(fallbackTextureUrl
+                        ? {
+                            default: {
+                                ...(structure.variants.default ?? {}),
+                                textureUrl: fallbackTextureUrl,
+                            },
+                        }
+                        : {}),
                 },
                 modificationSlots: await Promise.all((structure.modificationSlots ?? []).map(async slot => ({
                     ...slot,
