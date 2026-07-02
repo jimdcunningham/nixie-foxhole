@@ -2499,11 +2499,15 @@ public class FoxWatchManifestAssetExtractor
                 ?? ExtractDouble(inheritedProperty("MinWidth"));
             var pathMode = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("PathMode")));
             var componentReference = ResolveConnectorComponentReference(blueprint);
+            pathMode ??= NullIfWhiteSpace(NormalizeEnumValue(componentReference?.SplinePathMode));
             List<double>? defaultTarget = componentReference?.SplineDefaultTargetUnrealLocationCentimeters is { Count: > 0 } target
                 ? [.. target]
                 : null;
             List<FoxWatchManifestConnectorMeshConfig> meshConfigs = componentReference?.SplineConnectorMeshConfigs.Count > 0
                 ? [.. componentReference.SplineConnectorMeshConfigs.Select(CreateConnectorMeshConfig)]
+                : [];
+            List<FoxWatchManifestSplineComponentConfig> componentConfigs = componentReference?.SplineComponentConfigs.Count > 0
+                ? [.. componentReference.SplineComponentConfigs.Select(CreateSplineComponentConfig)]
                 : [];
 
             if (isConnector != true &&
@@ -2532,8 +2536,68 @@ public class FoxWatchManifestAssetExtractor
                 MinWidthCm = minWidthCm,
                 PathMode = pathMode,
                 DefaultTargetUnrealLocationCm = defaultTarget,
+                MinRadiusCm = componentReference?.SplineMinRadiusCentimeters,
+                MaxRadiusCm = componentReference?.SplineMaxRadiusCentimeters,
+                MaxBufferCm = componentReference?.SplineMaxBufferCentimeters,
+                MinBufferCm = componentReference?.SplineMinBufferCentimeters,
+                EnforceSplineModeCornerRadius = componentReference?.SplineEnforceCornerRadius,
+                MaxArcAngleDeg = componentReference?.SplineMaxArcAngleDegrees,
+                MaxTargetAngleDeg = componentReference?.SplineMaxTargetAngleDegrees,
+                MaxSlopeAngleDeg = componentReference?.SplineMaxSlopeAngleDegrees,
+                PathStyle = InferConnectorPathStyle(
+                    pathMode,
+                    minLengthCm,
+                    componentReference?.SplineMaxBufferCentimeters,
+                    componentReference?.SplineMinRadiusCentimeters,
+                    meshConfigs),
                 MeshConfigs = meshConfigs,
+                ComponentConfigs = componentConfigs,
             };
+        }
+
+        private static string? InferConnectorPathStyle(
+            string? pathMode,
+            double? minLengthCm,
+            double? maxBufferCm,
+            double? minRadiusCm,
+            IReadOnlyList<FoxWatchManifestConnectorMeshConfig> meshConfigs)
+        {
+            if (meshConfigs.Count == 0)
+            {
+                return "endpoints-only";
+            }
+
+            var normalizedPathMode = NormalizeString(pathMode);
+            if (normalizedPathMode.Contains("Arc", StringComparison.OrdinalIgnoreCase))
+            {
+                var arcHasCurveConstraints = (maxBufferCm ?? 0) > 0.001d && (minRadiusCm ?? 0) > 0.001d;
+                return arcHasCurveConstraints ? "spline" : "straight-telescoping";
+            }
+
+            var primaryMeshConfig = meshConfigs.FirstOrDefault(config =>
+                NormalizeString(config.Mode).Contains("Spline", StringComparison.OrdinalIgnoreCase))
+                ?? meshConfigs[0];
+            var startOffset = primaryMeshConfig?.StartOffset ?? 0;
+            var endOffset = primaryMeshConfig?.EndOffset ?? 0;
+            var hasCurveConstraints = (maxBufferCm ?? 0) > 0.001d && (minRadiusCm ?? 0) > 0.001d;
+            var hasTelescopingOffsets = startOffset > 1d && endOffset > 1d;
+
+            if (!hasCurveConstraints && hasTelescopingOffsets)
+            {
+                return "straight-telescoping";
+            }
+
+            if (hasCurveConstraints)
+            {
+                return "spline";
+            }
+
+            if (string.Equals(NormalizeString(primaryMeshConfig?.Mode), "Spline", StringComparison.OrdinalIgnoreCase))
+            {
+                return "spline";
+            }
+
+            return meshConfigs.Count > 0 ? "interval" : null;
         }
 
         private FoxWatchBlueprintComponentReference? ResolveConnectorComponentReference(UBlueprintGeneratedClass blueprint)
@@ -2577,8 +2641,27 @@ public class FoxWatchManifestAssetExtractor
                 Interval = config.Interval,
                 StartOffset = config.StartOffset,
                 EndOffset = config.EndOffset,
+                FillRemainder = config.FillRemainder,
+                ExtendSplineToMinLength = config.ExtendSplineToMinLength,
+                SplineStartOffset = config.SplineStartOffset == null ? null : [.. config.SplineStartOffset],
+                SplineEndOffset = config.SplineEndOffset == null ? null : [.. config.SplineEndOffset],
+                SplineBoundaryMin = config.SplineBoundaryMin,
+                SplineBoundaryMax = config.SplineBoundaryMax,
+                SplineMaterialScaling = config.SplineMaterialScaling == null ? null : [.. config.SplineMaterialScaling],
                 RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
                 RelativeScale = config.RelativeScale == null ? null : [.. config.RelativeScale],
+            };
+        }
+
+        private static FoxWatchManifestSplineComponentConfig CreateSplineComponentConfig(
+            FoxWatchSplineConnectorComponentConfigReference config)
+        {
+            return new FoxWatchManifestSplineComponentConfig
+            {
+                ComponentName = NullIfWhiteSpace(NormalizeString(config.ComponentName)) ?? string.Empty,
+                Distance = config.Distance,
+                RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
+                RelativeRotation = config.RelativeRotation == null ? null : [.. config.RelativeRotation],
             };
         }
 

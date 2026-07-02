@@ -1,0 +1,7 @@
+{
+  "connector": {
+    "pathStyle": "straight-telescoping",
+    "frontSocketName": "WallSplineCommon:FrontSocket",
+    "backSocketName": "WallSplineCommon:BackSocket"
+  }
+}

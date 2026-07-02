@@ -320,7 +320,38 @@ public sealed class FoxWatchManifestConnector
 
     public List<double>? DefaultTargetUnrealLocationCm { get; set; }
 
+    public double? MinRadiusCm { get; set; }
+
+    public double? MaxRadiusCm { get; set; }
+
+    public double? MaxBufferCm { get; set; }
+
+    public double? MinBufferCm { get; set; }
+
+    public bool? EnforceSplineModeCornerRadius { get; set; }
+
+    public double? MaxArcAngleDeg { get; set; }
+
+    public double? MaxTargetAngleDeg { get; set; }
+
+    public double? MaxSlopeAngleDeg { get; set; }
+
+    public string? PathStyle { get; set; }
+
     public List<FoxWatchManifestConnectorMeshConfig> MeshConfigs { get; set; } = [];
+
+    public List<FoxWatchManifestSplineComponentConfig> ComponentConfigs { get; set; } = [];
+}
+
+public sealed class FoxWatchManifestSplineComponentConfig
+{
+    public string ComponentName { get; set; } = string.Empty;
+
+    public double? Distance { get; set; }
+
+    public List<double>? RelativeLocation { get; set; }
+
+    public List<double>? RelativeRotation { get; set; }
 }
 
 public sealed class FoxWatchManifestConnectorMeshConfig
@@ -338,6 +369,20 @@ public sealed class FoxWatchManifestConnectorMeshConfig
     public double? StartOffset { get; set; }
 
     public double? EndOffset { get; set; }
+
+    public bool? FillRemainder { get; set; }
+
+    public bool? ExtendSplineToMinLength { get; set; }
+
+    public List<double>? SplineStartOffset { get; set; }
+
+    public List<double>? SplineEndOffset { get; set; }
+
+    public double? SplineBoundaryMin { get; set; }
+
+    public double? SplineBoundaryMax { get; set; }
+
+    public List<double>? SplineMaterialScaling { get; set; }
 
     public List<double>? RelativeLocation { get; set; }
 

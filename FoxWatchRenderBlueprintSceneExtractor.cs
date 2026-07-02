@@ -10,6 +10,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     private const string ModificationDataPackagePrefix = "War/Content/Blueprints/Structures/Facilities/Modifications/Data/";
     private const string VehicleMeshPackagePrefix = "War/Content/Meshes/Vehicles/";
     private const string ShippableMeshPackagePrefix = "War/Content/Meshes/Shippables/";
+    private const string CraneRailTrackMeshPackagePath = "War/Content/Meshes/Structures/CraneRailTrack.uasset";
     private const string StructureArrowComponentName = "StructureArrow";
     private static readonly List<double> PowerSocketDebugColor = [0.85, 0.15, 0.15, 1.0];
     private static readonly List<double> PipeSocketDebugColor = [0.15, 0.55, 0.95, 1.0];
@@ -469,6 +470,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences,
         bool allowDestroyedComponents = false)
     {
+        PopulateFallbackSplineConnectorMeshPaths(blueprintPackagePath, componentReferences);
         PopulateFallbackSplineConnectorTargets(componentReferences);
         NormalizeTrackedVehicleBodyHierarchy(componentReferences);
         NormalizeShipBodyHierarchy(componentReferences);
@@ -1753,18 +1755,54 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         return null;
     }
 
-    private static void PopulateFallbackSplineConnectorTargets(IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+    private static void PopulateFallbackSplineConnectorMeshPaths(
+        string blueprintPackagePath,
+        IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
     {
-        var frontSocket = componentReferences.FirstOrDefault(reference =>
-            string.Equals(reference.ComponentName, "FrontSocket", StringComparison.OrdinalIgnoreCase));
-        if (frontSocket == null || !TryParseVector(frontSocket.RelativeLocation, out var frontLocation))
+        if (!blueprintPackagePath.Contains("CraneRail", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var backSocket = componentReferences.FirstOrDefault(reference =>
-            string.Equals(reference.ComponentName, "BackSocket", StringComparison.OrdinalIgnoreCase));
-        var backLocation = TryParseVector(backSocket?.RelativeLocation ?? string.Empty, out var parsedBackLocation)
+        foreach (var componentReference in componentReferences.Where(reference =>
+                     string.Equals(reference.ComponentName, "SplineConnector", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (componentReference.SplineConnectorMeshConfigs.Count == 0)
+            {
+                componentReference.SplineConnectorMeshConfigs.Add(new FoxWatchSplineConnectorMeshConfigReference
+                {
+                    Mode = "Endpoints",
+                    MeshPaths = [CraneRailTrackMeshPackagePath],
+                    NativeMeshLengthCentimeters = 1000d,
+                });
+                continue;
+            }
+
+            foreach (var config in componentReference.SplineConnectorMeshConfigs)
+            {
+                if (config.MeshPaths.Count > 0)
+                {
+                    continue;
+                }
+
+                config.MeshPaths.Add(CraneRailTrackMeshPackagePath);
+                if (config.NativeMeshLengthCentimeters is not > 0.001d)
+                {
+                    config.NativeMeshLengthCentimeters = 1000d;
+                }
+            }
+        }
+    }
+
+    private static void PopulateFallbackSplineConnectorTargets(IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+    {
+        var frontSocket = FindConnectorEndpointReference(componentReferences, "FrontSocket");
+        var backSocket = FindConnectorEndpointReference(componentReferences, "BackSocket");
+
+        var frontLocation = frontSocket != null && TryParseVector(frontSocket.RelativeLocation, out var parsedFrontLocation)
+            ? parsedFrontLocation
+            : [0.0, 0.0, 0.0];
+        var backLocation = backSocket != null && TryParseVector(backSocket.RelativeLocation, out var parsedBackLocation)
             ? parsedBackLocation
             : [0.0, 0.0, 0.0];
 
@@ -1780,15 +1818,68 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             (fallbackTarget[2] * fallbackTarget[2]);
         if (magnitudeSquared <= 0.001d)
         {
-            return;
+            var wallTarget = componentReferences.FirstOrDefault(reference =>
+                string.Equals(reference.ComponentName, "WallTarget", StringComparison.OrdinalIgnoreCase));
+            if (wallTarget != null && TryParseVector(wallTarget.RelativeLocation, out var wallTargetLocation))
+            {
+                fallbackTarget =
+                [
+                    wallTargetLocation[0] - backLocation[0],
+                    wallTargetLocation[1] - backLocation[1],
+                    wallTargetLocation[2] - backLocation[2],
+                ];
+                magnitudeSquared = (fallbackTarget[0] * fallbackTarget[0]) +
+                    (fallbackTarget[1] * fallbackTarget[1]) +
+                    (fallbackTarget[2] * fallbackTarget[2]);
+            }
         }
 
-        foreach (var componentReference in componentReferences.Where(reference =>
-            reference.SplineConnectorMeshConfigs.Count > 0 &&
-            reference.SplineDefaultTargetUnrealLocationCentimeters is not { Count: >= 3 }))
+        if (magnitudeSquared <= 0.001d)
         {
-            componentReference.SplineDefaultTargetUnrealLocationCentimeters = [.. fallbackTarget];
+            var fallbackLength = componentReferences
+                .SelectMany(reference => reference.SplineConnectorMeshConfigs)
+                .Select(config => config.NativeMeshLengthCentimeters ?? 0d)
+                .Where(length => length > 0.001d)
+                .DefaultIfEmpty(0d)
+                .Max();
+            if (fallbackLength <= 0.001d)
+            {
+                return;
+            }
+
+            fallbackTarget =
+            [
+                fallbackLength,
+                0.0,
+                0.0,
+            ];
         }
+
+        foreach (var componentReference in componentReferences.Where(reference => reference.SplineConnectorMeshConfigs.Count > 0))
+        {
+            if (componentReference.SplineDefaultTargetUnrealLocationCentimeters is not { Count: >= 3 } existingTarget)
+            {
+                componentReference.SplineDefaultTargetUnrealLocationCentimeters = [.. fallbackTarget];
+                continue;
+            }
+
+            var existingMagnitudeSquared = (existingTarget[0] * existingTarget[0]) +
+                (existingTarget[1] * existingTarget[1]) +
+                (existingTarget[2] * existingTarget[2]);
+            if (existingMagnitudeSquared <= 0.001d)
+            {
+                componentReference.SplineDefaultTargetUnrealLocationCentimeters = [.. fallbackTarget];
+            }
+        }
+    }
+
+    private static FoxWatchBlueprintComponentReference? FindConnectorEndpointReference(
+        IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences,
+        string socketSuffix)
+    {
+        return componentReferences.FirstOrDefault(reference =>
+            string.Equals(reference.ComponentName, socketSuffix, StringComparison.OrdinalIgnoreCase)
+            || reference.ComponentName.EndsWith($":{socketSuffix}", StringComparison.OrdinalIgnoreCase));
     }
 
     private static FoxWatchRenderSceneNode? FindModificationSlotAttachNode(

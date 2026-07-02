@@ -1044,6 +1044,13 @@ function compactConnectorMeshConfig(value) {
         interval: compactJsonValue(value.interval),
         start: compactJsonValue(value.startOffset),
         end: compactJsonValue(value.endOffset),
+        fillRemainder: compactJsonValue(value.fillRemainder),
+        extendToMinLength: compactJsonValue(value.extendSplineToMinLength),
+        splineStart: compactJsonValue(value.splineStartOffset),
+        splineEnd: compactJsonValue(value.splineEndOffset),
+        boundaryMin: compactJsonValue(value.splineBoundaryMin),
+        boundaryMax: compactJsonValue(value.splineBoundaryMax),
+        materialScale: compactJsonValue(value.splineMaterialScaling),
         loc: compactJsonValue(value.relativeLocation),
         scale: compactJsonValue(value.relativeScale),
     }, {
@@ -1053,13 +1060,69 @@ function compactConnectorMeshConfig(value) {
         interval: null,
         start: 0,
         end: 0,
+        fillRemainder: null,
+        extendToMinLength: null,
+        splineStart: null,
+        splineEnd: null,
+        boundaryMin: null,
+        boundaryMax: null,
+        materialScale: null,
         loc: [0, 0, 0],
         scale: [1, 1, 1],
     });
 }
 
+function compactSplineComponentConfig(value) {
+    if (!isPlainObject(value)) {
+        return value;
+    }
+
+    return compactObject({
+        n: value.componentName,
+        d: compactJsonValue(value.distance),
+        loc: compactJsonValue(value.relativeLocation),
+        rot: compactJsonValue(value.relativeRotation),
+    }, {
+        n: null,
+        d: null,
+        loc: null,
+        rot: null,
+    });
+}
+
 function compactConnector(value) {
-    return compactNullableObject(value, {
+    if (!isPlainObject(value)) {
+        return undefined;
+    }
+
+    return compactObject({
+        kind: value.kind,
+        isConnector: value.isConnector,
+        isManualConnector: value.isManualConnector,
+        splineComponentName: value.splineComponentName,
+        frontSocketName: value.frontSocketName,
+        backSocketName: value.backSocketName,
+        minLengthCm: value.minLengthCm,
+        maxLengthCm: value.maxLengthCm,
+        minWidthCm: value.minWidthCm,
+        pathMode: value.pathMode,
+        defaultTargetUnrealLocationCm: value.defaultTargetUnrealLocationCm,
+        minR: value.minRadiusCm,
+        maxR: value.maxRadiusCm,
+        buffer: value.maxBufferCm,
+        minBuffer: value.minBufferCm,
+        enforceRadius: value.enforceSplineModeCornerRadius,
+        maxArc: value.maxArcAngleDeg,
+        maxTargetAngle: value.maxTargetAngleDeg,
+        maxSlope: value.maxSlopeAngleDeg,
+        pathStyle: value.pathStyle,
+        meshConfigs: Array.isArray(value.meshConfigs)
+            ? value.meshConfigs.map(compactConnectorMeshConfig)
+            : [],
+        configs: Array.isArray(value.componentConfigs)
+            ? value.componentConfigs.map(compactSplineComponentConfig)
+            : [],
+    }, {
         kind: null,
         isConnector: null,
         isManualConnector: null,
@@ -1071,9 +1134,17 @@ function compactConnector(value) {
         minWidthCm: null,
         pathMode: null,
         defaultTargetUnrealLocationCm: null,
+        minR: null,
+        maxR: null,
+        buffer: null,
+        minBuffer: null,
+        enforceRadius: null,
+        maxArc: null,
+        maxTargetAngle: null,
+        maxSlope: null,
+        pathStyle: null,
         meshConfigs: [],
-    }, {
-        meshConfigs: entryValue => compactArray(entryValue, compactConnectorMeshConfig),
+        configs: [],
     });
 }
 
@@ -2373,6 +2444,44 @@ async function syncCategoryIconAssets(manifest) {
         publicIconsDirectory,
         categoryIconKeys,
     );
+}
+
+async function removeStaleSharedIconsForCoLocatedStructures(manifest) {
+    if (!await pathExists(publicIconsDirectory)) {
+        return;
+    }
+
+    const coLocatedStructureIconKeys = new Set();
+    for (const structure of manifest?.assets ?? []) {
+        const iconUrl = String(structure?.icons?.default ?? structure?.iconUrl ?? '').trim();
+        if (!iconUrl || isSharedPublishedIconUrl(iconUrl)) {
+            continue;
+        }
+
+        const structureId = normalizeId(structure?.id);
+        if (structureId) {
+            coLocatedStructureIconKeys.add(structureId);
+        }
+    }
+
+    if (coLocatedStructureIconKeys.size === 0) {
+        return;
+    }
+
+    for await (const filePath of walkFiles(publicIconsDirectory)) {
+        const extension = extname(filePath).toLowerCase();
+        if (extension !== '.webp') {
+            continue;
+        }
+
+        const iconKey = normalizeId(basename(filePath, extension));
+        if (!coLocatedStructureIconKeys.has(iconKey)) {
+            continue;
+        }
+
+        await unlink(filePath);
+        console.log(`removed stale shared icon ${filePath}`);
+    }
 }
 
 function resolveRawRenderedAssetPublicOutputPath(filePath) {
@@ -4736,8 +4845,13 @@ function compareStructureRenderLayers(left, right) {
         ['walls', 1],
         ['corners', 2],
         ['backtrim', 10],
+        ['backramp', 10.25],
         ['span', 11],
+        ['frontramp', 11.75],
         ['fronttrim', 12],
+        ['backswitch', 10],
+        ['underlay', 10.5],
+        ['frontswitch', 12],
     ]);
     const leftOrder = orderById.get(normalizeId(left?.id)) ?? Number.MAX_SAFE_INTEGER;
     const rightOrder = orderById.get(normalizeId(right?.id)) ?? Number.MAX_SAFE_INTEGER;
@@ -6387,6 +6501,7 @@ try {
         await syncPublishedIconsToPublicDirectoryByKey(generatedIconsDirectory, publicIconsDirectory, referencedSharedGeneratedIconKeys);
     }
 
+    await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
     await syncCategoryIconAssets(prunedMergedManifest);
 
     await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);

@@ -1667,11 +1667,28 @@ public sealed class FoxWatchAssetMeshExporter
             ];
         }
 
+        targetReference.SplinePathMode = export.GetOrDefault<string>("PathMode");
+        targetReference.SplineMinBufferCentimeters = export.GetOrDefault<float?>("MinBuffer");
+        targetReference.SplineMinRadiusCentimeters = export.GetOrDefault<float?>("MinRadius");
+        targetReference.SplineMaxRadiusCentimeters = export.GetOrDefault<float?>("MaxRadius");
+        targetReference.SplineMaxBufferCentimeters = export.GetOrDefault<float?>("MaxBuffer");
+        targetReference.SplineEnforceCornerRadius = export.GetOrDefault<bool?>("bEnforceSplineModeCornerRadius");
+        targetReference.SplineMaxArcAngleDegrees = export.GetOrDefault<float?>("MaxArcAngle");
+        targetReference.SplineMaxTargetAngleDegrees = export.GetOrDefault<float?>("MaxTargetAngle");
+        targetReference.SplineMaxSlopeAngleDegrees = export.GetOrDefault<float?>("MaxSlopeAngle");
+
         targetReference.SplineConnectorMeshConfigs =
         [
             .. export.GetOrDefault<FStructFallback[]>("MeshConfigs", [])
                 .Select(fallback => CreateSplineConnectorMeshConfigReference(fallback))
                 .Where(config => config.MeshPaths.Count > 0 && !config.IsCollisionOnly)
+        ];
+
+        targetReference.SplineComponentConfigs =
+        [
+            .. export.GetOrDefault<FStructFallback[]>("ComponentConfigs", [])
+                .Select(CreateSplineConnectorComponentConfigReference)
+                .Where(config => !string.IsNullOrWhiteSpace(config.ComponentName))
         ];
     }
 
@@ -1699,6 +1716,24 @@ public sealed class FoxWatchAssetMeshExporter
         {
             TargetMeshPath = ReadResolvedObjectPackagePath(fallback, "Target") ?? string.Empty,
             OverrideMeshPath = ReadResolvedObjectPackagePath(fallback, "Override") ?? string.Empty,
+        };
+    }
+
+    private static FoxWatchSplineConnectorComponentConfigReference CreateSplineConnectorComponentConfigReference(FStructFallback fallback)
+    {
+        List<double>? relativeLocation = TryReadStructTransformTranslation(fallback, "RelativeTransform", out var translation)
+            ? [translation.X, translation.Y, translation.Z]
+            : null;
+        List<double>? relativeRotation = TryReadStructTransformRotationDegrees(fallback, "RelativeTransform", out var rotation)
+            ? [rotation.Pitch, rotation.Yaw, rotation.Roll]
+            : null;
+
+        return new FoxWatchSplineConnectorComponentConfigReference
+        {
+            ComponentName = ReadFallbackString(fallback, "ComponentName"),
+            Distance = fallback.GetOrDefault<float?>("Distance"),
+            RelativeLocation = relativeLocation,
+            RelativeRotation = relativeRotation,
         };
     }
 
@@ -1739,9 +1774,30 @@ public sealed class FoxWatchAssetMeshExporter
             Interval = fallback.GetOrDefault<float>("Interval"),
             StartOffset = fallback.GetOrDefault<float>("StartOffset"),
             EndOffset = fallback.GetOrDefault<float>("EndOffset"),
+            FillRemainder = fallback.GetOrDefault<bool?>("bFillRemainder"),
+            ExtendSplineToMinLength = fallback.GetOrDefault<bool?>("bExtendSplineToMinLength"),
+            SplineStartOffset = TryReadVector2(fallback, "SplineStartOffset"),
+            SplineEndOffset = TryReadVector2(fallback, "SplineEndOffset"),
+            SplineBoundaryMin = fallback.GetOrDefault<float?>("SplineBoundaryMin"),
+            SplineBoundaryMax = fallback.GetOrDefault<float?>("SplineBoundaryMax"),
+            SplineMaterialScaling = TryReadVector2(fallback, "SplineMaterialScaling"),
             RelativeLocation = relativeLocation,
             RelativeScale = relativeScale,
         };
+    }
+
+    private static List<double>? TryReadVector2(FStructFallback fallback, string propertyName)
+    {
+        if (!fallback.TryGetValue(out FStructFallback vectorFallback, propertyName))
+        {
+            return null;
+        }
+
+        return
+        [
+            vectorFallback.GetOrDefault<double>("X"),
+            vectorFallback.GetOrDefault<double>("Y"),
+        ];
     }
 
     internal double? ResolveMeshAxisLengthCentimeters(string? assetPath, char axis)
@@ -1879,6 +1935,34 @@ public sealed class FoxWatchAssetMeshExporter
 
         value = default;
         return false;
+    }
+
+    private static bool TryReadStructTransformRotationDegrees(FStructFallback fallback, string propertyName, out FRotator value)
+    {
+        if (!fallback.TryGetValue(out FStructFallback transformFallback, propertyName))
+        {
+            value = default;
+            return false;
+        }
+
+        if (TryReadRotator(transformFallback, "Rotation", out value))
+        {
+            return true;
+        }
+
+        if (!transformFallback.TryGetValue(out FStructFallback rotationFallback, "Rotation"))
+        {
+            value = default;
+            return false;
+        }
+
+        var quaternion = new FQuat(
+            (float)rotationFallback.GetOrDefault<double>("X"),
+            (float)rotationFallback.GetOrDefault<double>("Y"),
+            (float)rotationFallback.GetOrDefault<double>("Z"),
+            (float)rotationFallback.GetOrDefault<double>("W"));
+        value = quaternion.Rotator();
+        return true;
     }
 
     private static string GetObjectNameFromPackagePath(string packagePath)
@@ -2424,6 +2508,15 @@ public sealed class FoxWatchAssetMeshExporter
             SplineDefaultTargetUnrealLocationCentimeters = reference.SplineDefaultTargetUnrealLocationCentimeters == null
                 ? null
                 : [.. reference.SplineDefaultTargetUnrealLocationCentimeters],
+            SplinePathMode = reference.SplinePathMode,
+            SplineMinBufferCentimeters = reference.SplineMinBufferCentimeters,
+            SplineMinRadiusCentimeters = reference.SplineMinRadiusCentimeters,
+            SplineMaxRadiusCentimeters = reference.SplineMaxRadiusCentimeters,
+            SplineMaxBufferCentimeters = reference.SplineMaxBufferCentimeters,
+            SplineEnforceCornerRadius = reference.SplineEnforceCornerRadius,
+            SplineMaxArcAngleDegrees = reference.SplineMaxArcAngleDegrees,
+            SplineMaxTargetAngleDegrees = reference.SplineMaxTargetAngleDegrees,
+            SplineMaxSlopeAngleDegrees = reference.SplineMaxSlopeAngleDegrees,
             StaticMeshOverrides = [.. reference.StaticMeshOverrides.Select(overrideReference => new FoxWatchStaticMeshOverrideReference
             {
                 TargetMeshPath = overrideReference.TargetMeshPath,
@@ -2439,8 +2532,22 @@ public sealed class FoxWatchAssetMeshExporter
                 Interval = config.Interval,
                 StartOffset = config.StartOffset,
                 EndOffset = config.EndOffset,
+                FillRemainder = config.FillRemainder,
+                ExtendSplineToMinLength = config.ExtendSplineToMinLength,
+                SplineStartOffset = config.SplineStartOffset == null ? null : [.. config.SplineStartOffset],
+                SplineEndOffset = config.SplineEndOffset == null ? null : [.. config.SplineEndOffset],
+                SplineBoundaryMin = config.SplineBoundaryMin,
+                SplineBoundaryMax = config.SplineBoundaryMax,
+                SplineMaterialScaling = config.SplineMaterialScaling == null ? null : [.. config.SplineMaterialScaling],
                 RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
                 RelativeScale = config.RelativeScale == null ? null : [.. config.RelativeScale],
+            })],
+            SplineComponentConfigs = [.. reference.SplineComponentConfigs.Select(config => new FoxWatchSplineConnectorComponentConfigReference
+            {
+                ComponentName = config.ComponentName,
+                Distance = config.Distance,
+                RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
+                RelativeRotation = config.RelativeRotation == null ? null : [.. config.RelativeRotation],
             })],
             IsVisible = reference.IsVisible,
             IsHiddenInGame = reference.IsHiddenInGame,
@@ -2544,6 +2651,16 @@ public sealed class FoxWatchAssetMeshExporter
             ];
         }
 
+        targetReference.SplinePathMode ??= fallbackReference.SplinePathMode;
+        targetReference.SplineMinBufferCentimeters ??= fallbackReference.SplineMinBufferCentimeters;
+        targetReference.SplineMinRadiusCentimeters ??= fallbackReference.SplineMinRadiusCentimeters;
+        targetReference.SplineMaxRadiusCentimeters ??= fallbackReference.SplineMaxRadiusCentimeters;
+        targetReference.SplineMaxBufferCentimeters ??= fallbackReference.SplineMaxBufferCentimeters;
+        targetReference.SplineEnforceCornerRadius ??= fallbackReference.SplineEnforceCornerRadius;
+        targetReference.SplineMaxArcAngleDegrees ??= fallbackReference.SplineMaxArcAngleDegrees;
+        targetReference.SplineMaxTargetAngleDegrees ??= fallbackReference.SplineMaxTargetAngleDegrees;
+        targetReference.SplineMaxSlopeAngleDegrees ??= fallbackReference.SplineMaxSlopeAngleDegrees;
+
         if (targetReference.StaticMeshOverrides.Count == 0 &&
             fallbackReference.StaticMeshOverrides.Count > 0)
         {
@@ -2572,8 +2689,30 @@ public sealed class FoxWatchAssetMeshExporter
                     Interval = config.Interval,
                     StartOffset = config.StartOffset,
                     EndOffset = config.EndOffset,
+                    FillRemainder = config.FillRemainder,
+                    ExtendSplineToMinLength = config.ExtendSplineToMinLength,
+                    SplineStartOffset = config.SplineStartOffset == null ? null : [.. config.SplineStartOffset],
+                    SplineEndOffset = config.SplineEndOffset == null ? null : [.. config.SplineEndOffset],
+                    SplineBoundaryMin = config.SplineBoundaryMin,
+                    SplineBoundaryMax = config.SplineBoundaryMax,
+                    SplineMaterialScaling = config.SplineMaterialScaling == null ? null : [.. config.SplineMaterialScaling],
                     RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
                     RelativeScale = config.RelativeScale == null ? null : [.. config.RelativeScale],
+                })
+            ];
+        }
+
+        if (targetReference.SplineComponentConfigs.Count == 0 &&
+            fallbackReference.SplineComponentConfigs.Count > 0)
+        {
+            targetReference.SplineComponentConfigs =
+            [
+                .. fallbackReference.SplineComponentConfigs.Select(config => new FoxWatchSplineConnectorComponentConfigReference
+                {
+                    ComponentName = config.ComponentName,
+                    Distance = config.Distance,
+                    RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
+                    RelativeRotation = config.RelativeRotation == null ? null : [.. config.RelativeRotation],
                 })
             ];
         }
@@ -3123,8 +3262,18 @@ public sealed class FoxWatchBlueprintComponentReference
     public string AbsoluteScale { get; set; } = string.Empty;
     public List<FoxWatchBlueprintSocketTagReference> SocketTags { get; set; } = [];
     public List<double>? SplineDefaultTargetUnrealLocationCentimeters { get; set; }
+    public string? SplinePathMode { get; set; }
+    public double? SplineMinBufferCentimeters { get; set; }
+    public double? SplineMinRadiusCentimeters { get; set; }
+    public double? SplineMaxRadiusCentimeters { get; set; }
+    public double? SplineMaxBufferCentimeters { get; set; }
+    public bool? SplineEnforceCornerRadius { get; set; }
+    public double? SplineMaxArcAngleDegrees { get; set; }
+    public double? SplineMaxTargetAngleDegrees { get; set; }
+    public double? SplineMaxSlopeAngleDegrees { get; set; }
     public List<FoxWatchStaticMeshOverrideReference> StaticMeshOverrides { get; set; } = [];
     public List<FoxWatchSplineConnectorMeshConfigReference> SplineConnectorMeshConfigs { get; set; } = [];
+    public List<FoxWatchSplineConnectorComponentConfigReference> SplineComponentConfigs { get; set; } = [];
     public bool IsVisible { get; set; } = true;
     public bool IsHiddenInGame { get; set; }
 }
@@ -3152,8 +3301,23 @@ public sealed class FoxWatchSplineConnectorMeshConfigReference
     public double Interval { get; set; }
     public double StartOffset { get; set; }
     public double EndOffset { get; set; }
+    public bool? FillRemainder { get; set; }
+    public bool? ExtendSplineToMinLength { get; set; }
+    public List<double>? SplineStartOffset { get; set; }
+    public List<double>? SplineEndOffset { get; set; }
+    public double? SplineBoundaryMin { get; set; }
+    public double? SplineBoundaryMax { get; set; }
+    public List<double>? SplineMaterialScaling { get; set; }
     public List<double>? RelativeLocation { get; set; }
     public List<double>? RelativeScale { get; set; }
+}
+
+public sealed class FoxWatchSplineConnectorComponentConfigReference
+{
+    public string ComponentName { get; set; } = string.Empty;
+    public double? Distance { get; set; }
+    public List<double>? RelativeLocation { get; set; }
+    public List<double>? RelativeRotation { get; set; }
 }
 
 sealed class ScsNodeOverride

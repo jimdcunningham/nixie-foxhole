@@ -1,5 +1,10 @@
 {
   "clipFloor": true,
   "previewDirection": "sw",
-  "clipFloorZ": -4.8709
+  "clipFloorZ": -4.8709,
+  "connector": {
+    "pathStyle": "straight-telescoping",
+    "frontSocketName": "FrontSocket",
+    "backSocketName": "BackSocket"
+  }
 }
