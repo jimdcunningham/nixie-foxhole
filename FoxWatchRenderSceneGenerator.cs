@@ -825,6 +825,10 @@ public sealed class FoxWatchRenderSceneGenerator
             var preparedRoots = AdjustOverheadPipePreviewNodes(
                 structure,
                 FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots));
+            preparedRoots = AdjustTelescopingSpanPreviewNodes(
+                structure,
+                preparedRoots,
+                ["PipelineoverheadConnect", "PipelineSegment01"]);
             EnsureFacilityPipeOverheadCompositeSpan(structure, preparedRoots);
 
             return new FoxWatchBlueprintSceneExtraction
@@ -837,9 +841,28 @@ public sealed class FoxWatchRenderSceneGenerator
 
         if (IsFieldBridgeOrPierStructure(structure))
         {
-            var preparedRoots = PrepareFieldConnectorPreviewNodes(
+            var spanNodeNames = string.Equals(structure.Id, "fieldpier", StringComparison.OrdinalIgnoreCase)
+                ? new[] { "FieldPier" }
+                : new[] { "FieldBridge01" };
+            var preparedRoots = AdjustTelescopingSpanPreviewNodes(
                 structure,
-                FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots));
+                FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots),
+                spanNodeNames);
+
+            return new FoxWatchBlueprintSceneExtraction
+            {
+                Roots = preparedRoots,
+                Meshes = CloneMeshAssets(blueprintScene.Meshes),
+                Variants = blueprintScene.Variants,
+            };
+        }
+
+        if (IsFacilityCatwalkBridgeStructure(structure))
+        {
+            var preparedRoots = AdjustTelescopingSpanPreviewNodes(
+                structure,
+                FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots),
+                ["facilitieCatwalkPlatfrom"]);
 
             return new FoxWatchBlueprintSceneExtraction
             {
@@ -852,57 +875,113 @@ public sealed class FoxWatchRenderSceneGenerator
         return blueprintScene;
     }
 
-    private static List<FoxWatchRenderSceneNode> PrepareFieldConnectorPreviewNodes(
-        FoxWatchManifestStructure structure,
-        List<FoxWatchRenderSceneNode> nodes)
+    private readonly record struct TelescopingSpanMetrics(double CenterX, double StartX, double ScaleX);
+
+    private static FoxWatchManifestConnectorMeshConfig? ResolvePrimaryConnectorMeshConfig(FoxWatchManifestConnector? connector)
     {
-        var frontSocketName = structure.Connector?.FrontSocketName ?? "FrontSocket";
-        var backSocketName = structure.Connector?.BackSocketName ?? "BackSocket";
-        var frontSocketX = TryFindNodeUnrealLocationX(nodes, frontSocketName) ?? 0;
-        var backSocketX = TryFindNodeUnrealLocationX(nodes, backSocketName) ?? 0;
-        var spanLength = Math.Max(0, frontSocketX - backSocketX);
-        if (spanLength <= 0.001)
+        return connector?.MeshConfigs.FirstOrDefault(config =>
+            (config.Mode ?? string.Empty).Contains("Spline", StringComparison.OrdinalIgnoreCase))
+            ?? connector?.MeshConfigs.FirstOrDefault();
+    }
+
+    private static bool TryResolveTelescopingSpanMetrics(
+        FoxWatchManifestStructure structure,
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        out TelescopingSpanMetrics metrics)
+    {
+        metrics = default;
+        var connector = structure.Connector;
+        var frontSocketName = connector?.FrontSocketName ?? "FrontSocket";
+        var backSocketName = connector?.BackSocketName ?? "BackSocket";
+        var backSocketX = TryFindNodeUnrealLocationX(nodes, backSocketName)
+            ?? TryFindBuildSocketLocationX(structure, backSocketName)
+            ?? 0;
+        var frontSocketX = TryFindNodeUnrealLocationX(nodes, frontSocketName)
+            ?? TryFindBuildSocketLocationX(structure, frontSocketName);
+        if (frontSocketX == null && connector?.DefaultTargetUnrealLocationCm is { Count: >= 1 } defaultTarget)
+        {
+            frontSocketX = backSocketX + defaultTarget[0];
+        }
+
+        if (frontSocketX == null)
+        {
+            return false;
+        }
+
+        var meshConfig = ResolvePrimaryConnectorMeshConfig(connector);
+        var nativeLength = meshConfig?.NativeMeshLengthCm ?? meshConfig?.Interval ?? 0;
+        if (nativeLength <= 0.001)
+        {
+            return false;
+        }
+
+        var startOffset = Math.Max(0, meshConfig?.StartOffset ?? 0);
+        var endOffset = Math.Max(0, meshConfig?.EndOffset ?? 0);
+        var rawLength = Math.Max(0, frontSocketX.Value - backSocketX);
+        if (rawLength <= 0.001)
+        {
+            return false;
+        }
+
+        var trimmedLength = Math.Max(0, rawLength - startOffset - endOffset);
+        var spanLength = trimmedLength > 0.001 ? trimmedLength : nativeLength;
+        var spanStartX = backSocketX + startOffset;
+        var spanCenterX = trimmedLength > 0.001
+            ? spanStartX + (spanLength * 0.5)
+            : backSocketX + (rawLength * 0.5);
+
+        metrics = new TelescopingSpanMetrics(spanCenterX, spanStartX, spanLength / nativeLength);
+        return true;
+    }
+
+    private static double? TryFindBuildSocketLocationX(FoxWatchManifestStructure structure, string socketName)
+    {
+        if (string.IsNullOrWhiteSpace(socketName))
+        {
+            return null;
+        }
+
+        var socket = structure.BuildSockets.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, socketName, StringComparison.OrdinalIgnoreCase));
+        return socket?.X;
+    }
+
+    private static List<FoxWatchRenderSceneNode> AdjustTelescopingSpanPreviewNodes(
+        FoxWatchManifestStructure structure,
+        List<FoxWatchRenderSceneNode> nodes,
+        IReadOnlyList<string> spanNodeNames)
+    {
+        if (!TryResolveTelescopingSpanMetrics(structure, nodes, out var metrics))
         {
             return nodes;
         }
 
-        var spanNodeName = string.Equals(structure.Id, "fieldpier", StringComparison.OrdinalIgnoreCase)
-            ? "FieldPier"
-            : "FieldBridge01";
-        var meshConfig = structure.Connector?.MeshConfigs.FirstOrDefault();
-        var nativeLength = meshConfig?.NativeMeshLengthCm ?? meshConfig?.Interval ?? spanLength;
-        var scaleX = nativeLength > 0.001 ? spanLength / nativeLength : 1.0;
-        var spanCenterX = backSocketX + (spanLength * 0.5);
-
-        return [.. nodes.Select(node => PrepareFieldConnectorPreviewNode(
-            node,
-            spanNodeName,
-            spanCenterX,
-            scaleX))];
+        return [.. nodes.Select(node => AdjustTelescopingSpanPreviewNode(node, spanNodeNames, metrics))];
     }
 
-    private static FoxWatchRenderSceneNode PrepareFieldConnectorPreviewNode(
+    private static FoxWatchRenderSceneNode AdjustTelescopingSpanPreviewNode(
         FoxWatchRenderSceneNode node,
-        string spanNodeName,
-        double spanCenterX,
-        double scaleX)
+        IReadOnlyList<string> spanNodeNames,
+        TelescopingSpanMetrics metrics)
     {
         var normalizedNodeName = NormalizeRenderSceneNodeName(node.Name);
         List<double>? unrealLocationCentimeters = node.UnrealLocationCentimeters == null
             ? null
             : [.. node.UnrealLocationCentimeters];
         List<double>? scale = node.Scale == null ? null : [.. node.Scale];
-        if (string.Equals(normalizedNodeName, spanNodeName, StringComparison.OrdinalIgnoreCase) &&
-            unrealLocationCentimeters is { Count: > 0 })
+        if (spanNodeNames.Any(spanNodeName =>
+                string.Equals(normalizedNodeName, spanNodeName, StringComparison.OrdinalIgnoreCase)) &&
+            unrealLocationCentimeters is { Count: > 0 } location)
         {
-            unrealLocationCentimeters[0] = spanCenterX;
+            var placementX = Math.Abs(location[0]) < 1.0 ? metrics.StartX : metrics.CenterX;
+            unrealLocationCentimeters[0] = placementX;
             if (scale is { Count: > 0 })
             {
-                scale[0] = scaleX;
+                scale[0] = metrics.ScaleX;
             }
             else
             {
-                scale = [scaleX, 1.0, 1.0];
+                scale = [metrics.ScaleX, 1.0, 1.0];
             }
         }
 
@@ -928,7 +1007,7 @@ public sealed class FoxWatchRenderSceneGenerator
             PoseVariants = ClonePoseVariants(node.PoseVariants),
             AttachBoneName = node.AttachBoneName,
             TransformMatrix = [.. node.TransformMatrix],
-            Children = [.. node.Children.Select(child => PrepareFieldConnectorPreviewNode(child, spanNodeName, spanCenterX, scaleX))],
+            Children = [.. node.Children.Select(child => AdjustTelescopingSpanPreviewNode(child, spanNodeNames, metrics))],
         };
     }
 
@@ -953,12 +1032,7 @@ public sealed class FoxWatchRenderSceneGenerator
         FoxWatchManifestStructure structure,
         List<FoxWatchRenderSceneNode> roots)
     {
-        var frontSocketName = structure.Connector?.FrontSocketName ?? "FrontSocket";
-        var backSocketName = structure.Connector?.BackSocketName ?? "BackSocket";
-        var frontSocketX = TryFindNodeUnrealLocationX(roots, frontSocketName) ?? 0;
-        var backSocketX = TryFindNodeUnrealLocationX(roots, backSocketName) ?? 0;
-        var spanLength = Math.Max(0, frontSocketX - backSocketX);
-        if (spanLength <= 0.001)
+        if (!TryResolveTelescopingSpanMetrics(structure, roots, out var metrics))
         {
             return;
         }
@@ -969,19 +1043,13 @@ public sealed class FoxWatchRenderSceneGenerator
             return;
         }
 
-        var meshConfig = structure.Connector?.MeshConfigs.FirstOrDefault(config =>
-            (config.Mode ?? string.Empty).Contains("Spline", StringComparison.OrdinalIgnoreCase))
-            ?? structure.Connector?.MeshConfigs.FirstOrDefault();
-        var nativeLength = meshConfig?.NativeMeshLengthCm ?? 278.919;
-        var scaleX = nativeLength > 0.001 ? spanLength / nativeLength : 1.0;
-
         splineConnector.Children.Add(new FoxWatchRenderSceneNode
         {
             Id = $"{structure.Id}:composite:spline-span",
             Name = "PipelineoverheadConnect",
             MeshId = FacilityPipeOverheadSpanMeshId,
-            Scale = [scaleX, 1.0, 1.0],
-            UnrealLocationCentimeters = [0.0, 0.0, 0.0],
+            Scale = [metrics.ScaleX, 1.0, 1.0],
+            UnrealLocationCentimeters = [metrics.StartX, 0.0, 0.0],
             UnrealRotationDegrees = [0.0, 0.0, 0.0],
         });
     }
@@ -1166,9 +1234,7 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static double ResolveConnectorGroundedLength(FoxWatchManifestConnector? connector)
     {
-        var meshConfig = connector?.MeshConfigs.FirstOrDefault(config =>
-            (config.Mode ?? string.Empty).Contains("Spline", StringComparison.OrdinalIgnoreCase))
-            ?? connector?.MeshConfigs.FirstOrDefault();
+        var meshConfig = ResolvePrimaryConnectorMeshConfig(connector);
         return Math.Max(0, meshConfig?.StartOffset ?? meshConfig?.EndOffset ?? 0);
     }
 
@@ -1423,6 +1489,16 @@ public sealed class FoxWatchRenderSceneGenerator
             return ["backtrim", "backramp", "span", "frontramp", "fronttrim"];
         }
 
+        if (IsFacilityCatwalkBridgeStructure(structure))
+        {
+            return ["backtrim", "span", "fronttrim"];
+        }
+
+        if (IsTankStopSplineStructure(structure) || IsMineSplineStructure(structure) || IsIntervalMarkerSplineStructure(structure))
+        {
+            return ["span", "spanalt"];
+        }
+
         if (IsTrimSpanConnectorStructure(structure))
         {
             return ["backtrim", "span", "fronttrim"];
@@ -1472,11 +1548,50 @@ public sealed class FoxWatchRenderSceneGenerator
             || string.Equals(id, "fieldpier", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsFacilityCatwalkBridgeStructure(FoxWatchManifestStructure structure)
+    {
+        return string.Equals(structure.Id, "facilitycatwalkbridge", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTankStopSplineStructure(FoxWatchManifestStructure structure)
+    {
+        return (structure.Id ?? string.Empty).StartsWith("tankstopspline", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsMineSplineStructure(FoxWatchManifestStructure structure)
+    {
+        var id = structure.Id ?? string.Empty;
+        return string.Equals(id, "minespline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(id, "infantryminespline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(id, "waterminespline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(id, "surfacewaterminespline", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsIntervalMarkerSplineStructure(FoxWatchManifestStructure structure)
+    {
+        if (!string.Equals(structure.Connector?.PathStyle, "interval", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var meshConfigs = structure.Connector?.MeshConfigs;
+        if (meshConfigs == null || meshConfigs.Count == 0)
+        {
+            return false;
+        }
+
+        return !meshConfigs.Any(config =>
+            (config.Mode ?? string.Empty).Contains("Spline", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static bool IsTrimSpanConnectorStructure(FoxWatchManifestStructure structure)
     {
         var id = structure.Id ?? string.Empty;
         return IsFieldBridgeOrPierStructure(structure)
-            || id.StartsWith("wallspline", StringComparison.OrdinalIgnoreCase);
+            || IsFacilityCatwalkBridgeStructure(structure)
+            || string.Equals(id, "barbedwirespline", StringComparison.OrdinalIgnoreCase)
+            || id.StartsWith("wallspline", StringComparison.OrdinalIgnoreCase)
+            || id.StartsWith("waterwallspline", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsCraneRailTrackSplineStructure(FoxWatchManifestStructure structure)
@@ -2155,6 +2270,11 @@ public sealed class FoxWatchRenderSceneGenerator
             return MatchesTrimSpanConnectorLayer(structure, normalizedNodeName, layerId);
         }
 
+        if (IsTankStopSplineStructure(structure) || IsMineSplineStructure(structure) || IsIntervalMarkerSplineStructure(structure))
+        {
+            return MatchesIntervalMarkerSplineLayer(structure, normalizedNodeName, layerId);
+        }
+
         if (IsFacilityRoadStructure(structure))
         {
             return layerId.ToLowerInvariant() switch
@@ -2231,6 +2351,40 @@ public sealed class FoxWatchRenderSceneGenerator
             };
         }
 
+        if (string.Equals(structureId, "facilitycatwalkbridge", StringComparison.OrdinalIgnoreCase))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "backtrim" => string.Equals(normalizedNodeName, "BackSupport", StringComparison.OrdinalIgnoreCase),
+                "fronttrim" => string.Equals(normalizedNodeName, "FrontSupport", StringComparison.OrdinalIgnoreCase),
+                "span" => string.Equals(normalizedNodeName, "facilitieCatwalkPlatfrom", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
+        if (string.Equals(structureId, "barbedwirespline", StringComparison.OrdinalIgnoreCase))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "backtrim" => string.Equals(normalizedNodeName, "PillarBack", StringComparison.OrdinalIgnoreCase),
+                "fronttrim" => string.Equals(normalizedNodeName, "PillarFront", StringComparison.OrdinalIgnoreCase),
+                "span" => normalizedNodeName.StartsWith("BarbedWireSpline_", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
+        if (structureId.StartsWith("waterwallspline", StringComparison.OrdinalIgnoreCase))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "backtrim" => string.Equals(normalizedNodeName, "BackPillar", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedNodeName, "BackPIllar", StringComparison.OrdinalIgnoreCase),
+                "fronttrim" => string.Equals(normalizedNodeName, "FrontPillar", StringComparison.OrdinalIgnoreCase),
+                "span" => string.Equals(normalizedNodeName, "WaterWallSpline", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
         if (structureId.StartsWith("wallspline", StringComparison.OrdinalIgnoreCase))
         {
             return layerId.ToLowerInvariant() switch
@@ -2265,6 +2419,43 @@ public sealed class FoxWatchRenderSceneGenerator
         return normalizedNodeName.Contains("Wall_segment", StringComparison.OrdinalIgnoreCase)
             || normalizedNodeName.Contains("WallSegments", StringComparison.OrdinalIgnoreCase)
             || normalizedNodeName.Contains("WallPlank", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesIntervalMarkerSplineLayer(
+        FoxWatchManifestStructure structure,
+        string normalizedNodeName,
+        string layerId)
+    {
+        if (IsMineSplineStructure(structure))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "span" => string.Equals(normalizedNodeName, "CraterS", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedNodeName, "InfantryMinePickup", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedNodeName, "Seamines", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedNodeName, "SmallSeaMine", StringComparison.OrdinalIgnoreCase),
+                "spanalt" => string.Equals(normalizedNodeName, "Bouy01", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(normalizedNodeName, "InfantryMinePickup", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
+        if (IsTankStopSplineStructure(structure))
+        {
+            if (!normalizedNodeName.StartsWith("TankStopT3_", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return layerId.ToLowerInvariant() switch
+            {
+                "span" => normalizedNodeName.EndsWith("_1", StringComparison.OrdinalIgnoreCase),
+                "spanalt" => normalizedNodeName.EndsWith("_2", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
+        return false;
     }
 
     private static FoxWatchRenderScenePose? ClonePose(FoxWatchRenderScenePose? pose)

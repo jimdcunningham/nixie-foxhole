@@ -1758,6 +1758,131 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
     };
 }
 
+function collectReferencedUpgradeStructureIds(structures) {
+    const upgradeStructureIds = new Set();
+
+    for (const structure of structures ?? []) {
+        for (const slot of getStructurePublishedModificationSlots(structure)) {
+            for (const [variantId, variant] of Object.entries(slot?.variants ?? {})) {
+                if (normalizeId(variantId) === 'default') {
+                    continue;
+                }
+
+                if (variant?.isUpgrade !== true) {
+                    continue;
+                }
+
+                const appliedModificationId = normalizeId(variant?.appliedModificationId);
+                if (appliedModificationId) {
+                    upgradeStructureIds.add(appliedModificationId);
+                }
+            }
+        }
+    }
+
+    return upgradeStructureIds;
+}
+
+function mergeModificationVariantPublishedContext(variant, publishedVariant) {
+    if (!publishedVariant) {
+        return variant;
+    }
+
+    const nextVariant = { ...variant };
+    if (publishedVariant.isUpgrade === true) {
+        nextVariant.isUpgrade = true;
+        if (publishedVariant.appliedModificationId) {
+            nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
+        }
+        delete nextVariant.sharedModificationId;
+        return nextVariant;
+    }
+
+    if (publishedVariant.appliedModificationId && !nextVariant.appliedModificationId) {
+        nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
+    }
+
+    if (publishedVariant.sharedModificationId
+        && !nextVariant.sharedModificationId) {
+        nextVariant.sharedModificationId = publishedVariant.sharedModificationId;
+    }
+
+    return nextVariant;
+}
+
+function augmentPartialManifestWithPublishedContext(partialManifest, publishedManifest) {
+    if (!publishedManifest) {
+        return partialManifest;
+    }
+
+    const publishedStructuresById = new Map((publishedManifest.assets ?? [])
+        .map(structure => {
+            const structureId = normalizeId(structure?.id);
+            return structureId ? [structureId, structure] : null;
+        })
+        .filter(Boolean));
+
+    const publishedUpgradeStructuresById = new Map((publishedManifest.assets ?? [])
+        .filter(structure => structure?.isUpgrade === true)
+        .map(structure => {
+            const structureId = normalizeId(structure?.id);
+            return structureId ? [structureId, structure] : null;
+        })
+        .filter(Boolean));
+
+    const augmentedAssets = (partialManifest.assets ?? []).map(structure => {
+        const structureId = normalizeId(structure?.id);
+        const publishedStructure = structureId ? publishedStructuresById.get(structureId) : null;
+        if (!publishedStructure) {
+            return structure;
+        }
+
+        const publishedSlotsByName = new Map(getStructurePublishedModificationSlots(publishedStructure)
+            .map(slot => {
+                const slotName = String(slot?.name ?? '').trim();
+                return slotName ? [slotName, slot] : null;
+            })
+            .filter(Boolean));
+
+        const nextSlots = (structure?.modificationSlots ?? []).map(slot => ({
+            ...slot,
+            variants: Object.fromEntries(Object.entries(slot?.variants ?? {}).map(([variantId, variant]) => {
+                const publishedSlot = publishedSlotsByName.get(String(slot?.name ?? '').trim()) ?? null;
+                const publishedVariant = publishedSlot?.variants?.[variantId] ?? null;
+                return [variantId, mergeModificationVariantPublishedContext(variant, publishedVariant)];
+            })),
+        }));
+
+        return {
+            ...structure,
+            ...(nextSlots.length > 0 ? { modificationSlots: nextSlots } : {}),
+        };
+    });
+
+    const existingStructureIds = new Set(augmentedAssets
+        .map(structure => normalizeId(structure?.id))
+        .filter(Boolean));
+
+    for (const upgradeStructureId of collectReferencedUpgradeStructureIds(augmentedAssets)) {
+        if (existingStructureIds.has(upgradeStructureId)) {
+            continue;
+        }
+
+        const publishedUpgradeStructure = publishedUpgradeStructuresById.get(upgradeStructureId);
+        if (!publishedUpgradeStructure) {
+            continue;
+        }
+
+        augmentedAssets.push(publishedUpgradeStructure);
+        existingStructureIds.add(upgradeStructureId);
+    }
+
+    return {
+        ...partialManifest,
+        assets: augmentedAssets,
+    };
+}
+
 async function loadSourceManifest(manifestPath) {
     const rawManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     if (!Array.isArray(rawManifest?.assets)) {
@@ -6436,24 +6561,27 @@ try {
         ),
         targetFilter,
     ), sourceManifest.__sourceStructureMetadataById);
-    publishedAssetTypeById = buildPublishedAssetTypeLookup(filteredSourceManifest);
-    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIds(targetFilter, filteredSourceManifest);
+    const manifestForPublish = hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
+        ? augmentPartialManifestWithPublishedContext(filteredSourceManifest, publishedManifestBeforeWrite)
+        : filteredSourceManifest;
+    publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestForPublish);
+    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIds(targetFilter, manifestForPublish);
     const referencedGeneratedIconKeys = hasTargetFilters(targetFilter)
-        ? collectReferencedPublishedIconKeys(filteredSourceManifest)
+        ? collectReferencedPublishedIconKeys(manifestForPublish)
         : null;
-    const scopedRawRenderedAssetTargets = buildScopedRawRenderedAssetTargets(filteredSourceManifest);
+    const scopedRawRenderedAssetTargets = buildScopedRawRenderedAssetTargets(manifestForPublish);
 
-    await removeStaleRootStructureArtifacts(filteredSourceManifest);
-    await removeStaleStructureArtifactDirectories(filteredSourceManifest);
+    await removeStaleRootStructureArtifacts(manifestForPublish);
+    await removeStaleStructureArtifactDirectories(manifestForPublish);
     await removeStructureArtifactsByIds(explicitlyRemovedStructureIds);
-    await removeLegacyTypedLayoutArtifacts(filteredSourceManifest);
+    await removeLegacyTypedLayoutArtifacts(manifestForPublish);
 
-    await generateSyntheticOilfieldAssets(filteredSourceManifest);
+    await generateSyntheticOilfieldAssets(manifestForPublish);
     await syncRawRenderedAssetsToPublicDirectory(scopedRawRenderedAssetTargets);
 
-    const structureRenderEntries = await buildStructureRenderEntries(filteredSourceManifest, scopedRawRenderedAssetTargets);
+    const structureRenderEntries = await buildStructureRenderEntries(manifestForPublish, scopedRawRenderedAssetTargets);
     const manifestWithRenderUrls = applyStructureRenderUrls(
-        filteredSourceManifest,
+        manifestForPublish,
         structureRenderEntries.entriesByKey,
         await buildStructureSceneMetadata(),
         structureRenderEntries.modificationEntriesByKey,
@@ -6462,7 +6590,7 @@ try {
         structureRenderEntries.sharedPackagingEntriesByKey,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
-    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(manifestWithNormalizedIconUrls, generatedIconsDirectory, filteredSourceManifest);
+    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(manifestWithNormalizedIconUrls, generatedIconsDirectory, manifestForPublish);
     const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
         manifestWithCoLocatedFallbackAssets,
         structureRenderEntries.modificationEntriesByKey,
@@ -6471,7 +6599,7 @@ try {
     await syncSharedModificationDefaultIconAssets(manifestWithStrippedSlotNoise);
     const manifestWithPreservedAuthoredPreviewDirections = preserveAuthoredStructurePreviewDirections(
         manifestWithStrippedSlotNoise,
-        filteredSourceManifest,
+        manifestForPublish,
     );
     let publishedBaseManifest = null;
     if (hasTargetFilters(targetFilter)) {
