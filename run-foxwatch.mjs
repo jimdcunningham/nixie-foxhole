@@ -45,6 +45,7 @@ appendNpmConfigArgument(args, 'pak-path');
 appendNpmConfigArgument(args, 'base-assets-url');
 appendNpmConfigArgument(args, 'limit');
 appendNpmConfigArgument(args, 'skip-existing-assets');
+appendNpmConfigArgument(args, 'mod');
 
 if (command === 'publish-manifest') {
     const parsedArgs = parseCliArgs(args);
@@ -55,6 +56,42 @@ if (command === 'publish-manifest') {
         getNormalizedValues(parsedArgs, 'only'),
         { skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets') },
     );
+    process.exit(0);
+}
+
+if (command === 'refresh-modifications') {
+    const parsedArgs = parseCliArgs(args);
+    await runNpm(['run', 'build:foxwatch']);
+
+    const manifestFoxwatchArgs = await buildFoxWatchArgsFromParsedArgs(parsedArgs, {
+        onlyIds: [],
+        categoryIds: [],
+    });
+    console.log('refresh-modifications: generating full source manifest');
+    await run('dotnet', [dllPath, 'generate-manifest', ...manifestFoxwatchArgs]);
+
+    const modificationStructureIds = await collectModificationStructureIds(rawFoxWatchManifestPath, parsedArgs);
+    if (modificationStructureIds.length === 0) {
+        throw new Error('refresh-modifications matched no structures with modification slots');
+    }
+
+    console.log(`refresh-modifications: rendering ${modificationStructureIds.length} structure(s) with modification slots`);
+    const renderFoxwatchArgs = await buildFoxWatchArgsFromParsedArgs(parsedArgs, {
+        onlyIds: modificationStructureIds,
+        categoryIds: [],
+    });
+    await run('dotnet', [dllPath, 'generate-render-scenes', ...renderFoxwatchArgs]);
+    await run(blenderExecutable, buildBlenderArgs(args, {
+        purgeExistingByDefault: false,
+        onlyIds: modificationStructureIds,
+    }));
+
+    console.log('refresh-modifications: publishing full manifest');
+    await run('node', ['--experimental-strip-types', publishManifestScriptPath]);
+    await publishPlannerCompat();
+    await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, null, {
+        skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),
+    });
     process.exit(0);
 }
 
@@ -301,6 +338,46 @@ async function syncStructureDefaultIcon(structure, isDestroyed = false) {
 function resolveSourceManifestPath(parsedArgs) {
     const explicitSourcePath = (parsedArgs['source-manifest'] ?? parsedArgs.source ?? []).at(-1);
     return explicitSourcePath ? path.resolve(repoRoot, explicitSourcePath) : rawFoxWatchManifestPath;
+}
+
+async function collectModificationStructureIds(manifestPath, parsedArgs = {}) {
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    const requestedVariantIds = new Set(getNormalizedValues(parsedArgs, 'mod'));
+
+    const structureIds = new Set();
+    for (const structure of manifest?.assets ?? []) {
+        const structureId = normalizeAssetId(structure?.id);
+        if (!structureId) {
+            continue;
+        }
+
+        let hasMatchingModification = false;
+        for (const slot of structure?.modificationSlots ?? []) {
+            for (const [variantId] of Object.entries(slot?.variants ?? {})) {
+                const normalizedVariantId = normalizeAssetId(variantId);
+                if (!normalizedVariantId || normalizedVariantId === 'default') {
+                    continue;
+                }
+
+                if (requestedVariantIds.size > 0 && !requestedVariantIds.has(normalizedVariantId)) {
+                    continue;
+                }
+
+                hasMatchingModification = true;
+                break;
+            }
+
+            if (hasMatchingModification) {
+                break;
+            }
+        }
+
+        if (hasMatchingModification) {
+            structureIds.add(structureId);
+        }
+    }
+
+    return [...structureIds].sort((left, right) => left.localeCompare(right));
 }
 
 async function syncMissingStructureDefaultIcons(sourceManifestPath, onlyIds = null) {

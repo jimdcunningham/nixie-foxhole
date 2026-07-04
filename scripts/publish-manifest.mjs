@@ -6,6 +6,13 @@ import sharp from 'sharp';
 
 import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
+import {
+    buildSharedModificationIdComputation,
+    createSharedModificationHashDiagnosticInput,
+    getStandaloneModificationIdentityText,
+    normalizeStandaloneModificationIdentityPart,
+    normalizeStandaloneModificationKeyComponent,
+} from './shared-modification-id.mjs';
 
 import {
     createFoxholeAssetsBaseUrl,
@@ -33,6 +40,7 @@ const renderScenesIndexPath = resolve(renderScenesDirectory, 'index.render-scene
 const publicLocalizationsDirectory = resolve(publicFoxholeAssetsDirectory, 'localizations');
 const fixtureManifestPath = resolve(repositoryRoot, 'tests/fixtures/foxhole/manifest.v1.fixture.json');
 const fixtureLocalizationsDirectory = resolve(repositoryRoot, 'tests/fixtures/foxhole/localizations');
+const sharedModificationOverrideManifestPath = resolve(repositoryRoot, 'tools/foxwatch/asset-overrides/modifications.json');
 const defaultWreckedSubtypeIconUrl = '/foxhole/assets/icons/subtypewreckedicon.webp';
 const sharedModificationHashDiagnosticsDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/diagnostics/shared-modification-hash');
 
@@ -89,14 +97,6 @@ const sharedModificationHashDiagnostics = {
 
 function createSharedModificationHashDiagnosticsRunId() {
     return `${new Date().toISOString().replace(/[.:]/g, '-')}-pid${process.pid}`;
-}
-
-function createSharedModificationHashDiagnosticInput(value) {
-    const raw = value == null ? '' : String(value);
-    return {
-        raw,
-        normalized: normalizeStandaloneModificationIdentityPart(raw),
-    };
 }
 
 function cloneSharedModificationHashDiagnosticValue(value) {
@@ -1301,7 +1301,7 @@ function compactSharedPackagedPallet(value) {
 function compactModificationVariant(value) {
     if (isPlainObject(value)) {
         const sharedModificationId = String(value.sharedModificationId ?? '').trim();
-        if (sharedModificationId && value.isUpgrade !== true) {
+        if (sharedModificationId) {
             return compactObject({
                 ...value,
                 subTypeIconUrl: undefined,
@@ -1731,9 +1731,9 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                                 ?? rawVariant?.appliedModificationId
                                 ?? variantId,
                             )) ?? null;
-                            const seededSharedModificationId = normalizeId(variantId) === 'default' || rawVariant?.isUpgrade === true || rawSourceModification?.isUpgrade === true
+                            const seededSharedModificationId = normalizeId(variantId) === 'default'
                                 ? null
-                                : resolvePreferredSharedModificationId(
+                                : resolvePublishedSharedModificationId(
                                     variant?.sharedModificationId ?? rawVariant?.sharedModificationId ?? rawSourceModification?.sharedModificationId ?? null,
                                     variantId,
                                     {
@@ -1794,17 +1794,11 @@ function mergeModificationVariantPublishedContext(variant, publishedVariant) {
         if (publishedVariant.appliedModificationId) {
             nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
         }
-        delete nextVariant.sharedModificationId;
         return nextVariant;
     }
 
     if (publishedVariant.appliedModificationId && !nextVariant.appliedModificationId) {
         nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
-    }
-
-    if (publishedVariant.sharedModificationId
-        && !nextVariant.sharedModificationId) {
-        nextVariant.sharedModificationId = publishedVariant.sharedModificationId;
     }
 
     return nextVariant;
@@ -1904,6 +1898,11 @@ async function loadSourceManifest(manifestPath) {
         .filter(Boolean));
     const normalizedManifest = normalizeOptionalStructureProperties(await mergeExternalLocalizationFiles(manifest, manifestPath));
     return attachSourceStructureMetadata(normalizedManifest, structureMetadataById);
+}
+
+function structurePrefersGeneratedDefaultIcon(structure, sourceStructureMetadata) {
+    return structure?.generateDefaultIcon === true
+        || sourceStructureMetadata?.generateDefaultIcon === true;
 }
 
 function parseCliArgs(rawArgs) {
@@ -2072,12 +2071,129 @@ function collectReferencedSharedModificationIds(manifest) {
     return sharedModificationIds;
 }
 
-function buildScopedRawRenderedAssetTargets(manifest) {
+async function loadRenderScenesIndexDocument() {
+    if (!await pathExists(renderScenesIndexPath)) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(await readFile(renderScenesIndexPath, 'utf8'));
+    } catch (error) {
+        console.warn(`failed to read render scene index from ${renderScenesIndexPath}: ${error}`);
+        return null;
+    }
+}
+
+function collectSharedModificationIdsFromRenderIndex(renderScenesIndexDocument, scopedAssetIds = null) {
+    const sharedModificationIds = new Set();
+    if (!renderScenesIndexDocument) {
+        return sharedModificationIds;
+    }
+
+    for (const entry of renderScenesIndexDocument?.scenes ?? []) {
+        if (!isSharedModificationRenderIndexEntry(entry)) {
+            continue;
+        }
+
+        const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
+        if (scopedAssetIds && scopedAssetIds.size > 0) {
+            const affectsScope = consumers.some(consumer => scopedAssetIds.has(normalizeId(consumer?.structureId)));
+            if (!affectsScope) {
+                continue;
+            }
+        }
+
+        const sharedOutputKey = normalizeId(basename(String(entry?.outputPath ?? ''), '.scene.json'));
+        if (sharedOutputKey && hasStandaloneModificationContentHashSuffix(sharedOutputKey)) {
+            sharedModificationIds.add(sharedOutputKey);
+        }
+    }
+
+    return sharedModificationIds;
+}
+
+function buildSharedModificationConsumerLookup(renderScenesIndexDocument) {
+    const sharedModificationIdByConsumer = new Map();
+    if (!renderScenesIndexDocument) {
+        return sharedModificationIdByConsumer;
+    }
+
+    for (const entry of renderScenesIndexDocument?.scenes ?? []) {
+        if (!isSharedModificationRenderIndexEntry(entry)) {
+            continue;
+        }
+
+        const sharedOutputKey = normalizeId(basename(String(entry?.outputPath ?? ''), '.scene.json'));
+        if (!sharedOutputKey || !hasStandaloneModificationContentHashSuffix(sharedOutputKey)) {
+            continue;
+        }
+
+        for (const consumer of entry?.consumers ?? []) {
+            const structureId = normalizeId(consumer?.structureId);
+            const variantId = normalizeId(consumer?.variantId);
+            if (structureId && variantId) {
+                sharedModificationIdByConsumer.set(`${structureId}|${variantId}`, sharedOutputKey);
+            }
+        }
+    }
+
+    return sharedModificationIdByConsumer;
+}
+
+function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDocument) {
+    const sharedModificationIdByConsumer = buildSharedModificationConsumerLookup(renderScenesIndexDocument);
+    if (sharedModificationIdByConsumer.size === 0) {
+        return manifest;
+    }
+
+    return {
+        ...manifest,
+        assets: (manifest?.assets ?? []).map(structure => {
+            const structureId = normalizeId(structure?.id);
+            if (!structureId || !Array.isArray(structure?.modificationSlots) || structure.modificationSlots.length === 0) {
+                return structure;
+            }
+
+            return {
+                ...structure,
+                modificationSlots: structure.modificationSlots.map(slot => ({
+                    ...slot,
+                    variants: Object.fromEntries(Object.entries(slot?.variants ?? {}).map(([variantId, variant]) => {
+                        if (normalizeId(variantId) === 'default') {
+                            return [variantId, variant];
+                        }
+
+                        const consumerKey = `${structureId}|${normalizeId(variantId)}`;
+                        const existingSharedModificationId = normalizeId(variant?.sharedModificationId);
+                        if (existingSharedModificationId) {
+                            return [variantId, variant];
+                        }
+
+                        const sharedModificationId = sharedModificationIdByConsumer.get(consumerKey);
+                        if (!sharedModificationId) {
+                            return [variantId, variant];
+                        }
+
+                        return [variantId, {
+                            ...variant,
+                            sharedModificationId,
+                        }];
+                    })),
+                })),
+            };
+        }),
+    };
+}
+
+function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument = null) {
     const assetIds = new Set((manifest?.assets ?? [])
         .flatMap(structure => [structure?.id, structure?.codeName, structure?.parentStructureId, structure?.rootStructureId])
         .map(normalizeId)
         .filter(Boolean));
     const sharedModificationIds = collectReferencedSharedModificationIds(buildSharedModificationStore(manifest));
+    for (const sharedModificationId of collectSharedModificationIdsFromRenderIndex(renderScenesIndexDocument, assetIds)) {
+        sharedModificationIds.add(sharedModificationId);
+    }
     const sharedPackagingKeys = new Set([
         ...sharedPackagingTargetKeys,
         ...Object.keys(manifest?.shared?.packaging ?? {})
@@ -2228,6 +2344,115 @@ function preserveAuthoredStructurePreviewDirections(publishedManifest, sourceMan
             };
         }),
     };
+}
+
+function collectAuthoredModificationPreviewDirections(sourceManifest) {
+    const authoredPreviewDirectionByStructureVariant = new Map();
+
+    for (const structure of sourceManifest?.assets ?? []) {
+        const structureId = normalizeId(structure?.id);
+        if (!structureId) {
+            continue;
+        }
+
+        for (const slot of structure?.modificationSlots ?? []) {
+            for (const [variantId, variant] of Object.entries(slot?.variants ?? {})) {
+                const previewDirection = normalizeId(variant?.previewDirection);
+                if (!previewDirection) {
+                    continue;
+                }
+
+                authoredPreviewDirectionByStructureVariant.set(`${structureId}|${normalizeId(variantId)}`, previewDirection);
+            }
+        }
+    }
+
+    return authoredPreviewDirectionByStructureVariant;
+}
+
+function preserveAuthoredModificationPreviewDirections(publishedManifest, sourceManifest) {
+    const authoredPreviewDirectionByStructureVariant = collectAuthoredModificationPreviewDirections(sourceManifest);
+    if (authoredPreviewDirectionByStructureVariant.size === 0) {
+        return publishedManifest;
+    }
+
+    return {
+        ...publishedManifest,
+        assets: (publishedManifest?.assets ?? []).map(structure => {
+            const structureId = normalizeId(structure?.id);
+            if (!structureId || !Array.isArray(structure?.modificationSlots)) {
+                return structure;
+            }
+
+            let structureChanged = false;
+            const modificationSlots = structure.modificationSlots.map(slot => ({
+                ...slot,
+                variants: Object.fromEntries(Object.entries(slot?.variants ?? {}).map(([variantId, variant]) => {
+                    const authoredPreviewDirection = authoredPreviewDirectionByStructureVariant.get(`${structureId}|${normalizeId(variantId)}`)
+                        ?? (normalizeId(variant?.sharedModificationId)
+                            ? authoredPreviewDirectionByStructureVariant.get(`${structureId}|${normalizeId(variant.sharedModificationId)}`)
+                            : null);
+                    if (!authoredPreviewDirection || normalizeId(variant?.previewDirection) === authoredPreviewDirection) {
+                        return [variantId, variant];
+                    }
+
+                    structureChanged = true;
+                    return [variantId, {
+                        ...variant,
+                        previewDirection: authoredPreviewDirection,
+                    }];
+                })),
+            }));
+
+            return structureChanged ? { ...structure, modificationSlots } : structure;
+        }),
+    };
+}
+
+async function loadAuthoredSharedModificationOverrides() {
+    if (!await pathExists(sharedModificationOverrideManifestPath)) {
+        return {};
+    }
+
+    try {
+        const document = JSON.parse(await readFile(sharedModificationOverrideManifestPath, 'utf8'));
+        return Object.fromEntries(Object.entries(document?.modifications ?? {})
+            .map(([sharedModificationId, override]) => [normalizeId(sharedModificationId), override])
+            .filter(([sharedModificationId]) => Boolean(sharedModificationId)));
+    } catch (error) {
+        console.warn(`failed to read shared modification overrides from ${sharedModificationOverrideManifestPath}: ${error}`);
+        return {};
+    }
+}
+
+function preserveAuthoredSharedModificationPreviewDirections(publishedManifest, authoredOverridesBySharedModificationId) {
+    if (!publishedManifest?.shared?.modifications || Object.keys(authoredOverridesBySharedModificationId).length === 0) {
+        return publishedManifest;
+    }
+
+    let changed = false;
+    const modifications = Object.fromEntries(Object.entries(publishedManifest.shared.modifications).map(([sharedModificationId, modification]) => {
+        const authoredPreviewDirection = normalizeId(authoredOverridesBySharedModificationId[normalizeId(sharedModificationId)]?.previewDirection);
+        if (!authoredPreviewDirection || normalizeId(modification?.previewDirection) === authoredPreviewDirection) {
+            return [sharedModificationId, modification];
+        }
+
+        changed = true;
+        return [sharedModificationId, {
+            ...modification,
+            previewDirection: authoredPreviewDirection,
+        }];
+    }));
+
+    return changed
+        ? {
+            ...publishedManifest,
+            shared: {
+                ...publishedManifest.shared,
+                modifications,
+            },
+        }
+        : publishedManifest;
 }
 
 function getExplicitlyRemovedStructureIds(filter, partialManifest) {
@@ -3132,70 +3357,8 @@ function parseAssetRelativeLocation(filePath) {
     return null;
 }
 
-function normalizeStandaloneModificationKeyComponent(value) {
-    return normalizeId(value)
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-}
-
-function normalizeStandaloneModificationIdentityPart(value) {
-    return String(value ?? '').trim().toLowerCase();
-}
-
-function getStandaloneModificationIdentityText(value) {
-    if (typeof value === 'string') {
-        return value;
-    }
-
-    if (isPlainObject(value)) {
-        if (typeof value.fallback === 'string' && value.fallback.trim()) {
-            return value.fallback;
-        }
-
-        if (typeof value.id === 'string' && value.id.trim()) {
-            return value.id;
-        }
-    }
-
-    return '';
-}
-
 function buildRenderGeneratorStyleSharedModificationIdComputation(variantId, variant, structurePreviewDirection) {
-    const previewDirection = normalizeId(variant?.previewDirection) || normalizeId(structurePreviewDirection) || 'se';
-    const variantIdInput = createSharedModificationHashDiagnosticInput(variantId);
-    const templateActorPathInput = createSharedModificationHashDiagnosticInput(variant?.templateActorPath);
-    const templateMeshPathInput = createSharedModificationHashDiagnosticInput(variant?.templateMeshPath);
-    const previewMeshPathInput = createSharedModificationHashDiagnosticInput(variant?.previewMeshPath);
-    const nameInput = createSharedModificationHashDiagnosticInput(getStandaloneModificationIdentityText(variant?.name));
-    const descriptionInput = createSharedModificationHashDiagnosticInput(getStandaloneModificationIdentityText(variant?.description));
-    const previewDirectionInput = createSharedModificationHashDiagnosticInput(previewDirection);
-    const identity = [
-        variantIdInput.normalized,
-        templateActorPathInput.normalized,
-        templateMeshPathInput.normalized,
-        previewMeshPathInput.normalized,
-        nameInput.normalized,
-        descriptionInput.normalized,
-        previewDirectionInput.normalized,
-    ].join('|');
-    const normalizedVariantId = normalizeStandaloneModificationKeyComponent(variantId);
-    const fullHashHex = createHash('sha256').update(identity).digest('hex');
-    const truncatedHashHex = fullHashHex.slice(0, 12);
-    return {
-        previewDirection,
-        variantIdInput,
-        templateActorPathInput,
-        templateMeshPathInput,
-        previewMeshPathInput,
-        nameInput,
-        descriptionInput,
-        previewDirectionInput,
-        identity,
-        normalizedVariantId,
-        fullHashHex,
-        truncatedHashHex,
-        generatedSharedModificationId: normalizedVariantId ? `${normalizedVariantId}-${truncatedHashHex}` : truncatedHashHex,
-    };
+    return buildSharedModificationIdComputation(variantId, variant, structurePreviewDirection);
 }
 
 function createRenderGeneratorStyleSharedModificationId(variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
@@ -3227,6 +3390,28 @@ function createRenderGeneratorStyleSharedModificationId(variantId, variant, stru
 
 function hasStandaloneModificationContentHashSuffix(value) {
     return /-[a-f0-9]{12}(?:-\d+)?$/.test(normalizeId(value));
+}
+
+function resolvePublishedSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
+    const seededSharedModificationId = normalizeId(variant?.sharedModificationId);
+    if (seededSharedModificationId && hasStandaloneModificationContentHashSuffix(seededSharedModificationId)) {
+        return seededSharedModificationId;
+    }
+
+    return createRenderGeneratorStyleSharedModificationId(variantId, variant, structurePreviewDirection, {
+        candidateSharedModificationId: candidateId ?? null,
+        normalizedCandidateSharedModificationId: normalizeId(candidateId),
+        ...cloneSharedModificationHashDiagnosticValue(diagnosticsContext),
+    });
+}
+
+function isSharedModificationRenderIndexEntry(entry) {
+    if (normalizeId(entry?.structureId) === 'mods') {
+        return true;
+    }
+
+    const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
+    return consumers.length > 0;
 }
 
 function resolvePreferredSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
@@ -4076,22 +4261,15 @@ function cloneRenderEntry(entry) {
 }
 
 async function applySharedModificationConsumerEntries(modificationEntriesByKey, modificationEntriesByAssetId) {
-    if (!await pathExists(renderScenesIndexPath)) {
-        return;
-    }
-
-    let renderScenesIndexDocument;
-    try {
-        renderScenesIndexDocument = JSON.parse(await readFile(renderScenesIndexPath, 'utf8'));
-    } catch (error) {
-        console.warn(`failed to read render scene index from ${renderScenesIndexPath}: ${error}`);
+    const renderScenesIndexDocument = await loadRenderScenesIndexDocument();
+    if (!renderScenesIndexDocument) {
         return;
     }
 
     for (const entry of renderScenesIndexDocument?.scenes ?? []) {
         const structureId = normalizeId(entry?.structureId);
         const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
-        if (consumers.length === 0) {
+        if (!isSharedModificationRenderIndexEntry(entry)) {
             continue;
         }
 
@@ -4778,11 +4956,6 @@ function buildSharedModificationStore(manifest) {
         modifications: getStructurePublishedModificationSlots(structure).map(slot => ({
             ...slot,
             variants: sortObjectEntries(Object.fromEntries(Object.entries(slot.variants ?? {}).map(([variantId, variant]) => {
-                if (variant?.isUpgrade === true) {
-                    const { sharedModificationId: _sharedModificationId, ...localVariant } = variant ?? {};
-                    return [variantId, localVariant];
-                }
-
                 const localVariantPayload = extractLocalSharedModificationPayload(variant);
                 const sharedModificationSources = {
                     defaultIconSourceUrl: normalizePublishedIconAssetUrl(String(
@@ -4806,16 +4979,11 @@ function buildSharedModificationStore(manifest) {
                 };
                 const localVariantPayloadSignature = createSharedModificationPayloadSignature(localVariantPayload);
                 const normalizedVariantSharedModificationId = normalizeId(variant?.sharedModificationId);
-                const preferredSharedModificationId = normalizedVariantSharedModificationId
-                    || createFallbackSharedModificationId(
-                        variantId,
-                        localVariantPayload,
-                        localVariantPayloadSignature,
-                        {
-                            ...baseDiagnosticsContext,
-                            localVariantPayloadSignature,
-                        },
-                    );
+                if (!normalizedVariantSharedModificationId) {
+                    return [variantId, variant];
+                }
+
+                const preferredSharedModificationId = normalizedVariantSharedModificationId;
                 if (normalizedVariantSharedModificationId) {
                     recordSharedModificationHashDiagnostic({
                         kind: 'preferred-shared-modification-id-from-variant',
@@ -5266,15 +5434,17 @@ function applyStructureRenderUrls(
                     modifications: Object.fromEntries(Object.entries(structure.modifications ?? {}).map(([modificationId, modification]) => {
                         const modificationLookupKey = normalizeId(modification?.appliedModificationId ?? modificationId);
                         const renderEntry = modificationEntriesByAssetId?.[normalizeId(structure.id)]?.[modificationLookupKey] ?? null;
-                        const preferredSharedModificationId = modification?.isUpgrade === true
+                        const preferredSharedModificationId = normalizeId(modificationLookupKey || modificationId) === 'default'
                             ? null
-                            : resolvePreferredSharedModificationId(
-                                modification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
+                            : resolvePublishedSharedModificationId(
+                                renderEntry?.sharedModificationId
+                                ?? modification?.sharedModificationId
+                                ?? null,
                                 modificationLookupKey || modificationId,
                                 modification,
                                 renderEntry?.previewDirection ?? modification?.previewDirection ?? structure?.previewDirection,
                             );
-                        return [modificationId, {
+                        const nextModification = {
                             ...modification,
                             ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
                             ...(renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
@@ -5291,8 +5461,13 @@ function applyStructureRenderUrls(
                             ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
                             ...(renderEntry?.rootStructureId ? { rootStructureId: renderEntry.rootStructureId } : {}),
                             ...(renderEntry?.appliedModificationId ? { appliedModificationId: renderEntry.appliedModificationId } : {}),
-                            ...(preferredSharedModificationId ? { sharedModificationId: preferredSharedModificationId } : {}),
-                        }];
+                        };
+                        if (preferredSharedModificationId) {
+                            nextModification.sharedModificationId = preferredSharedModificationId;
+                        } else {
+                            delete nextModification.sharedModificationId;
+                        }
+                        return [modificationId, nextModification];
                     })),
                     modificationSlots: (structure.modificationSlots ?? []).map(slot => ({
                         ...slot,
@@ -5311,10 +5486,13 @@ function applyStructureRenderUrls(
                                 .map(lookupKey => assetScopedEntries?.[lookupKey])
                                 .find(Boolean)
                                 ?? modificationEntriesByKey?.[normalizeId(variantId)];
-                            const preferredSharedModificationId = normalizeId(variantId) === 'default' || variant?.isUpgrade === true || sourceModification?.isUpgrade === true
+                            const preferredSharedModificationId = normalizeId(variantId) === 'default'
                                 ? null
-                                : resolvePreferredSharedModificationId(
-                                    variant?.sharedModificationId ?? sourceModification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
+                                : resolvePublishedSharedModificationId(
+                                    renderEntry?.sharedModificationId
+                                    ?? variant?.sharedModificationId
+                                    ?? sourceModification?.sharedModificationId
+                                    ?? null,
                                     variantId,
                                     {
                                         ...sourceModification,
@@ -5325,7 +5503,7 @@ function applyStructureRenderUrls(
                                     ?? sourceModification?.previewDirection
                                     ?? structure?.previewDirection,
                                 );
-                            return [variantId, {
+                            const nextVariant = {
                                 ...variant,
                                 ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
                                 ...(!variant?.iconUrl && renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
@@ -5342,8 +5520,13 @@ function applyStructureRenderUrls(
                                 ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
                                 ...(renderEntry?.rootStructureId ? { rootStructureId: renderEntry.rootStructureId } : {}),
                                 ...(renderEntry?.appliedModificationId ? { appliedModificationId: renderEntry.appliedModificationId } : {}),
-                                ...(preferredSharedModificationId ? { sharedModificationId: preferredSharedModificationId } : {}),
-                            }];
+                            };
+                            if (preferredSharedModificationId) {
+                                nextVariant.sharedModificationId = preferredSharedModificationId;
+                            } else {
+                                delete nextVariant.sharedModificationId;
+                            }
+                            return [variantId, nextVariant];
                         })),
                     })),
                 };
@@ -5535,10 +5718,13 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                         ? renderEntry.offsetY
                         : (variant?.sprite?.offsetY ?? sourceModification?.offsetY ?? targetStructure?.sprite?.offsetY);
 
-                    const preferredSharedModificationId = variant?.isUpgrade === true || sourceModification?.isUpgrade === true
+                    const preferredSharedModificationId = normalizeId(variantId) === 'default'
                         ? null
-                        : resolvePreferredSharedModificationId(
-                            variant?.sharedModificationId ?? sourceModification?.sharedModificationId ?? renderEntry?.sharedModificationId ?? null,
+                        : resolvePublishedSharedModificationId(
+                            renderEntry?.sharedModificationId
+                            ?? variant?.sharedModificationId
+                            ?? sourceModification?.sharedModificationId
+                            ?? null,
                             variantId,
                             {
                                 ...sourceModification,
@@ -5947,6 +6133,21 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
             return null;
         }
 
+        if (assetKind === 'icon.default') {
+            const sourceStructure = sourceStructureById.get(normalizeId(structureId)) ?? null;
+            const sourceStructureMetadata = sourceStructureMetadataById.get(normalizeId(structureId)) ?? null;
+            if (structurePrefersGeneratedDefaultIcon(sourceStructure, sourceStructureMetadata)) {
+                const existingGeneratedDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structureId, 'icon.default');
+                if (existingGeneratedDefaultIconUrl) {
+                    return existingGeneratedDefaultIconUrl;
+                }
+
+                if (isSharedPublishedIconUrl(normalizedSourceUrl)) {
+                    return null;
+                }
+            }
+        }
+
         const publishedSourceFilePath = getPublishedAssetFilePath(normalizedSourceUrl);
         const outputDirectory = getPublishedAssetDirectory(structureId) ?? resolve(assetTypesDirectory, 'structures', structureId);
         const requiresTypedAssetRelocation = Boolean(publishedSourceFilePath)
@@ -6095,6 +6296,11 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
     async function syncMissingStructureDefaultIconFallbacks(publishedManifest) {
         for (const structure of publishedManifest.assets ?? []) {
             const sourceStructure = sourceStructureById.get(normalizeId(structure.id)) ?? null;
+            const sourceStructureMetadata = sourceStructureMetadataById.get(normalizeId(structure.id)) ?? null;
+            if (structurePrefersGeneratedDefaultIcon(structure, sourceStructureMetadata)) {
+                continue;
+            }
+
             const explicitDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
                 structure.subTypeIconUrl
                     ? (sourceStructure?.iconUrl ?? sourceStructure?.icons?.default ?? '')
@@ -6271,14 +6477,19 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
             const existingDestroyedRenderedIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.icon.rendered');
             const existingDestroyedPreviewUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.preview');
             const existingDestroyedTextureUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.texture');
-            const explicitDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure.subTypeIconUrl
-                    ? (sourceStructure?.iconUrl ?? sourceStructure?.icons?.default ?? '')
-                    : (sourceStructure?.icons?.default ?? sourceStructure?.iconUrl ?? ''),
-            ).trim()) || null;
-            const publishedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure?.icons?.default ?? structure?.iconUrl ?? '',
-            ).trim()) || null;
+            const prefersGeneratedDefaultIcon = structurePrefersGeneratedDefaultIcon(structure, sourceStructureMetadata);
+            const explicitDefaultIconSourceUrl = prefersGeneratedDefaultIcon
+                ? null
+                : (normalizePublishedIconAssetUrl(String(
+                    structure.subTypeIconUrl
+                        ? (sourceStructure?.iconUrl ?? sourceStructure?.icons?.default ?? '')
+                        : (sourceStructure?.icons?.default ?? sourceStructure?.iconUrl ?? ''),
+                ).trim()) || null);
+            const publishedDefaultIconSourceUrl = prefersGeneratedDefaultIcon
+                ? null
+                : (normalizePublishedIconAssetUrl(String(
+                    structure?.icons?.default ?? structure?.iconUrl ?? '',
+                ).trim()) || null);
             const defaultIconSourceUrl = publishedDefaultIconSourceUrl ?? explicitDefaultIconSourceUrl;
             const fallbackIconUrl = defaultIconSourceUrl
                 ? (await resolveCoLocatedStructureAssetUrl(
@@ -6310,9 +6521,11 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
                     defaultFallbackSourceUrl,
                 ) ?? existingDefaultIconUrl)
                 : null;
-            const ensuredDefaultIconUrl = preservedExistingDefaultIconUrl ?? (defaultIconSourceUrl
-                ? (fallbackIconUrl ?? existingDefaultIconUrl)
-                : null);
+            const ensuredDefaultIconUrl = prefersGeneratedDefaultIcon
+                ? (existingDefaultIconUrl ?? fallbackIconUrl)
+                : (preservedExistingDefaultIconUrl ?? (defaultIconSourceUrl
+                    ? (fallbackIconUrl ?? existingDefaultIconUrl)
+                    : null));
             const destroyedSubTypeIconUrl = structure.destroyed
                 ? (structure.subTypeIconUrl ?? defaultWreckedSubtypeIconUrl)
                 : null;
@@ -6435,6 +6648,10 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
                 modificationSlots: await Promise.all((structure.modificationSlots ?? []).map(async slot => ({
                     ...slot,
                     variants: Object.fromEntries(await Promise.all(Object.entries(slot.variants ?? {}).map(async ([variantKey, variant]) => {
+                        if (normalizeId(variant?.sharedModificationId)) {
+                            return [variantKey, variant];
+                        }
+
                         const coLocatedDefaultIconUrl = await resolveCoLocatedModificationAssetUrl(
                             structure.id,
                             variant?.appliedModificationId ?? variant?.id ?? variantKey,
@@ -6561,27 +6778,38 @@ try {
         ),
         targetFilter,
     ), sourceManifest.__sourceStructureMetadataById);
-    const manifestForPublish = hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
-        ? augmentPartialManifestWithPublishedContext(filteredSourceManifest, publishedManifestBeforeWrite)
-        : filteredSourceManifest;
-    publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestForPublish);
-    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIds(targetFilter, manifestForPublish);
+    const manifestForPublish = attachSourceStructureMetadata(
+        hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
+            ? augmentPartialManifestWithPublishedContext(filteredSourceManifest, publishedManifestBeforeWrite)
+            : filteredSourceManifest,
+        sourceManifest.__sourceStructureMetadataById,
+    );
+    const renderScenesIndexDocument = await loadRenderScenesIndexDocument();
+    const manifestWithSeededSharedModificationIds = seedSharedModificationIdsFromRenderIndex(
+        manifestForPublish,
+        renderScenesIndexDocument,
+    );
+    publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestWithSeededSharedModificationIds);
+    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIds(targetFilter, manifestWithSeededSharedModificationIds);
     const referencedGeneratedIconKeys = hasTargetFilters(targetFilter)
-        ? collectReferencedPublishedIconKeys(manifestForPublish)
+        ? collectReferencedPublishedIconKeys(manifestWithSeededSharedModificationIds)
         : null;
-    const scopedRawRenderedAssetTargets = buildScopedRawRenderedAssetTargets(manifestForPublish);
+    const scopedRawRenderedAssetTargets = buildScopedRawRenderedAssetTargets(
+        manifestWithSeededSharedModificationIds,
+        renderScenesIndexDocument,
+    );
 
-    await removeStaleRootStructureArtifacts(manifestForPublish);
-    await removeStaleStructureArtifactDirectories(manifestForPublish);
+    await removeStaleRootStructureArtifacts(manifestWithSeededSharedModificationIds);
+    await removeStaleStructureArtifactDirectories(manifestWithSeededSharedModificationIds);
     await removeStructureArtifactsByIds(explicitlyRemovedStructureIds);
-    await removeLegacyTypedLayoutArtifacts(manifestForPublish);
+    await removeLegacyTypedLayoutArtifacts(manifestWithSeededSharedModificationIds);
 
-    await generateSyntheticOilfieldAssets(manifestForPublish);
+    await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
     await syncRawRenderedAssetsToPublicDirectory(scopedRawRenderedAssetTargets);
 
-    const structureRenderEntries = await buildStructureRenderEntries(manifestForPublish, scopedRawRenderedAssetTargets);
+    const structureRenderEntries = await buildStructureRenderEntries(manifestWithSeededSharedModificationIds, scopedRawRenderedAssetTargets);
     const manifestWithRenderUrls = applyStructureRenderUrls(
-        manifestForPublish,
+        manifestWithSeededSharedModificationIds,
         structureRenderEntries.entriesByKey,
         await buildStructureSceneMetadata(),
         structureRenderEntries.modificationEntriesByKey,
@@ -6590,16 +6818,22 @@ try {
         structureRenderEntries.sharedPackagingEntriesByKey,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
-    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(manifestWithNormalizedIconUrls, generatedIconsDirectory, manifestForPublish);
+    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(manifestWithNormalizedIconUrls, generatedIconsDirectory, manifestWithSeededSharedModificationIds);
     const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
         manifestWithCoLocatedFallbackAssets,
         structureRenderEntries.modificationEntriesByKey,
         structureRenderEntries.modificationEntriesByAssetId,
     );
     await syncSharedModificationDefaultIconAssets(manifestWithStrippedSlotNoise);
-    const manifestWithPreservedAuthoredPreviewDirections = preserveAuthoredStructurePreviewDirections(
-        manifestWithStrippedSlotNoise,
-        manifestForPublish,
+    const manifestWithPreservedAuthoredPreviewDirections = preserveAuthoredSharedModificationPreviewDirections(
+        preserveAuthoredModificationPreviewDirections(
+            preserveAuthoredStructurePreviewDirections(
+                manifestWithStrippedSlotNoise,
+                manifestWithSeededSharedModificationIds,
+            ),
+            manifestWithSeededSharedModificationIds,
+        ),
+        await loadAuthoredSharedModificationOverrides(),
     );
     let publishedBaseManifest = null;
     if (hasTargetFilters(targetFilter)) {

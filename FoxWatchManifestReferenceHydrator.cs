@@ -15,6 +15,7 @@ public sealed class FoxWatchManifestReferenceHydrator
         "nameLocalizedValues",
         "descriptionLocalizedValues",
         "categoryNameLocalizedValues",
+        "modifications",
     };
     private static readonly IReadOnlyDictionary<string, DestroyedStructureNameFormat> DestroyedStructureNameFormats = new Dictionary<string, DestroyedStructureNameFormat>(StringComparer.OrdinalIgnoreCase)
     {
@@ -57,6 +58,7 @@ public sealed class FoxWatchManifestReferenceHydrator
         if (importedCategories.Count == 0)
         {
             var fallbackOverrideCount = ApplyStructureManifestOverrides(manifest, manifest.Assets);
+            var fallbackSharedModificationOverrideCount = ApplySharedModificationManifestOverrides(manifest);
             var fallbackInjectedStructureCount = InjectSyntheticStructureOverrides(manifest);
             var fallbackInheritedCategoryCount = ApplyDestroyedStructureCategoryInheritance(manifest.Assets);
             var fallbackInheritedIconCount = ApplyDestroyedStructureDefaultIconInheritance(manifest.Assets);
@@ -69,11 +71,12 @@ public sealed class FoxWatchManifestReferenceHydrator
             fallbackExcludedStructureCount += ApplyExcludedStructureFilter(manifest);
             SynchronizeEnglishCategoryLocalizations(manifest);
             LogRemovedDanglingStructureReferences(RemoveDanglingStructureReferences(manifest.Assets));
-            _logger.LogInformation("Skipping manifest hydration because the imported category catalog is unavailable; applied {AppliedStructureOverrideCount} structure manifest overrides, injected {InjectedStructureCount} synthetic structures, inherited {InheritedStructureCategoryCount} destroyed structure categories, inherited {InheritedStructureIconCount} destroyed structure default icons, and excluded {ExcludedStructureCount} structures", fallbackOverrideCount, fallbackInjectedStructureCount, fallbackInheritedCategoryCount, fallbackInheritedIconCount, fallbackExcludedStructureCount);
+            _logger.LogInformation("Skipping manifest hydration because the imported category catalog is unavailable; applied {AppliedStructureOverrideCount} structure manifest overrides, {AppliedSharedModificationOverrideCount} shared modification overrides, injected {InjectedStructureCount} synthetic structures, inherited {InheritedStructureCategoryCount} destroyed structure categories, inherited {InheritedStructureIconCount} destroyed structure default icons, and excluded {ExcludedStructureCount} structures", fallbackOverrideCount, fallbackSharedModificationOverrideCount, fallbackInjectedStructureCount, fallbackInheritedCategoryCount, fallbackInheritedIconCount, fallbackExcludedStructureCount);
             return manifest;
         }
 
         var appliedStructureOverrideCount = ApplyStructureManifestOverrides(manifest, manifest.Assets);
+        var appliedSharedModificationOverrideCount = ApplySharedModificationManifestOverrides(manifest);
         var injectedStructureCount = InjectSyntheticStructureOverrides(manifest);
         var inheritedCategoryCount = ApplyDestroyedStructureCategoryInheritance(manifest.Assets);
         var inheritedIconCount = ApplyDestroyedStructureDefaultIconInheritance(manifest.Assets);
@@ -89,7 +92,7 @@ public sealed class FoxWatchManifestReferenceHydrator
         SynchronizeEnglishCategoryLocalizations(manifest);
         LogRemovedDanglingStructureReferences(RemoveDanglingStructureReferences(manifest.Assets));
 
-        _logger.LogInformation("Hydrated {HydratedCategoryCount} categories from the imported category catalog, applied {AppliedStructureOverrideCount} structure manifest overrides, injected {InjectedStructureCount} synthetic structures, inherited {InheritedStructureCategoryCount} destroyed structure categories, inherited {InheritedStructureIconCount} destroyed structure default icons, and excluded {ExcludedStructureCount} structures", hydratedCategoryCount, appliedStructureOverrideCount, injectedStructureCount, inheritedCategoryCount, inheritedIconCount, excludedStructureCount);
+        _logger.LogInformation("Hydrated {HydratedCategoryCount} categories from the imported category catalog, applied {AppliedStructureOverrideCount} structure manifest overrides, {AppliedSharedModificationOverrideCount} shared modification overrides, injected {InjectedStructureCount} synthetic structures, inherited {InheritedStructureCategoryCount} destroyed structure categories, inherited {InheritedStructureIconCount} destroyed structure default icons, and excluded {ExcludedStructureCount} structures", hydratedCategoryCount, appliedStructureOverrideCount, appliedSharedModificationOverrideCount, injectedStructureCount, inheritedCategoryCount, inheritedIconCount, excludedStructureCount);
         return manifest;
     }
 
@@ -1349,6 +1352,14 @@ public sealed class FoxWatchManifestReferenceHydrator
             }
 
             var applied = ApplyOverrideObject(structure, overrideElement, _assetManifestOverrideLoader.GetStructureOverridePath(structure.Id), $"structure {structure.Id}");
+            if (TryGetOverrideProperty(overrideElement, "modifications", out var structureModificationsElement))
+            {
+                applied |= ApplyStructureModificationVariantOverrides(
+                    structure,
+                    structureModificationsElement,
+                    _assetManifestOverrideLoader.GetStructureOverridePath(structure.Id));
+            }
+
             FoxWatchManifestStructure? localizedTextSourceStructure = null;
             localizedTextSourceByStructureId?.TryGetValue(structure.Id, out localizedTextSourceStructure);
             applied |= ApplyStructureLocalizedTextOverrides(manifest, structure, overrideElement, localizedTextSourceStructure);
@@ -1527,6 +1538,175 @@ public sealed class FoxWatchManifestReferenceHydrator
         }
 
         return applied;
+    }
+
+    private int ApplySharedModificationManifestOverrides(FoxWatchManifest manifest)
+    {
+        if (!_assetManifestOverrideLoader.TryLoadSharedModificationOverrides(out var overrideElement) ||
+            !TryGetOverrideProperty(overrideElement, "modifications", out var modificationsElement))
+        {
+            return 0;
+        }
+
+        return ApplyStructureModificationVariantOverrides(
+            manifest.Assets,
+            modificationsElement,
+            FoxWatchWorkspace.SharedModificationOverrideManifestPath,
+            matchSharedModificationVariantIds: true);
+    }
+
+    private bool ApplyStructureModificationVariantOverrides(
+        FoxWatchManifestStructure structure,
+        JsonElement modificationsElement,
+        string overridePath)
+    {
+        return ApplyStructureModificationVariantOverrides(
+            [structure],
+            modificationsElement,
+            overridePath,
+            matchSharedModificationVariantIds: false) > 0;
+    }
+
+    private int ApplyStructureModificationVariantOverrides(
+        IReadOnlyList<FoxWatchManifestStructure> structures,
+        JsonElement modificationsElement,
+        string overridePath,
+        bool matchSharedModificationVariantIds)
+    {
+        if (modificationsElement.ValueKind != JsonValueKind.Object)
+        {
+            _logger.LogWarning(
+                "Skipping modification overrides from {OverridePath} because modifications must be an object",
+                overridePath);
+            return 0;
+        }
+
+        var overridesByVariantId = modificationsElement.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.Object)
+            .ToDictionary(
+                property => NormalizeModificationVariantLookupKey(property.Name),
+                property => property.Value,
+                StringComparer.OrdinalIgnoreCase);
+        if (overridesByVariantId.Count == 0)
+        {
+            return 0;
+        }
+
+        var appliedCount = 0;
+        foreach (var structure in structures)
+        {
+            if (structure.ModificationSlots == null || structure.ModificationSlots.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var slot in structure.ModificationSlots)
+            {
+                foreach (var (variantId, variant) in slot.Variants)
+                {
+                    if (!TryResolveModificationVariantOverride(overridesByVariantId, variantId, variant, out var variantOverride))
+                    {
+                        continue;
+                    }
+
+                    if (ApplyModificationVariantOverrideProperties(variant, variantOverride, overridePath, $"{structure.Id}/{variantId}"))
+                    {
+                        appliedCount += 1;
+                    }
+                }
+            }
+        }
+
+        if (matchSharedModificationVariantIds && appliedCount > 0)
+        {
+            _logger.LogInformation(
+                "Applied shared modification overrides from {OverridePath} to {AppliedVariantCount} modification variant(s)",
+                overridePath,
+                appliedCount);
+        }
+
+        return appliedCount;
+    }
+
+    private static bool TryGetModificationVariantOverride(
+        IReadOnlyDictionary<string, JsonElement> overridesByVariantId,
+        string? lookupKey,
+        out JsonElement variantOverride)
+    {
+        return overridesByVariantId.TryGetValue(
+            NormalizeModificationVariantLookupKey(lookupKey),
+            out variantOverride);
+    }
+
+    private static bool TryResolveModificationVariantOverride(
+        IReadOnlyDictionary<string, JsonElement> overridesByVariantId,
+        string variantId,
+        FoxWatchManifestModificationSlotVariant variant,
+        out JsonElement variantOverride)
+    {
+        if (TryGetModificationVariantOverride(overridesByVariantId, variantId, out variantOverride))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant.CodeName) &&
+            TryGetModificationVariantOverride(overridesByVariantId, variant.CodeName, out variantOverride))
+        {
+            return true;
+        }
+
+        var computedSharedModificationId = FoxWatchSharedModificationIdentity.ComputeManifestId(variantId, variant);
+        if (TryGetModificationVariantOverride(overridesByVariantId, computedSharedModificationId, out variantOverride))
+        {
+            return true;
+        }
+
+        variantOverride = default;
+        return false;
+    }
+
+    private bool ApplyModificationVariantOverrideProperties(
+        FoxWatchManifestModificationSlotVariant variant,
+        JsonElement variantOverride,
+        string overridePath,
+        string targetPath)
+    {
+        var applied = false;
+
+        if (TryGetOverrideProperty(variantOverride, "previewDirection", out var previewDirectionElement) &&
+            previewDirectionElement.ValueKind == JsonValueKind.String)
+        {
+            var previewDirection = NormalizePreviewDirectionOverride(previewDirectionElement.GetString());
+            if (!string.IsNullOrWhiteSpace(previewDirection))
+            {
+                variant.PreviewDirection = previewDirection;
+                applied = true;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Skipping previewDirection override for {TargetPath} from {OverridePath} because the value must be one of ne, nw, se, sw",
+                    targetPath,
+                    overridePath);
+            }
+        }
+
+        return applied;
+    }
+
+    private static string NormalizeModificationVariantLookupKey(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+    }
+
+    private static string? NormalizePreviewDirectionOverride(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "ne" or "nw" or "se" or "sw" => normalized,
+            _ => null,
+        };
     }
 
     private bool ApplyOverrideObject(object target, JsonElement overrideElement, string overridePath, string targetPath)

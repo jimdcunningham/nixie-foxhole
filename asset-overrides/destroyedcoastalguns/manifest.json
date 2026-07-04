@@ -1,3 +1,5 @@
 {
-  "categoryId": "fortifications"
+  "previewDirection": "sw",
+  "categoryId": "fortifications",
+  "buildOrder": 22
 }

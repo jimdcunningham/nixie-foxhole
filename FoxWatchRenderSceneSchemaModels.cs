@@ -180,6 +180,8 @@ public sealed class FoxWatchRenderSceneMeshAsset
     public string? DefaultPoseAnimationPackagePath { get; set; }
 
     public List<string>? PoseAnimationPackagePaths { get; set; }
+
+    public string? MaterialSidecarNameOverride { get; set; }
 }
 
 public sealed class FoxWatchRenderSceneMaterialAsset

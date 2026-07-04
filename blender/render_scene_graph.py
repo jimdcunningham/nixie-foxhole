@@ -303,6 +303,7 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
                 scene_variant_color_hex=render_settings.get("scene_variant_color_hex"),
                 clip_floor=bool(render_settings["clip_floor"]),
                 floor_z=float(render_settings["floor_z"]),
+                material_sidecar_name_override=mesh_asset.get("materialSidecarNameOverride"),
             )
             apply_pose_to_imported_objects(imported_objects, resolve_node_pose_document(node_document, scene_variant))
             imported_armature = next((obj for obj in imported_objects if obj.type == "ARMATURE"), None)

@@ -3274,6 +3274,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public List<FoxWatchStaticMeshOverrideReference> StaticMeshOverrides { get; set; } = [];
     public List<FoxWatchSplineConnectorMeshConfigReference> SplineConnectorMeshConfigs { get; set; } = [];
     public List<FoxWatchSplineConnectorComponentConfigReference> SplineComponentConfigs { get; set; } = [];
+    public string MaterialSidecarNameOverride { get; set; } = string.Empty;
     public bool IsVisible { get; set; } = true;
     public bool IsHiddenInGame { get; set; }
 }

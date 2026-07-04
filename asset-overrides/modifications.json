@@ -1,0 +1,32 @@
+{
+  "modifications": {
+    "bunkbed-47e016ce52d5": { "previewDirection": "nw" },
+    "chalkboard-1a05d15c1401": { "previewDirection": "nw" },
+    "desk-a7a2ff0d194a": { "previewDirection": "nw" },
+    "dishwashstation-9fe3952a6049": { "previewDirection": "nw" },
+    "door-5ba3fd4fbcf7": { "previewDirection": "se" },
+    "door-81c11c5935ba": { "previewDirection": "se" },
+    "door-e5a5fdedb678": { "previewDirection": "se" },
+    "firingport-48a4c4af7aa0": { "previewDirection": "se" },
+    "firingport-72609ffaf08a": { "previewDirection": "se" },
+    "firingport-c32add0b8d08": { "previewDirection": "se" },
+    "interiorfiringport-69e0b646fcdd": { "previewDirection": "ne" },
+    "kitchen-eb70a802018a": { "previewDirection": "nw" },
+    "ladder-9fa851f7e326": { "previewDirection": "ne" },
+    "ladder-e072e9db80fc": { "previewDirection": "ne" },
+    "latrine-f69b0d1a8139": { "previewDirection": "nw" },
+    "lockers-37a0c3391eb4": { "previewDirection": "nw" },
+    "module-d47eb2bb3f11": { "previewDirection": "nw" },
+    "pantry-ebfcf79c883b": { "previewDirection": "nw" },
+    "radiostation-7bac3b973a8e": { "previewDirection": "nw" },
+    "sandbags-649ba37bd152": { "previewDirection": "se" },
+    "sandbags-9a10a4553be5": { "previewDirection": "se" },
+    "sandbags-e6e4e595890c": { "previewDirection": "se" },
+    "stairs-1047056c7718": { "previewDirection": "sw" },
+    "stairs-54e52425f894": { "previewDirection": "nw" },
+    "stairs-8e00617b9fde": { "previewDirection": "sw" },
+    "stairs-bfe4ad5148aa": { "previewDirection": "nw" },
+    "stairs-d43216f3565f": { "previewDirection": "nw" },
+    "strategicmap-639a408836d4": { "previewDirection": "nw" }
+  }
+}

@@ -1355,6 +1355,7 @@ def prepare_imported_mesh_objects(
     scene_variant_color_hex: Optional[str] = None,
     clip_floor: bool = False,
     floor_z: float = 0.0,
+    material_sidecar_name_override: Optional[str] = None,
 ):
     imported_armatures = [obj for obj in imported_objects if obj.type == "ARMATURE"]
     clay_material = ensure_clay_material() if material_mode == "clay" else None
@@ -1380,6 +1381,8 @@ def prepare_imported_mesh_objects(
         elif material_mode == "sidecar" and obj.type == "MESH":
             for index, slot in enumerate(obj.material_slots):
                 material_name = slot.material.name if slot.material is not None else None
+                if material_sidecar_name_override:
+                    material_name = material_sidecar_name_override
                 if not material_name:
                     continue
                 sidecar_path = find_material_sidecar(material_name, search_roots)
@@ -1601,9 +1604,9 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
     return material
 
 
-def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], parent_object=None, material_mode: Optional[str] = None, debug_color: Optional[list[float]] = None, scene_variant_color_hex: Optional[str] = None, clip_floor: bool = False, floor_z: float = 0.0):
+def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], parent_object=None, material_mode: Optional[str] = None, debug_color: Optional[list[float]] = None, scene_variant_color_hex: Optional[str] = None, clip_floor: bool = False, floor_z: float = 0.0, material_sidecar_name_override: Optional[str] = None):
     debug_color_key = tuple(float(component) for component in debug_color) if debug_color is not None else None
-    cache_key = (mesh_path, material_mode, debug_color_key, normalize_color_hex(scene_variant_color_hex), bool(clip_floor), float(floor_z))
+    cache_key = (mesh_path, material_mode, debug_color_key, normalize_color_hex(scene_variant_color_hex), bool(clip_floor), float(floor_z), material_sidecar_name_override)
     cached_objects = _IMPORTED_MESH_OBJECT_CACHE.get(cache_key)
     if cached_objects is None:
         template_collection = ensure_private_collection("FoxWatch:AssetTemplates")
@@ -1618,6 +1621,7 @@ def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], p
             scene_variant_color_hex=scene_variant_color_hex,
             clip_floor=clip_floor,
             floor_z=floor_z,
+            material_sidecar_name_override=material_sidecar_name_override,
         )
         for obj in prepared_objects:
             for user_collection in list(obj.users_collection):

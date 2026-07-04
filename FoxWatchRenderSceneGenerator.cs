@@ -41,6 +41,9 @@ public sealed class FoxWatchRenderSceneGenerator
     private const string FacilityPipeOverheadSpanMeshSourcePath =
         "War/Content/Meshes/Structures/Facilities/PipelineoverheadConnect.glb";
     private const string FacilityPipeOverheadSpanMeshId = "mesh-pipelineoverheadconnect";
+    private const double FacilityCatwalkDeckNativeLengthCm = 260.0;
+    private const double FacilityCatwalkDeckMeshScale = 0.95;
+    private const double FacilityCatwalkCrossbeamNativeLengthCm = 127.35235595703125;
     private const string DeployableTripodMountedAttachmentBoneName = "vertical_pivot";
     private const string DeployableTripodHeightPoseAnimationPackagePath = "War/Content/Animation/Weapons/DeployableTripod/Tripod_POSE_h200_r60.uasset";
     private const string DeployableTripodNeutralPoseAnimationPackagePath = "War/Content/Animation/Weapons/DeployableTripod/Tripod_POSE_neutral.uasset";
@@ -200,11 +203,24 @@ public sealed class FoxWatchRenderSceneGenerator
             await PopulateMeshExportsAsync(blueprintScene.Meshes, renderAssetOutputDirectory, cancellationToken);
         }
 
-        var collapsedStructureScene = PrepareBlueprintSceneForBaseRender(
+        var collapsedBlueprint = CollapseBlueprintSceneForBaseRender(
             structure,
-            CollapseBlueprintSceneForBaseRender(
+            CloneBlueprintSceneExtraction(blueprintScene));
+
+        FoxWatchBlueprintSceneExtraction? collapsedStructureScene;
+        IReadOnlyList<string>? baseSceneModes = null;
+        if (IsFacilityCatwalkBridgeStructure(structure))
+        {
+            collapsedStructureScene = PrepareFacilityCatwalkBridgeScene(
                 structure,
-                CloneBlueprintSceneExtraction(blueprintScene)));
+                collapsedBlueprint,
+                shortenSpanForPreview: false);
+            baseSceneModes = ["topdown"];
+        }
+        else
+        {
+            collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
+        }
 
         var documents = new List<FoxWatchGeneratedRenderSceneDocument>
         {
@@ -222,12 +238,39 @@ public sealed class FoxWatchRenderSceneGenerator
                     structure,
                     collapsedStructureScene,
                     structure.Id,
-                    null,
+                    baseSceneModes,
                     includePoseVariants,
                     clipFloorOverride: null,
                     cancellationToken),
             },
         };
+
+        if (IsFacilityCatwalkBridgeStructure(structure))
+        {
+            var previewScene = PrepareFacilityCatwalkBridgeScene(
+                structure,
+                collapsedBlueprint,
+                shortenSpanForPreview: true);
+            documents.Add(new FoxWatchGeneratedRenderSceneDocument
+            {
+                StructureId = structure.Id,
+                AllowedStructureIds = GetAllowedStructureIds(structure),
+                CodeName = structure.CodeName,
+                Name = structure.Name.Fallback,
+                CategoryId = structure.CategoryId,
+                PreviewUrl = structure.PreviewUrl,
+                IconUrl = structure.IconUrl,
+                RelativeScenePath = Path.Combine(structure.Id, "preview.scene.json"),
+                Document = await CreateDocumentAsync(
+                    structure,
+                    previewScene,
+                    structure.Id,
+                    ["preview", "icon"],
+                    includePoseVariants,
+                    clipFloorOverride: null,
+                    cancellationToken),
+            });
+        }
 
         var destroyedVehicleScene = await _blueprintSceneExtractor.TryExtractDestroyedVehicleAsync(structure, cancellationToken);
         if (destroyedVehicleScene?.Roots.Count > 0)
@@ -358,18 +401,15 @@ public sealed class FoxWatchRenderSceneGenerator
                     clipFloorOverride: target.IsUpgrade ? null : false,
                     cancellationToken,
                     previewDirectionOverride: target.PreviewDirection),
-                IsStandaloneModification = !target.IsUpgrade,
+                IsStandaloneModification = true,
                 Consumers =
-                target.IsUpgrade
-                    ? []
-                    :
-                    [
-                        new FoxWatchRenderSceneConsumer
-                        {
-                            StructureId = structure.Id,
-                            VariantId = target.VariantId,
-                        },
-                    ],
+                [
+                    new FoxWatchRenderSceneConsumer
+                    {
+                        StructureId = structure.Id,
+                        VariantId = target.VariantId,
+                    },
+                ],
             });
         }
 
@@ -442,9 +482,8 @@ public sealed class FoxWatchRenderSceneGenerator
         var modificationDocuments = sceneDocuments
             .Where(document => document.IsStandaloneModification)
             .ToList();
-        if (modificationDocuments.Count <= 1)
+        if (modificationDocuments.Count == 0)
         {
-            nonModificationDocuments.AddRange(modificationDocuments);
             return nonModificationDocuments;
         }
 
@@ -458,15 +497,15 @@ public sealed class FoxWatchRenderSceneGenerator
                 .OrderBy(document => document.RelativeScenePath, StringComparer.Ordinal)
                 .ToList();
             var representative = orderedGroup[0];
+            var sharedOutputKey = CreateSharedStandaloneModificationOutputKey(orderedGroup, group.Key);
+            representative.StructureId = "mods";
+            representative.CodeName = sharedOutputKey;
+            representative.Name = sharedOutputKey;
+            representative.CategoryId = "mods";
+            representative.RelativeScenePath = Path.Combine("mods", $"{sharedOutputKey}.scene.json");
+            representative.Document.Render.OutputKey = $"mods/{sharedOutputKey}";
             if (orderedGroup.Count > 1)
             {
-                var sharedOutputKey = CreateSharedStandaloneModificationOutputKey(orderedGroup, group.Key);
-                representative.StructureId = "mods";
-                representative.CodeName = sharedOutputKey;
-                representative.Name = sharedOutputKey;
-                representative.CategoryId = "mods";
-                representative.RelativeScenePath = Path.Combine("mods", $"{sharedOutputKey}.scene.json");
-                representative.Document.Render.OutputKey = $"mods/{sharedOutputKey}";
                 representative.AllowedStructureIds = orderedGroup
                     .SelectMany(document => document.AllowedStructureIds)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -479,9 +518,10 @@ public sealed class FoxWatchRenderSceneGenerator
                     .OrderBy(consumer => consumer.StructureId, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(consumer => consumer.VariantId, StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                representative.PreviewUrl = null;
-                representative.IconUrl = null;
             }
+
+            representative.PreviewUrl = null;
+            representative.IconUrl = null;
 
             nonModificationDocuments.Add(representative);
         }
@@ -491,11 +531,13 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static string CreateStandaloneModificationDeduplicationKey(FoxWatchGeneratedRenderSceneDocument sceneDocument)
     {
-        var fingerprint = CreateStandaloneModificationSceneFingerprint(sceneDocument);
         var sharedModificationId = NormalizeStandaloneModificationIdentityPart(sceneDocument.SharedModificationId);
-        return string.IsNullOrWhiteSpace(sharedModificationId)
-            ? fingerprint
-            : $"{sharedModificationId}|{fingerprint}";
+        if (!string.IsNullOrWhiteSpace(sharedModificationId))
+        {
+            return sharedModificationId;
+        }
+
+        return CreateStandaloneModificationSceneFingerprint(sceneDocument);
     }
 
     private static string CreateStandaloneModificationSceneFingerprint(FoxWatchGeneratedRenderSceneDocument sceneDocument)
@@ -857,12 +899,11 @@ public sealed class FoxWatchRenderSceneGenerator
             };
         }
 
-        if (IsFacilityCatwalkBridgeStructure(structure))
+        if (string.Equals(structure.Id, "facilitypipeunderground", StringComparison.OrdinalIgnoreCase))
         {
-            var preparedRoots = AdjustTelescopingSpanPreviewNodes(
-                structure,
+            var preparedRoots = FilterNodesExcludingNormalizedNames(
                 FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots),
-                ["facilitieCatwalkPlatfrom"]);
+                ["FrontMesh"]);
 
             return new FoxWatchBlueprintSceneExtraction
             {
@@ -875,7 +916,56 @@ public sealed class FoxWatchRenderSceneGenerator
         return blueprintScene;
     }
 
-    private readonly record struct TelescopingSpanMetrics(double CenterX, double StartX, double ScaleX);
+    private static FoxWatchBlueprintSceneExtraction? PrepareFacilityCatwalkBridgeScene(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? blueprintScene,
+        bool shortenSpanForPreview)
+    {
+        if (blueprintScene == null)
+        {
+            return null;
+        }
+
+        var preparedRoots = FilterNodesForTopdownStructurePreview(
+            structure,
+            FilterNodesExcludingNormalizedNames(
+                blueprintScene.Roots,
+                ["BackSupport", "FrontSupport"]));
+
+        if (shortenSpanForPreview)
+        {
+            var forceSpanLengthCm = ResolveConnectorPreviewSpanLengthCm(structure);
+            preparedRoots = AdjustTelescopingSpanPreviewNodes(
+                structure,
+                preparedRoots,
+                ["facilitieCatwalkPlatfrom"],
+                forceSpanLengthCm: forceSpanLengthCm);
+            if (TryResolveTelescopingSpanMetrics(structure, preparedRoots, out var spanMetrics, forceSpanLengthCm))
+            {
+                preparedRoots = TrimFacilityCatwalkBridgePreviewToSpan(structure, preparedRoots, spanMetrics);
+            }
+        }
+
+        return new FoxWatchBlueprintSceneExtraction
+        {
+            Roots = preparedRoots,
+            Meshes = CloneMeshAssets(blueprintScene.Meshes),
+            Variants = blueprintScene.Variants,
+        };
+    }
+
+    private static double? ResolveConnectorPreviewSpanLengthCm(FoxWatchManifestStructure structure)
+    {
+        if (structure.Connector?.DefaultTargetUnrealLocationCm is { Count: >= 1 } defaultTarget
+            && defaultTarget[0] > 0.001)
+        {
+            return defaultTarget[0];
+        }
+
+        return null;
+    }
+
+    private readonly record struct TelescopingSpanMetrics(double CenterX, double StartX, double ScaleX, double SpanLengthCm);
 
     private static FoxWatchManifestConnectorMeshConfig? ResolvePrimaryConnectorMeshConfig(FoxWatchManifestConnector? connector)
     {
@@ -887,7 +977,8 @@ public sealed class FoxWatchRenderSceneGenerator
     private static bool TryResolveTelescopingSpanMetrics(
         FoxWatchManifestStructure structure,
         IEnumerable<FoxWatchRenderSceneNode> nodes,
-        out TelescopingSpanMetrics metrics)
+        out TelescopingSpanMetrics metrics,
+        double? forceSpanLengthCm = null)
     {
         metrics = default;
         var connector = structure.Connector;
@@ -896,8 +987,10 @@ public sealed class FoxWatchRenderSceneGenerator
         var backSocketX = TryFindNodeUnrealLocationX(nodes, backSocketName)
             ?? TryFindBuildSocketLocationX(structure, backSocketName)
             ?? 0;
-        var frontSocketX = TryFindNodeUnrealLocationX(nodes, frontSocketName)
-            ?? TryFindBuildSocketLocationX(structure, frontSocketName);
+        double? frontSocketX = forceSpanLengthCm is > 0
+            ? backSocketX + forceSpanLengthCm.Value
+            : TryFindNodeUnrealLocationX(nodes, frontSocketName)
+                ?? TryFindBuildSocketLocationX(structure, frontSocketName);
         if (frontSocketX == null && connector?.DefaultTargetUnrealLocationCm is { Count: >= 1 } defaultTarget)
         {
             frontSocketX = backSocketX + defaultTarget[0];
@@ -930,8 +1023,159 @@ public sealed class FoxWatchRenderSceneGenerator
             ? spanStartX + (spanLength * 0.5)
             : backSocketX + (rawLength * 0.5);
 
-        metrics = new TelescopingSpanMetrics(spanCenterX, spanStartX, spanLength / nativeLength);
+        metrics = new TelescopingSpanMetrics(spanCenterX, spanStartX, spanLength / nativeLength, spanLength);
         return true;
+    }
+
+    private static List<FoxWatchRenderSceneNode> TrimFacilityCatwalkBridgePreviewToSpan(
+        FoxWatchManifestStructure structure,
+        List<FoxWatchRenderSceneNode> nodes,
+        TelescopingSpanMetrics metrics)
+    {
+        var spanEndX = metrics.StartX + metrics.SpanLengthCm;
+        var railingSpanScale = metrics.SpanLengthCm / ResolveFacilityCatwalkBridgeNativeSpanCm(structure, nodes);
+        return [.. nodes
+            .Select(node => TrimFacilityCatwalkBridgePreviewSpanNode(node, structure, metrics, spanEndX, railingSpanScale))
+            .Where(node => node != null)
+            .Cast<FoxWatchRenderSceneNode>()];
+    }
+
+    private static FoxWatchRenderSceneNode? TrimFacilityCatwalkBridgePreviewSpanNode(
+        FoxWatchRenderSceneNode node,
+        FoxWatchManifestStructure structure,
+        TelescopingSpanMetrics metrics,
+        double spanEndX,
+        double railingSpanScale)
+    {
+        var normalizedNodeName = NormalizeRenderSceneNodeName(node.Name);
+        List<double>? unrealLocationCentimeters = node.UnrealLocationCentimeters == null
+            ? null
+            : [.. node.UnrealLocationCentimeters];
+        List<double>? scale = node.Scale == null ? null : [.. node.Scale];
+        if (string.Equals(normalizedNodeName, "facilitieCatwalkXBar", StringComparison.OrdinalIgnoreCase))
+        {
+            var crossbeamX = unrealLocationCentimeters?.FirstOrDefault() ?? 0;
+            var halfLength = ResolveCatwalkCrossbeamHalfLengthCm(node);
+            var backEdge = crossbeamX - halfLength;
+            var frontEdge = crossbeamX + halfLength;
+            if (frontEdge <= metrics.StartX + 0.5 || backEdge >= spanEndX - 0.5)
+            {
+                return null;
+            }
+
+            if (frontEdge > spanEndX + 0.5)
+            {
+                var clippedBack = Math.Max(backEdge, metrics.StartX);
+                var clippedLength = spanEndX - clippedBack;
+                if (clippedLength <= 0.5)
+                {
+                    return null;
+                }
+
+                var newHalfLength = clippedLength * 0.5;
+                var scaleFactor = newHalfLength / halfLength;
+                if (unrealLocationCentimeters is { Count: > 0 })
+                {
+                    unrealLocationCentimeters[0] = clippedBack + newHalfLength;
+                }
+
+                if (scale is { Count: > 0 })
+                {
+                    scale[0] *= scaleFactor;
+                }
+                else
+                {
+                    scale = [scaleFactor, 1.0, 1.0];
+                }
+            }
+        }
+        else if (IsFacilityCatwalkBridgeRailingNode(normalizedNodeName) && unrealLocationCentimeters is { Count: > 0 })
+        {
+            unrealLocationCentimeters[0] = metrics.CenterX;
+            if (scale is { Count: > 0 })
+            {
+                for (var index = 0; index < scale.Count; index++)
+                {
+                    scale[index] *= railingSpanScale;
+                }
+            }
+            else
+            {
+                scale = [railingSpanScale, railingSpanScale, railingSpanScale];
+            }
+        }
+        else if (IsFacilityCatwalkBridgeCornerNode(normalizedNodeName) && unrealLocationCentimeters is { Count: > 0 })
+        {
+            unrealLocationCentimeters[0] = normalizedNodeName.StartsWith("Front", StringComparison.OrdinalIgnoreCase)
+                ? spanEndX
+                : metrics.StartX;
+        }
+
+        var filteredChildren = node.Children
+            .Select(child => TrimFacilityCatwalkBridgePreviewSpanNode(child, structure, metrics, spanEndX, railingSpanScale))
+            .Where(child => child != null)
+            .Cast<FoxWatchRenderSceneNode>()
+            .ToList();
+
+        return new FoxWatchRenderSceneNode
+        {
+            Id = node.Id,
+            Name = node.Name,
+            Visible = node.Visible,
+            VariantIds = node.VariantIds == null ? null : [.. node.VariantIds],
+            MeshId = node.MeshId,
+            Primitive = ClonePrimitive(node.Primitive),
+            MaterialIds = [.. node.MaterialIds],
+            Location = node.Location == null ? null : [.. node.Location],
+            RotationEulerDegrees = node.RotationEulerDegrees == null ? null : [.. node.RotationEulerDegrees],
+            Scale = scale,
+            UnrealLocationCentimeters = unrealLocationCentimeters,
+            UnrealSceneLocationCentimeters = node.UnrealSceneLocationCentimeters == null ? null : [.. node.UnrealSceneLocationCentimeters],
+            UnrealRotationDegrees = node.UnrealRotationDegrees == null ? null : [.. node.UnrealRotationDegrees],
+            DebugColor = node.DebugColor == null ? null : [.. node.DebugColor],
+            MarkerColor = node.MarkerColor == null ? null : [.. node.MarkerColor],
+            MarkerSize = node.MarkerSize,
+            Pose = ClonePose(node.Pose),
+            PoseVariants = ClonePoseVariants(node.PoseVariants),
+            AttachBoneName = node.AttachBoneName,
+            TransformMatrix = [.. node.TransformMatrix],
+            Children = filteredChildren,
+        };
+    }
+
+    private static double ResolveFacilityCatwalkBridgeNativeSpanCm(
+        FoxWatchManifestStructure structure,
+        IEnumerable<FoxWatchRenderSceneNode> nodes)
+    {
+        var backSocketX = TryFindNodeUnrealLocationX(nodes, "BackSocket")
+            ?? TryFindBuildSocketLocationX(structure, "BackSocket")
+            ?? 0;
+        var frontSocketX = TryFindNodeUnrealLocationX(nodes, "FrontSocket")
+            ?? TryFindBuildSocketLocationX(structure, "FrontSocket");
+        if (frontSocketX.HasValue && frontSocketX.Value > backSocketX + 0.001)
+        {
+            return frontSocketX.Value - backSocketX;
+        }
+
+        var meshConfig = ResolvePrimaryConnectorMeshConfig(structure.Connector);
+        return meshConfig?.NativeMeshLengthCm ?? FacilityCatwalkDeckNativeLengthCm;
+    }
+
+    private static double ResolveCatwalkCrossbeamHalfLengthCm(FoxWatchRenderSceneNode node)
+    {
+        var scaleX = node.Scale is { Count: > 0 } ? node.Scale[0] : FacilityCatwalkDeckMeshScale;
+        return FacilityCatwalkCrossbeamNativeLengthCm * scaleX * 0.5;
+    }
+
+    private static bool IsFacilityCatwalkBridgeRailingNode(string normalizedNodeName)
+    {
+        return string.Equals(normalizedNodeName, "FrontRailing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedNodeName, "BackRailing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFacilityCatwalkBridgeCornerNode(string normalizedNodeName)
+    {
+        return normalizedNodeName.EndsWith("Corner", StringComparison.OrdinalIgnoreCase);
     }
 
     private static double? TryFindBuildSocketLocationX(FoxWatchManifestStructure structure, string socketName)
@@ -949,9 +1193,10 @@ public sealed class FoxWatchRenderSceneGenerator
     private static List<FoxWatchRenderSceneNode> AdjustTelescopingSpanPreviewNodes(
         FoxWatchManifestStructure structure,
         List<FoxWatchRenderSceneNode> nodes,
-        IReadOnlyList<string> spanNodeNames)
+        IReadOnlyList<string> spanNodeNames,
+        double? forceSpanLengthCm = null)
     {
-        if (!TryResolveTelescopingSpanMetrics(structure, nodes, out var metrics))
+        if (!TryResolveTelescopingSpanMetrics(structure, nodes, out var metrics, forceSpanLengthCm))
         {
             return nodes;
         }
@@ -1098,6 +1343,66 @@ public sealed class FoxWatchRenderSceneGenerator
             }
 
             var childNodes = FilterNodesForTopdownStructurePreview(structure, node.Children);
+            filteredNodes.Add(new FoxWatchRenderSceneNode
+            {
+                Id = node.Id,
+                Name = node.Name,
+                Visible = node.Visible,
+                VariantIds = node.VariantIds == null ? null : [.. node.VariantIds],
+                MeshId = node.MeshId,
+                Primitive = ClonePrimitive(node.Primitive),
+                MaterialIds = [.. node.MaterialIds],
+                Location = node.Location == null ? null : [.. node.Location],
+                RotationEulerDegrees = node.RotationEulerDegrees == null ? null : [.. node.RotationEulerDegrees],
+                Scale = node.Scale == null ? null : [.. node.Scale],
+                UnrealLocationCentimeters = node.UnrealLocationCentimeters == null ? null : [.. node.UnrealLocationCentimeters],
+                UnrealSceneLocationCentimeters = node.UnrealSceneLocationCentimeters == null ? null : [.. node.UnrealSceneLocationCentimeters],
+                UnrealRotationDegrees = node.UnrealRotationDegrees == null ? null : [.. node.UnrealRotationDegrees],
+                DebugColor = node.DebugColor == null ? null : [.. node.DebugColor],
+                MarkerColor = node.MarkerColor == null ? null : [.. node.MarkerColor],
+                MarkerSize = node.MarkerSize,
+                Pose = ClonePose(node.Pose),
+                PoseVariants = ClonePoseVariants(node.PoseVariants),
+                AttachBoneName = node.AttachBoneName,
+                TransformMatrix = [.. node.TransformMatrix],
+                Children = childNodes,
+            });
+        }
+
+        return filteredNodes;
+    }
+
+    private static List<FoxWatchRenderSceneNode> FilterNodesExcludingNormalizedNames(
+        List<FoxWatchRenderSceneNode> nodes,
+        IReadOnlyList<string> excludedNormalizedNames)
+    {
+        var excludedNames = excludedNormalizedNames
+            .Select(NormalizeRenderSceneNodeName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (excludedNames.Count == 0)
+        {
+            return nodes;
+        }
+
+        return FilterNodesExcludingNormalizedNames(nodes, excludedNames);
+    }
+
+    private static List<FoxWatchRenderSceneNode> FilterNodesExcludingNormalizedNames(
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        ISet<string> excludedNormalizedNames)
+    {
+        var filteredNodes = new List<FoxWatchRenderSceneNode>();
+        foreach (var node in nodes)
+        {
+            var normalizedNodeName = NormalizeRenderSceneNodeName(node.Name);
+            if (!string.IsNullOrWhiteSpace(normalizedNodeName) &&
+                excludedNormalizedNames.Contains(normalizedNodeName))
+            {
+                continue;
+            }
+
+            var childNodes = FilterNodesExcludingNormalizedNames(node.Children, excludedNormalizedNames);
             filteredNodes.Add(new FoxWatchRenderSceneNode
             {
                 Id = node.Id,
@@ -1315,9 +1620,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     var variantId = entry.Key.Trim();
                     var isUpgrade = IsUpgradeModificationVariant(structure, variantId);
                     var previewDirection = ResolveModificationPreviewDirection(entry.Value, structure);
-                    var sharedModificationId = isUpgrade
-                        ? string.Empty
-                        : CreateSharedModificationManifestIdWithDiagnostics(structure, slot.Name.Trim(), variantId, entry.Value, previewDirection);
+                    var sharedModificationId = CreateSharedModificationManifestIdWithDiagnostics(structure, slot.Name.Trim(), variantId, entry.Value, previewDirection);
                     return new StandaloneModificationRenderTarget
                     {
                         VariantId = variantId,
@@ -1759,6 +2062,7 @@ public sealed class FoxWatchRenderSceneGenerator
             ExportUrl = mesh.ExportUrl,
             DefaultPoseAnimationPackagePath = mesh.DefaultPoseAnimationPackagePath,
             PoseAnimationPackagePaths = mesh.PoseAnimationPackagePaths == null ? null : [.. mesh.PoseAnimationPackagePaths],
+            MaterialSidecarNameOverride = mesh.MaterialSidecarNameOverride,
         })];
     }
 
@@ -4122,6 +4426,13 @@ public sealed class FoxWatchRenderSceneGenerator
         return false;
     }
 
+    private static readonly Dictionary<string, string> FoundationMaterialSidecarReferenceMeshPackagePaths =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["FacilityFoundationConcrete"] = "War/Content/Meshes/Structures/Foundations/Foundation01T3.uasset",
+            ["FacilityFoundationDirt"] = "War/Content/Meshes/Structures/Foundations/Foundation01T1.uasset",
+        };
+
     private async Task PopulateMeshExportsAsync(IEnumerable<FoxWatchRenderSceneMeshAsset> meshAssets, string? renderAssetOutputDirectory, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(renderAssetOutputDirectory))
@@ -4129,7 +4440,8 @@ public sealed class FoxWatchRenderSceneGenerator
             return;
         }
 
-        foreach (var meshAsset in meshAssets)
+        var meshAssetList = meshAssets as IList<FoxWatchRenderSceneMeshAsset> ?? [.. meshAssets];
+        foreach (var meshAsset in meshAssetList)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -4155,6 +4467,22 @@ public sealed class FoxWatchRenderSceneGenerator
 
             meshAsset.ExportUrl = exportUrl;
             _exportUrlByPackagePath[meshPackagePath] = exportUrl;
+        }
+
+        foreach (var materialSidecarName in meshAssetList
+                     .Select(meshAsset => meshAsset.MaterialSidecarNameOverride)
+                     .Where(value => !string.IsNullOrWhiteSpace(value))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!FoundationMaterialSidecarReferenceMeshPackagePaths.TryGetValue(materialSidecarName!, out var referenceMeshPackagePath) ||
+                _exportUrlByPackagePath.ContainsKey(referenceMeshPackagePath))
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await _meshAssetExporter.ExportMeshAsync(referenceMeshPackagePath, renderAssetOutputDirectory, cancellationToken);
+            _exportUrlByPackagePath[referenceMeshPackagePath] = BuildExportUrl(referenceMeshPackagePath) ?? referenceMeshPackagePath;
         }
     }
 
@@ -4390,14 +4718,11 @@ public sealed class FoxWatchRenderSceneGenerator
         var nameInput = CreateSharedModificationHashDiagnosticInput(variant?.Name);
         var descriptionInput = CreateSharedModificationHashDiagnosticInput(variant?.Description);
         var previewDirectionInput = CreateSharedModificationHashDiagnosticInput(previewDirection);
+        var templatePathInput = CreateSharedModificationHashDiagnosticInput(
+            ResolveTemplatePathForSharedModificationIdentity(variant));
         var identity = string.Join("|", [
             variantIdInput.Normalized,
-            templateActorPathInput.Normalized,
-            templateMeshPathInput.Normalized,
-            previewMeshPathInput.Normalized,
-            nameInput.Normalized,
-            descriptionInput.Normalized,
-            previewDirectionInput.Normalized,
+            templatePathInput.Normalized,
         ]);
         var normalizedVariantId = NormalizeStandaloneModificationKeyComponent(variantId);
         var fullHashHex = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
@@ -4428,6 +4753,26 @@ public sealed class FoxWatchRenderSceneGenerator
             Raw = value ?? string.Empty,
             Normalized = NormalizeStandaloneModificationIdentityPart(value),
         };
+    }
+
+    private static string ResolveTemplatePathForSharedModificationIdentity(FoxWatchManifestModificationSlotVariant? variant)
+    {
+        if (!string.IsNullOrWhiteSpace(variant?.TemplateActorPath))
+        {
+            return variant.TemplateActorPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant?.TemplateMeshPath))
+        {
+            return variant.TemplateMeshPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant?.PreviewMeshPath))
+        {
+            return variant.PreviewMeshPath;
+        }
+
+        return string.Empty;
     }
 
     private static string CreateSharedModificationHashDiagnosticsRunId()

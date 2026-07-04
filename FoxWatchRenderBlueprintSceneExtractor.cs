@@ -12,6 +12,8 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     private const string ShippableMeshPackagePrefix = "War/Content/Meshes/Shippables/";
     private const string CraneRailTrackMeshPackagePath = "War/Content/Meshes/Structures/CraneRailTrack.uasset";
     private const string StructureArrowComponentName = "StructureArrow";
+    private const string FacilityFoundationDirtMaterialSidecarName = "FacilityFoundationDirt";
+    private const string FacilityFoundationConcreteMaterialSidecarName = "FacilityFoundationConcrete";
     private static readonly List<double> PowerSocketDebugColor = [0.85, 0.15, 0.15, 1.0];
     private static readonly List<double> PipeSocketDebugColor = [0.15, 0.55, 0.95, 1.0];
     private static readonly List<double> GenericSocketDebugColor = [0.95, 0.65, 0.15, 1.0];
@@ -62,6 +64,13 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             return null;
         }
 
+        var normalizedComponentReferences = componentReferences.ToList();
+        await ApplyFoundationStructureBlueprintCorrectionsAsync(
+            structure,
+            blueprintPackagePath,
+            normalizedComponentReferences,
+            cancellationToken);
+
         var includeDestroyedComponents =
             structure.IsDestroyed == true
             || string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
@@ -73,9 +82,9 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             structure.Id,
             structure.CodeName,
             blueprintPackagePath,
-            componentReferences,
+            normalizedComponentReferences,
             allowDestroyedComponents: includeDestroyedComponents);
-        await AppendModificationSlotVariantsAsync(structure, extraction, componentReferences, cancellationToken);
+        await AppendModificationSlotVariantsAsync(structure, extraction, normalizedComponentReferences, cancellationToken);
 
         return extraction;
     }
@@ -485,6 +494,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         var hiddenSubtreeComponentNames = BuildHiddenSubtreeComponentNames(deduplicatedComponentReferences);
 
         var meshIdBySourcePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var materialSidecarOverrideByMeshId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var poseAnimationPackagePathsBySourcePath = BuildPoseAnimationPackagePathsBySourcePath(deduplicatedComponentReferences);
         var nodesByComponentName = new Dictionary<string, FoxWatchRenderSceneNode>(StringComparer.OrdinalIgnoreCase);
         var rootNode = new FoxWatchRenderSceneNode
@@ -502,6 +512,12 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             }
 
             var node = CreateNode(nodeIdPrefix, componentReference, meshIdBySourcePath);
+            if (!string.IsNullOrWhiteSpace(componentReference.MaterialSidecarNameOverride) &&
+                !string.IsNullOrWhiteSpace(node.MeshId))
+            {
+                materialSidecarOverrideByMeshId[node.MeshId] = componentReference.MaterialSidecarNameOverride;
+            }
+
             nodesByComponentName[componentReference.ComponentName] = node;
         }
 
@@ -538,6 +554,9 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                     DefaultPoseAnimationPackagePath = SelectDefaultPoseAnimationPackagePath(poseAnimationPackagePaths),
                     PoseAnimationPackagePaths = poseAnimationPackagePaths?.Count > 0
                         ? [.. poseAnimationPackagePaths]
+                        : null,
+                    MaterialSidecarNameOverride = materialSidecarOverrideByMeshId.TryGetValue(entry.Value, out var materialSidecarNameOverride)
+                        ? materialSidecarNameOverride
                         : null,
                 };
             })
@@ -584,6 +603,173 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             {
                 curtainsNode.Children.Add(curtainMeshNode);
             }
+        }
+    }
+
+    private async Task ApplyFoundationStructureBlueprintCorrectionsAsync(
+        FoxWatchManifestStructure structure,
+        string blueprintPackagePath,
+        List<FoxWatchBlueprintComponentReference> componentReferences,
+        CancellationToken cancellationToken)
+    {
+        if (!IsFacilityFoundationStructure(structure) ||
+            !TryResolveFoundationTier(structure, out var foundationTier))
+        {
+            return;
+        }
+
+        var currentBlueprintReferences = FilterCurrentBlueprintComponentReferences(componentReferences, blueprintPackagePath);
+        if (string.Equals(foundationTier, "t3", StringComparison.OrdinalIgnoreCase))
+        {
+            var siblingBlueprintPackagePath = ResolveFoundationTierSiblingBlueprintPackagePath(structure);
+            if (!string.IsNullOrWhiteSpace(siblingBlueprintPackagePath))
+            {
+                try
+                {
+                    var siblingComponentReferences = await _meshAssetExporter.InspectBlueprintComponentsAsync(
+                        siblingBlueprintPackagePath,
+                        cancellationToken);
+                    ApplyFoundationBorderRotationCorrections(
+                        currentBlueprintReferences,
+                        FilterCurrentBlueprintComponentReferences(siblingComponentReferences, siblingBlueprintPackagePath));
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Skipping foundation border rotation correction for {StructureId} because sibling blueprint {SiblingBlueprintPackagePath} could not be inspected",
+                        structure.Id,
+                        siblingBlueprintPackagePath);
+                }
+            }
+        }
+
+        foreach (var componentReference in currentBlueprintReferences)
+        {
+            if (!IsFoundationFloorComponent(componentReference))
+            {
+                continue;
+            }
+
+            if (string.Equals(foundationTier, "t3", StringComparison.OrdinalIgnoreCase) &&
+                UsesDirtFoundationFloorMesh(componentReference.MeshPath))
+            {
+                componentReference.MaterialSidecarNameOverride = FacilityFoundationConcreteMaterialSidecarName;
+            }
+            else if (string.Equals(foundationTier, "t1", StringComparison.OrdinalIgnoreCase) &&
+                     UsesConcreteFoundationFloorMesh(componentReference.MeshPath))
+            {
+                componentReference.MaterialSidecarNameOverride = FacilityFoundationDirtMaterialSidecarName;
+            }
+        }
+    }
+
+    private static bool IsFacilityFoundationStructure(FoxWatchManifestStructure structure)
+    {
+        var structureId = structure.Id ?? string.Empty;
+        return structureId.StartsWith("foundation", StringComparison.OrdinalIgnoreCase) &&
+            !structureId.Contains("railtracksplinefoundation", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryResolveFoundationTier(FoxWatchManifestStructure structure, out string foundationTier)
+    {
+        foundationTier = string.Empty;
+
+        var structureId = structure.Id ?? string.Empty;
+        if (structureId.EndsWith("t3", StringComparison.OrdinalIgnoreCase))
+        {
+            foundationTier = "t3";
+            return true;
+        }
+
+        if (structureId.EndsWith("t1", StringComparison.OrdinalIgnoreCase))
+        {
+            foundationTier = "t1";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? ResolveFoundationTierSiblingBlueprintPackagePath(FoxWatchManifestStructure structure)
+    {
+        var codeName = structure.CodeName ?? string.Empty;
+        if (codeName.EndsWith("T3", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"War/Content/Blueprints/Structures/Facilities/BP{codeName[..^2]}T1.uasset";
+        }
+
+        if (codeName.EndsWith("T1", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"War/Content/Blueprints/Structures/Facilities/BP{codeName[..^2]}T3.uasset";
+        }
+
+        return null;
+    }
+
+    private static bool IsFoundationBorderTrimComponent(FoxWatchBlueprintComponentReference componentReference)
+    {
+        if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
+        {
+            return false;
+        }
+
+        var normalizedComponentName = NormalizeReferenceName(componentReference.ComponentName);
+        return normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase) ||
+            normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFoundationFloorComponent(FoxWatchBlueprintComponentReference componentReference)
+    {
+        return string.Equals(
+            NormalizeReferenceName(componentReference.ComponentName),
+            "Foundation",
+            StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(componentReference.MeshPath);
+    }
+
+    private static bool UsesDirtFoundationFloorMesh(string? meshPath)
+    {
+        if (string.IsNullOrWhiteSpace(meshPath))
+        {
+            return false;
+        }
+
+        var meshFileName = Path.GetFileNameWithoutExtension(meshPath);
+        return string.Equals(meshFileName, "Foundation012x2T1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(meshFileName, "Foundation01_1x2_T1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool UsesConcreteFoundationFloorMesh(string? meshPath)
+    {
+        if (string.IsNullOrWhiteSpace(meshPath))
+        {
+            return false;
+        }
+
+        return meshPath.Contains("ConcreteFoundation", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ApplyFoundationBorderRotationCorrections(
+        IEnumerable<FoxWatchBlueprintComponentReference> targetComponentReferences,
+        IReadOnlyList<FoxWatchBlueprintComponentReference> referenceComponentReferences)
+    {
+        var referenceRotationsByComponentName = referenceComponentReferences
+            .Where(IsFoundationBorderTrimComponent)
+            .Where(reference => HasMeaningfulRotation(reference.RelativeRotation))
+            .GroupBy(reference => reference.ComponentName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().RelativeRotation, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var componentReference in targetComponentReferences.Where(IsFoundationBorderTrimComponent))
+        {
+            if (HasMeaningfulRotation(componentReference.RelativeRotation) ||
+                !referenceRotationsByComponentName.TryGetValue(componentReference.ComponentName, out var referenceRotation) ||
+                string.IsNullOrWhiteSpace(referenceRotation))
+            {
+                continue;
+            }
+
+            componentReference.RelativeRotation = referenceRotation;
         }
     }
 
@@ -2009,6 +2195,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             ExportUrl = asset.ExportUrl,
             DefaultPoseAnimationPackagePath = asset.DefaultPoseAnimationPackagePath,
             PoseAnimationPackagePaths = asset.PoseAnimationPackagePaths == null ? null : [.. asset.PoseAnimationPackagePaths],
+            MaterialSidecarNameOverride = asset.MaterialSidecarNameOverride,
         };
     }
 

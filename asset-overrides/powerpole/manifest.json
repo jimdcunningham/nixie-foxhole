@@ -1,0 +1,8 @@
+{
+  "previewDirection": "sw",
+  "modifications": {
+    "light": {
+      "previewDirection": "ne"
+    }
+  }
+}

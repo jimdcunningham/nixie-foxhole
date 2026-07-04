@@ -71,6 +71,43 @@ public sealed class FoxWatchAssetManifestOverrideLoader
         return structureIds.OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    public bool TryLoadSharedModificationOverrides(out JsonElement overrideElement)
+    {
+        var filePath = FoxWatchWorkspace.SharedModificationOverrideManifestPath;
+        if (!File.Exists(filePath))
+        {
+            overrideElement = default;
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(filePath));
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                _logger.LogWarning(
+                    "Skipping shared modification overrides at {OverridePath} because the root value must be an object",
+                    filePath);
+                overrideElement = default;
+                return false;
+            }
+
+            overrideElement = document.RootElement.Clone();
+            return true;
+        }
+        catch (JsonException exception)
+        {
+            _logger.LogWarning(exception, "Failed to parse shared modification overrides at {OverridePath}", filePath);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to read shared modification overrides at {OverridePath}", filePath);
+        }
+
+        overrideElement = default;
+        return false;
+    }
+
     private string ResolveExistingOverridePath(string structureId)
     {
         var primaryPath = GetStructureOverridePath(structureId);

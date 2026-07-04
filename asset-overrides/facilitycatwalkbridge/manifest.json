@@ -1,4 +1,10 @@
 {
   "previewDirection": "sw",
-  "clipFloorZ": -0.5
+  "clipFloorZ": -0.5,
+  "connector": {
+    "pathStyle": "straight-telescoping",
+    "frontSocketName": "FrontSocket",
+    "backSocketName": "BackSocket",
+    "defaultTargetUnrealLocationCm": [250, 0, 0]
+  }
 }
