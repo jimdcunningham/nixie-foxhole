@@ -217,6 +217,11 @@ public sealed class FoxWatchRenderSceneGenerator
                 shortenSpanForPreview: false);
             baseSceneModes = ["topdown"];
         }
+        else if (IsRailTrackSplineStructure(structure))
+        {
+            collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
+            baseSceneModes = ["topdown"];
+        }
         else
         {
             collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
@@ -251,6 +256,29 @@ public sealed class FoxWatchRenderSceneGenerator
                 structure,
                 collapsedBlueprint,
                 shortenSpanForPreview: true);
+            documents.Add(new FoxWatchGeneratedRenderSceneDocument
+            {
+                StructureId = structure.Id,
+                AllowedStructureIds = GetAllowedStructureIds(structure),
+                CodeName = structure.CodeName,
+                Name = structure.Name.Fallback,
+                CategoryId = structure.CategoryId,
+                PreviewUrl = structure.PreviewUrl,
+                IconUrl = structure.IconUrl,
+                RelativeScenePath = Path.Combine(structure.Id, "preview.scene.json"),
+                Document = await CreateDocumentAsync(
+                    structure,
+                    previewScene,
+                    structure.Id,
+                    ["preview", "icon"],
+                    includePoseVariants,
+                    clipFloorOverride: null,
+                    cancellationToken),
+            });
+        }
+        else if (IsRailTrackSplineStructure(structure))
+        {
+            var previewScene = PrepareRailTrackSplineSceneForPreview(structure, collapsedBlueprint);
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
                 StructureId = structure.Id,
@@ -914,6 +942,29 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return blueprintScene;
+    }
+
+    private static readonly string[] RailTrackSplineSwitchNodeNames = ["BackSwitchMesh", "FrontSwitchMesh"];
+
+    private static FoxWatchBlueprintSceneExtraction? PrepareRailTrackSplineSceneForPreview(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? blueprintScene)
+    {
+        if (blueprintScene == null)
+        {
+            return null;
+        }
+
+        var preparedRoots = FilterNodesExcludingNormalizedNames(
+            FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots),
+            RailTrackSplineSwitchNodeNames);
+
+        return new FoxWatchBlueprintSceneExtraction
+        {
+            Roots = preparedRoots,
+            Meshes = CloneMeshAssets(blueprintScene.Meshes),
+            Variants = blueprintScene.Variants,
+        };
     }
 
     private static FoxWatchBlueprintSceneExtraction? PrepareFacilityCatwalkBridgeScene(
@@ -1820,8 +1871,8 @@ public sealed class FoxWatchRenderSceneGenerator
         if (IsRailTrackSplineStructure(structure))
         {
             return IsRailTrackSplineFoundationStructure(structure)
-                ? ["span"]
-                : ["underlay", "span"];
+                ? ["backswitch", "span", "frontswitch"]
+                : ["backswitch", "underlay", "span", "frontswitch"];
         }
 
         return [];

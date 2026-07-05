@@ -7,6 +7,11 @@ import sharp from 'sharp';
 import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
 import {
+    getCoLocatedStructureAssetFileName,
+    publishStructureIconsForManifest,
+    shouldSyncRenderedAssetToPublic,
+} from './publish-structure-icons.mjs';
+import {
     buildSharedModificationIdComputation,
     createSharedModificationHashDiagnosticInput,
     getStandaloneModificationIdentityText,
@@ -72,7 +77,6 @@ let publishedAssetTypeById = new Map();
 let sourcePublishedIconPathByKeyPromise = null;
 let renderedPublishedIconFallbackPathByKeyPromise = null;
 const renderVisibilityByFilePath = new Map();
-const samePathSubtypeCompositionStateDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/rendered-subtype-state');
 let temporaryFileWriteSequence = 0;
 
 const cliArgs = parseCliArgs(process.argv.slice(2));
@@ -1720,7 +1724,7 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                     return normalizedModificationId ? [normalizedModificationId, modification] : null;
                 })
                 .filter(Boolean));
-            const rawSlotsByName = new Map((rawStructure?.modificationSlots ?? [])
+            const rawSlotsByName = new Map(getRawStructureModificationSlots(rawStructure)
                 .map(slot => {
                     const slotName = String(slot?.name ?? '').trim();
                     return slotName ? [slotName, slot] : null;
@@ -1748,6 +1752,7 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                                     {
                                         ...rawSourceModification,
                                         ...rawVariant,
+                                        ...variant,
                                     },
                                     variant?.previewDirection
                                     ?? rawVariant?.previewDirection
@@ -1808,6 +1813,11 @@ function mergeModificationVariantPublishedContext(variant, publishedVariant) {
 
     if (publishedVariant.appliedModificationId && !nextVariant.appliedModificationId) {
         nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
+    }
+
+    const publishedSharedModificationId = normalizeId(publishedVariant?.sharedModificationId);
+    if (publishedSharedModificationId && hasStandaloneModificationContentHashSuffix(publishedSharedModificationId)) {
+        nextVariant.sharedModificationId = publishedSharedModificationId;
     }
 
     return nextVariant;
@@ -1886,13 +1896,28 @@ function augmentPartialManifestWithPublishedContext(partialManifest, publishedMa
     };
 }
 
-async function loadSourceManifest(manifestPath) {
+function getRawStructureModificationSlots(rawStructure) {
+    if (Array.isArray(rawStructure?.modificationSlots)) {
+        return rawStructure.modificationSlots;
+    }
+
+    if (Array.isArray(rawStructure?.modifications)) {
+        return rawStructure.modifications;
+    }
+
+    return [];
+}
+
+async function loadSourceManifest(manifestPath, { seedSharedModificationIds = true } = {}) {
     const rawManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     if (!Array.isArray(rawManifest?.assets)) {
         throw new Error(`manifest at ${manifestPath} does not use the assets root`);
     }
 
-    const manifest = seedAuthoredSharedModificationIds(rawManifest, foxholeManifestSchema.parse(rawManifest));
+    const parsedManifest = foxholeManifestSchema.parse(rawManifest);
+    const manifest = seedSharedModificationIds
+        ? seedAuthoredSharedModificationIds(rawManifest, parsedManifest)
+        : parsedManifest;
     const structureMetadataById = new Map((rawManifest.assets ?? [])
         .map(structure => {
             const structureId = normalizeId(structure?.id);
@@ -2252,6 +2277,68 @@ function pruneSharedModificationEntries(manifest) {
     };
 }
 
+function preservePublishedVariantSharedModificationIds(publishedStructure, partialStructure) {
+    const publishedSlots = getStructurePublishedModificationSlots(publishedStructure);
+    if (publishedSlots.length === 0) {
+        return partialStructure;
+    }
+
+    const publishedSlotsByName = new Map(publishedSlots
+        .map(slot => {
+            const slotName = String(slot?.name ?? '').trim();
+            return slotName ? [slotName, slot] : null;
+        })
+        .filter(Boolean));
+
+    const partialSlots = getStructurePublishedModificationSlots(partialStructure);
+    if (partialSlots.length === 0) {
+        return partialStructure;
+    }
+
+    let structureChanged = false;
+    const nextSlots = partialSlots.map(partialSlot => {
+        const slotName = String(partialSlot?.name ?? '').trim();
+        const publishedSlot = slotName ? publishedSlotsByName.get(slotName) : null;
+        if (!publishedSlot) {
+            return partialSlot;
+        }
+
+        const nextVariants = Object.fromEntries(Object.entries(partialSlot?.variants ?? {}).map(([variantId, variant]) => {
+            const publishedVariant = publishedSlot?.variants?.[variantId];
+            const publishedSharedModificationId = normalizeId(publishedVariant?.sharedModificationId);
+            const partialSharedModificationId = normalizeId(variant?.sharedModificationId);
+            if (!publishedSharedModificationId || !hasStandaloneModificationContentHashSuffix(publishedSharedModificationId)) {
+                return [variantId, variant];
+            }
+
+            if (partialSharedModificationId === publishedSharedModificationId) {
+                return [variantId, variant];
+            }
+
+            structureChanged = true;
+            return [variantId, {
+                ...variant,
+                sharedModificationId: publishedSharedModificationId,
+            }];
+        }));
+
+        return {
+            ...partialSlot,
+            variants: nextVariants,
+        };
+    });
+
+    if (!structureChanged) {
+        return partialStructure;
+    }
+
+    const { modifications: _modifications, modificationSlots: _modificationSlots, ...nextStructure } = partialStructure;
+    return {
+        ...nextStructure,
+        modifications: nextSlots,
+    };
+}
+
 function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds = new Set()) {
     const partialStructuresById = new Map((partialManifest.assets ?? [])
         .filter(structure => !structure?.isUpgrade)
@@ -2279,7 +2366,10 @@ function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds 
         }
 
         seenStructureIds.add(structureId);
-        structures.push(partialStructuresById.get(structureId) ?? structure);
+        const partialStructure = partialStructuresById.get(structureId);
+        structures.push(partialStructure
+            ? preservePublishedVariantSharedModificationIds(structure, partialStructure)
+            : structure);
     }
 
     for (const [structureId, structure] of partialStructuresById) {
@@ -2621,6 +2711,51 @@ function extractPublishedIconKey(value) {
     return match ? normalizeId(match[1]) : null;
 }
 
+function collectSubtypeOverlayIconKeys(manifest) {
+    const keys = new Set();
+
+    function addValue(value) {
+        const key = extractPublishedIconKey(value);
+        if (key) {
+            keys.add(key);
+        }
+    }
+
+    addValue(defaultWreckedSubtypeIconUrl);
+    for (const structure of manifest?.assets ?? []) {
+        addValue(structure?.subTypeIconUrl);
+        for (const slot of getStructurePublishedModificationSlots(structure)) {
+            for (const variant of Object.values(slot?.variants ?? {})) {
+                addValue(variant?.subTypeIconUrl);
+            }
+        }
+    }
+
+    for (const modification of Object.values(manifest?.shared?.modifications ?? {})) {
+        addValue(modification?.subTypeIconUrl);
+    }
+
+    return keys;
+}
+
+function isComposeTimeSubtypeIconKey(key, subtypeOverlayIconKeys = null) {
+    const normalizedKey = normalizeId(key);
+    if (!normalizedKey) {
+        return false;
+    }
+
+    if (normalizedKey.startsWith('subtype')) {
+        return true;
+    }
+
+    return subtypeOverlayIconKeys?.has(normalizedKey) ?? false;
+}
+
+function isComposeTimeSubtypeIconUrl(value, subtypeOverlayIconKeys = null) {
+    const iconKey = extractPublishedIconKey(value);
+    return Boolean(iconKey && isComposeTimeSubtypeIconKey(iconKey, subtypeOverlayIconKeys));
+}
+
 function isSharedPublishedIconUrl(value) {
     return /^\/foxhole\/assets\/icons\/[^/]+\.webp$/i.test(String(value ?? ''));
 }
@@ -2843,6 +2978,27 @@ async function removeStaleSharedIconsForCoLocatedStructures(manifest) {
     }
 }
 
+async function removeComposeTimeSubtypeIconsFromPublicDirectory(subtypeOverlayIconKeys) {
+    if (!await pathExists(publicIconsDirectory)) {
+        return;
+    }
+
+    for await (const filePath of walkFiles(publicIconsDirectory)) {
+        const extension = extname(filePath).toLowerCase();
+        if (extension !== '.webp') {
+            continue;
+        }
+
+        const iconKey = normalizeId(basename(filePath, extension));
+        if (!isComposeTimeSubtypeIconKey(iconKey, subtypeOverlayIconKeys)) {
+            continue;
+        }
+
+        await unlink(filePath);
+        console.log(`removed compose-time subtype icon ${filePath}`);
+    }
+}
+
 function resolveRawRenderedAssetPublicOutputPath(filePath) {
     const normalizedFilePath = normalizeFileSystemPath(filePath);
     for (const rawRootDirectory of [rawRenderedAssetTypesDirectory, rawRenderedSharedAssetsDirectory]) {
@@ -2906,6 +3062,10 @@ async function syncRawRenderedAssetsToPublicDirectory(scopedTargets = null) {
         for await (const filePath of walkFiles(rawRootDirectory)) {
             const extension = extname(filePath).toLowerCase();
             if (extension !== '.json' && extension !== '.webp') {
+                continue;
+            }
+
+            if (extension === '.webp' && !shouldSyncRenderedAssetToPublic(basename(filePath))) {
                 continue;
             }
 
@@ -3017,21 +3177,20 @@ async function syncSharedModificationDefaultIconAssets(manifest) {
     }
 }
 
-function collectReferencedPublishedIconKeys(manifest, options = {}) {
-    const includeSubtypeIcons = options.includeSubtypeIcons ?? true;
+function collectReferencedPublishedIconKeys(manifest) {
+    const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifest);
     const keys = new Set();
 
     function addValue(value) {
         const key = extractPublishedIconKey(value);
-        if (key) {
-            keys.add(key);
+        if (!key || isComposeTimeSubtypeIconKey(key, subtypeOverlayIconKeys)) {
+            return;
         }
+
+        keys.add(key);
     }
 
     for (const structure of manifest?.assets ?? []) {
-        if (includeSubtypeIcons) {
-            addValue(structure?.subTypeIconUrl);
-        }
         addValue(structure?.icons?.default ?? structure?.iconUrl);
         addValue(structure?.icons?.rendered ?? structure?.previewIconUrl);
         addValue(structure?.previewUrl);
@@ -3048,9 +3207,6 @@ function collectReferencedPublishedIconKeys(manifest, options = {}) {
         addValue(structure?.packaged?.sprite?.source ?? structure?.packaged?.textureUrl);
         for (const slot of getStructurePublishedModificationSlots(structure)) {
             for (const variant of Object.values(slot?.variants ?? {})) {
-                if (includeSubtypeIcons) {
-                    addValue(variant?.subTypeIconUrl);
-                }
                 addValue(variant?.icons?.default ?? variant?.iconUrl);
                 addValue(variant?.icons?.rendered ?? variant?.renderedIconUrl);
                 addValue(variant?.previewUrl);
@@ -3060,9 +3216,6 @@ function collectReferencedPublishedIconKeys(manifest, options = {}) {
     }
 
     for (const modification of Object.values(manifest?.shared?.modifications ?? {})) {
-        if (includeSubtypeIcons) {
-            addValue(modification?.subTypeIconUrl);
-        }
         addValue(modification?.icons?.default ?? modification?.iconUrl);
         addValue(modification?.icons?.rendered ?? modification?.renderedIconUrl);
         addValue(modification?.previewUrl);
@@ -3402,7 +3555,8 @@ function hasStandaloneModificationContentHashSuffix(value) {
 }
 
 function resolvePublishedSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
-    const seededSharedModificationId = normalizeId(variant?.sharedModificationId);
+    const seededSharedModificationId = normalizeId(variant?.sharedModificationId)
+        || normalizeId(candidateId);
     if (seededSharedModificationId && hasStandaloneModificationContentHashSuffix(seededSharedModificationId)) {
         return seededSharedModificationId;
     }
@@ -4629,8 +4783,53 @@ function hasReferencedArtifactDirectory(referencedDirectories, directoryPath) {
     return false;
 }
 
+function getSharedModificationVariantPrefix(sharedModificationId) {
+    const normalizedSharedModificationId = normalizeId(sharedModificationId);
+    const hashSuffixMatch = normalizedSharedModificationId.match(/^(.+)-[a-f0-9]{12}(?:-\d+)?$/);
+    return hashSuffixMatch ? hashSuffixMatch[1] : normalizedSharedModificationId;
+}
+
+function collectReferencedSharedModificationArtifactDirectories(manifest, directories = new Set()) {
+    const referencedPrefixes = new Set();
+    const referencedSharedModificationIds = collectReferencedSharedModificationIds(manifest);
+    for (const sharedModificationId of Object.keys(manifest?.shared?.modifications ?? {})) {
+        referencedSharedModificationIds.add(normalizeId(sharedModificationId));
+    }
+
+    for (const sharedModificationId of referencedSharedModificationIds) {
+        const assetPathId = getSharedModificationAssetPathId(sharedModificationId);
+        if (!assetPathId) {
+            continue;
+        }
+
+        referencedPrefixes.add(getSharedModificationVariantPrefix(assetPathId));
+        directories.add(normalizeFileSystemPathForComparison(
+            resolve(sharedAssetsDirectory, 'modifications', assetPathId),
+        ));
+    }
+
+    return {
+        directories,
+        referencedPrefixes,
+    };
+}
+
+function isReferencedSharedModificationArtifactDirectory(
+    directoryName,
+    referencedDirectories,
+    referencedPrefixes,
+) {
+    const candidateDirectory = resolve(sharedAssetsDirectory, 'modifications', directoryName);
+    if (hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory)) {
+        return true;
+    }
+
+    return referencedPrefixes.has(getSharedModificationVariantPrefix(directoryName));
+}
+
 async function removeUnreferencedGeneratedModificationArtifactDirectories(manifest) {
     const referencedDirectories = collectReferencedPublicAssetDirectories(manifest);
+    const { referencedPrefixes } = collectReferencedSharedModificationArtifactDirectories(manifest, referencedDirectories);
     const structureIds = new Set((manifest?.assets ?? [])
         .map(structure => normalizeId(structure?.id))
         .filter(Boolean));
@@ -4673,7 +4872,7 @@ async function removeUnreferencedGeneratedModificationArtifactDirectories(manife
         }
 
         const candidateDirectory = resolve(sharedModificationsDirectory, entry.name);
-        if (hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory)) {
+        if (isReferencedSharedModificationArtifactDirectory(entry.name, referencedDirectories, referencedPrefixes)) {
             continue;
         }
 
@@ -5213,6 +5412,15 @@ function resolveStructureSceneMetadata(structureSceneMetadata, structure) {
     return null;
 }
 
+function getCoLocatedStructureIconPublicUrl(structureId, assetKind) {
+    const outputDirectory = getPublishedAssetDirectory(structureId)
+        ?? resolve(assetTypesDirectory, 'structures', structureId);
+    return toPublicFoxholeAssetUrl(resolve(
+        outputDirectory,
+        getCoLocatedStructureAssetFileName(structureId, assetKind),
+    ));
+}
+
 function applyStructureRenderUrls(
     manifest,
     entriesByKey,
@@ -5300,7 +5508,10 @@ function applyStructureRenderUrls(
                 const resolvedStructureDefaultIconUrl = structureDefaultIconUrl
                     ?? renderEntry?.defaultIconUrl
                     ?? null;
-                const structureRenderedIconUrl = defaultStructureColor?.renderedIconUrl ?? structure?.icons?.rendered ?? structure?.previewIconUrl ?? resolvedStructureDefaultIconUrl;
+                const coLocatedRenderedIconUrl = getCoLocatedStructureIconPublicUrl(structure.id, 'icon.rendered');
+                const structureRenderedIconUrl = defaultStructureColor?.renderedIconUrl
+                    ?? coLocatedRenderedIconUrl
+                    ?? resolvedStructureDefaultIconUrl;
                 const meshlessFallbackUrl = isMeshlessScene ? structureDefaultIconUrl : null;
                 const textureUrl = defaultStructureColor?.textureUrl ?? renderEntry?.textureUrl ?? meshlessFallbackUrl;
                 const defaultTextureUrl = textureUrl ?? structure.variants.default?.textureUrl;
@@ -5867,517 +6078,30 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
     });
 }
 
-async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sourceManifest = null) {
+async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sourceManifest = null, subtypeOverlayIconKeys = null) {
     const copiedAssetUrls = new Map();
-    const sourceStructureById = new Map((sourceManifest?.assets ?? [])
-        .map(structure => [normalizeId(structure?.id), structure])
-        .filter(([structureId]) => Boolean(structureId)));
-    const sourceStructureMetadataById = sourceManifest?.__sourceStructureMetadataById instanceof Map
-        ? sourceManifest.__sourceStructureMetadataById
-        : new Map();
 
-    function normalizeFileSystemPath(value) {
-        return String(value ?? '').replace(/\\/g, '/').toLowerCase();
-    }
-
-    function getPublishedAssetFilePath(sourceUrl) {
-        if (!String(sourceUrl ?? '').startsWith(createFoxholeAssetsBaseUrl('/'))) {
-            return null;
-        }
-
-        const sourceRelativePath = sourceUrl.replace(`${createFoxholeAssetsBaseUrl('/')}`, '').replace(/\//g, '\\');
-        return resolve(publicFoxholeAssetsDirectory, sourceRelativePath);
-    }
-
-    function getCoLocatedStructureAssetFileName(structureId, assetKind) {
-        switch (assetKind) {
-            case 'destroyed.icon.default':
-                return `${structureId}.destroyed.icon.default.webp`;
-            case 'destroyed.icon.rendered':
-                return `${structureId}.destroyed.icon.rendered.webp`;
-            case 'destroyed.preview':
-                return `${structureId}.destroyed.preview.webp`;
-            case 'destroyed.texture':
-                return `${structureId}.destroyed.texture.webp`;
-            case 'icon.rendered':
-                return `${structureId}.icon.rendered.webp`;
-            case 'preview':
-                return `${structureId}.preview.webp`;
-            case 'texture':
-                return `${structureId}.texture.webp`;
-            case 'icon.default':
-            default:
-                return `${structureId}.icon.default.webp`;
-        }
-    }
-
-    function getCoLocatedStructureAssetOutputPath(structureId, assetKind) {
-        const outputDirectory = getPublishedAssetDirectory(structureId) ?? resolve(assetTypesDirectory, 'structures', structureId);
-        return resolve(outputDirectory, getCoLocatedStructureAssetFileName(structureId, assetKind));
-    }
-
-    function isSubtypeComposableStructureAssetKind(assetKind) {
-        switch (assetKind) {
-            case 'icon.default':
-            case 'icon.rendered':
-            case 'destroyed.icon.default':
-            case 'destroyed.icon.rendered':
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    async function readCoLocatedAssetSourceFile(sourceUrl) {
-        const normalizedSourceUrl = String(sourceUrl ?? '').trim();
-        if (!normalizedSourceUrl) {
-            throw new Error('missing co-located asset source url');
-        }
-
-        if (isSharedPublishedIconUrl(normalizedSourceUrl)) {
-            try {
-                return await readPublishedIconSourceFile(generatedDirectory, normalizedSourceUrl);
-            } catch (error) {
-                const persistedSourceFilePath = getPublishedAssetFilePath(normalizedSourceUrl);
-                if (persistedSourceFilePath && await pathExists(persistedSourceFilePath)) {
-                    return {
-                        sourceFilePath: persistedSourceFilePath,
-                        content: await readFileWithRetries(persistedSourceFilePath),
-                    };
-                }
-
-                throw error;
-            }
-        }
-
-        const sourceFilePath = getPublishedAssetFilePath(normalizedSourceUrl);
-        if (sourceFilePath) {
-            const rawRenderedSourceFilePath = await resolveRawRenderedAssetSourceInputPathForPublishedOutput(sourceFilePath);
-            const effectiveSourceFilePath = rawRenderedSourceFilePath ?? sourceFilePath;
-            return {
-                sourceFilePath: effectiveSourceFilePath,
-                content: await readImageContentAsWebp(effectiveSourceFilePath),
-            };
-        }
-
-        return readPublishedIconSourceFile(generatedDirectory, normalizedSourceUrl);
-    }
-
-    async function buildCoLocatedDefaultIconContent(sourceUrl, subTypeIconUrl, assetKind = 'icon.default') {
-        const source = await readCoLocatedAssetSourceFile(sourceUrl);
+    async function buildCoLocatedModificationIconContent(sourceUrl, subTypeIconUrl) {
         const normalizedSubTypeIconUrl = String(subTypeIconUrl ?? '').trim();
+        const source = await readPublishedIconSourceFile(generatedDirectory, sourceUrl);
         if (!normalizedSubTypeIconUrl) {
             return source;
         }
 
         try {
-            const subTypeIconSource = await readCoLocatedAssetSourceFile(normalizedSubTypeIconUrl);
+            const subTypeIconSource = await readPublishedIconSourceFile(generatedDirectory, normalizedSubTypeIconUrl);
             return {
                 sourceFilePath: source.sourceFilePath,
                 subTypeSourceFilePath: subTypeIconSource.sourceFilePath,
                 content: await composeSubtypeIcon(
                     source.content,
                     subTypeIconSource.content,
-                    resolveSubtypeComposedAssetWebpOptions(assetKind),
+                    losslessPublishedWebpOptions,
                 ),
             };
         } catch (error) {
             console.warn(`failed to compose subtype icon ${normalizedSubTypeIconUrl} onto ${sourceUrl}: ${error}`);
             return source;
-        }
-    }
-
-    async function getFileModifiedTime(filePath) {
-        try {
-            return (await stat(filePath)).mtimeMs;
-        } catch {
-            return null;
-        }
-    }
-
-    function getSamePathSubtypeCompositionStatePath(outputFilePath) {
-        const outputPathKey = createHash('sha1')
-            .update(normalizeFileSystemPath(outputFilePath))
-            .digest('hex');
-        return resolve(samePathSubtypeCompositionStateDirectory, `${outputPathKey}.json`);
-    }
-
-    async function readSamePathSubtypeCompositionState(outputFilePath) {
-        const statePath = getSamePathSubtypeCompositionStatePath(outputFilePath);
-        try {
-            return JSON.parse(await readFileWithRetries(statePath, 'utf8'));
-        } catch {
-            return null;
-        }
-    }
-
-    async function writeSamePathSubtypeCompositionState(outputFilePath, subTypeSourceFilePath, baseSourceFilePath = null) {
-        const outputModifiedTimeMs = await getFileModifiedTime(outputFilePath);
-        if (!Number.isFinite(outputModifiedTimeMs)) {
-            return;
-        }
-
-        const normalizedSubTypeSourceFilePath = normalizeFileSystemPath(subTypeSourceFilePath);
-        const subTypeSourceModifiedTimeMs = await getFileModifiedTime(subTypeSourceFilePath);
-        const normalizedBaseSourceFilePath = baseSourceFilePath
-            ? normalizeFileSystemPath(baseSourceFilePath)
-            : null;
-        const baseSourceModifiedTimeMs = baseSourceFilePath
-            ? await getFileModifiedTime(baseSourceFilePath)
-            : null;
-        const statePath = getSamePathSubtypeCompositionStatePath(outputFilePath);
-        await mkdir(dirname(statePath), { recursive: true });
-        await writeFileWithRetries(statePath, JSON.stringify({
-            outputFilePath: normalizeFileSystemPath(outputFilePath),
-            outputModifiedTimeMs,
-            subTypeSourceFilePath: normalizedSubTypeSourceFilePath,
-            subTypeSourceModifiedTimeMs: Number.isFinite(subTypeSourceModifiedTimeMs)
-                ? subTypeSourceModifiedTimeMs
-                : null,
-            baseSourceFilePath: normalizedBaseSourceFilePath,
-            baseSourceModifiedTimeMs: Number.isFinite(baseSourceModifiedTimeMs)
-                ? baseSourceModifiedTimeMs
-                : null,
-        }));
-    }
-
-    function hasFreshSamePathSubtypeCompositionState(
-        state,
-        outputFilePath,
-        outputModifiedTimeMs,
-        subTypeSourceFilePath,
-        subTypeSourceModifiedTimeMs,
-        baseSourceFilePath,
-        baseSourceModifiedTimeMs,
-    ) {
-        if (!state || !Number.isFinite(outputModifiedTimeMs)) {
-            return false;
-        }
-
-        return state.outputFilePath === normalizeFileSystemPath(outputFilePath)
-            && state.outputModifiedTimeMs === outputModifiedTimeMs
-            && state.subTypeSourceFilePath === normalizeFileSystemPath(subTypeSourceFilePath)
-            && (state.subTypeSourceModifiedTimeMs ?? null) === (Number.isFinite(subTypeSourceModifiedTimeMs)
-                ? subTypeSourceModifiedTimeMs
-                : null)
-            && (state.baseSourceFilePath ?? null) === (baseSourceFilePath
-                ? normalizeFileSystemPath(baseSourceFilePath)
-                : null)
-            && (state.baseSourceModifiedTimeMs ?? null) === (Number.isFinite(baseSourceModifiedTimeMs)
-                ? baseSourceModifiedTimeMs
-                : null);
-    }
-
-    async function ensureSubtypeCompositedCoLocatedStructureAssetUrl(structureId, assetKind, subTypeIconUrl, baseSourceUrl = null) {
-        const normalizedSubTypeIconUrl = String(subTypeIconUrl ?? '').trim();
-        const normalizedBaseSourceUrl = String(baseSourceUrl ?? '').trim();
-        const outputFilePath = getCoLocatedStructureAssetOutputPath(structureId, assetKind);
-        if (!isSubtypeComposableStructureAssetKind(assetKind)
-            || !normalizedSubTypeIconUrl
-            || !await pathExists(outputFilePath)) {
-            return null;
-        }
-
-        const outputUrl = toPublicFoxholeAssetUrl(outputFilePath);
-        if (skipExistingAssets) {
-            return outputUrl;
-        }
-
-        if (!normalizedBaseSourceUrl) {
-            return outputUrl;
-        }
-
-        try {
-            const baseSource = await readCoLocatedAssetSourceFile(normalizedBaseSourceUrl);
-            if (normalizeFileSystemPath(baseSource.sourceFilePath) === normalizeFileSystemPath(outputFilePath)) {
-                return outputUrl;
-            }
-
-            const subTypeIconSource = await readCoLocatedAssetSourceFile(normalizedSubTypeIconUrl);
-            const outputModifiedTimeMs = await getFileModifiedTime(outputFilePath);
-            const baseSourceModifiedTimeMs = await getFileModifiedTime(baseSource.sourceFilePath);
-            const subTypeSourceModifiedTimeMs = await getFileModifiedTime(subTypeIconSource.sourceFilePath);
-            const existingState = await readSamePathSubtypeCompositionState(outputFilePath);
-            if (hasFreshSamePathSubtypeCompositionState(
-                existingState,
-                outputFilePath,
-                outputModifiedTimeMs,
-                subTypeIconSource.sourceFilePath,
-                subTypeSourceModifiedTimeMs,
-                baseSource.sourceFilePath,
-                baseSourceModifiedTimeMs,
-            )) {
-                return outputUrl;
-            }
-
-            const composed = await buildCoLocatedDefaultIconContent(normalizedBaseSourceUrl, normalizedSubTypeIconUrl, assetKind);
-            if (!composed.subTypeSourceFilePath) {
-                return outputUrl;
-            }
-
-            await writeFileWithRetries(outputFilePath, composed.content);
-            await writeSamePathSubtypeCompositionState(outputFilePath, composed.subTypeSourceFilePath, baseSource.sourceFilePath);
-            console.log(`co-located ${baseSource.sourceFilePath} -> ${outputFilePath}`);
-            return outputUrl;
-        } catch (error) {
-            console.warn(`failed to compose subtype icon onto ${outputFilePath}: ${error}`);
-            return outputUrl;
-        }
-    }
-
-    async function resolveExistingCoLocatedStructureAssetUrl(structureId, assetKind) {
-        const outputFilePath = getCoLocatedStructureAssetOutputPath(structureId, assetKind);
-        try {
-            await access(outputFilePath);
-            return toPublicFoxholeAssetUrl(outputFilePath);
-        } catch {
-            return null;
-        }
-    }
-
-    async function resolveCoLocatedStructureAssetUrl(structureId, sourceUrl, assetKind = 'icon.default', subTypeIconUrl = null) {
-        const normalizedSourceUrl = String(sourceUrl ?? '').trim();
-        const normalizedSubTypeIconUrl = String(subTypeIconUrl ?? '').trim();
-        if (!normalizedSourceUrl) {
-            return null;
-        }
-
-        if (assetKind === 'icon.default') {
-            const sourceStructure = sourceStructureById.get(normalizeId(structureId)) ?? null;
-            const sourceStructureMetadata = sourceStructureMetadataById.get(normalizeId(structureId)) ?? null;
-            if (structurePrefersGeneratedDefaultIcon(sourceStructure, sourceStructureMetadata)) {
-                const existingGeneratedDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structureId, 'icon.default');
-                if (existingGeneratedDefaultIconUrl) {
-                    return existingGeneratedDefaultIconUrl;
-                }
-
-                if (isSharedPublishedIconUrl(normalizedSourceUrl)) {
-                    return null;
-                }
-            }
-        }
-
-        const publishedSourceFilePath = getPublishedAssetFilePath(normalizedSourceUrl);
-        const outputDirectory = getPublishedAssetDirectory(structureId) ?? resolve(assetTypesDirectory, 'structures', structureId);
-        const requiresTypedAssetRelocation = Boolean(publishedSourceFilePath)
-            && normalizeFileSystemPath(dirname(publishedSourceFilePath)) !== normalizeFileSystemPath(outputDirectory);
-        const canComposeFromPublishedAsset = isSubtypeComposableStructureAssetKind(assetKind)
-            && Boolean(normalizedSubTypeIconUrl)
-            && Boolean(publishedSourceFilePath)
-            && await pathExists(publishedSourceFilePath);
-
-        if (!isSharedPublishedIconUrl(normalizedSourceUrl) && !canComposeFromPublishedAsset && !requiresTypedAssetRelocation) {
-            return normalizedSourceUrl;
-        }
-
-        const cacheKey = `${structureId}|${assetKind}`;
-        const cached = copiedAssetUrls.get(cacheKey);
-        if (cached) {
-            return await cached;
-        }
-
-        const pending = (async () => {
-            const outputFileName = getCoLocatedStructureAssetFileName(structureId, assetKind);
-            const outputFilePath = resolve(outputDirectory, outputFileName);
-            const outputUrl = toPublicFoxholeAssetUrl(outputFilePath);
-            if (await shouldReuseExistingAssetOutput(outputFilePath)) {
-                return outputUrl;
-            }
-
-            const rawRenderedSourceFilePath = publishedSourceFilePath
-                ? await resolveRawRenderedAssetSourceInputPathForPublishedOutput(publishedSourceFilePath)
-                : null;
-
-            if (normalizedSourceUrl === outputUrl && !rawRenderedSourceFilePath && await pathExists(outputFilePath)) {
-                return outputUrl;
-            }
-
-            await mkdir(outputDirectory, { recursive: true });
-
-            try {
-                const { sourceFilePath, content } = isSubtypeComposableStructureAssetKind(assetKind)
-                    ? await buildCoLocatedDefaultIconContent(normalizedSourceUrl, normalizedSubTypeIconUrl, assetKind)
-                    : await readCoLocatedAssetSourceFile(normalizedSourceUrl);
-                await writeFileWithRetries(outputFilePath, content);
-                console.log(`co-located ${sourceFilePath} -> ${outputFilePath}`);
-                return outputUrl;
-            } catch (error) {
-                console.warn(`skipping co-located ${assetKind} for ${structureId} from ${normalizedSourceUrl}: ${error}`);
-                return normalizedSourceUrl;
-            }
-        })();
-
-        copiedAssetUrls.set(cacheKey, pending);
-        return await pending;
-    }
-
-    async function resolveStructureAssetAliasUrl(structureId, sourceUrl, assetKind = 'icon.default', subTypeIconUrl = null) {
-        const normalizedSourceUrl = String(sourceUrl ?? '').trim();
-        if (!normalizedSourceUrl) {
-            return null;
-        }
-
-        const cacheKey = `${structureId}|alias|${assetKind}`;
-        const cached = copiedAssetUrls.get(cacheKey);
-        if (cached) {
-            return await cached;
-        }
-
-        const pending = (async () => {
-            const outputDirectory = getPublishedAssetDirectory(structureId) ?? resolve(assetTypesDirectory, 'structures', structureId);
-            const outputFileName = getCoLocatedStructureAssetFileName(structureId, assetKind);
-            const outputFilePath = resolve(outputDirectory, outputFileName);
-            const outputUrl = toPublicFoxholeAssetUrl(outputFilePath);
-
-            if (await shouldReuseExistingAssetOutput(outputFilePath)) {
-                return outputUrl;
-            }
-
-            if (normalizedSourceUrl === outputUrl) {
-                return outputUrl;
-            }
-
-            await mkdir(outputDirectory, { recursive: true });
-
-            if (!isSharedPublishedIconUrl(normalizedSourceUrl) && !getPublishedAssetFilePath(normalizedSourceUrl)) {
-                return normalizedSourceUrl;
-            }
-
-            try {
-                const source = isSubtypeComposableStructureAssetKind(assetKind)
-                    ? await buildCoLocatedDefaultIconContent(normalizedSourceUrl, subTypeIconUrl, assetKind)
-                    : await readCoLocatedAssetSourceFile(normalizedSourceUrl);
-                await writeFileWithRetries(outputFilePath, source.content);
-                console.log(`co-located ${source.sourceFilePath} -> ${outputFilePath}`);
-                return outputUrl;
-            } catch (error) {
-                console.warn(`skipping co-located alias ${assetKind} for ${structureId} from ${normalizedSourceUrl}: ${error}`);
-                return normalizedSourceUrl;
-            }
-        })();
-
-        copiedAssetUrls.set(cacheKey, pending);
-        return await pending;
-    }
-
-    async function forceCoLocatedStructureAssetFallbackUrl(structureId, sourceUrl, assetKind = 'icon.default', subTypeIconUrl = null) {
-        const normalizedSourceUrl = String(sourceUrl ?? '').trim();
-        if (!normalizedSourceUrl) {
-            return null;
-        }
-        const outputFilePath = getCoLocatedStructureAssetOutputPath(structureId, assetKind);
-        const outputUrl = toPublicFoxholeAssetUrl(outputFilePath);
-
-        if (await shouldReuseExistingAssetOutput(outputFilePath)) {
-            return outputUrl;
-        }
-
-        if (normalizedSourceUrl === outputUrl && await pathExists(outputFilePath)) {
-            return outputUrl;
-        }
-
-        await mkdir(dirname(outputFilePath), { recursive: true });
-
-        try {
-            const source = isSubtypeComposableStructureAssetKind(assetKind)
-                ? await buildCoLocatedDefaultIconContent(normalizedSourceUrl, subTypeIconUrl, assetKind)
-                : await readCoLocatedAssetSourceFile(normalizedSourceUrl);
-            await writeFileWithRetries(outputFilePath, source.content);
-            console.log(`co-located ${source.sourceFilePath} -> ${outputFilePath}`);
-            return outputUrl;
-        } catch (error) {
-            console.warn(`skipping forced co-located ${assetKind} for ${structureId} from ${normalizedSourceUrl}: ${error}`);
-            return null;
-        }
-    }
-
-    async function resolveExistingPublishedStructureAssetUrl(structureId, assetKinds) {
-        for (const assetKind of assetKinds) {
-            const candidateUrl = await resolveExistingCoLocatedStructureAssetUrl(structureId, assetKind);
-            if (candidateUrl) {
-                return candidateUrl;
-            }
-        }
-
-        return null;
-    }
-
-    async function syncMissingStructureDefaultIconFallbacks(publishedManifest) {
-        for (const structure of publishedManifest.assets ?? []) {
-            const sourceStructure = sourceStructureById.get(normalizeId(structure.id)) ?? null;
-            const sourceStructureMetadata = sourceStructureMetadataById.get(normalizeId(structure.id)) ?? null;
-            if (structurePrefersGeneratedDefaultIcon(structure, sourceStructureMetadata)) {
-                continue;
-            }
-
-            const explicitDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure.subTypeIconUrl
-                    ? (sourceStructure?.iconUrl ?? sourceStructure?.icons?.default ?? '')
-                    : (sourceStructure?.icons?.default ?? sourceStructure?.iconUrl ?? ''),
-            ).trim()) || null;
-            const publishedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure?.icons?.default ?? structure?.iconUrl ?? '',
-            ).trim()) || null;
-            const authoritativeDefaultIconSourceUrl = publishedDefaultIconSourceUrl ?? explicitDefaultIconSourceUrl;
-
-            if (authoritativeDefaultIconSourceUrl) {
-                const existingDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'icon.default');
-                if (existingDefaultIconUrl) {
-                    await ensureSubtypeCompositedCoLocatedStructureAssetUrl(
-                        structure.id,
-                        'icon.default',
-                        structure.subTypeIconUrl,
-                        authoritativeDefaultIconSourceUrl,
-                    );
-                } else {
-                    await resolveCoLocatedStructureAssetUrl(
-                        structure.id,
-                        authoritativeDefaultIconSourceUrl,
-                        'icon.default',
-                        structure.subTypeIconUrl,
-                    );
-                }
-            }
-
-            if (!structure.destroyed) {
-                continue;
-            }
-
-            const explicitDestroyedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                sourceStructure?.destroyed?.icons?.default
-                ?? sourceStructure?.destroyed?.iconUrl
-                ?? explicitDefaultIconSourceUrl
-                ?? sourceStructure?.icons?.default
-                ?? sourceStructure?.iconUrl
-                ?? '',
-            ).trim()) || null;
-            const publishedDestroyedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure?.destroyed?.icons?.default
-                ?? structure?.destroyed?.iconUrl
-                ?? '',
-            ).trim()) || null;
-            const authoritativeDestroyedDefaultIconSourceUrl = publishedDestroyedDefaultIconSourceUrl ?? explicitDestroyedDefaultIconSourceUrl;
-
-            if (!authoritativeDestroyedDefaultIconSourceUrl) {
-                continue;
-            }
-
-            const existingDestroyedDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.icon.default');
-            if (existingDestroyedDefaultIconUrl) {
-                await ensureSubtypeCompositedCoLocatedStructureAssetUrl(
-                    structure.id,
-                    'destroyed.icon.default',
-                    structure.subTypeIconUrl ?? defaultWreckedSubtypeIconUrl,
-                    authoritativeDestroyedDefaultIconSourceUrl,
-                );
-            } else {
-                await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    authoritativeDestroyedDefaultIconSourceUrl,
-                    'destroyed.icon.default',
-                    structure.subTypeIconUrl ?? defaultWreckedSubtypeIconUrl,
-                );
-            }
         }
     }
 
@@ -6427,7 +6151,7 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
 
             try {
                 if (!await shouldReuseExistingAssetOutput(outputFilePath)) {
-                    const { sourceFilePath, content } = await buildCoLocatedDefaultIconContent(sourceUrl, subTypeIconUrl, 'icon.default');
+                    const { sourceFilePath, content } = await buildCoLocatedModificationIconContent(sourceUrl, subTypeIconUrl);
                     await writeFileWithRetries(outputFilePath, content);
                     console.log(`co-located ${sourceFilePath} -> ${outputFilePath}`);
                 }
@@ -6453,7 +6177,7 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
                     }
 
                     try {
-                        const source = await readCoLocatedAssetSourceFile(normalizedAssetSourceUrl);
+                        const source = await readPublishedAssetUrlAsWebp(generatedDirectory, normalizedAssetSourceUrl);
                         await writeFileWithRetries(assetOutputFilePath, source.content);
                         console.log(`co-located ${source.sourceFilePath} -> ${assetOutputFilePath}`);
                     } catch (error) {
@@ -6472,221 +6196,53 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
         return await pending;
     }
 
-    const coLocatedManifest = foxholeManifestSchema.parse({
-        ...manifest,
-        assets: await Promise.all(manifest.assets.map(async structure => {
-            const sourceStructure = sourceStructureById.get(normalizeId(structure.id)) ?? null;
-            const sourceStructureMetadata = sourceStructureMetadataById.get(normalizeId(structure.id)) ?? null;
-            const { iconUrl: _legacyIconUrl, previewIconUrl: _legacyPreviewIconUrl, ...structureWithoutLegacyIcons } = structure;
-            const existingDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'icon.default');
-            const existingRenderedIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'icon.rendered');
-            const existingPreviewUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'preview');
-            const existingTextureUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'texture');
-            const existingDestroyedDefaultIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.icon.default');
-            const existingDestroyedRenderedIconUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.icon.rendered');
-            const existingDestroyedPreviewUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.preview');
-            const existingDestroyedTextureUrl = await resolveExistingCoLocatedStructureAssetUrl(structure.id, 'destroyed.texture');
-            const prefersGeneratedDefaultIcon = structurePrefersGeneratedDefaultIcon(structure, sourceStructureMetadata);
-            const explicitDefaultIconSourceUrl = prefersGeneratedDefaultIcon
-                ? null
-                : (normalizePublishedIconAssetUrl(String(
-                    structure.subTypeIconUrl
-                        ? (sourceStructure?.iconUrl ?? sourceStructure?.icons?.default ?? '')
-                        : (sourceStructure?.icons?.default ?? sourceStructure?.iconUrl ?? ''),
-                ).trim()) || null);
-            const publishedDefaultIconSourceUrl = prefersGeneratedDefaultIcon
-                ? null
-                : (normalizePublishedIconAssetUrl(String(
-                    structure?.icons?.default ?? structure?.iconUrl ?? '',
-                ).trim()) || null);
-            const defaultIconSourceUrl = publishedDefaultIconSourceUrl ?? explicitDefaultIconSourceUrl;
-            const fallbackIconUrl = defaultIconSourceUrl
-                ? (await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    defaultIconSourceUrl,
-                    'icon.default',
-                    structure.subTypeIconUrl,
-                ) ?? existingDefaultIconUrl)
-                : null;
-            const fallbackPreviewUrl = await resolveCoLocatedStructureAssetUrl(structure.id, structure.previewUrl, 'preview') ?? existingPreviewUrl;
-            const fallbackTextureUrl = await resolveCoLocatedStructureAssetUrl(structure.id, structure.variants.default?.textureUrl, 'texture') ?? existingTextureUrl;
-            const renderedSubTypeIconUrl = structure.isDestroyed === true || structure.isBreached === true
-                ? structure.subTypeIconUrl
-                : null;
-            const fallbackRenderedIconUrl = await resolveCoLocatedStructureAssetUrl(
-                structure.id,
-                structure.icons?.rendered ?? structure.previewIconUrl,
-                'icon.rendered',
-                renderedSubTypeIconUrl,
-            ) ?? existingRenderedIconUrl;
-            const defaultFallbackSourceUrl = defaultIconSourceUrl;
-            const canPreserveExistingDefaultIcon = Boolean(defaultIconSourceUrl)
-                && existingDefaultIconUrl;
-            const preservedExistingDefaultIconUrl = canPreserveExistingDefaultIcon
-                ? (await ensureSubtypeCompositedCoLocatedStructureAssetUrl(
-                    structure.id,
-                    'icon.default',
-                    structure.subTypeIconUrl,
-                    defaultFallbackSourceUrl,
-                ) ?? existingDefaultIconUrl)
-                : null;
-            const ensuredDefaultIconUrl = prefersGeneratedDefaultIcon
-                ? (existingDefaultIconUrl ?? fallbackIconUrl)
-                : (preservedExistingDefaultIconUrl ?? (defaultIconSourceUrl
-                    ? (fallbackIconUrl ?? existingDefaultIconUrl)
-                    : null));
-            const destroyedSubTypeIconUrl = structure.destroyed
-                ? (structure.subTypeIconUrl ?? defaultWreckedSubtypeIconUrl)
-                : null;
-            const fallbackDestroyedPreviewUrl = structure.destroyed
-                ? (await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    structure.destroyed?.previewUrl,
-                    'destroyed.preview',
-                ) ?? existingDestroyedPreviewUrl)
-                : null;
-            const fallbackDestroyedTextureUrl = structure.destroyed
-                ? (await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    structure.destroyed?.sprite?.source ?? structure.destroyed?.textureUrl,
-                    'destroyed.texture',
-                ) ?? existingDestroyedTextureUrl)
-                : null;
-            const destroyedRenderedIconSourceUrl = structure.destroyed?.icons?.rendered
-                ?? structure.destroyed?.previewIconUrl
-                ?? existingDestroyedRenderedIconUrl
-                ?? fallbackDestroyedPreviewUrl
-                ?? fallbackDestroyedTextureUrl
-                ?? null;
-            const fallbackDestroyedRenderedIconUrl = structure.destroyed
-                ? (await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    destroyedRenderedIconSourceUrl,
-                    'destroyed.icon.rendered',
-                    destroyedSubTypeIconUrl,
-                ) ?? existingDestroyedRenderedIconUrl)
-                : null;
-            const explicitDestroyedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                sourceStructure?.destroyed?.icons?.default
-                ?? sourceStructure?.destroyed?.iconUrl
-                ?? explicitDefaultIconSourceUrl
-                ?? sourceStructure?.icons?.default
-                ?? sourceStructure?.iconUrl
-                ?? '',
-            ).trim()) || null;
-            const publishedDestroyedDefaultIconSourceUrl = normalizePublishedIconAssetUrl(String(
-                structure?.destroyed?.icons?.default
-                ?? structure?.destroyed?.iconUrl
-                ?? '',
-            ).trim()) || null;
-            const destroyedDefaultIconSourceUrl = publishedDestroyedDefaultIconSourceUrl ?? explicitDestroyedDefaultIconSourceUrl;
-            const fallbackDestroyedDefaultIconUrl = structure.destroyed && destroyedDefaultIconSourceUrl
-                ? (await resolveCoLocatedStructureAssetUrl(
-                    structure.id,
-                    destroyedDefaultIconSourceUrl,
-                    'destroyed.icon.default',
-                    destroyedSubTypeIconUrl,
-                ) ?? existingDestroyedDefaultIconUrl)
-                : null;
-            const destroyedDefaultFallbackSourceUrl = destroyedDefaultIconSourceUrl;
-            const canPreserveGeneratedDestroyedDefaultIcon = Boolean(destroyedDefaultIconSourceUrl)
-                && existingDestroyedDefaultIconUrl;
-            const preservedGeneratedDestroyedDefaultIconUrl = canPreserveGeneratedDestroyedDefaultIcon
-                ? await ensureSubtypeCompositedCoLocatedStructureAssetUrl(
-                    structure.id,
-                    'destroyed.icon.default',
-                    destroyedSubTypeIconUrl,
-                    destroyedDefaultFallbackSourceUrl,
-                )
-                : null;
-            const ensuredDestroyedDefaultIconUrl = structure.destroyed
-                ? (destroyedDefaultIconSourceUrl
-                    ? (preservedGeneratedDestroyedDefaultIconUrl ?? fallbackDestroyedDefaultIconUrl ?? existingDestroyedDefaultIconUrl)
-                    : null)
-                : null;
-
-            return {
-                ...structureWithoutLegacyIcons,
-                icons: {
-                    default: ensuredDefaultIconUrl,
-                    rendered: fallbackRenderedIconUrl,
-                },
-                ...(structure.destroyed
-                    ? {
-                        destroyed: {
-                            ...structure.destroyed,
-                            ...(Object.keys({
-                                ...(ensuredDestroyedDefaultIconUrl ? { default: ensuredDestroyedDefaultIconUrl } : {}),
-                                ...(fallbackDestroyedRenderedIconUrl ? { rendered: fallbackDestroyedRenderedIconUrl } : {}),
-                            }).length > 0
-                                ? {
-                                    icons: {
-                                        ...(structure.destroyed.icons ?? {}),
-                                        ...(ensuredDestroyedDefaultIconUrl ? { default: ensuredDestroyedDefaultIconUrl } : {}),
-                                        ...(fallbackDestroyedRenderedIconUrl ? { rendered: fallbackDestroyedRenderedIconUrl } : {}),
-                                    },
-                                }
-                                : {}),
-                            ...(ensuredDestroyedDefaultIconUrl ? { iconUrl: ensuredDestroyedDefaultIconUrl } : {}),
-                            ...(fallbackDestroyedRenderedIconUrl ? { previewIconUrl: fallbackDestroyedRenderedIconUrl } : {}),
-                            ...(fallbackDestroyedPreviewUrl ? { previewUrl: fallbackDestroyedPreviewUrl } : {}),
-                            ...(fallbackDestroyedTextureUrl
-                                ? {
-                                    sprite: {
-                                        ...(structure.destroyed.sprite ?? {}),
-                                        source: fallbackDestroyedTextureUrl,
-                                    },
-                                    textureUrl: fallbackDestroyedTextureUrl,
-                                }
-                                : {}),
-                        },
-                    }
-                    : {}),
-                previewUrl: fallbackPreviewUrl,
-                variants: {
-                    ...structure.variants,
-                    ...(fallbackTextureUrl
-                        ? {
-                            default: {
-                                ...(structure.variants.default ?? {}),
-                                textureUrl: fallbackTextureUrl,
-                            },
-                        }
-                        : {}),
-                },
-                modificationSlots: await Promise.all((structure.modificationSlots ?? []).map(async slot => ({
-                    ...slot,
-                    variants: Object.fromEntries(await Promise.all(Object.entries(slot.variants ?? {}).map(async ([variantKey, variant]) => {
-                        if (normalizeId(variant?.sharedModificationId)) {
-                            return [variantKey, variant];
-                        }
-
-                        const coLocatedDefaultIconUrl = await resolveCoLocatedModificationAssetUrl(
-                            structure.id,
-                            variant?.appliedModificationId ?? variant?.id ?? variantKey,
-                            variant?.icons?.default ?? variant?.iconUrl,
-                            variant?.icons?.rendered ?? variant?.previewIconUrl,
-                            variant?.textureUrl,
-                            variant?.previewUrl,
-                            variant?.subTypeIconUrl,
-                        );
-                        const nextIcons = {
-                            ...(variant?.icons ?? {}),
-                            ...(coLocatedDefaultIconUrl ? { default: coLocatedDefaultIconUrl } : {}),
-                        };
-                        return [variantKey, {
-                            ...variant,
-                            ...(Object.keys(nextIcons).length > 0 ? { icons: nextIcons } : {}),
-                            iconUrl: coLocatedDefaultIconUrl ?? variant?.iconUrl,
-                        }];
-                    }))),
-                }))),
-            };
-        })),
+    const manifestWithPublishedIcons = await publishStructureIconsForManifest({
+        manifest,
+        sourceManifest,
+        getOutputDirectory: structureId => getPublishedAssetDirectory(structureId)
+            ?? resolve(assetTypesDirectory, 'structures', structureId),
+        toPublicAssetUrl: toPublicFoxholeAssetUrl,
+        rawRenderedAssetTypesDirectory,
+        generatedIconsDirectory: generatedDirectory,
+        publicAssetsDirectory: publicFoxholeAssetsDirectory,
+        resolveAssetTypeName: resolvePublishedAssetTypeName,
+        skipExistingAssets,
+        defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
     });
 
-    await syncMissingStructureDefaultIconFallbacks(coLocatedManifest);
-    return coLocatedManifest;
+    return foxholeManifestSchema.parse({
+        ...manifestWithPublishedIcons,
+        assets: await Promise.all((manifestWithPublishedIcons.assets ?? []).map(async structure => ({
+            ...structure,
+            modificationSlots: await Promise.all((structure.modificationSlots ?? []).map(async slot => ({
+                ...slot,
+                variants: Object.fromEntries(await Promise.all(Object.entries(slot.variants ?? {}).map(async ([variantKey, variant]) => {
+                    if (normalizeId(variant?.sharedModificationId)) {
+                        return [variantKey, variant];
+                    }
+
+                    const coLocatedDefaultIconUrl = await resolveCoLocatedModificationAssetUrl(
+                        structure.id,
+                        variant?.appliedModificationId ?? variant?.id ?? variantKey,
+                        variant?.icons?.default ?? variant?.iconUrl,
+                        variant?.icons?.rendered ?? variant?.previewIconUrl,
+                        variant?.textureUrl,
+                        variant?.previewUrl,
+                        variant?.subTypeIconUrl,
+                    );
+                    const nextIcons = {
+                        ...(variant?.icons ?? {}),
+                        ...(coLocatedDefaultIconUrl ? { default: coLocatedDefaultIconUrl } : {}),
+                    };
+                    return [variantKey, {
+                        ...variant,
+                        ...(Object.keys(nextIcons).length > 0 ? { icons: nextIcons } : {}),
+                        iconUrl: coLocatedDefaultIconUrl ?? variant?.iconUrl,
+                    }];
+                }))),
+            }))),
+        }))),
+    });
 }
 
 function splitManifestLocalizations(manifest) {
@@ -6773,7 +6329,7 @@ try {
     let publishedManifestBeforeWrite = null;
     if (await pathExists(publishedManifestPath)) {
         try {
-            publishedManifestBeforeWrite = await loadSourceManifest(publishedManifestPath);
+            publishedManifestBeforeWrite = await loadSourceManifest(publishedManifestPath, { seedSharedModificationIds: false });
         } catch (error) {
             console.warn(`skipping published manifest preload because the existing published manifest is not in the assets-root shape: ${error}`);
         }
@@ -6827,10 +6383,12 @@ try {
         structureRenderEntries.sharedPackagingEntriesByKey,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
+    const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifestWithNormalizedIconUrls);
     const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(
         manifestWithNormalizedIconUrls,
         generatedIconsDirectory,
         attachSourceStructureMetadata(manifestForPublish, sourceManifest.__sourceStructureMetadataById),
+        subtypeOverlayIconKeys,
     );
     const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
         manifestWithCoLocatedFallbackAssets,
@@ -6878,8 +6436,11 @@ try {
 
     await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
     await syncCategoryIconAssets(prunedMergedManifest);
+    await removeComposeTimeSubtypeIconsFromPublicDirectory(collectSubtypeOverlayIconKeys(prunedMergedManifest));
 
-    await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
+    if (!hasTargetFilters(targetFilter)) {
+        await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
+    }
 
     const prunedMergedManifestWithCompactLocalizationIds = compactManifestLocalizationIds(prunedMergedManifest);
 
