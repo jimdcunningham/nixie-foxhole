@@ -325,6 +325,19 @@ async function syncStructureDefaultIcon(structure, isDestroyed = false) {
             return await writeIconFileIfExists(overrideSourcePath, targetPath, 'overrode');
         }
 
+        if (structure?.generateDefaultIcon === true) {
+            const assetType = getPublishedAssetTypeName(structure);
+            const renderedSourcePath = path.join(
+                rawRenderedAssetOutputRoot,
+                assetType,
+                assetId,
+                `${assetId}.icon.default.webp`,
+            );
+            if (await writeIconFileIfExists(renderedSourcePath, targetPath, 'synced rendered default icon')) {
+                return true;
+            }
+        }
+
         return await pathExists(targetPath);
     }
 

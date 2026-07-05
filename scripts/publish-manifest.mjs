@@ -445,13 +445,22 @@ function normalizeOptionalStructureProperties(manifest) {
     };
 }
 
+function getSourceStructureMetadataById(manifest) {
+    return manifest?.__sourceStructureMetadataById instanceof Map
+        ? manifest.__sourceStructureMetadataById
+        : null;
+}
+
 function attachSourceStructureMetadata(manifest, sourceStructureMetadataById) {
-    if (!(sourceStructureMetadataById instanceof Map) || !manifest || typeof manifest !== 'object') {
+    const metadataById = sourceStructureMetadataById instanceof Map
+        ? sourceStructureMetadataById
+        : getSourceStructureMetadataById(manifest);
+    if (!(metadataById instanceof Map) || !manifest || typeof manifest !== 'object') {
         return manifest;
     }
 
     Object.defineProperty(manifest, '__sourceStructureMetadataById', {
-        value: sourceStructureMetadataById,
+        value: metadataById,
         enumerable: false,
         configurable: false,
         writable: false,
@@ -2146,7 +2155,7 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
         return manifest;
     }
 
-    return {
+    return attachSourceStructureMetadata({
         ...manifest,
         assets: (manifest?.assets ?? []).map(structure => {
             const structureId = normalizeId(structure?.id);
@@ -2182,7 +2191,7 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
                 })),
             };
         }),
-    };
+    }, manifest);
 }
 
 function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument = null) {
@@ -6818,7 +6827,11 @@ try {
         structureRenderEntries.sharedPackagingEntriesByKey,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
-    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(manifestWithNormalizedIconUrls, generatedIconsDirectory, manifestWithSeededSharedModificationIds);
+    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(
+        manifestWithNormalizedIconUrls,
+        generatedIconsDirectory,
+        attachSourceStructureMetadata(manifestForPublish, sourceManifest.__sourceStructureMetadataById),
+    );
     const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
         manifestWithCoLocatedFallbackAssets,
         structureRenderEntries.modificationEntriesByKey,
