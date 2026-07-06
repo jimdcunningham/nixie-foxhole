@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, resolve } from 'node:path';
 import sharp from 'sharp';
 
@@ -9,7 +9,44 @@ export const DEFAULT_WRECKED_SUBTYPE_ICON_URL = '/foxhole/assets/icons/subtypewr
 export const MAX_PUBLISHED_ICON_DIMENSION = 256;
 
 const ICON_SOURCE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
-const LOSSLESS_WEBP_OPTIONS = { lossless: true, quality: 100, effort: 6 };
+export const LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS = { lossless: true, quality: 100, effort: 6 };
+export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90 };
+export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100 };
+
+const OUTPUT_FILE_RETRY_DELAYS_MS = [50, 100, 250, 500, 1000, 2000, 4000];
+
+function isRetryableOutputFileError(error) {
+    const code = String(error?.code ?? '').toUpperCase();
+    if (['EBUSY', 'EPERM', 'UNKNOWN', 'EMFILE', 'ENFILE'].includes(code)) {
+        return true;
+    }
+
+    const message = String(error?.message ?? '').toLowerCase();
+    return message.includes('operation not permitted')
+        || message.includes('unknown error, open')
+        || message.includes('resource busy or locked');
+}
+
+async function writeOutputFile(filePath, content) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            await writeFile(filePath, content);
+            return;
+        } catch (error) {
+            if (!isRetryableOutputFileError(error) || attempt >= OUTPUT_FILE_RETRY_DELAYS_MS.length) {
+                throw error;
+            }
+
+            if (attempt >= 2) {
+                await unlink(filePath).catch(() => {});
+            }
+
+            await new Promise(resolve => setTimeout(resolve, OUTPUT_FILE_RETRY_DELAYS_MS[attempt]));
+        }
+    }
+}
+
+const LOSSLESS_WEBP_OPTIONS = LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS;
 
 const LIVING_ICON_KINDS = ['icon.default', 'icon.rendered', 'preview', 'texture'];
 const DESTROYED_ICON_KINDS = [
@@ -114,16 +151,192 @@ export function structureHasNestedDestroyed(structure) {
     return Boolean(structure?.destroyed);
 }
 
-export function structureNeedsWreckedSubtype(structure, sourceStructure) {
+const RAW_DESTROYED_RENDER_ASSET_KINDS = [
+    'destroyed.texture',
+    'destroyed.preview',
+    'destroyed.icon.rendered',
+];
+
+export async function hasRawDestroyedRenderAssets(
+    structureId,
+    rawRenderedAssetTypesDirectory,
+    resolveAssetTypeName,
+) {
+    const normalizedStructureId = normalizeId(structureId);
+    if (!normalizedStructureId) {
+        return false;
+    }
+
+    for (const assetKind of RAW_DESTROYED_RENDER_ASSET_KINDS) {
+        const rawRenderedPath = getRawRenderedAssetPath(
+            normalizedStructureId,
+            assetKind,
+            resolveAssetTypeName(normalizedStructureId),
+            rawRenderedAssetTypesDirectory,
+        );
+        if (await pathExists(rawRenderedPath) && await imageFileHasVisiblePixelsFromPath(rawRenderedPath)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+export async function structureHasPublishableNestedDestroyed(
+    structure,
+    rawRenderedAssetTypesDirectory,
+    resolveAssetTypeName,
+    structuresWithDestroyedRenderScenes = null,
+) {
+    if (!structureHasNestedDestroyed(structure)) {
+        return false;
+    }
+
+    if (!structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes)) {
+        return false;
+    }
+
+    return hasRawDestroyedRenderAssets(
+        structure?.id,
+        rawRenderedAssetTypesDirectory,
+        resolveAssetTypeName,
+    );
+}
+
+export function resolvePublishedIconWebpOptions(assetKind) {
+    switch (assetKind) {
+        case 'icon.rendered':
+        case 'destroyed.icon.rendered':
+            return LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS;
+        case 'preview':
+        case 'destroyed.preview':
+        case 'texture':
+        case 'destroyed.texture':
+            return LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS;
+        case 'icon.default':
+        case 'destroyed.icon.default':
+        default:
+            return LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS;
+    }
+}
+
+export function structureIsStandaloneDestroyedCodename(structureId) {
+    const normalizedStructureId = normalizeId(structureId);
+    return normalizedStructureId.endsWith('destroyed')
+        || normalizedStructureId.endsWith('breached');
+}
+
+export function structureNeedsWreckedSubtype(structure, sourceStructure, structureId = null) {
     return structure?.isDestroyed === true
         || structure?.isBreached === true
         || sourceStructure?.isDestroyed === true
-        || sourceStructure?.isBreached === true;
+        || sourceStructure?.isBreached === true
+        || (structureId ? structureIsStandaloneDestroyedCodename(structureId) : false)
+        || (structure?.id ? structureIsStandaloneDestroyedCodename(structure.id) : false)
+        || (sourceStructure?.id ? structureIsStandaloneDestroyedCodename(sourceStructure.id) : false);
 }
 
 export function structurePrefersGeneratedDefaultIcon(structure, sourceStructure) {
     return structure?.generateDefaultIcon === true
         || sourceStructure?.generateDefaultIcon === true;
+}
+
+export function isPublishableDestroyedIconAssetKind(assetKind) {
+    return assetKind === 'destroyed.icon.default' || assetKind === 'destroyed.icon.rendered';
+}
+
+export function isIconFallbackVisualAssetKind(assetKind) {
+    return assetKind === 'preview' || assetKind === 'texture';
+}
+
+export async function collectStructureIdsWithDestroyedRenderScenesFromDirectory(renderScenesDirectory) {
+    const structureIds = new Set();
+    if (!renderScenesDirectory) {
+        return structureIds;
+    }
+
+    let entries = [];
+    try {
+        entries = await readdir(renderScenesDirectory, { withFileTypes: true });
+    } catch {
+        return structureIds;
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) {
+            continue;
+        }
+
+        const destroyedScenePath = resolve(renderScenesDirectory, entry.name, 'destroyed.scene.json');
+        if (await pathExists(destroyedScenePath)) {
+            structureIds.add(normalizeId(entry.name));
+        }
+    }
+
+    return structureIds;
+}
+
+export function stripUntrustworthyVehicleDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes) {
+    if (!structuresWithDestroyedRenderScenes) {
+        return manifest;
+    }
+
+    let strippedCount = 0;
+    const assets = (manifest?.assets ?? []).map(structure => {
+        if (!structure?.destroyed || structure?.isVehicle !== true) {
+            return structure;
+        }
+
+        const structureId = normalizeId(structure?.id);
+        if (!structureId || structuresWithDestroyedRenderScenes.has(structureId)) {
+            return structure;
+        }
+
+        strippedCount += 1;
+        const { destroyed, ...structureWithoutDestroyed } = structure;
+        return structureWithoutDestroyed;
+    });
+
+    if (strippedCount > 0) {
+        console.log(`stripped untrustworthy vehicle destroyed visuals from ${strippedCount} manifest entries (no destroyed.scene.json)`);
+    }
+
+    return {
+        ...manifest,
+        assets,
+    };
+}
+
+export function structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes) {
+    if (!structuresWithDestroyedRenderScenes) {
+        return true;
+    }
+
+    if (structure?.isVehicle !== true) {
+        return true;
+    }
+
+    const structureId = normalizeId(structure?.id);
+    return structureId ? structuresWithDestroyedRenderScenes.has(structureId) : false;
+}
+
+export function resolveSubtypeOverlayUrlForIconFallback({
+    structure,
+    sourceStructure,
+    assetKind,
+    fellBackToIconDefault = false,
+    defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
+}) {
+    if (!fellBackToIconDefault || !isIconFallbackVisualAssetKind(assetKind)) {
+        return null;
+    }
+
+    return resolveSubtypeOverlayUrl({
+        structure,
+        sourceStructure,
+        assetKind: 'icon.default',
+        defaultWreckedSubtypeUrl,
+    });
 }
 
 export function resolveSubtypeOverlayUrl({
@@ -145,8 +358,12 @@ export function resolveSubtypeOverlayUrl({
         return explicitSubtype;
     }
 
-    const needsWrecked = structureNeedsWreckedSubtype(structure, sourceStructure)
-        || assetKind.startsWith('destroyed.');
+    const needsWrecked = structureNeedsWreckedSubtype(
+        structure,
+        sourceStructure,
+        structure?.id ?? sourceStructure?.id ?? null,
+    )
+        || isPublishableDestroyedIconAssetKind(assetKind);
     if (needsWrecked) {
         return defaultWreckedSubtypeUrl;
     }
@@ -170,9 +387,7 @@ function getBlueprintIconUrlCandidates(structure, sourceStructure, assetKind) {
             source?.destroyed?.iconUrl,
             source?.destroyed?.icons?.rendered,
             source?.destroyed?.previewIconUrl,
-            source?.icons?.default,
-            source?.iconUrl,
-        ];
+        ].filter(Boolean);
     }
 
     return [
@@ -226,7 +441,8 @@ export async function imageBufferHasVisiblePixels(content) {
 
 export async function imageFileHasVisiblePixelsFromPath(filePath) {
     try {
-        const { data } = await sharp(filePath)
+        const content = await readFile(filePath);
+        const { data } = await sharp(content)
             .ensureAlpha()
             .resize(32, 32, { fit: 'inside', withoutEnlargement: true })
             .raw()
@@ -375,6 +591,52 @@ export async function resolveRawCopySource({
     };
 }
 
+export async function resolveRawVisualCopySource({
+    structureId,
+    assetKind,
+    structure,
+    sourceStructure,
+    rawRenderedAssetTypesDirectory,
+    generatedIconsDirectory,
+    publicAssetsDirectory,
+    resolveAssetTypeName,
+}) {
+    const rawCopy = await resolveRawCopySource({
+        structureId,
+        assetKind,
+        rawRenderedAssetTypesDirectory,
+        resolveAssetTypeName,
+    });
+
+    if (rawCopy?.content && await imageBufferHasVisiblePixels(rawCopy.content)) {
+        return rawCopy;
+    }
+
+    if (assetKind.startsWith('destroyed.')) {
+        return null;
+    }
+
+    const iconDefaultSource = await resolveRawIconSource({
+        structureId,
+        assetKind: 'icon.default',
+        structure,
+        sourceStructure,
+        rawRenderedAssetTypesDirectory,
+        generatedIconsDirectory,
+        publicAssetsDirectory,
+        resolveAssetTypeName,
+    });
+    if (!iconDefaultSource?.content) {
+        return rawCopy;
+    }
+
+    return {
+        sourceFilePath: iconDefaultSource.sourceFilePath,
+        content: iconDefaultSource.content,
+        fellBackToIconDefault: true,
+    };
+}
+
 async function readSubtypeOverlaySource(subtypeOverlayUrl, generatedIconsDirectory, publicAssetsDirectory) {
     const normalizedSubtypeUrl = String(subtypeOverlayUrl ?? '').trim();
     if (!normalizedSubtypeUrl) {
@@ -419,7 +681,8 @@ export async function writeCoLocatedIcon({
 
     await mkdir(dirname(outputPath), { recursive: true });
 
-    let outputContent = await normalizeIconContentDimensions(rawSource.content);
+    const webpOptions = resolvePublishedIconWebpOptions(assetKind);
+    let outputContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
     let composed = false;
 
     const subtypeOverlay = isComposableIconAssetKind(assetKind) && subtypeOverlayUrl
@@ -430,12 +693,12 @@ export async function writeCoLocatedIcon({
         outputContent = await composeSubtypeIcon(
             outputContent,
             subtypeOverlay.content,
-            LOSSLESS_WEBP_OPTIONS,
+            webpOptions,
         );
         composed = true;
     }
 
-    await writeFile(outputPath, outputContent);
+    await writeOutputFile(outputPath, outputContent);
     return {
         outputPath,
         wrote: true,
@@ -447,12 +710,17 @@ export async function writeCoLocatedIcon({
 export async function writeCoLocatedCopy({
     outputPath,
     rawSource,
+    assetKind = null,
+    subtypeOverlayUrl = null,
+    generatedIconsDirectory = null,
+    publicAssetsDirectory = null,
     skipExisting = false,
 }) {
     if (skipExisting && await pathExists(outputPath)) {
         return {
             outputPath,
             wrote: false,
+            composed: false,
         };
     }
 
@@ -460,14 +728,43 @@ export async function writeCoLocatedCopy({
         return {
             outputPath,
             wrote: false,
+            composed: false,
         };
     }
 
     await mkdir(dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, rawSource.content);
+
+    let outputContent = rawSource.content;
+    let composed = false;
+    const webpOptions = assetKind ? resolvePublishedIconWebpOptions(assetKind) : null;
+
+    if (assetKind && rawSource.fellBackToIconDefault && subtypeOverlayUrl
+        && generatedIconsDirectory && publicAssetsDirectory) {
+        let iconContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
+        const subtypeOverlay = await readSubtypeOverlaySource(
+            subtypeOverlayUrl,
+            generatedIconsDirectory,
+            publicAssetsDirectory,
+        );
+        if (subtypeOverlay) {
+            outputContent = await composeSubtypeIcon(
+                iconContent,
+                subtypeOverlay.content,
+                webpOptions,
+            );
+            composed = true;
+        } else {
+            outputContent = iconContent;
+        }
+    } else if (assetKind && isCopyOnlyAssetKind(assetKind) && rawSource.fellBackToIconDefault && webpOptions) {
+        outputContent = await sharp(rawSource.content).webp(webpOptions).toBuffer();
+    }
+
+    await writeOutputFile(outputPath, outputContent);
     return {
         outputPath,
         wrote: true,
+        composed,
         sourceFilePath: rawSource.sourceFilePath,
     };
 }
@@ -498,17 +795,41 @@ export async function publishStructureIconAsset({
     });
 
     if (isCopyOnlyAssetKind(assetKind)) {
-        const rawSource = await resolveRawCopySource({
+        const rawSource = await resolveRawVisualCopySource({
             structureId,
             assetKind,
+            structure,
+            sourceStructure,
             rawRenderedAssetTypesDirectory,
+            generatedIconsDirectory,
+            publicAssetsDirectory,
             resolveAssetTypeName,
+        });
+        if (!rawSource?.fellBackToIconDefault
+            && await pathExists(outputPath)
+            && await imageFileHasVisiblePixelsFromPath(outputPath)) {
+            return toPublicAssetUrl(outputPath);
+        }
+
+        const fallbackSubtypeOverlayUrl = resolveSubtypeOverlayUrlForIconFallback({
+            structure,
+            sourceStructure,
+            assetKind,
+            fellBackToIconDefault: rawSource?.fellBackToIconDefault === true,
+            defaultWreckedSubtypeUrl,
         });
         const result = await writeCoLocatedCopy({
             outputPath,
             rawSource,
+            assetKind,
+            subtypeOverlayUrl: fallbackSubtypeOverlayUrl,
+            generatedIconsDirectory,
+            publicAssetsDirectory,
             skipExisting: skipExistingAssets,
         });
+        if (result.wrote && result.composed) {
+            console.log(`published icon-fallback ${result.sourceFilePath} -> ${outputPath} (with subtype)`);
+        }
         return result.wrote || await pathExists(outputPath)
             ? toPublicAssetUrl(outputPath)
             : null;
@@ -555,6 +876,7 @@ export async function publishStructureIconsForAsset({
     resolveAssetTypeName,
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
+    structuresWithDestroyedRenderScenes = null,
 }) {
     const structureId = normalizeId(structure?.id);
     if (!structureId) {
@@ -562,7 +884,17 @@ export async function publishStructureIconsForAsset({
     }
 
     const publishedUrls = {};
-    for (const assetKind of getStructureIconAssetKinds(structure)) {
+    const includeDestroyedKinds = await structureHasPublishableNestedDestroyed(
+        structure,
+        rawRenderedAssetTypesDirectory,
+        resolveAssetTypeName,
+        structuresWithDestroyedRenderScenes,
+    );
+    const assetKinds = includeDestroyedKinds
+        ? [...LIVING_ICON_KINDS, ...DESTROYED_ICON_KINDS]
+        : [...LIVING_ICON_KINDS];
+
+    for (const assetKind of assetKinds) {
         const publishedUrl = await publishStructureIconAsset({
             structureId,
             assetKind,
@@ -596,6 +928,7 @@ export async function publishStructureIconsForManifest({
     resolveAssetTypeName,
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
+    structuresWithDestroyedRenderScenes = null,
 }) {
     const sourceStructuresById = new Map((sourceManifest?.assets ?? [])
         .map(entry => {
@@ -625,7 +958,14 @@ export async function publishStructureIconsForManifest({
             resolveAssetTypeName,
             skipExistingAssets,
             defaultWreckedSubtypeUrl,
+            structuresWithDestroyedRenderScenes,
         });
+        const includeDestroyedKinds = await structureHasPublishableNestedDestroyed(
+            structure,
+            rawRenderedAssetTypesDirectory,
+            resolveAssetTypeName,
+            structuresWithDestroyedRenderScenes,
+        );
 
         const { iconUrl: _legacyIconUrl, previewIconUrl: _legacyPreviewIconUrl, ...structureWithoutLegacyIcons } = structure;
         const nextIcons = {
@@ -648,7 +988,10 @@ export async function publishStructureIconsForManifest({
                     },
                 }
                 : {}),
-            ...(structureHasNestedDestroyed(structure)
+            ...(includeDestroyedKinds && (publishedUrls['destroyed.icon.default']
+                || publishedUrls['destroyed.icon.rendered']
+                || publishedUrls['destroyed.preview']
+                || publishedUrls['destroyed.texture'])
                 ? {
                     destroyed: {
                         ...structure.destroyed,

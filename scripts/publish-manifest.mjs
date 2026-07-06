@@ -7,9 +7,13 @@ import sharp from 'sharp';
 import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
 import {
+    collectStructureIdsWithDestroyedRenderScenesFromDirectory,
     getCoLocatedStructureAssetFileName,
+    hasRawDestroyedRenderAssets,
     publishStructureIconsForManifest,
     shouldSyncRenderedAssetToPublic,
+    stripUntrustworthyVehicleDestroyedVisuals,
+    structureHasResolvableDestroyedRenderScene,
 } from './publish-structure-icons.mjs';
 import {
     buildSharedModificationIdComputation,
@@ -2105,6 +2109,14 @@ function collectReferencedSharedModificationIds(manifest) {
     return sharedModificationIds;
 }
 
+async function loadStructureIdsWithDestroyedRenderScenes() {
+    if (!await pathExists(renderScenesDirectory)) {
+        return null;
+    }
+
+    return collectStructureIdsWithDestroyedRenderScenesFromDirectory(renderScenesDirectory);
+}
+
 async function loadRenderScenesIndexDocument() {
     if (!await pathExists(renderScenesIndexPath)) {
         return null;
@@ -3639,14 +3651,15 @@ async function imageFileHasVisiblePixels(filePath) {
 
     const pending = (async () => {
         try {
-            const metadata = await sharp(filePath).metadata();
+            const content = await readFileWithRetries(filePath);
+            const metadata = await sharp(content).metadata();
             const width = Number(metadata.width ?? 0);
             const height = Number(metadata.height ?? 0);
             if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
                 return false;
             }
 
-            const { data } = await sharp(filePath)
+            const { data } = await sharp(content)
                 .ensureAlpha()
                 .resize(32, 32, { fit: 'inside', withoutEnlargement: true })
                 .raw()
@@ -3671,25 +3684,19 @@ async function hasVisiblePublishedAssetUrl(publicUrl) {
 }
 
 async function hasPublishedDestroyedVisual(structure) {
-    const destroyedSourceUrl = structure?.destroyed?.sprite?.source ?? structure?.destroyed?.textureUrl ?? null;
-    if (await hasVisiblePublishedAssetUrl(destroyedSourceUrl)) {
-        return true;
-    }
-
     const structureId = normalizeId(structure?.id);
     if (!structureId) {
         return false;
     }
 
-    const destroyedTextureFilePath = getPublishedStructureVariantTextureFilePath(structureId, 'destroyed');
-    if (!destroyedTextureFilePath || !await pathExists(destroyedTextureFilePath)) {
-        return false;
-    }
-
-    return await imageFileHasVisiblePixels(destroyedTextureFilePath);
+    return hasRawDestroyedRenderAssets(
+        structureId,
+        rawRenderedAssetTypesDirectory,
+        resolvePublishedAssetTypeName,
+    );
 }
 
-async function stripUnavailableDestroyedVisuals(manifest) {
+async function stripUnavailableDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes = null) {
     return foxholeManifestSchema.parse({
         ...manifest,
         assets: await Promise.all((manifest?.assets ?? []).map(async structure => {
@@ -3698,6 +3705,11 @@ async function stripUnavailableDestroyedVisuals(manifest) {
             }
 
             if (await hasPublishedDestroyedVisual(structure)) {
+                if (!structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes)) {
+                    const { destroyed, ...structureWithoutDestroyed } = structure;
+                    return structureWithoutDestroyed;
+                }
+
                 return structure;
             }
 
@@ -3707,9 +3719,47 @@ async function stripUnavailableDestroyedVisuals(manifest) {
     });
 }
 
+async function removeDestroyedArtifactsWithoutManifestEntry(manifest) {
+    const destroyedAssetKinds = [
+        'destroyed.icon.default',
+        'destroyed.icon.rendered',
+        'destroyed.preview',
+        'destroyed.texture',
+    ];
+
+    for (const structure of manifest?.assets ?? []) {
+        const structureId = normalizeId(structure?.id);
+        if (!structureId || structure?.destroyed) {
+            continue;
+        }
+
+        const outputDirectory = getPublishedAssetDirectory(structureId);
+        if (!outputDirectory || !await pathExists(outputDirectory)) {
+            continue;
+        }
+
+        for (const assetKind of destroyedAssetKinds) {
+            const outputPath = resolve(outputDirectory, getCoLocatedStructureAssetFileName(structureId, assetKind));
+            if (!await pathExists(outputPath)) {
+                continue;
+            }
+
+            await unlink(outputPath);
+            console.log(`removed unpublished destroyed artifact ${outputPath}`);
+        }
+
+        const destroyedTextureJsonPath = resolve(outputDirectory, `${structureId}.destroyed.texture.json`);
+        if (await pathExists(destroyedTextureJsonPath)) {
+            await unlink(destroyedTextureJsonPath);
+            console.log(`removed unpublished destroyed artifact ${destroyedTextureJsonPath}`);
+        }
+    }
+}
+
 async function readImageDimensions(filePath) {
     try {
-        const metadata = await sharp(filePath).metadata();
+        const content = await readFileWithRetries(filePath);
+        const metadata = await sharp(content).metadata();
         const width = Number(metadata.width ?? 0);
         const height = Number(metadata.height ?? 0);
         if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -3967,6 +4017,9 @@ async function collectAssetRenderEntries(entriesByKey, modificationEntriesByKey,
     }
 
     if (normalized.endsWith('.destroyed.icon.default.webp')) {
+        if (!await imageFileHasVisiblePixels(filePath)) {
+            return;
+        }
         const key = normalizeId(fileName.slice(0, -'.destroyed.icon.default.webp'.length));
         entriesByKey[key] ??= {};
         entriesByKey[key].destroyed ??= {};
@@ -3975,6 +4028,9 @@ async function collectAssetRenderEntries(entriesByKey, modificationEntriesByKey,
     }
 
     if (normalized.endsWith('.destroyed.texture.webp')) {
+        if (!await imageFileHasVisiblePixels(filePath)) {
+            return;
+        }
         const key = normalizeId(fileName.slice(0, -'.destroyed.texture.webp'.length));
         entriesByKey[key] ??= {};
         entriesByKey[key].destroyed ??= {};
@@ -5429,6 +5485,7 @@ function applyStructureRenderUrls(
     modificationEntriesByAssetId,
     structureLayerEntriesByStructureId,
     sharedPackagingEntriesByKey,
+    structuresWithRawDestroyedRenders = new Set(),
 ) {
     function resolveSourceModification(structure, variantId, variant) {
         const candidateIds = [
@@ -5522,18 +5579,22 @@ function applyStructureRenderUrls(
                     ?? sceneMetadata?.previewDirection
                     ?? structure.previewDirection;
                 const destroyedRenderEntry = renderEntry?.destroyed ?? null;
+                const structureHasRawDestroyedRenders = structuresWithRawDestroyedRenders.has(normalizeId(structure.id));
                 const destroyedDefaultIconUrl = structure?.destroyed?.icons?.default
                     ?? structure?.destroyed?.iconUrl
-                    ?? structureDefaultIconUrl
                     ?? destroyedRenderEntry?.defaultIconUrl
+                    ?? (structureHasRawDestroyedRenders ? structureDefaultIconUrl : null)
                     ?? null;
-                const destroyedRenderedIconUrl = destroyedRenderEntry?.renderedIconUrl ?? structure?.destroyed?.icons?.rendered ?? structure?.destroyed?.previewIconUrl ?? destroyedDefaultIconUrl;
+                const destroyedRenderedIconUrl = destroyedRenderEntry?.renderedIconUrl
+                    ?? structure?.destroyed?.icons?.rendered
+                    ?? structure?.destroyed?.previewIconUrl
+                    ?? destroyedDefaultIconUrl;
                 const destroyedPreviewUrl = destroyedRenderEntry?.previewUrl ?? structure?.destroyed?.previewUrl ?? null;
                 const destroyedTextureUrl = destroyedRenderEntry?.textureUrl ?? structure?.destroyed?.sprite?.source ?? structure?.destroyed?.textureUrl ?? null;
                 const destroyedPreviewDirection = destroyedRenderEntry?.previewDirection ?? structure?.destroyed?.previewDirection ?? null;
                 // Some vehicles expose a destroyed component without any renderable destroyed texture.
                 // Drop the entire destroyed payload unless we can emit a destroyed sprite block.
-                const hasPublishedDestroyedVisual = Boolean(destroyedTextureUrl);
+                const hasPublishedDestroyedVisual = structureHasRawDestroyedRenders;
                 const packagedRenderEntry = renderEntry?.packaged ?? null;
                 const packagedTextureUrl = packagedRenderEntry?.textureUrl
                     ?? structure?.packaged?.sprite?.source
@@ -6078,7 +6139,13 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
     });
 }
 
-async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sourceManifest = null, subtypeOverlayIconKeys = null) {
+async function coLocateFallbackStructureAssets(
+    manifest,
+    generatedDirectory,
+    sourceManifest = null,
+    subtypeOverlayIconKeys = null,
+    structuresWithDestroyedRenderScenes = null,
+) {
     const copiedAssetUrls = new Map();
 
     async function buildCoLocatedModificationIconContent(sourceUrl, subTypeIconUrl) {
@@ -6208,6 +6275,7 @@ async function coLocateFallbackStructureAssets(manifest, generatedDirectory, sou
         resolveAssetTypeName: resolvePublishedAssetTypeName,
         skipExistingAssets,
         defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
+        structuresWithDestroyedRenderScenes,
     });
 
     return foxholeManifestSchema.parse({
@@ -6350,8 +6418,12 @@ try {
         sourceManifest.__sourceStructureMetadataById,
     );
     const renderScenesIndexDocument = await loadRenderScenesIndexDocument();
+    const structuresWithDestroyedRenderScenes = await loadStructureIdsWithDestroyedRenderScenes();
+    const manifestForPublishWithoutBogusDestroyed = foxholeManifestSchema.parse(
+        stripUntrustworthyVehicleDestroyedVisuals(manifestForPublish, structuresWithDestroyedRenderScenes),
+    );
     const manifestWithSeededSharedModificationIds = seedSharedModificationIdsFromRenderIndex(
-        manifestForPublish,
+        manifestForPublishWithoutBogusDestroyed,
         renderScenesIndexDocument,
     );
     publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestWithSeededSharedModificationIds);
@@ -6372,6 +6444,23 @@ try {
     await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
     await syncRawRenderedAssetsToPublicDirectory(scopedRawRenderedAssetTargets);
 
+    const structuresWithRawDestroyedRenders = new Set();
+    for (const structure of manifestWithSeededSharedModificationIds.assets ?? []) {
+        const structureId = normalizeId(structure?.id);
+        if (!structureId) {
+            continue;
+        }
+
+        if (await hasRawDestroyedRenderAssets(
+            structureId,
+            rawRenderedAssetTypesDirectory,
+            resolvePublishedAssetTypeName,
+        )
+            && structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes)) {
+            structuresWithRawDestroyedRenders.add(structureId);
+        }
+    }
+
     const structureRenderEntries = await buildStructureRenderEntries(manifestWithSeededSharedModificationIds, scopedRawRenderedAssetTargets);
     const manifestWithRenderUrls = applyStructureRenderUrls(
         manifestWithSeededSharedModificationIds,
@@ -6381,6 +6470,7 @@ try {
         structureRenderEntries.modificationEntriesByAssetId,
         structureRenderEntries.structureLayerEntriesByStructureId,
         structureRenderEntries.sharedPackagingEntriesByKey,
+        structuresWithRawDestroyedRenders,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
     const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifestWithNormalizedIconUrls);
@@ -6389,6 +6479,7 @@ try {
         generatedIconsDirectory,
         attachSourceStructureMetadata(manifestForPublish, sourceManifest.__sourceStructureMetadataById),
         subtypeOverlayIconKeys,
+        structuresWithDestroyedRenderScenes,
     );
     const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
         manifestWithCoLocatedFallbackAssets,
@@ -6414,7 +6505,12 @@ try {
     const mergedManifest = publishedBaseManifest
         ? mergeManifestSubset(publishedBaseManifest, manifestWithPreservedAuthoredPreviewDirections, explicitlyRemovedStructureIds)
         : manifestWithPreservedAuthoredPreviewDirections;
-    const mergedManifestWithoutUnavailableDestroyedVisuals = await stripUnavailableDestroyedVisuals(mergedManifest);
+    const mergedManifestWithoutUnavailableDestroyedVisuals = await stripUnavailableDestroyedVisuals(
+        mergedManifest,
+        structuresWithDestroyedRenderScenes,
+    );
+    await removeDestroyedArtifactsWithoutManifestEntry(mergedManifestWithoutUnavailableDestroyedVisuals);
+    await removeStaleRootStructureArtifacts(mergedManifestWithoutUnavailableDestroyedVisuals);
     const removedUpgradeStructureIds = getRemovedUpgradeStructureIds(publishedManifestBeforeWrite, mergedManifestWithoutUnavailableDestroyedVisuals);
     const removedPublishedStructureIds = getRemovedStructureIds(publishedManifestBeforeWrite, mergedManifestWithoutUnavailableDestroyedVisuals);
     const removedStructureIds = new Set([
