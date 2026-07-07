@@ -1,3 +1,6 @@
 {
-  "clipFloorZ": -0.5
+  "clipFloorZ": -0.5,
+  "connector": {
+    "pathStyle": "spline"
+  }
 }
