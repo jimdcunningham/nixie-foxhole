@@ -12,7 +12,7 @@ const ROOT = path.resolve(repositoryRoot, 'apps', 'foxhole-planner', 'public', '
 // - localizations/
 // - shared/
 //     - <components|modifications>/
-//         - <componentOrModificationId>/
+//         - <componentOrModificationId>/   # shared mods use renderId folder names
 //             - <componentOrModificationId>.icon.default.webp
 //             - <componentOrModificationId>.icon.rendered.webp
 //             - <componentOrModificationId>.preview.webp
@@ -21,8 +21,8 @@ const ROOT = path.resolve(repositoryRoot, 'apps', 'foxhole-planner', 'public', '
 //     - <items|structures|vehicles>/
 //         - <codename>/
 //             - <components|modifications>/
-//                 - <componentOrModificationId>/
-//                     - <componentOrModificationId>.icon.default.webp
+//                 - <componentId|renderId>/   # renderId = {variantId}-{hash12}
+//                     - <componentId|renderId>.icon.default.webp
 //                     - <componentOrModificationId>.icon.rendered.webp
 //                     - <componentOrModificationId>.preview.webp
 //                     - <componentOrModificationId>.texture.webp
@@ -363,8 +363,16 @@ function validateAssetFiles(dir, expectedId) {
     }
 }
 
+function isRenderIdFolderName(value) {
+    return /-[a-f0-9]{12}$/.test(String(value ?? '').toLowerCase());
+}
+
 function validateChildFolder(dir) {
     const childId = path.basename(dir);
+    const parentSubtype = path.basename(path.dirname(dir));
+    if (parentSubtype === 'modifications' && !isRenderIdFolderName(childId)) {
+        fail('Modification folder must use renderId (variant-hash), not bare variantId', dir);
+    }
     validateAssetFiles(dir, childId);
 }
 

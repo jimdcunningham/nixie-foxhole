@@ -21,6 +21,7 @@ import {
     resolveRawVisualCopySource,
     shouldSyncRenderedAssetToPublic,
     stripUntrustworthyVehicleDestroyedVisuals,
+    sanitizeVehicleDestroyedVisuals,
     structureHasPublishableNestedDestroyed,
     structureHasResolvableDestroyedRenderScene,
     collectStructureIdsWithDestroyedRenderScenesFromDirectory,
@@ -146,6 +147,24 @@ test('stripUntrustworthyVehicleDestroyedVisuals removes vehicle destroyed withou
     assert.equal(manifest.assets[0].destroyed?.componentName, 'DestroyedMesh');
     assert.equal(manifest.assets[1].destroyed, undefined);
     assert.equal(manifest.assets[2].destroyed?.componentName, 'DestroyedMesh');
+});
+
+test('sanitizeVehicleDestroyedVisuals strips vehicles not on destroyed publish allowlist', () => {
+    const destroyedScenes = new Set(['truckliquidc', 'truckw', 'fieldharvesterc']);
+    const allowlist = new Set(['truckliquidc', 'fieldharvesterc']);
+    const manifest = sanitizeVehicleDestroyedVisuals({
+        assets: [
+            { id: 'truckliquidc', isVehicle: true, destroyed: { componentName: 'DestroyedMesh' } },
+            { id: 'truckw', isVehicle: true, destroyed: { componentName: 'DestroyedMesh' } },
+            { id: 'fieldharvesterc', isVehicle: true, destroyed: { componentName: 'DestroyedMesh' } },
+            { id: 'facilitymine1', destroyed: { componentName: 'DestroyedMesh' } },
+        ],
+    }, destroyedScenes, allowlist);
+
+    assert.equal(manifest.assets[0].destroyed?.componentName, 'DestroyedMesh');
+    assert.equal(manifest.assets[1].destroyed, undefined);
+    assert.equal(manifest.assets[2].destroyed?.componentName, 'DestroyedMesh');
+    assert.equal(manifest.assets[3].destroyed?.componentName, 'DestroyedMesh');
 });
 
 test('structureHasResolvableDestroyedRenderScene requires destroyed scene for vehicles', () => {

@@ -45,6 +45,13 @@ public sealed class FoxWatchManifestGenerator
         var json = JsonSerializer.Serialize(manifest, serializerOptions);
         await File.WriteAllTextAsync(outputPath, $"{json}{Environment.NewLine}", cancellationToken);
         _logger.LogInformation("Wrote FoxWatch manifest to {OutputPath}", outputPath);
+
+        var renderIndex = FoxWatchModificationRenderIdentity.BuildRenderIndex(manifest);
+        var renderIndexPath = Path.Combine(
+            outputDirectory ?? FoxWatchWorkspace.ResolvePath("tmp"),
+            "modification-render-index.v1.json");
+        await FoxWatchModificationRenderIndexWriter.WriteAsync(renderIndex, renderIndexPath, cancellationToken);
+        _logger.LogInformation("Wrote modification render index to {RenderIndexPath}", renderIndexPath);
     }
 
     public FoxWatchManifest BuildManifest(string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null)
@@ -64,6 +71,9 @@ public sealed class FoxWatchManifestGenerator
                 manifest.Localizations[0].Strings["foxhole:meta:baseAssetsUrl"] = baseAssetsUrl;
                 _logger.LogInformation("Resolved {StructureCount} structures across {CategoryCount} categories from direct extraction", manifest.Assets.Count, manifest.Categories.Count);
                 manifest = _manifestReferenceHydrator.Hydrate(manifest);
+                // Hydration can inject/synthetic-merge modification variants after extraction
+                // AssignRenderIds; re-assign so every non-default slot variant has a renderId.
+                FoxWatchModificationRenderIdentity.AssignRenderIds(manifest);
                 var exportedCategoryIconCount = extractor.ExportCategoryIcons(manifest.Categories, iconOutputDirectory);
                 if (exportedCategoryIconCount > 0)
                 {

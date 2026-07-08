@@ -32,11 +32,14 @@ public static class FoxWatchCli
 
     public static async Task<int> RunGenerateManifestAsync(string[] args)
     {
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var verbose = parsedArguments.ContainsKey("verbose");
         var configuration = FoxWatchCliSupport.BuildConfiguration();
-        using var provider = FoxWatchCliSupport.BuildProvider(configuration);
+        using var provider = FoxWatchCliSupport.BuildProvider(
+            configuration,
+            builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
 
         var (logger, generator, configuredOptions) = FoxWatchCliSupport.ResolveCommand<FoxWatchManifestGenerator>(provider);
-        var parsedArguments = FoxWatchCliArguments.Parse(args);
         var targetFilter = FoxWatchTargetFilter.FromArguments(parsedArguments);
 
         var outputPath = FoxWatchCliSupport.ResolveRequiredPath(
@@ -99,11 +102,14 @@ public static class FoxWatchCli
 
     public static async Task<int> RunGenerateRenderScenesAsync(string[] args)
     {
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var verbose = parsedArguments.ContainsKey("verbose");
         var configuration = FoxWatchCliSupport.BuildConfiguration();
-        using var provider = FoxWatchCliSupport.BuildProvider(configuration);
+        using var provider = FoxWatchCliSupport.BuildProvider(
+            configuration,
+            builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
 
         var (logger, generator, configuredOptions) = FoxWatchCliSupport.ResolveCommand<FoxWatchRenderSceneGenerator>(provider);
-        var parsedArguments = FoxWatchCliArguments.Parse(args);
         var targetFilter = FoxWatchTargetFilter.FromArguments(parsedArguments);
 
         var outputDirectory = FoxWatchCliSupport.ResolveRequiredPath(
@@ -405,13 +411,7 @@ public static class FoxWatchCli
         var configuration = FoxWatchCliSupport.BuildConfiguration();
         using var provider = FoxWatchCliSupport.BuildProvider<FoxWatchAssetMeshExporter>(
             configuration,
-            builder =>
-            {
-                if (!verbose)
-                {
-                    builder.AddFilter("FoxWatchService.FoxWatchAssetMeshExporter", LogLevel.Warning);
-                }
-            });
+            builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
 
         var (logger, exporter, configuredOptions) = FoxWatchCliSupport.ResolveCommand<FoxWatchAssetMeshExporter>(provider);
 
@@ -483,15 +483,6 @@ public static class FoxWatchCli
                         result.MeshType,
                         result.AssetPath,
                         result.SavedFilePath);
-                }
-                else
-                {
-                    logger.LogInformation(
-                        "{Completed}/{Total} exported {MeshType} from {AssetPath}",
-                        completed,
-                        totalCount,
-                        result.MeshType,
-                        result.AssetPath);
                 }
             }
             catch (Exception exception)

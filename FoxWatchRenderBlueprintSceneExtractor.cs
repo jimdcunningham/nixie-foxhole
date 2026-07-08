@@ -1329,10 +1329,15 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 var variantExtraction = await TryBuildModificationVariantExtractionAsync(structureId, modificationVariant, extraction, attachNode, cancellationToken);
                 if (variantExtraction == null)
                 {
-                    _logger.LogWarning(
-                        "Skipping modification slot variant {VariantId} for {StructureId} because no scene overlay could be built",
-                        modificationVariant.Id,
-                        structureId);
+                    // Default slot variants are the base host meshes — no overlay/icons/renders expected.
+                    if (!string.Equals(modificationVariant.Id, "default", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning(
+                            "Skipping modification slot variant {VariantId} for {StructureId} because no scene overlay could be built",
+                            modificationVariant.Id,
+                            structureId);
+                    }
+
                     continue;
                 }
 

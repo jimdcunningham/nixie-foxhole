@@ -55,9 +55,13 @@ export function resolveTemplatePathForSharedModificationIdentity(variant) {
 function finalizeSharedModificationIdComputation({
     variantIdInput,
     templatePathInput,
+    dataClassPathInput = createSharedModificationHashDiagnosticInput(''),
     previewDirection = 'se',
     extraInputs = {},
 }) {
+    // Identity is visual only: variantId|templatePath.
+    // dataClassPath is retained in diagnostics but must not participate in the hash.
+    // Host-specific pixel differences are handled by scene-fingerprint routing.
     const identity = [
         variantIdInput.normalized,
         templatePathInput.normalized,
@@ -69,6 +73,7 @@ function finalizeSharedModificationIdComputation({
     return {
         previewDirection,
         variantIdInput,
+        dataClassPathInput,
         templatePathInput,
         templateActorPathInput: extraInputs.templateActorPathInput ?? createSharedModificationHashDiagnosticInput(''),
         templateMeshPathInput: extraInputs.templateMeshPathInput ?? createSharedModificationHashDiagnosticInput(''),
@@ -83,31 +88,35 @@ function finalizeSharedModificationIdComputation({
         generatedSharedModificationId: normalizedVariantId
             ? `${normalizedVariantId}-${truncatedHashHex}`
             : truncatedHashHex,
+        renderId: normalizedVariantId
+            ? `${normalizedVariantId}-${truncatedHashHex}`
+            : truncatedHashHex,
     };
 }
 
-export function buildSharedModificationIdComputation(variantId, variant, structurePreviewDirection) {
-    const previewDirection = normalizeStandaloneModificationIdentityPart(variant?.previewDirection)
-        || normalizeStandaloneModificationIdentityPart(structurePreviewDirection)
-        || 'se';
+export function buildRenderIdComputation(variantId, dataClassPath, variant) {
     const variantIdInput = createSharedModificationHashDiagnosticInput(variantId);
+    const dataClassPathInput = createSharedModificationHashDiagnosticInput(dataClassPath);
     const templatePathInput = createSharedModificationHashDiagnosticInput(
         resolveTemplatePathForSharedModificationIdentity(variant),
     );
 
     return finalizeSharedModificationIdComputation({
         variantIdInput,
+        dataClassPathInput,
         templatePathInput,
-        previewDirection,
         extraInputs: {
             templateActorPathInput: createSharedModificationHashDiagnosticInput(variant?.templateActorPath),
             templateMeshPathInput: createSharedModificationHashDiagnosticInput(variant?.templateMeshPath),
             previewMeshPathInput: createSharedModificationHashDiagnosticInput(variant?.previewMeshPath),
             nameInput: createSharedModificationHashDiagnosticInput(getStandaloneModificationIdentityText(variant?.name)),
             descriptionInput: createSharedModificationHashDiagnosticInput(getStandaloneModificationIdentityText(variant?.description)),
-            previewDirectionInput: createSharedModificationHashDiagnosticInput(previewDirection),
         },
     });
+}
+
+export function buildSharedModificationIdComputation(variantId, variant, structurePreviewDirection) {
+    return buildRenderIdComputation(variantId, '', variant);
 }
 
 export function buildLegacySharedModificationIdComputation(variantId, variant, structurePreviewDirection) {

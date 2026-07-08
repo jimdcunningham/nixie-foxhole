@@ -160,6 +160,7 @@ def parse_args():
     parser.add_argument("--icon-size", type=int, default=256)
     parser.add_argument("--debug-bounds", action="store_true")
     parser.add_argument("--purge-existing", action="store_true")
+    parser.add_argument("--verbose", action="store_true")
     return parser.parse_args(raw_args)
 
 
@@ -369,6 +370,21 @@ def set_webp_lossless(image_settings):
         image_settings.webp_lossless = True
 
 
+def set_image_output_format(image_settings, output_path: str):
+    extension = os.path.splitext(str(output_path or ""))[1].lower()
+    if extension == ".png":
+        image_settings.file_format = "PNG"
+        if hasattr(image_settings, "color_mode"):
+            image_settings.color_mode = "RGBA"
+        if hasattr(image_settings, "quality"):
+            image_settings.quality = 100
+        if hasattr(image_settings, "compression"):
+            image_settings.compression = 15
+        return
+
+    set_webp_lossless(image_settings)
+
+
 def set_neutral_view_transform(scene):
     view_settings = scene.view_settings
     display_settings = scene.display_settings
@@ -436,7 +452,7 @@ def render_fallback_source(output_path: str):
     bpy.context.scene.render.filepath = output_path
     view_layer.material_override = ensure_fallback_source_material()
     bpy.context.scene.render.use_freestyle = True
-    set_webp_lossless(image_settings)
+    set_image_output_format(image_settings, output_path)
 
     freestyle_settings = view_layer.freestyle_settings
     while len(freestyle_settings.linesets) > 1:
@@ -494,7 +510,7 @@ def render_flat_lineart_source(output_path: str, thickness: int):
     bpy.context.scene.render.filepath = output_path
     view_layer.material_override = ensure_flat_lineart_material()
     bpy.context.scene.render.use_freestyle = True
-    set_webp_lossless(image_settings)
+    set_image_output_format(image_settings, output_path)
 
     freestyle_settings = view_layer.freestyle_settings
     while len(freestyle_settings.linesets) > 1:
@@ -705,7 +721,7 @@ def generate_flat_topdown_from_source(
             previous_color_mode = getattr(image_settings, "color_mode", None)
             previous_quality = getattr(image_settings, "quality", None)
             previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
-            set_webp_lossless(image_settings)
+            set_image_output_format(image_settings, output_path)
             try:
                 flat_image.save_render(output_path, scene=bpy.context.scene)
             finally:
@@ -777,7 +793,7 @@ def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str):
             previous_color_mode = getattr(image_settings, "color_mode", None)
             previous_quality = getattr(image_settings, "quality", None)
             previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
-            set_webp_lossless(image_settings)
+            set_image_output_format(image_settings, fallback_path)
             try:
                 fallback_image.save_render(fallback_path, scene=bpy.context.scene)
             finally:
@@ -864,7 +880,7 @@ def render_file_stem_name(base_name: str, mode: str, scene_variant: str | None, 
         if mode == "preview":
             return f"{stem_name}.preview"
         if mode == "icon":
-            return f"{stem_name}.icon.rendered"
+            return f"{stem_name}.icon.default"
         raise ValueError(f"Unsupported render mode '{mode}'")
 
     if mode == "topdown":
@@ -874,7 +890,7 @@ def render_file_stem_name(base_name: str, mode: str, scene_variant: str | None, 
     elif mode == "preview":
         stem_name = f"{base_name}.preview"
     elif mode == "icon":
-        stem_name = f"{base_name}.icon.rendered"
+        stem_name = f"{base_name}.icon.default"
     else:
         raise ValueError(f"Unsupported render mode '{mode}'")
 
@@ -884,35 +900,43 @@ def render_file_stem_name(base_name: str, mode: str, scene_variant: str | None, 
     return stem_name
 
 
+def render_file_extension(mode: str) -> str:
+    if mode in {"preview", "icon"}:
+        return ".png"
+    return ".webp"
+
+
 def resolve_render_output_path(base_output_dir: str, asset_type: str, structure_id: str, raw_output_key: str, scene_document: dict, mode: str, scene_variant: str | None) -> str:
     scene_variant_document = resolve_scene_variant_document(scene_document, scene_variant)
     normalized_output_key = str(raw_output_key or "").replace("\\", "/").strip("/")
     typed_output_directory = os.path.join(base_output_dir, normalize_asset_type_name(asset_type))
     asset_root_directory = os.path.normpath(os.path.join(base_output_dir, os.pardir))
+    extension = render_file_extension(mode)
+    stem = lambda base_name: f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}{extension}"
 
     if structure_id == "mods":
         base_name = os.path.basename(normalized_output_key)
         output_directory = os.path.join(asset_root_directory, "shared", "modifications", base_name)
-        return os.path.join(output_directory, f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}.webp")
+        return os.path.join(output_directory, stem(base_name))
 
     if structure_id == "packaged-pallets":
         base_name = os.path.basename(normalized_output_key)
         output_directory = os.path.join(asset_root_directory, "shared", "packaging", base_name)
-        return os.path.join(output_directory, f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}.webp")
+        return os.path.join(output_directory, stem(base_name))
 
     if normalized_output_key.startswith("components/"):
         base_name = os.path.basename(normalized_output_key)
         output_directory = os.path.join(typed_output_directory, structure_id, "components", base_name)
-        return os.path.join(output_directory, f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}.webp")
+        return os.path.join(output_directory, stem(base_name))
 
     if normalized_output_key.startswith("modifications/"):
         base_name = os.path.basename(normalized_output_key)
         output_directory = os.path.join(typed_output_directory, structure_id, "modifications", base_name)
-        return os.path.join(output_directory, f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}.webp")
+        return os.path.join(output_directory, stem(base_name))
 
     base_name = os.path.basename(normalized_output_key) or structure_id
     output_directory = os.path.join(typed_output_directory, structure_id)
-    return os.path.join(output_directory, f"{render_file_stem_name(base_name, mode, scene_variant, scene_variant_document)}.webp")
+    return os.path.join(output_directory, stem(base_name))
 
 
 def preview_variants_for_mode(scene_document, mode):
@@ -933,12 +957,11 @@ def should_generate_default_icon(scene_document: dict) -> bool:
     return bool((scene_document.get("render") or {}).get("generateDefaultIcon"))
 
 
-def resolve_default_icon_output_path(rendered_icon_output_path: str) -> str:
-    suffix = ".icon.rendered.webp"
-    if rendered_icon_output_path.lower().endswith(suffix):
-        return rendered_icon_output_path[:-len(suffix)] + ".icon.default.webp"
+def resolve_default_icon_output_path(preview_output_path: str) -> str:
+    if preview_output_path.lower().endswith(".preview.png"):
+        return preview_output_path[:-len(".preview.png")] + ".icon.default.png"
 
-    return rendered_icon_output_path.replace(".icon.rendered", ".icon.default")
+    return preview_output_path.replace(".preview", ".icon.default")
 
 
 def allowed_modes_for_scene(scene_document: dict, requested_modes: list[str]) -> list[str]:
@@ -968,7 +991,7 @@ def main():
     if args.purge_existing:
         remove_collections_with_prefix("FoxWatch:")
 
-    modes = args.mode or ["topdown", "preview", "icon"]
+    modes = args.mode or ["topdown", "preview"]
     rendered = 0
     for entry in index_document.get("scenes", []):
         structure_id = entry["structureId"]
@@ -1045,7 +1068,7 @@ def main():
                                 os.remove(fill_lineart_path)
                             if os.path.exists(outline_lineart_path):
                                 os.remove(outline_lineart_path)
-                    elif mode in {"preview", "icon"} and bpy.context.scene.camera is not None:
+                    elif mode == "preview" and bpy.context.scene.camera is not None:
                         render_margins = autocenter_ortho_camera_from_render(
                             bpy.context.scene.camera,
                             output_path,
@@ -1058,8 +1081,8 @@ def main():
                         output_path,
                         trench_readability_profile(structure_id, output_key, render_state["mode"]),
                     )
-                    if mode == "icon" and scene_variant is None and should_generate_default_icon(scene_document):
-                        lineart_source_file = tempfile.NamedTemporaryFile(suffix=".icon.default.source.webp", delete=False)
+                    if mode == "preview" and scene_variant is None and should_generate_default_icon(scene_document):
+                        lineart_source_file = tempfile.NamedTemporaryFile(suffix=".icon.default.source.png", delete=False)
                         lineart_source_path = lineart_source_file.name
                         lineart_source_file.close()
                         try:
@@ -1090,15 +1113,21 @@ def main():
                             args.pixels_per_meter,
                             anchor_projection,
                         )
-                    print(
-                        f"Rendered {structure_id}"
-                        f"{f' [{scene_variant}]' if scene_variant else ''}"
-                        f" ({render_state['mode']}{f':{preview_variant}' if preview_variant else ''}, {render_state['resolution'][0]}x{render_state['resolution'][1]}, {render_state['camera']}, "
-                        f"center=({render_state['boundsCenterProjection']['pixelX']:.2f},{render_state['boundsCenterProjection']['pixelY']:.2f}), "
-                        f"bounds L={render_state['boundsMargins']['left']:.2f} R={render_state['boundsMargins']['right']:.2f} "
-                        f"T={render_state['boundsMargins']['top']:.2f} B={render_state['boundsMargins']['bottom']:.2f}"
-                        f"{f', alpha L={render_margins['left']:.2f} R={render_margins['right']:.2f} T={render_margins['top']:.2f} B={render_margins['bottom']:.2f}' if render_margins else ''})"
-                    )
+                    if args.verbose:
+                        print(
+                            f"Rendered {structure_id}"
+                            f"{f' [{scene_variant}]' if scene_variant else ''}"
+                            f" ({render_state['mode']}{f':{preview_variant}' if preview_variant else ''}, {render_state['resolution'][0]}x{render_state['resolution'][1]}, {render_state['camera']}, "
+                            f"center=({render_state['boundsCenterProjection']['pixelX']:.2f},{render_state['boundsCenterProjection']['pixelY']:.2f}), "
+                            f"bounds L={render_state['boundsMargins']['left']:.2f} R={render_state['boundsMargins']['right']:.2f} "
+                            f"T={render_state['boundsMargins']['top']:.2f} B={render_state['boundsMargins']['bottom']:.2f}"
+                            + (
+                                f", alpha L={render_margins['left']:.2f} R={render_margins['right']:.2f} "
+                                f"T={render_margins['top']:.2f} B={render_margins['bottom']:.2f}"
+                                if render_margins else ''
+                            )
+                            + ")"
+                        )
 
             remove_collection(collection.name)
 
@@ -1108,6 +1137,8 @@ def main():
         rendered += 1
         if args.limit > 0 and rendered >= args.limit:
             break
+
+    print(f"render_render_scenes: rendered {rendered} structure(s) to {args.output_dir}")
 
 
 if __name__ == "__main__":

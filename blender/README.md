@@ -7,12 +7,12 @@ For overall setup, prerequisites, configuration, and common FoxWatch workflows, 
 Run the examples below from the repo root so the relative paths resolve correctly.
 
 Current status:
-- FoxWatch now emits scaffold bundle scene manifests with structure identity, canonical category data, placeholder visuals, sprite metadata, render defaults, and a stable scene-graph shape.
-- The Blender importer now treats placeholder width and height as world size at `64 px/m`, so the temporary plane path renders at true scale instead of normalizing everything to an arbitrary size.
-- The render pipeline now supports three orthographic modes:
-  - `topdown`: straight-down, size-accurate output at `64 px/m`
-  - `preview`: 45 degree orthographic view for structure previews
-  - `icon`: tighter 45 degree orthographic framing for icon-style renders
+- FoxWatch emits bundle scene manifests with structure identity, render defaults, and a stable scene-graph shape.
+- The render pipeline supports orthographic modes:
+  - `topdown`: straight-down board texture output as lossy WebP
+  - `preview`: 45 degree orthographic view written as **PNG** lossless master (publish converts to WebP)
+- Blender does **not** run a separate `icon` mode. Publish derives `icon.rendered` from the preview PNG master.
+- When no blueprint default icon exists, Blender may emit `icon.default.png` (pencil fallback) for publish to convert to lossless WebP.
 
 ## Generate render bundles
 
@@ -77,10 +77,10 @@ blender "./tools/foxwatch/blender/render-template.blend" --python "./tools/foxwa
 ```
 
 Useful options:
-- `--mode topdown|preview|icon`
+- `--mode topdown|preview` (default batch modes; `icon` is legacy-only for explicit pencil-default experiments)
 - `--pixels-per-meter 64`
 - `--preview-size 512`
-- `--icon-size 256`
+- `--icon-size 256` (used only when `--mode icon` is explicitly requested)
 - `--purge-existing`
 
 Scene node transforms can also be authored from raw Unreal blueprint values:
@@ -94,25 +94,27 @@ The importer converts those fields using the same `SwapYZ` + `0.01` basis used b
 
 ## Batch render bundles in Blender
 
-This example renders all three orthographic outputs for ten structures:
+This example renders top-down textures and preview masters for ten structures:
 
 ```powershell
 blender "./tools/foxwatch/blender/render-template.blend" --background --python "./tools/foxwatch/blender/render_render_scenes.py" -- \
   --index "./tools/foxwatch/tmp/renders/index.render-scenes.v1.json" \
-  --output-dir "./apps/foxhole-planner/public/foxhole/assets/types" \
+  --output-dir "./tools/foxwatch/tmp/rendered-assets/types" \
   --mode topdown \
   --mode preview \
-  --mode icon \
   --limit 10 \
   --purge-existing
 ```
 
 Output files use these names:
 - `<structureId>.texture.webp` for top-down structure renders
-- `<structureId>.preview.webp` for preview renders
-- `<structureId>.icon.rendered.webp` for rendered icons
+- `<structureId>.preview.png` for lossless preview masters (publish converts to `.preview.webp`)
+- `<structureId>.icon.default.png` when `generateDefaultIcon` applies and no blueprint default exists
+- `modifications/<renderId>/<renderId>.preview.png` for host-specific modification previews
+- `../../shared/modifications/<renderId>/<renderId>.*` for deduped cross-host modification renders
 - `components/<componentId>/<componentId>.texture.webp` for standalone render layers
-- `../../shared/modifications/<sharedRenderKey>/<sharedRenderKey>.*.webp` for shared modification renders
+
+Publish derives `<id>.icon.rendered.webp` from the preview PNG master and applies subtype overlays during that write when the asset has `subTypeIconUrl` or needs the wrecked badge; Blender does not emit `icon.rendered`.
 
 ## Dump animation packages for pose trials
 
@@ -180,6 +182,7 @@ That lets it consume both existing bridge placeholder textures and future FoxWat
 
 - Real mesh scene nodes and mesh assets are not emitted yet.
 - Material asset export is not wired yet.
-- Preview and icon sizing are currently fixed square outputs; once real meshes land, those defaults may need tuning per asset family.
+- Preview masters are fixed 512×512 PNG outputs; publish downscales derived icons to ≤256 px.
+- Icon sizing is no longer a separate Blender mode; publish derives rendered icons from preview PNG masters.
 
 The next FoxWatch-side step is to populate `scene.roots`, `assets.meshes`, and `assets.materials` with real extracted data so Blender can stop using placeholder planes.

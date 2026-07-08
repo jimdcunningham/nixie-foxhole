@@ -739,6 +739,11 @@ public sealed class FoxWatchManifestModificationSlotVariant
     public double? OffsetX { get; set; }
 
     public double? OffsetY { get; set; }
+
+    public string? RenderId { get; set; }
+
+    [Obsolete("Use RenderId. Kept for backward compatibility during migration.")]
+    public string? SharedModificationId { get; set; }
 }
 
 public sealed class FoxWatchManifestItem

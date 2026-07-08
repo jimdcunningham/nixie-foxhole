@@ -159,8 +159,11 @@ public sealed class FoxWatchRenderSceneGenerator
                     Consumers = [.. sceneDocument.Consumers.Select(consumer => new FoxWatchRenderSceneConsumer
                     {
                         StructureId = consumer.StructureId,
+                        SlotName = consumer.SlotName,
+                        DataClassPath = consumer.DataClassPath,
                         VariantId = consumer.VariantId,
                     })],
+                    RenderId = GetDocumentRenderId(sceneDocument),
                     CodeName = sceneDocument.CodeName,
                     Name = sceneDocument.Name,
                     CategoryId = sceneDocument.CategoryId,
@@ -300,7 +303,10 @@ public sealed class FoxWatchRenderSceneGenerator
             });
         }
 
-        var destroyedVehicleScene = await _blueprintSceneExtractor.TryExtractDestroyedVehicleAsync(structure, cancellationToken);
+        var destroyedVehicleScene = structure.IsVehicle == true
+            && !FoxWatchVehicleDestroyedPublishAllowlist.ShouldPublishDestroyedVisuals(structure.Id)
+            ? null
+            : await _blueprintSceneExtractor.TryExtractDestroyedVehicleAsync(structure, cancellationToken);
         if (destroyedVehicleScene?.Roots.Count > 0)
         {
             if (destroyedVehicleScene.Meshes.Count > 0)
@@ -419,12 +425,13 @@ public sealed class FoxWatchRenderSceneGenerator
                 PreviewUrl = structure.PreviewUrl,
                 IconUrl = structure.IconUrl,
                 RelativeScenePath = Path.Combine(structure.Id, "modifications", $"{target.OutputKey}.scene.json"),
-                SharedModificationId = target.SharedModificationId,
+                RenderId = target.RenderId,
+                SharedModificationId = target.RenderId,
                 Document = await CreateDocumentAsync(
                     structure,
                     modificationScene,
                     $"modifications/{target.OutputKey}",
-                    ["topdown", "preview", "icon"],
+                    ["topdown", "preview"],
                     includePoseVariants: false,
                     clipFloorOverride: target.IsUpgrade ? null : false,
                     cancellationToken,
@@ -435,6 +442,8 @@ public sealed class FoxWatchRenderSceneGenerator
                     new FoxWatchRenderSceneConsumer
                     {
                         StructureId = structure.Id,
+                        SlotName = target.SlotName,
+                        DataClassPath = target.DataClassPath,
                         VariantId = target.VariantId,
                     },
                 ],
@@ -515,46 +524,67 @@ public sealed class FoxWatchRenderSceneGenerator
             return nonModificationDocuments;
         }
 
-        var groupedDocuments = modificationDocuments
-            .GroupBy(CreateStandaloneModificationDeduplicationKey, StringComparer.Ordinal)
-            .OrderBy(group => group.Key, StringComparer.Ordinal);
-
-        foreach (var group in groupedDocuments)
+        foreach (var renderIdGroup in modificationDocuments
+            .GroupBy(document => NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(document)), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
         {
-            var orderedGroup = group
+            var documentsInGroup = renderIdGroup
                 .OrderBy(document => document.RelativeScenePath, StringComparer.Ordinal)
                 .ToList();
-            var representative = orderedGroup[0];
-            var sharedOutputKey = CreateSharedStandaloneModificationOutputKey(orderedGroup, group.Key);
-            representative.StructureId = "mods";
-            representative.CodeName = sharedOutputKey;
-            representative.Name = sharedOutputKey;
-            representative.CategoryId = "mods";
-            representative.RelativeScenePath = Path.Combine("mods", $"{sharedOutputKey}.scene.json");
-            representative.Document.Render.OutputKey = $"mods/{sharedOutputKey}";
-            if (orderedGroup.Count > 1)
+            var fingerprints = documentsInGroup
+                .Select(CreateStandaloneModificationSceneFingerprint)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (fingerprints.Count == 1 && documentsInGroup.Count > 1)
             {
-                representative.AllowedStructureIds = orderedGroup
+                var representative = documentsInGroup[0];
+                var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(representative));
+                representative.StructureId = "mods";
+                representative.CodeName = renderId;
+                representative.Name = renderId;
+                representative.CategoryId = "mods";
+                representative.RelativeScenePath = Path.Combine("mods", $"{renderId}.scene.json");
+                representative.Document.Render.OutputKey = $"mods/{renderId}";
+                representative.AllowedStructureIds = documentsInGroup
                     .SelectMany(document => document.AllowedStructureIds)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(value => value, StringComparer.Ordinal)
                     .ToList();
-                representative.Consumers = orderedGroup
+                representative.Consumers = documentsInGroup
                     .SelectMany(document => document.Consumers)
-                    .GroupBy(consumer => $"{consumer.StructureId}|{consumer.VariantId}", StringComparer.OrdinalIgnoreCase)
+                    .GroupBy(consumer => $"{consumer.StructureId}|{consumer.SlotName}|{consumer.DataClassPath}|{consumer.VariantId}", StringComparer.OrdinalIgnoreCase)
                     .Select(grouping => grouping.First())
                     .OrderBy(consumer => consumer.StructureId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(consumer => consumer.SlotName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(consumer => consumer.VariantId, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                representative.PreviewUrl = null;
+                representative.IconUrl = null;
+                nonModificationDocuments.Add(representative);
+                continue;
             }
 
-            representative.PreviewUrl = null;
-            representative.IconUrl = null;
-
-            nonModificationDocuments.Add(representative);
+            foreach (var document in documentsInGroup)
+            {
+                var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(document));
+                document.RelativeScenePath = Path.Combine(document.StructureId, "modifications", $"{renderId}.scene.json");
+                document.Document.Render.OutputKey = $"modifications/{renderId}";
+                nonModificationDocuments.Add(document);
+            }
         }
 
         return nonModificationDocuments;
+    }
+
+    private static string GetDocumentRenderId(FoxWatchGeneratedRenderSceneDocument sceneDocument)
+    {
+        if (!string.IsNullOrWhiteSpace(sceneDocument.RenderId))
+        {
+            return sceneDocument.RenderId.Trim();
+        }
+
+        return sceneDocument.SharedModificationId?.Trim() ?? string.Empty;
     }
 
     private static string CreateStandaloneModificationDeduplicationKey(FoxWatchGeneratedRenderSceneDocument sceneDocument)
@@ -745,6 +775,8 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             if (target.Any(existing =>
                 string.Equals(existing.StructureId, consumer.StructureId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.SlotName, consumer.SlotName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.DataClassPath, consumer.DataClassPath, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(existing.VariantId, consumer.VariantId, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
@@ -753,6 +785,8 @@ public sealed class FoxWatchRenderSceneGenerator
             target.Add(new FoxWatchRenderSceneConsumer
             {
                 StructureId = consumer.StructureId,
+                SlotName = consumer.SlotName,
+                DataClassPath = consumer.DataClassPath,
                 VariantId = consumer.VariantId,
             });
         }
@@ -1671,21 +1705,84 @@ public sealed class FoxWatchRenderSceneGenerator
                     var variantId = entry.Key.Trim();
                     var isUpgrade = IsUpgradeModificationVariant(structure, variantId);
                     var previewDirection = ResolveModificationPreviewDirection(entry.Value, structure);
-                    var sharedModificationId = CreateSharedModificationManifestIdWithDiagnostics(structure, slot.Name.Trim(), variantId, entry.Value, previewDirection);
+                    var renderId = ResolveModificationRenderId(
+                        structure,
+                        slot,
+                        slot.Name.Trim(),
+                        variantId,
+                        entry.Value,
+                        previewDirection);
                     return new StandaloneModificationRenderTarget
                     {
                         VariantId = variantId,
                         SlotName = slot.Name.Trim(),
-                        OutputKey = NormalizeStandaloneModificationKeyComponent(variantId),
+                        DataClassPath = slot.DataClassPath,
+                        OutputKey = NormalizeStandaloneModificationKeyComponent(renderId),
                         IsUpgrade = isUpgrade,
-                        SharedModificationId = sharedModificationId,
+                        RenderId = renderId,
+                        SharedModificationId = renderId,
                         PreviewDirection = previewDirection,
                     };
-                }))
-            .GroupBy(target => target.VariantId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group
-                .OrderBy(target => target.SlotName, StringComparer.OrdinalIgnoreCase)
-                .First())];
+                }))];
+    }
+
+    private string ResolveModificationRenderId(
+        FoxWatchManifestStructure structure,
+        FoxWatchManifestModificationSlot slot,
+        string slotName,
+        string variantId,
+        FoxWatchManifestModificationSlotVariant variant,
+        string previewDirection)
+    {
+        if (!string.IsNullOrWhiteSpace(variant.RenderId))
+        {
+            return variant.RenderId.Trim();
+        }
+
+        return CreateRenderIdWithDiagnostics(structure, slot, slotName, variantId, variant, previewDirection);
+    }
+
+    private string CreateRenderIdWithDiagnostics(
+        FoxWatchManifestStructure structure,
+        FoxWatchManifestModificationSlot slot,
+        string slotName,
+        string variantId,
+        FoxWatchManifestModificationSlotVariant? variant,
+        string previewDirection)
+    {
+        var computation = FoxWatchModificationRenderIdentity.ComputeRenderIdWithDiagnostics(
+            variantId,
+            slot.DataClassPath,
+            variant);
+        _sharedModificationHashDiagnostics.Add(new SharedModificationHashDiagnosticEntry
+        {
+            StructureId = structure.Id,
+            StructureCodeName = structure.CodeName,
+            StructureName = structure.Name?.Fallback,
+            SlotName = slotName,
+            VariantId = variantId,
+            RawPreviewDirection = variant?.PreviewDirection,
+            ResolvedPreviewDirection = previewDirection,
+            GeneratedSharedModificationId = computation.RenderId,
+            GeneratedRenderId = computation.RenderId,
+            NormalizedVariantId = computation.NormalizedVariantId,
+            Identity = computation.Identity,
+            FullHashHex = computation.FullHashHex,
+            TruncatedHashHex = computation.TruncatedHashHex,
+            Inputs = new SharedModificationHashDiagnosticInputs
+            {
+                VariantId = CreateSharedModificationHashDiagnosticInput(variantId),
+                DataClassPath = CreateSharedModificationHashDiagnosticInput(slot.DataClassPath),
+                TemplateActorPath = CreateSharedModificationHashDiagnosticInput(variant?.TemplateActorPath),
+                TemplateMeshPath = CreateSharedModificationHashDiagnosticInput(variant?.TemplateMeshPath),
+                PreviewMeshPath = CreateSharedModificationHashDiagnosticInput(variant?.PreviewMeshPath),
+                Name = CreateSharedModificationHashDiagnosticInput(variant?.Name),
+                Description = CreateSharedModificationHashDiagnosticInput(variant?.Description),
+                PreviewDirection = CreateSharedModificationHashDiagnosticInput(previewDirection),
+            },
+        });
+
+        return computation.RenderId;
     }
 
     private static bool IsUpgradeModificationVariant(FoxWatchManifestStructure structure, string variantId)
@@ -2188,6 +2285,8 @@ public sealed class FoxWatchRenderSceneGenerator
 
         public bool IsStandaloneModification { get; set; }
 
+        public string RenderId { get; set; } = string.Empty;
+
         public string SharedModificationId { get; set; } = string.Empty;
 
         public string RelativeScenePath { get; set; } = string.Empty;
@@ -2236,6 +2335,8 @@ public sealed class FoxWatchRenderSceneGenerator
 
         public string GeneratedSharedModificationId { get; set; } = string.Empty;
 
+        public string GeneratedRenderId { get; set; } = string.Empty;
+
         public string NormalizedVariantId { get; set; } = string.Empty;
 
         public string Identity { get; set; } = string.Empty;
@@ -2250,6 +2351,8 @@ public sealed class FoxWatchRenderSceneGenerator
     private sealed class SharedModificationHashDiagnosticInputs
     {
         public SharedModificationHashDiagnosticInput VariantId { get; set; } = new();
+
+        public SharedModificationHashDiagnosticInput DataClassPath { get; set; } = new();
 
         public SharedModificationHashDiagnosticInput TemplateActorPath { get; set; } = new();
 
@@ -2943,7 +3046,7 @@ public sealed class FoxWatchRenderSceneGenerator
             AttachChildMeshesToBoneForMatchingNodes(roots, DeployableTripodMeshId, DeployableTripodMountedAttachmentBoneName);
             if (appliedCount > 0)
             {
-                _logger.LogInformation("Applied embedded tripod pose for {StructureId}", structure.Id);
+                _logger.LogDebug("Applied embedded tripod pose for {StructureId}", structure.Id);
                 return true;
             }
         }
@@ -2958,7 +3061,7 @@ public sealed class FoxWatchRenderSceneGenerator
             return;
         }
 
-        _logger.LogInformation("Applied default pose override for {StructureId}", structureId);
+        _logger.LogDebug("Applied default pose override for {StructureId}", structureId);
     }
 
     private async Task<List<FoxWatchRenderSceneVariant>?> TryApplyPoseVariantsAsync(
@@ -3043,7 +3146,7 @@ public sealed class FoxWatchRenderSceneGenerator
             return null;
         }
 
-        _logger.LogInformation("Generated {VariantCount} pose variants for {StructureId}", variants.Count, structure.Id);
+        _logger.LogDebug("Generated {VariantCount} pose variants for {StructureId}", variants.Count, structure.Id);
         return variants;
     }
 
@@ -4720,83 +4823,6 @@ public sealed class FoxWatchRenderSceneGenerator
         return GetPreviewDirection(structure, variant?.PreviewDirection);
     }
 
-    private string CreateSharedModificationManifestIdWithDiagnostics(
-        FoxWatchManifestStructure structure,
-        string slotName,
-        string variantId,
-        FoxWatchManifestModificationSlotVariant? variant,
-        string previewDirection)
-    {
-        var computation = ComputeSharedModificationManifestId(variantId, variant, previewDirection);
-        _sharedModificationHashDiagnostics.Add(new SharedModificationHashDiagnosticEntry
-        {
-            StructureId = structure.Id,
-            StructureCodeName = structure.CodeName,
-            StructureName = structure.Name?.Fallback,
-            SlotName = slotName,
-            VariantId = variantId,
-            RawPreviewDirection = variant?.PreviewDirection,
-            ResolvedPreviewDirection = previewDirection,
-            GeneratedSharedModificationId = computation.GeneratedSharedModificationId,
-            NormalizedVariantId = computation.NormalizedVariantId,
-            Identity = computation.Identity,
-            FullHashHex = computation.FullHashHex,
-            TruncatedHashHex = computation.TruncatedHashHex,
-            Inputs = new SharedModificationHashDiagnosticInputs
-            {
-                VariantId = computation.VariantId,
-                TemplateActorPath = computation.TemplateActorPath,
-                TemplateMeshPath = computation.TemplateMeshPath,
-                PreviewMeshPath = computation.PreviewMeshPath,
-                Name = computation.Name,
-                Description = computation.Description,
-                PreviewDirection = computation.PreviewDirection,
-            },
-        });
-
-        return computation.GeneratedSharedModificationId;
-    }
-
-    private static SharedModificationHashComputation ComputeSharedModificationManifestId(
-        string variantId,
-        FoxWatchManifestModificationSlotVariant? variant,
-        string previewDirection)
-    {
-        var variantIdInput = CreateSharedModificationHashDiagnosticInput(variantId);
-        var templateActorPathInput = CreateSharedModificationHashDiagnosticInput(variant?.TemplateActorPath);
-        var templateMeshPathInput = CreateSharedModificationHashDiagnosticInput(variant?.TemplateMeshPath);
-        var previewMeshPathInput = CreateSharedModificationHashDiagnosticInput(variant?.PreviewMeshPath);
-        var nameInput = CreateSharedModificationHashDiagnosticInput(variant?.Name);
-        var descriptionInput = CreateSharedModificationHashDiagnosticInput(variant?.Description);
-        var previewDirectionInput = CreateSharedModificationHashDiagnosticInput(previewDirection);
-        var templatePathInput = CreateSharedModificationHashDiagnosticInput(
-            ResolveTemplatePathForSharedModificationIdentity(variant));
-        var identity = string.Join("|", [
-            variantIdInput.Normalized,
-            templatePathInput.Normalized,
-        ]);
-        var normalizedVariantId = NormalizeStandaloneModificationKeyComponent(variantId);
-        var fullHashHex = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
-        var truncatedHashHex = fullHashHex[..12];
-        return new SharedModificationHashComputation
-        {
-            VariantId = variantIdInput,
-            TemplateActorPath = templateActorPathInput,
-            TemplateMeshPath = templateMeshPathInput,
-            PreviewMeshPath = previewMeshPathInput,
-            Name = nameInput,
-            Description = descriptionInput,
-            PreviewDirection = previewDirectionInput,
-            Identity = identity,
-            FullHashHex = fullHashHex,
-            TruncatedHashHex = truncatedHashHex,
-            NormalizedVariantId = normalizedVariantId,
-            GeneratedSharedModificationId = string.IsNullOrWhiteSpace(normalizedVariantId)
-                ? truncatedHashHex
-                : $"{normalizedVariantId}-{truncatedHashHex}",
-        };
-    }
-
     private static SharedModificationHashDiagnosticInput CreateSharedModificationHashDiagnosticInput(string? value)
     {
         return new SharedModificationHashDiagnosticInput
@@ -4913,9 +4939,13 @@ public sealed class FoxWatchRenderSceneGenerator
 
         public string SlotName { get; set; } = string.Empty;
 
+        public string? DataClassPath { get; set; }
+
         public string OutputKey { get; set; } = string.Empty;
 
         public bool IsUpgrade { get; set; }
+
+        public string RenderId { get; set; } = string.Empty;
 
         public string SharedModificationId { get; set; } = string.Empty;
 

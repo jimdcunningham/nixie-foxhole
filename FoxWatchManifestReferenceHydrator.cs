@@ -16,6 +16,7 @@ public sealed class FoxWatchManifestReferenceHydrator
         "descriptionLocalizedValues",
         "categoryNameLocalizedValues",
         "modifications",
+        "publishDestroyedVisuals",
     };
     private static readonly IReadOnlyDictionary<string, DestroyedStructureNameFormat> DestroyedStructureNameFormats = new Dictionary<string, DestroyedStructureNameFormat>(StringComparer.OrdinalIgnoreCase)
     {
@@ -1604,7 +1605,13 @@ public sealed class FoxWatchManifestReferenceHydrator
             {
                 foreach (var (variantId, variant) in slot.Variants)
                 {
-                    if (!TryResolveModificationVariantOverride(overridesByVariantId, variantId, variant, out var variantOverride))
+                    if (!TryResolveModificationVariantOverride(
+                        overridesByVariantId,
+                        structure.Id,
+                        slot.Name,
+                        variantId,
+                        variant,
+                        out var variantOverride))
                     {
                         continue;
                     }
@@ -1640,29 +1647,64 @@ public sealed class FoxWatchManifestReferenceHydrator
 
     private static bool TryResolveModificationVariantOverride(
         IReadOnlyDictionary<string, JsonElement> overridesByVariantId,
+        string structureId,
+        string slotName,
         string variantId,
         FoxWatchManifestModificationSlotVariant variant,
         out JsonElement variantOverride)
     {
-        if (TryGetModificationVariantOverride(overridesByVariantId, variantId, out variantOverride))
+        foreach (var lookupKey in EnumerateModificationVariantOverrideLookupKeys(structureId, slotName, variantId, variant))
         {
-            return true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(variant.CodeName) &&
-            TryGetModificationVariantOverride(overridesByVariantId, variant.CodeName, out variantOverride))
-        {
-            return true;
-        }
-
-        var computedSharedModificationId = FoxWatchSharedModificationIdentity.ComputeManifestId(variantId, variant);
-        if (TryGetModificationVariantOverride(overridesByVariantId, computedSharedModificationId, out variantOverride))
-        {
-            return true;
+            if (TryGetModificationVariantOverride(overridesByVariantId, lookupKey, out variantOverride))
+            {
+                return true;
+            }
         }
 
         variantOverride = default;
         return false;
+    }
+
+    private static IEnumerable<string> EnumerateModificationVariantOverrideLookupKeys(
+        string structureId,
+        string slotName,
+        string variantId,
+        FoxWatchManifestModificationSlotVariant variant)
+    {
+        var normalizedStructureId = NormalizeModificationVariantLookupKey(structureId);
+        var normalizedSlotName = NormalizeModificationVariantLookupKey(slotName);
+        var normalizedVariantId = NormalizeModificationVariantLookupKey(variantId);
+        if (!string.IsNullOrWhiteSpace(normalizedStructureId)
+            && !string.IsNullOrWhiteSpace(normalizedSlotName)
+            && !string.IsNullOrWhiteSpace(normalizedVariantId))
+        {
+            yield return $"{normalizedStructureId}/{normalizedSlotName}/{normalizedVariantId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedStructureId) && !string.IsNullOrWhiteSpace(normalizedVariantId))
+        {
+            yield return $"{normalizedStructureId}/{normalizedVariantId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant.RenderId))
+        {
+            yield return NormalizeModificationVariantLookupKey(variant.RenderId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant.SharedModificationId))
+        {
+            yield return NormalizeModificationVariantLookupKey(variant.SharedModificationId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedVariantId))
+        {
+            yield return normalizedVariantId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(variant.CodeName))
+        {
+            yield return NormalizeModificationVariantLookupKey(variant.CodeName);
+        }
     }
 
     private bool ApplyModificationVariantOverrideProperties(

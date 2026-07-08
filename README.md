@@ -14,8 +14,10 @@ The published assets directory is a separate private git repository. The nixie m
 
 Common paths:
 - `tools/foxwatch/tmp/foxwatch-manifest.v1.json`: raw generated source manifest
+- `tools/foxwatch/tmp/modification-render-index.v1.json`: canonical modification `renderId` index
 - `tools/foxwatch/tmp/renders/`: generated Blender render scene bundles
-- `tools/foxwatch/tmp/assets/`: extracted mesh and material outputs used during rendering
+- `tools/foxwatch/tmp/assets/`: extracted mesh and material packages used during rendering
+- `tools/foxwatch/tmp/rendered-assets/`: Blender image outputs (`types/`, `shared/`) before publish
 - `apps/foxhole-planner/public/foxhole/assets/manifest.v1.json`: published planner manifest
 - `apps/foxhole-planner/public/foxhole/assets/planner-compat.json`: CI metadata tying assets to planner version and schema versions
 
@@ -245,6 +247,35 @@ npm run foxwatch -- publish-manifest -- --only trencht1
 npm run foxwatch -- publish-manifest -- --allow-partial-source
 ```
 
+### Publish performance
+
+The slowest publish step is usually copying/converting Blender output (`tmp/rendered-assets` → `public/foxhole/assets`), especially preview PNG → WebP and derived `icon.rendered` generation.
+
+Defaults now:
+
+- Process raw asset sync in parallel (`--publish-concurrency`, default ≈ CPU count, capped at 16)
+- Index published render URLs in parallel (same concurrency), including batched image visibility checks
+- Emit summary lines instead of logging every file (pass `--verbose` for the old per-file output)
+
+Other useful flags:
+
+```powershell
+# Re-publish manifest only after a code/doc change; skip image work when outputs already exist
+npm run foxwatch -- publish-manifest -- --skip-existing-assets
+
+# Scoped refresh/publish is much faster than --deep when only a few assets changed
+npm run foxwatch -- refresh -- --only trencht1
+
+# More/less parallelism during publish (refresh forwards these flags)
+npm run foxwatch -- refresh --deep -- --publish-concurrency 12
+```
+
+`--skip-existing-assets` is a big win when Blender output is unchanged and you only need manifest URL rewiring.
+
+By default, publish logs only section summaries plus warnings/errors. Pass `--verbose` for per-file success logs.
+
+Vehicle destroyed visuals are deny-by-default. Allowlist IDs in `tools/foxwatch/asset-overrides/vehicle-destroyed-whitelist.json`, or set `"publishDestroyedVisuals": true` in a structure's `asset-overrides/<codename>/manifest.json`.
+
 ## Useful lower-level commands
 
 These pass straight through to the FoxWatch .NET CLI:
@@ -301,5 +332,6 @@ You do not need Blender for `generate-manifest`, `generate-map-data`, `find-asse
 
 ## Related docs
 
+- `tools/foxwatch/ASSET-OUTPUT.md` for the authoritative published file layout, image roles, formats, and manifest URL rules
 - `tools/foxwatch/blender/README.md` for Blender scene import and render bundle details
 - `apps/foxhole-planner/public/foxhole/assets/README.md` for the private assets repo release model

@@ -1,0 +1,23 @@
+[
+  {
+    "variantId": "bunkbed",
+    "dataClassPath": "War/Content/Blueprints/Structures/FortModData",
+    "variant": {
+      "templateActorPath": "War/Content/Blueprints/Props/BunkBed/BP_BunkBed"
+    }
+  },
+  {
+    "variantId": "stairs",
+    "dataClassPath": "",
+    "variant": {
+      "templateMeshPath": "War/Content/Meshes/Structures/Stairs/SM_Stairs"
+    }
+  },
+  {
+    "variantId": "pipe",
+    "dataClassPath": "War/Content/Blueprints/Structures/PipeModData",
+    "variant": {
+      "previewMeshPath": "War/Content/Meshes/Props/Pipe/SM_Pipe"
+    }
+  }
+]

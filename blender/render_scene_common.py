@@ -554,24 +554,35 @@ def configure_sun(mode: Optional[str] = None, preview_direction: Optional[str] =
     return sun_object
 
 
-def configure_scene_render(resolution_x: int, resolution_y: int, transparent_background: bool) -> None:
+def configure_scene_render(
+    resolution_x: int,
+    resolution_y: int,
+    transparent_background: bool,
+    file_format: str = "WEBP",
+) -> None:
     global _LAST_RENDER_CONFIGURATION
 
     scene = bpy.context.scene
-    configuration = (max(1, int(resolution_x)), max(1, int(resolution_y)), transparent_background)
+    normalized_file_format = str(file_format or "WEBP").strip().upper() or "WEBP"
+    configuration = (max(1, int(resolution_x)), max(1, int(resolution_y)), transparent_background, normalized_file_format)
     if _LAST_RENDER_CONFIGURATION == configuration:
         return
 
     scene.render.resolution_x = configuration[0]
     scene.render.resolution_y = configuration[1]
     scene.render.film_transparent = transparent_background
-    scene.render.image_settings.file_format = "WEBP"
+    scene.render.image_settings.file_format = normalized_file_format
     scene.render.image_settings.color_mode = "RGBA"
-    scene.render.image_settings.quality = 90
-    if hasattr(scene.render.image_settings, "use_webp_lossless"):
-        scene.render.image_settings.use_webp_lossless = False
-    elif hasattr(scene.render.image_settings, "use_lossless"):
-        scene.render.image_settings.use_lossless = False
+    if normalized_file_format == "PNG":
+        scene.render.image_settings.quality = 100
+        if hasattr(scene.render.image_settings, "compression"):
+            scene.render.image_settings.compression = 15
+    else:
+        scene.render.image_settings.quality = 90
+        if hasattr(scene.render.image_settings, "use_webp_lossless"):
+            scene.render.image_settings.use_webp_lossless = False
+        elif hasattr(scene.render.image_settings, "use_lossless"):
+            scene.render.image_settings.use_lossless = False
     try:
         scene.render.engine = "BLENDER_EEVEE_NEXT"
     except TypeError:
@@ -1944,7 +1955,7 @@ def apply_render_mode(
         # to the evaluated structure bounds and emit the true origin anchor separately.
         padding = 0.0
         resolution_x, resolution_y = topdown_resolution_from_bounds(min_corner, max_corner, padding, pixels_per_meter)
-        configure_scene_render(resolution_x, resolution_y, transparent_background)
+        configure_scene_render(resolution_x, resolution_y, transparent_background, file_format="WEBP")
         camera_position = Vector((center.x, center.y, max_corner.z + max(max_dimension * 2.0, 8.0)))
         camera_object = configure_topdown_camera_object(TOPDOWN_CAMERA_NAME, camera_position)
         fit_topdown_camera_to_bounds(camera_object, min_corner, max_corner, resolution_x, resolution_y, padding)
@@ -1954,7 +1965,7 @@ def apply_render_mode(
         resolution_x = preview_size
         resolution_y = preview_size
         padding = max(max_dimension * 0.03, 0.12)
-        configure_scene_render(resolution_x, resolution_y, transparent_background)
+        configure_scene_render(resolution_x, resolution_y, transparent_background, file_format="PNG")
         camera_position, target = angled_camera_pose(scene_document, mode, center, min_corner, span, max_dimension, resolved_preview_variant)
         camera_object = configure_camera_object(PREVIEW_CAMERA_NAME, camera_position, target)
         fit_ortho_camera_to_bounds(camera_object, min_corner, max_corner, resolution_x, resolution_y, padding)
@@ -1964,7 +1975,7 @@ def apply_render_mode(
         resolution_x = icon_size
         resolution_y = icon_size
         padding = max(max_dimension * 0.03, 0.12)
-        configure_scene_render(resolution_x, resolution_y, transparent_background)
+        configure_scene_render(resolution_x, resolution_y, transparent_background, file_format="PNG")
         camera_position, target = angled_camera_pose(scene_document, mode, center, min_corner, span, max_dimension, resolved_preview_variant)
         camera_object = configure_camera_object(ICON_CAMERA_NAME, camera_position, target)
         fit_ortho_camera_to_bounds(camera_object, min_corner, max_corner, resolution_x, resolution_y, padding)

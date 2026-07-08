@@ -1,0 +1,24 @@
+{
+  "structureIds": [
+    "ambulancec",
+    "ambulancew",
+    "barge",
+    "battletankc",
+    "bicycle",
+    "busc",
+    "busw",
+    "fieldmgc",
+    "fieldmgw",
+    "freighter",
+    "gunboat2w",
+    "landingshipc",
+    "landingshipw",
+    "mediumboatc",
+    "mediumboatw",
+    "relicapc",
+    "relicscoutvehicle",
+    "relictruck",
+    "truckliquidc",
+    "truckliquidw"
+  ]
+}

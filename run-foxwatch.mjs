@@ -6,6 +6,8 @@ import path from 'node:path';
 import process from 'node:process';
 import sharp from 'sharp';
 
+import { configurePublishLogging, logPublishDetail } from './scripts/publish-log.mjs';
+
 const [, , command, ...commandArgs] = process.argv;
 const rawArgs = commandArgs.filter(arg => arg !== '--');
 
@@ -45,7 +47,12 @@ appendNpmConfigArgument(args, 'pak-path');
 appendNpmConfigArgument(args, 'base-assets-url');
 appendNpmConfigArgument(args, 'limit');
 appendNpmConfigArgument(args, 'skip-existing-assets');
+appendNpmConfigArgument(args, 'verbose');
+appendNpmConfigArgument(args, 'publish-concurrency');
 appendNpmConfigArgument(args, 'mod');
+
+const parsedFoxwatchArgs = parseCliArgs(args);
+configurePublishLogging({ verbose: hasCliFlag(parsedFoxwatchArgs, 'verbose') });
 
 if (command === 'publish-manifest') {
     const parsedArgs = parseCliArgs(args);
@@ -280,7 +287,7 @@ async function writeIconFileIfExists(sourcePath, targetPath, actionLabel = 'sync
         : await sharp(sourceBuffer).webp({ lossless: true, effort: 6 }).toBuffer();
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, content);
-    console.log(`${actionLabel} ${path.relative(repoRoot, sourcePath)} -> ${path.relative(repoRoot, targetPath)}`);
+    logPublishDetail(`${actionLabel} ${path.relative(repoRoot, sourcePath)} -> ${path.relative(repoRoot, targetPath)}`);
     return true;
 }
 
@@ -614,6 +621,10 @@ async function buildFoxWatchArgsFromParsedArgs(parsedArgs, options = {}) {
     outputArgs.push('--output-dir', renderSceneOutputDir);
     outputArgs.push('--render-asset-output-dir', renderAssetOutputDir);
 
+    if (hasCliFlag(parsedArgs, 'verbose')) {
+        outputArgs.push('--verbose');
+    }
+
     for (const optionName of ['pak-path', 'base-assets-url', 'limit']) {
         const values = parsedArgs[optionName] ?? [];
         if (values.length > 0) {
@@ -669,6 +680,10 @@ function buildBlenderArgs(rawArgs, options = {}) {
         flagOptions.add('purge-existing');
     }
 
+    if (hasCliFlag(parsedArgs, 'verbose')) {
+        flagOptions.add('verbose');
+    }
+
     for (const optionName of flagOptions) {
         outputArgs.push(`--${optionName}`);
     }
@@ -688,8 +703,28 @@ async function buildPublishArgsFromParsedArgs(parsedArgs, options = {}) {
 
     appendRepeatedArgs(outputArgs, 'only', onlyIds);
     appendRepeatedArgs(outputArgs, 'category', categoryIds);
+    appendPublishCliPassthroughArgs(outputArgs, parsedArgs);
 
     return outputArgs;
+}
+
+function appendPublishCliPassthroughArgs(outputArgs, parsedArgs) {
+    if (hasCliFlag(parsedArgs, 'skip-existing-assets')) {
+        outputArgs.push('--skip-existing-assets');
+    }
+
+    if (hasCliFlag(parsedArgs, 'verbose')) {
+        outputArgs.push('--verbose');
+    }
+
+    if (hasCliFlag(parsedArgs, 'allow-partial-source')) {
+        outputArgs.push('--allow-partial-source');
+    }
+
+    const publishConcurrency = (parsedArgs['publish-concurrency'] ?? []).at(-1);
+    if (publishConcurrency) {
+        outputArgs.push('--publish-concurrency', publishConcurrency);
+    }
 }
 
 async function buildRefreshExecution(rawArgs) {

@@ -8,6 +8,26 @@ using Microsoft.Extensions.Options;
 
 public static class FoxWatchCliSupport
 {
+    private static readonly string[] QuietDetailLogCategories =
+    [
+        "FoxWatchService.FoxWatchAssetMeshExporter",
+        "FoxWatchService.FoxWatchRenderBlueprintSceneExtractor",
+    ];
+
+    public static void ApplyStandardLoggingFilters(ILoggingBuilder builder, bool verbose)
+    {
+        if (verbose)
+        {
+            builder.AddFilter("FoxWatchService.FoxWatchRenderSceneGenerator", LogLevel.Debug);
+            return;
+        }
+
+        foreach (var category in QuietDetailLogCategories)
+        {
+            builder.AddFilter(category, LogLevel.Warning);
+        }
+    }
+
     public static IConfiguration BuildConfiguration()
     {
         return new ConfigurationBuilder()

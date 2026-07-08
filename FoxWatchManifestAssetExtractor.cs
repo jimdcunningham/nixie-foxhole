@@ -261,7 +261,7 @@ public class FoxWatchManifestAssetExtractor
 
             var localizationBundles = BuildLocalizationBundles(englishStrings, localizationReferencesById);
 
-            return new FoxWatchManifest
+            var manifest = new FoxWatchManifest
             {
                 Source = new FoxWatchManifestSource
                 {
@@ -272,6 +272,8 @@ public class FoxWatchManifestAssetExtractor
                 Items = [],
                 Localizations = localizationBundles,
             };
+            FoxWatchModificationRenderIdentity.AssignRenderIds(manifest);
+            return manifest;
         }
 
         private IEnumerable<string> EnumerateCandidateBlueprintPackagePaths(FoxWatchTargetFilter? targetFilter)
@@ -2344,6 +2346,8 @@ public class FoxWatchManifestAssetExtractor
                 AnchorY = variant.AnchorY,
                 OffsetX = variant.OffsetX,
                 OffsetY = variant.OffsetY,
+                RenderId = variant.RenderId,
+                SharedModificationId = variant.SharedModificationId,
             };
         }
 

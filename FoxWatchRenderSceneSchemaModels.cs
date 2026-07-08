@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace FoxWatchService;
 
 public sealed class FoxWatchRenderSceneDocument
@@ -208,6 +211,16 @@ public sealed class FoxWatchRenderSceneIndexEntry
 
     public List<FoxWatchRenderSceneConsumer> Consumers { get; set; } = [];
 
+    public string? RenderId { get; set; }
+
+    [JsonIgnore]
+    [Obsolete("Use RenderId.")]
+    public string? SharedModificationId
+    {
+        get => RenderId;
+        set => RenderId = value;
+    }
+
     public string CodeName { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
@@ -224,6 +237,10 @@ public sealed class FoxWatchRenderSceneIndexEntry
 public sealed class FoxWatchRenderSceneConsumer
 {
     public string StructureId { get; set; } = string.Empty;
+
+    public string? SlotName { get; set; }
+
+    public string? DataClassPath { get; set; }
 
     public string VariantId { get; set; } = string.Empty;
 }

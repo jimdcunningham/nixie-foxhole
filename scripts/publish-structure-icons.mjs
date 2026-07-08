@@ -4,6 +4,7 @@ import sharp from 'sharp';
 
 import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
+import { logPublishDetail, logPublishSummary } from './publish-log.mjs';
 
 export const DEFAULT_WRECKED_SUBTYPE_ICON_URL = '/foxhole/assets/icons/subtypewreckedicon.webp';
 export const MAX_PUBLISHED_ICON_DIMENSION = 256;
@@ -277,28 +278,40 @@ export async function collectStructureIdsWithDestroyedRenderScenesFromDirectory(
 }
 
 export function stripUntrustworthyVehicleDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes) {
-    if (!structuresWithDestroyedRenderScenes) {
-        return manifest;
-    }
+    return sanitizeVehicleDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes, null);
+}
 
-    let strippedCount = 0;
+export function sanitizeVehicleDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes, allowlistedVehicleDestroyedIds = null) {
+    let strippedNotAllowlisted = 0;
+    let strippedUntrustworthy = 0;
     const assets = (manifest?.assets ?? []).map(structure => {
-        if (!structure?.destroyed || structure?.isVehicle !== true) {
+        if (!structure?.destroyed) {
             return structure;
         }
 
         const structureId = normalizeId(structure?.id);
-        if (!structureId || structuresWithDestroyedRenderScenes.has(structureId)) {
-            return structure;
+        if (structure?.isVehicle === true) {
+            if (allowlistedVehicleDestroyedIds && !allowlistedVehicleDestroyedIds.has(structureId)) {
+                strippedNotAllowlisted += 1;
+                const { destroyed, ...structureWithoutDestroyed } = structure;
+                return structureWithoutDestroyed;
+            }
+
+            if (!structuresWithDestroyedRenderScenes?.has(structureId)) {
+                strippedUntrustworthy += 1;
+                const { destroyed, ...structureWithoutDestroyed } = structure;
+                return structureWithoutDestroyed;
+            }
         }
 
-        strippedCount += 1;
-        const { destroyed, ...structureWithoutDestroyed } = structure;
-        return structureWithoutDestroyed;
+        return structure;
     });
 
-    if (strippedCount > 0) {
-        console.log(`stripped untrustworthy vehicle destroyed visuals from ${strippedCount} manifest entries (no destroyed.scene.json)`);
+    if (strippedNotAllowlisted > 0 || strippedUntrustworthy > 0) {
+        logPublishSummary(
+            `publish-manifest: stripped vehicle destroyed visuals`
+            + ` (${strippedNotAllowlisted} not allowlisted, ${strippedUntrustworthy} missing destroyed.scene.json)`,
+        );
     }
 
     return {
@@ -828,7 +841,7 @@ export async function publishStructureIconAsset({
             skipExisting: skipExistingAssets,
         });
         if (result.wrote && result.composed) {
-            console.log(`published icon-fallback ${result.sourceFilePath} -> ${outputPath} (with subtype)`);
+            logPublishDetail(`published icon-fallback ${result.sourceFilePath} -> ${outputPath} (with subtype)`);
         }
         return result.wrote || await pathExists(outputPath)
             ? toPublicAssetUrl(outputPath)
@@ -857,7 +870,7 @@ export async function publishStructureIconAsset({
     });
 
     if (result.wrote) {
-        console.log(`published icon ${result.sourceFilePath} -> ${outputPath}${result.composed ? ' (with subtype)' : ''}`);
+        logPublishDetail(`published icon ${result.sourceFilePath} -> ${outputPath}${result.composed ? ' (with subtype)' : ''}`);
     }
 
     return result.wrote || await pathExists(outputPath)
@@ -1029,6 +1042,8 @@ export async function publishStructureIconsForManifest({
                 : {}),
         });
     }
+
+    logPublishSummary(`publish-manifest: co-located icons for ${nextAssets.length} manifest assets`);
 
     return {
         ...manifest,
