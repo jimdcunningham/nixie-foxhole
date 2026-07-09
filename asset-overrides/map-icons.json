@@ -153,16 +153,6 @@
       "category": "bases",
       "key": "townbase1"
     },
-    "59": {
-      "textureName": "MapIconStormcannon",
-      "name": "Storm Cannon",
-      "key": "lrartillery"
-    },
-    "60": {
-      "textureName": "MapIconIntelcenter",
-      "name": "Intel Center",
-      "key": "intelcenter"
-    },
     "61": {
       "textureName": "MapIconCoal",
       "name": "Coal Field",
@@ -195,11 +185,6 @@
       "name": "Offshore Platform",
       "category": "resources",
       "key": "facilitymineoilrig"
-    },
-    "83": {
-      "textureName": "MapIconWeatherStation",
-      "name": "Weather Station",
-      "key": "weatherstation"
     },
     "84": {
       "textureName": "MapIconMortarHouse",
