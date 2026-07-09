@@ -27,6 +27,8 @@ import {
 import { configurePublishLogging, isPublishVerbose, logPublishDetail, logPublishSummary, logPublishWarn } from './publish-log.mjs';
 import { getDefaultPublishConcurrency, mapWithConcurrency } from './publish-concurrency.mjs';
 import {
+    augmentTargetedOnlyPublishedStructures,
+    getExplicitlyRemovedStructureIdsForTargetedPublish,
     loadAuthoredStructurePreviewDirections,
     preserveAuthoredStructurePreviewDirections,
     shouldPublishVehicleDestroyedVisual,
@@ -2784,19 +2786,6 @@ function preserveAuthoredSharedModificationPreviewDirections(publishedManifest, 
             },
         }
         : publishedManifest;
-}
-
-function getExplicitlyRemovedStructureIds(filter, partialManifest) {
-    if (filter.only.size === 0) {
-        return new Set();
-    }
-
-    const presentIds = new Set((partialManifest?.assets ?? [])
-        .flatMap(structure => [structure?.id, structure?.codeName])
-        .map(normalizeId)
-        .filter(Boolean));
-
-    return new Set([...filter.only].filter(id => !presentIds.has(id)));
 }
 
 function normalizeStructureReferenceCodeName(value) {
@@ -7002,9 +6991,13 @@ try {
         targetFilter,
     ), sourceManifest.__sourceStructureMetadataById);
     const manifestForPublish = attachSourceStructureMetadata(
-        hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
-            ? augmentPartialManifestWithPublishedContext(filteredSourceManifest, publishedManifestBeforeWrite)
-            : filteredSourceManifest,
+        augmentTargetedOnlyPublishedStructures(
+            hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
+                ? augmentPartialManifestWithPublishedContext(filteredSourceManifest, publishedManifestBeforeWrite)
+                : filteredSourceManifest,
+            publishedManifestBeforeWrite,
+            targetFilter,
+        ),
         sourceManifest.__sourceStructureMetadataById,
     );
     const renderScenesIndexDocument = await loadRenderScenesIndexDocument();
@@ -7024,7 +7017,7 @@ try {
         modificationRenderIndexDocument,
     );
     publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestWithSeededSharedModificationIds);
-    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIds(targetFilter, manifestWithSeededSharedModificationIds);
+    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIdsForTargetedPublish();
     const referencedGeneratedIconKeys = hasTargetFilters(targetFilter)
         ? collectReferencedPublishedIconKeys(manifestWithSeededSharedModificationIds)
         : null;

@@ -105,3 +105,43 @@ export function shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedP
 
     return isVehicleDestroyedPublishAllowlisted(structureId, vehicleDestroyedPublishAllowlist);
 }
+
+export function augmentTargetedOnlyPublishedStructures(filteredManifest, publishedManifest, filter) {
+    if (!filter?.only?.size || !publishedManifest) {
+        return filteredManifest;
+    }
+
+    const filteredIds = new Set((filteredManifest?.assets ?? [])
+        .map(structure => normalizeId(structure?.id))
+        .filter(Boolean));
+    const publishedById = new Map((publishedManifest?.assets ?? [])
+        .map(structure => {
+            const structureId = normalizeId(structure?.id);
+            return structureId ? [structureId, structure] : null;
+        })
+        .filter(Boolean));
+
+    const augmentedAssets = [...(filteredManifest?.assets ?? [])];
+    for (const onlyId of filter.only) {
+        if (filteredIds.has(onlyId)) {
+            continue;
+        }
+
+        const publishedStructure = publishedById.get(onlyId);
+        if (!publishedStructure) {
+            continue;
+        }
+
+        augmentedAssets.push(publishedStructure);
+        filteredIds.add(onlyId);
+    }
+
+    return {
+        ...filteredManifest,
+        assets: augmentedAssets,
+    };
+}
+
+export function getExplicitlyRemovedStructureIdsForTargetedPublish() {
+    return new Set();
+}
