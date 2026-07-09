@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
 import { logPublishDetail, logPublishSummary } from './publish-log.mjs';
+import { getDefaultPublishConcurrency, mapWithConcurrency } from './publish-concurrency.mjs';
 
 export const DEFAULT_WRECKED_SUBTYPE_ICON_URL = '/foxhole/assets/icons/subtypewreckedicon.webp';
 export const MAX_PUBLISHED_ICON_DIMENSION = 256;
@@ -907,7 +908,7 @@ export async function publishStructureIconsForAsset({
         ? [...LIVING_ICON_KINDS, ...DESTROYED_ICON_KINDS]
         : [...LIVING_ICON_KINDS];
 
-    for (const assetKind of assetKinds) {
+    const publishedEntries = await Promise.all(assetKinds.map(async assetKind => {
         const publishedUrl = await publishStructureIconAsset({
             structureId,
             assetKind,
@@ -922,12 +923,119 @@ export async function publishStructureIconsForAsset({
             skipExistingAssets,
             defaultWreckedSubtypeUrl,
         });
-        if (publishedUrl) {
-            publishedUrls[assetKind] = publishedUrl;
+
+        return publishedUrl ? [assetKind, publishedUrl] : null;
+    }));
+
+    for (const entry of publishedEntries) {
+        if (entry) {
+            publishedUrls[entry[0]] = entry[1];
         }
     }
 
     return publishedUrls;
+}
+
+async function publishStructureManifestAsset({
+    structure,
+    sourceStructure,
+    getOutputDirectory,
+    toPublicAssetUrl,
+    rawRenderedAssetTypesDirectory,
+    generatedIconsDirectory,
+    publicAssetsDirectory,
+    resolveAssetTypeName,
+    skipExistingAssets,
+    defaultWreckedSubtypeUrl,
+    structuresWithDestroyedRenderScenes,
+}) {
+    const structureId = normalizeId(structure?.id);
+    const outputDirectory = structureId ? getOutputDirectory(structureId) : null;
+    if (!structureId || !outputDirectory) {
+        return structure;
+    }
+
+    const publishedUrls = await publishStructureIconsForAsset({
+        structure,
+        sourceStructure,
+        outputDirectory,
+        toPublicAssetUrl,
+        rawRenderedAssetTypesDirectory,
+        generatedIconsDirectory,
+        publicAssetsDirectory,
+        resolveAssetTypeName,
+        skipExistingAssets,
+        defaultWreckedSubtypeUrl,
+        structuresWithDestroyedRenderScenes,
+    });
+    const includeDestroyedKinds = await structureHasPublishableNestedDestroyed(
+        structure,
+        rawRenderedAssetTypesDirectory,
+        resolveAssetTypeName,
+        structuresWithDestroyedRenderScenes,
+    );
+
+    const { iconUrl: _legacyIconUrl, previewIconUrl: _legacyPreviewIconUrl, ...structureWithoutLegacyIcons } = structure;
+    const nextIcons = {
+        ...(structure?.icons ?? {}),
+        ...(publishedUrls['icon.default'] ? { default: publishedUrls['icon.default'] } : {}),
+        ...(publishedUrls['icon.rendered'] ? { rendered: publishedUrls['icon.rendered'] } : {}),
+    };
+    return {
+        ...structureWithoutLegacyIcons,
+        ...(Object.keys(nextIcons).length > 0 ? { icons: nextIcons } : {}),
+        ...(publishedUrls.preview ? { previewUrl: publishedUrls.preview } : {}),
+        ...(publishedUrls.texture && structure?.variants?.default
+            ? {
+                variants: {
+                    ...structure.variants,
+                    default: {
+                        ...structure.variants.default,
+                        textureUrl: publishedUrls.texture,
+                    },
+                },
+            }
+            : {}),
+        ...(includeDestroyedKinds && (publishedUrls['destroyed.icon.default']
+            || publishedUrls['destroyed.icon.rendered']
+            || publishedUrls['destroyed.preview']
+            || publishedUrls['destroyed.texture'])
+            ? {
+                destroyed: {
+                    ...structure.destroyed,
+                    ...(publishedUrls['destroyed.icon.default'] || publishedUrls['destroyed.icon.rendered']
+                        ? {
+                            icons: {
+                                ...(structure.destroyed?.icons ?? {}),
+                                ...(publishedUrls['destroyed.icon.default']
+                                    ? { default: publishedUrls['destroyed.icon.default'] }
+                                    : {}),
+                                ...(publishedUrls['destroyed.icon.rendered']
+                                    ? { rendered: publishedUrls['destroyed.icon.rendered'] }
+                                    : {}),
+                            },
+                        }
+                        : {}),
+                    ...(publishedUrls['destroyed.icon.default']
+                        ? { iconUrl: publishedUrls['destroyed.icon.default'] }
+                        : {}),
+                    ...(publishedUrls['destroyed.icon.rendered']
+                        ? { previewIconUrl: publishedUrls['destroyed.icon.rendered'] }
+                        : {}),
+                    ...(publishedUrls['destroyed.preview'] ? { previewUrl: publishedUrls['destroyed.preview'] } : {}),
+                    ...(publishedUrls['destroyed.texture']
+                        ? {
+                            sprite: {
+                                ...(structure.destroyed?.sprite ?? {}),
+                                source: publishedUrls['destroyed.texture'],
+                            },
+                            textureUrl: publishedUrls['destroyed.texture'],
+                        }
+                        : {}),
+                },
+            }
+            : {}),
+    };
 }
 
 export async function publishStructureIconsForManifest({
@@ -942,6 +1050,7 @@ export async function publishStructureIconsForManifest({
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
     structuresWithDestroyedRenderScenes = null,
+    publishConcurrency = getDefaultPublishConcurrency(),
 }) {
     const sourceStructuresById = new Map((sourceManifest?.assets ?? [])
         .map(entry => {
@@ -950,20 +1059,17 @@ export async function publishStructureIconsForManifest({
         })
         .filter(Boolean));
 
-    const nextAssets = [];
-    for (const structure of manifest?.assets ?? []) {
-        const structureId = normalizeId(structure?.id);
-        const sourceStructure = structureId ? sourceStructuresById.get(structureId) ?? null : null;
-        const outputDirectory = getOutputDirectory(structureId);
-        if (!structureId || !outputDirectory) {
-            nextAssets.push(structure);
-            continue;
-        }
-
-        const publishedUrls = await publishStructureIconsForAsset({
+    const assets = manifest?.assets ?? [];
+    const startedAt = Date.now();
+    const nextAssets = await mapWithConcurrency(
+        assets,
+        publishConcurrency,
+        structure => publishStructureManifestAsset({
             structure,
-            sourceStructure,
-            outputDirectory,
+            sourceStructure: normalizeId(structure?.id)
+                ? sourceStructuresById.get(normalizeId(structure.id)) ?? null
+                : null,
+            getOutputDirectory,
             toPublicAssetUrl,
             rawRenderedAssetTypesDirectory,
             generatedIconsDirectory,
@@ -972,78 +1078,14 @@ export async function publishStructureIconsForManifest({
             skipExistingAssets,
             defaultWreckedSubtypeUrl,
             structuresWithDestroyedRenderScenes,
-        });
-        const includeDestroyedKinds = await structureHasPublishableNestedDestroyed(
-            structure,
-            rawRenderedAssetTypesDirectory,
-            resolveAssetTypeName,
-            structuresWithDestroyedRenderScenes,
-        );
+        }),
+    );
+    const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 
-        const { iconUrl: _legacyIconUrl, previewIconUrl: _legacyPreviewIconUrl, ...structureWithoutLegacyIcons } = structure;
-        const nextIcons = {
-            ...(structure?.icons ?? {}),
-            ...(publishedUrls['icon.default'] ? { default: publishedUrls['icon.default'] } : {}),
-            ...(publishedUrls['icon.rendered'] ? { rendered: publishedUrls['icon.rendered'] } : {}),
-        };
-        nextAssets.push({
-            ...structureWithoutLegacyIcons,
-            ...(Object.keys(nextIcons).length > 0 ? { icons: nextIcons } : {}),
-            ...(publishedUrls.preview ? { previewUrl: publishedUrls.preview } : {}),
-            ...(publishedUrls.texture && structure?.variants?.default
-                ? {
-                    variants: {
-                        ...structure.variants,
-                        default: {
-                            ...structure.variants.default,
-                            textureUrl: publishedUrls.texture,
-                        },
-                    },
-                }
-                : {}),
-            ...(includeDestroyedKinds && (publishedUrls['destroyed.icon.default']
-                || publishedUrls['destroyed.icon.rendered']
-                || publishedUrls['destroyed.preview']
-                || publishedUrls['destroyed.texture'])
-                ? {
-                    destroyed: {
-                        ...structure.destroyed,
-                        ...(publishedUrls['destroyed.icon.default'] || publishedUrls['destroyed.icon.rendered']
-                            ? {
-                                icons: {
-                                    ...(structure.destroyed?.icons ?? {}),
-                                    ...(publishedUrls['destroyed.icon.default']
-                                        ? { default: publishedUrls['destroyed.icon.default'] }
-                                        : {}),
-                                    ...(publishedUrls['destroyed.icon.rendered']
-                                        ? { rendered: publishedUrls['destroyed.icon.rendered'] }
-                                        : {}),
-                                },
-                            }
-                            : {}),
-                        ...(publishedUrls['destroyed.icon.default']
-                            ? { iconUrl: publishedUrls['destroyed.icon.default'] }
-                            : {}),
-                        ...(publishedUrls['destroyed.icon.rendered']
-                            ? { previewIconUrl: publishedUrls['destroyed.icon.rendered'] }
-                            : {}),
-                        ...(publishedUrls['destroyed.preview'] ? { previewUrl: publishedUrls['destroyed.preview'] } : {}),
-                        ...(publishedUrls['destroyed.texture']
-                            ? {
-                                sprite: {
-                                    ...(structure.destroyed?.sprite ?? {}),
-                                    source: publishedUrls['destroyed.texture'],
-                                },
-                                textureUrl: publishedUrls['destroyed.texture'],
-                            }
-                            : {}),
-                    },
-                }
-                : {}),
-        });
-    }
-
-    logPublishSummary(`publish-manifest: co-located icons for ${nextAssets.length} manifest assets`);
+    logPublishSummary(
+        `publish-manifest: co-located icons for ${nextAssets.length} manifest assets`
+        + ` (concurrency ${publishConcurrency}, ${elapsedSeconds}s)`,
+    );
 
     return {
         ...manifest,

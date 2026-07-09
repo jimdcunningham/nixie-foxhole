@@ -254,6 +254,8 @@ The slowest publish step is usually copying/converting Blender output (`tmp/rend
 Defaults now:
 
 - Process raw asset sync in parallel (`--publish-concurrency`, default ≈ CPU count, capped at 16)
+- Co-locate per-structure published icons in parallel (same concurrency)
+- Copy shared game icons to `public/icons/` in parallel (same concurrency)
 - Index published render URLs in parallel (same concurrency), including batched image visibility checks
 - Emit summary lines instead of logging every file (pass `--verbose` for the old per-file output)
 

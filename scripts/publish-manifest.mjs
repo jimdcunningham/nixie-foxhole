@@ -1,6 +1,5 @@
 import { access, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { availableParallelism, cpus } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -25,7 +24,13 @@ import {
     normalizeStandaloneModificationIdentityPart,
     normalizeStandaloneModificationKeyComponent,
 } from './shared-modification-id.mjs';
-import { configurePublishLogging, isPublishVerbose, logPublishDetail, logPublishSummary } from './publish-log.mjs';
+import { configurePublishLogging, isPublishVerbose, logPublishDetail, logPublishSummary, logPublishWarn } from './publish-log.mjs';
+import { getDefaultPublishConcurrency, mapWithConcurrency } from './publish-concurrency.mjs';
+import {
+    loadAuthoredStructurePreviewDirections,
+    preserveAuthoredStructurePreviewDirections,
+    shouldPublishVehicleDestroyedVisual,
+} from './publish-manifest-overrides.mjs';
 import { loadVehicleDestroyedPublishAllowlist } from './vehicle-destroyed-allowlist.mjs';
 
 import {
@@ -99,7 +104,7 @@ const targetFilter = {
 };
 const skipExistingAssets = hasCliFlag(cliArgs, 'skip-existing-assets');
 configurePublishLogging({ verbose: hasCliFlag(cliArgs, 'verbose') });
-const defaultPublishConcurrency = Math.min(16, Math.max(4, availableParallelism?.() ?? cpus().length));
+const defaultPublishConcurrency = getDefaultPublishConcurrency();
 const publishConcurrency = getPositiveIntegerCliValue(cliArgs, 'publish-concurrency', defaultPublishConcurrency);
 const assetOverridesDirectory = resolve(repositoryRoot, 'tools/foxwatch/asset-overrides');
 const sharedModificationHashDiagnostics = {
@@ -1718,7 +1723,7 @@ async function mergeExternalLocalizationFiles(manifest, manifestPath) {
             });
             knownLocales.add(locale);
         } catch (error) {
-            console.warn(`failed to read localization bundle for ${locale} from ${localizationPath}: ${error}`);
+            logPublishWarn(`failed to read localization bundle for ${locale} from ${localizationPath}: ${error}`);
         }
     }
 
@@ -2035,27 +2040,6 @@ function getPositiveIntegerCliValue(parsedArgs, key, fallback) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function mapWithConcurrency(items, concurrency, mapper) {
-    if (items.length === 0) {
-        return [];
-    }
-
-    const results = new Array(items.length);
-    let nextIndex = 0;
-    const workerCount = Math.min(concurrency, items.length);
-
-    async function worker() {
-        while (nextIndex < items.length) {
-            const currentIndex = nextIndex;
-            nextIndex += 1;
-            results[currentIndex] = await mapper(items[currentIndex], currentIndex);
-        }
-    }
-
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
-    return results;
-}
-
 function getNormalizedValues(parsedArgs, key) {
     return (parsedArgs[key] ?? [])
         .flatMap(value => String(value).split(','))
@@ -2209,7 +2193,7 @@ async function loadRenderScenesIndexDocument() {
     try {
         return JSON.parse(await readFile(renderScenesIndexPath, 'utf8'));
     } catch (error) {
-        console.warn(`failed to read render scene index from ${renderScenesIndexPath}: ${error}`);
+        logPublishWarn(`failed to read render scene index from ${renderScenesIndexPath}: ${error}`);
         return null;
     }
 }
@@ -2222,7 +2206,7 @@ async function loadModificationRenderIndexDocument() {
     try {
         return JSON.parse(await readFile(modificationRenderIndexPath, 'utf8'));
     } catch (error) {
-        console.warn(`failed to read modification render index from ${modificationRenderIndexPath}: ${error}`);
+        logPublishWarn(`failed to read modification render index from ${modificationRenderIndexPath}: ${error}`);
         return null;
     }
 }
@@ -2610,32 +2594,6 @@ function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds 
     };
 }
 
-function preserveAuthoredStructurePreviewDirections(publishedManifest, sourceManifest) {
-    const authoredPreviewDirectionById = new Map((sourceManifest?.assets ?? [])
-        .map(structure => [normalizeId(structure?.id), normalizeId(structure?.previewDirection)])
-        .filter(([structureId, previewDirection]) => structureId && previewDirection));
-
-    return {
-        ...publishedManifest,
-        assets: (publishedManifest?.assets ?? []).map(structure => {
-            const structureId = normalizeId(structure?.id);
-            if (!structureId) {
-                return structure;
-            }
-
-            const authoredPreviewDirection = authoredPreviewDirectionById.get(structureId);
-            if (!authoredPreviewDirection || normalizeId(structure?.previewDirection)) {
-                return structure;
-            }
-
-            return {
-                ...structure,
-                previewDirection: authoredPreviewDirection,
-            };
-        }),
-    };
-}
-
 function collectAuthoredModificationPreviewDirections(sourceManifest) {
     const authoredPreviewDirectionByStructureVariant = new Map();
 
@@ -2719,7 +2677,7 @@ async function loadAuthoredSharedModificationOverrides() {
             .map(([lookupKey, override]) => [normalizeId(lookupKey), override])
             .filter(([lookupKey]) => Boolean(lookupKey)));
     } catch (error) {
-        console.warn(`failed to read shared modification overrides from ${sharedModificationOverrideManifestPath}: ${error}`);
+        logPublishWarn(`failed to read shared modification overrides from ${sharedModificationOverrideManifestPath}: ${error}`);
         return {};
     }
 }
@@ -2847,7 +2805,7 @@ function removeDanglingStructureReferences(manifest) {
 
         const normalizedUpgradeStructureCodeName = normalizeStructureReferenceCodeName(structure.upgradeStructureCodeName);
         if (normalizedUpgradeStructureCodeName && !availableReferences.has(normalizeId(normalizedUpgradeStructureCodeName))) {
-            console.warn(`removed dangling upgradeStructureCodeName ${normalizedUpgradeStructureCodeName} from ${structureLabel}`);
+            logPublishWarn(`removed dangling upgradeStructureCodeName ${normalizedUpgradeStructureCodeName} from ${structureLabel}`);
             removedReferenceCount += 1;
             nextStructure = {
                 ...nextStructure,
@@ -2869,7 +2827,7 @@ function removeDanglingStructureReferences(manifest) {
                     continue;
                 }
 
-                console.warn(`removed dangling conversionCodeName ${normalizedCodeName} from ${structureLabel}`);
+                logPublishWarn(`removed dangling conversionCodeName ${normalizedCodeName} from ${structureLabel}`);
                 removedReferenceCount += 1;
             }
 
@@ -2884,7 +2842,7 @@ function removeDanglingStructureReferences(manifest) {
 
         const normalizedDestroyedStructureCodeName = normalizeStructureReferenceCodeName(structure.destroyedStructureCodeName);
         if (normalizedDestroyedStructureCodeName && !availableReferences.has(normalizeId(normalizedDestroyedStructureCodeName))) {
-            console.warn(`removed dangling destroyedStructureCodeName ${normalizedDestroyedStructureCodeName} from ${structureLabel}`);
+            logPublishWarn(`removed dangling destroyedStructureCodeName ${normalizedDestroyedStructureCodeName} from ${structureLabel}`);
             removedReferenceCount += 1;
             nextStructure = {
                 ...nextStructure,
@@ -2896,7 +2854,7 @@ function removeDanglingStructureReferences(manifest) {
     });
 
     if (removedReferenceCount > 0) {
-        console.warn(`removed ${removedReferenceCount} dangling structure reference(s) from published manifest`);
+        logPublishWarn(`removed ${removedReferenceCount} dangling structure reference(s) from published manifest`);
     }
 
     return removedReferenceCount > 0
@@ -3082,7 +3040,7 @@ async function syncPublishedIconsToPublicDirectoryByKey(directory, publicDirecto
 
     await mkdir(publicDirectory, { recursive: true });
     const copiedKeys = new Set();
-    let copiedIcons = 0;
+    const copyJobs = [];
 
     if (await pathExists(directory)) {
         const candidateKeys = new Set();
@@ -3105,41 +3063,71 @@ async function syncPublishedIconsToPublicDirectoryByKey(directory, publicDirecto
                 continue;
             }
 
-            const outputPath = resolve(publicDirectory, `${fileKey}.webp`);
-            if (await shouldReuseExistingAssetOutput(outputPath)) {
-                copiedKeys.add(fileKey);
-                continue;
-            }
-
-            const { sourceFilePath, content } = await readPublishedIconSourceFile(directory, `${fileKey}.webp`);
-            if (await writeFileIfChanged(outputPath, content)) {
-                copiedIcons += 1;
-                logPublishDetail(`copied ${sourceFilePath} -> ${outputPath}`);
-            }
-            copiedKeys.add(fileKey);
+            copyJobs.push({
+                fileKey,
+                outputPath: resolve(publicDirectory, `${fileKey}.webp`),
+            });
         }
     }
 
+    const primaryCopyResults = await mapWithConcurrency(
+        copyJobs,
+        publishConcurrency,
+        async ({ fileKey, outputPath }) => {
+            if (await shouldReuseExistingAssetOutput(outputPath)) {
+                return { fileKey, copied: false, reused: true };
+            }
+
+            const { sourceFilePath, content } = await readPublishedIconSourceFile(directory, `${fileKey}.webp`);
+            const copied = await writeFileIfChanged(outputPath, content);
+            if (copied) {
+                logPublishDetail(`copied ${sourceFilePath} -> ${outputPath}`);
+            }
+
+            return { fileKey, copied, reused: false };
+        },
+    );
+    for (const result of primaryCopyResults) {
+        if (result?.fileKey) {
+            copiedKeys.add(result.fileKey);
+        }
+    }
+    let copiedIcons = primaryCopyResults.filter(result => result?.copied).length;
+
+    const fallbackCopyJobs = [];
     for (const fileKey of allowedKeys ?? []) {
         if (copiedKeys.has(fileKey)) {
             continue;
         }
 
-        try {
-            const outputPath = resolve(publicDirectory, `${fileKey}.webp`);
+        fallbackCopyJobs.push({
+            fileKey,
+            outputPath: resolve(publicDirectory, `${fileKey}.webp`),
+        });
+    }
+
+    const fallbackCopyResults = await mapWithConcurrency(
+        fallbackCopyJobs,
+        publishConcurrency,
+        async ({ fileKey, outputPath }) => {
             if (await shouldReuseExistingAssetOutput(outputPath)) {
-                continue;
+                return false;
             }
 
-            const { sourceFilePath, content } = await readPublishedIconSourceFile(directory, `${fileKey}.webp`);
-            if (await writeFileIfChanged(outputPath, content)) {
-                copiedIcons += 1;
-                logPublishDetail(`copied fallback icon ${sourceFilePath} -> ${outputPath}`);
+            try {
+                const { sourceFilePath, content } = await readPublishedIconSourceFile(directory, `${fileKey}.webp`);
+                const copied = await writeFileIfChanged(outputPath, content);
+                if (copied) {
+                    logPublishDetail(`copied fallback icon ${sourceFilePath} -> ${outputPath}`);
+                }
+                return copied;
+            } catch (error) {
+                logPublishWarn(`skipping fallback icon ${fileKey}: ${error}`);
+                return false;
             }
-        } catch (error) {
-            console.warn(`skipping fallback icon ${fileKey}: ${error}`);
-        }
-    }
+        },
+    );
+    copiedIcons += fallbackCopyResults.filter(Boolean).length;
 
     if (copiedIcons > 0) {
         logPublishSummary(`publish-manifest: copied ${copiedIcons} shared game icons to public/icons`);
@@ -3392,7 +3380,7 @@ async function deriveRenderedIconWebpFromPreviewPng(previewPngPath, subTypeIconU
                 { lossless: true, quality: 100, effort: 6 },
             );
         } catch (error) {
-            console.warn(`failed to compose subtype icon ${normalizedSubTypeIconUrl} onto preview ${previewPngPath}: ${error}`);
+            logPublishWarn(`failed to compose subtype icon ${normalizedSubTypeIconUrl} onto preview ${previewPngPath}: ${error}`);
         }
     }
 
@@ -3438,6 +3426,13 @@ async function collectRawRenderedAssetSyncCandidates(scopedTargets = null) {
                 continue;
             }
 
+            if (extension === '.webp' && basename(filePath).toLowerCase().endsWith('.preview.webp')) {
+                const previewPngMasterPath = filePath.replace(/\.preview\.webp$/i, '.preview.png');
+                if (await pathExists(previewPngMasterPath)) {
+                    continue;
+                }
+            }
+
             if (extension === '.png' && !basename(filePath).toLowerCase().endsWith('.preview.png')
                 && !basename(filePath).toLowerCase().endsWith('.icon.default.png')) {
                 continue;
@@ -3462,22 +3457,18 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
     if (extension === '.png') {
         const previewWebpPath = outputPath.replace(/\.png$/i, '.webp');
         if (basename(filePath).toLowerCase().endsWith('.preview.png')) {
-            if (!await shouldReuseExistingAssetOutput(previewWebpPath)) {
-                await mkdir(dirname(previewWebpPath), { recursive: true });
-                const previewPng = await readFileWithRetries(filePath);
-                const previewWebp = await sharp(previewPng).webp(lossyPreviewWebpOptions).toBuffer();
-                if (await writeFileIfChanged(previewWebpPath, previewWebp)) {
-                    stats.previewSynced += 1;
-                    logPublishDetail(`synced preview master ${filePath} -> ${previewWebpPath}`);
-                } else {
-                    stats.reused += 1;
-                }
+            await mkdir(dirname(previewWebpPath), { recursive: true });
+            const previewPng = await readFileWithRetries(filePath);
+            const previewWebp = await sharp(previewPng).webp(lossyPreviewWebpOptions).toBuffer();
+            if (await writeFileIfChanged(previewWebpPath, previewWebp)) {
+                stats.previewSynced += 1;
+                logPublishDetail(`synced preview master ${filePath} -> ${previewWebpPath}`);
             } else {
                 stats.reused += 1;
             }
 
             const renderedIconPath = previewWebpPath.replace(/\.preview\.webp$/i, '.icon.rendered.webp');
-            if (!await shouldReuseExistingAssetOutput(renderedIconPath)) {
+            {
                 await mkdir(dirname(renderedIconPath), { recursive: true });
                 const owner = resolveManifestOwnerForPublicRenderedAsset(manifest, renderedIconPath);
                 const subTypeIconUrl = owner
@@ -3498,8 +3489,6 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
                 } else {
                     stats.reused += 1;
                 }
-            } else {
-                stats.reused += 1;
             }
         } else if (basename(filePath).toLowerCase().endsWith('.icon.default.png')) {
             const defaultWebpPath = outputPath.replace(/\.png$/i, '.webp');
@@ -3528,7 +3517,7 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
                             losslessPublishedWebpOptions,
                         );
                     } catch (error) {
-                        console.warn(
+                        logPublishWarn(
                             `failed to compose subtype icon ${subTypeIconUrl} onto pencil default ${filePath}: ${error}`,
                         );
                         defaultWebp = await sharp(defaultPng).webp(losslessPublishedWebpOptions).toBuffer();
@@ -3579,7 +3568,7 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
         }
 
         stats.locked += 1;
-        console.warn(`skipping locked raw render ${filePath} -> ${outputPath}: ${error}`);
+        logPublishWarn(`skipping locked raw render ${filePath} -> ${outputPath}: ${error}`);
     }
 
     return stats;
@@ -3687,7 +3676,7 @@ async function syncSharedModificationDefaultIconAssets(manifest) {
                 coLocatedSharedModificationAssets += 1;
                 logPublishDetail(`co-located ${source.sourceFilePath} -> ${outputFilePath}`);
             } catch (error) {
-                console.warn(`skipping shared modification asset ${fileSuffix} for ${sharedModificationId} from ${sourceUrl}: ${error}`);
+                logPublishWarn(`skipping shared modification asset ${fileSuffix} for ${sharedModificationId} from ${sourceUrl}: ${error}`);
             }
         }
     }
@@ -4244,12 +4233,22 @@ async function collectStructureIdsWithVisibleRawDestroyedRenders() {
     return structureIds;
 }
 
-async function stripUnavailableDestroyedVisuals(manifest, structuresWithDestroyedRenderScenes = null, structuresWithVisibleRawDestroyedRenders = null) {
+async function stripUnavailableDestroyedVisuals(
+    manifest,
+    structuresWithDestroyedRenderScenes = null,
+    structuresWithVisibleRawDestroyedRenders = null,
+    vehicleDestroyedPublishAllowlist = null,
+) {
     return foxholeManifestSchema.parse({
         ...manifest,
         assets: await Promise.all((manifest?.assets ?? []).map(async structure => {
             if (!structure?.destroyed) {
                 return structure;
+            }
+
+            if (!shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedPublishAllowlist)) {
+                const { destroyed, ...structureWithoutDestroyed } = structure;
+                return structureWithoutDestroyed;
             }
 
             if (await hasPublishedDestroyedVisual(structure, structuresWithVisibleRawDestroyedRenders)) {
@@ -6174,6 +6173,7 @@ function applyStructureRenderUrls(
     structureLayerEntriesByStructureId,
     sharedPackagingEntriesByKey,
     structuresWithRawDestroyedRenders = new Set(),
+    vehicleDestroyedPublishAllowlist = null,
 ) {
     function resolveSourceModification(structure, variantId, variant) {
         const candidateIds = [
@@ -6267,7 +6267,9 @@ function applyStructureRenderUrls(
                     ?? sceneMetadata?.previewDirection
                     ?? structure.previewDirection;
                 const destroyedRenderEntry = renderEntry?.destroyed ?? null;
-                const structureHasRawDestroyedRenders = structuresWithRawDestroyedRenders.has(normalizeId(structure.id));
+                const structureId = normalizeId(structure.id);
+                const structureHasRawDestroyedRenders = structuresWithRawDestroyedRenders.has(structureId)
+                    && shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedPublishAllowlist);
                 const destroyedDefaultIconUrl = structure?.destroyed?.icons?.default
                     ?? structure?.destroyed?.iconUrl
                     ?? destroyedRenderEntry?.defaultIconUrl
@@ -6852,6 +6854,7 @@ async function coLocateFallbackStructureAssets(
         skipExistingAssets,
         defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
         structuresWithDestroyedRenderScenes,
+        publishConcurrency,
     });
 }
 
@@ -6944,7 +6947,7 @@ try {
         try {
             publishedManifestBeforeWrite = await loadSourceManifest(publishedManifestPath, { seedSharedModificationIds: false });
         } catch (error) {
-            console.warn(`skipping published manifest preload because the existing published manifest is not in the assets-root shape: ${error}`);
+            logPublishWarn(`skipping published manifest preload because the existing published manifest is not in the assets-root shape: ${error}`);
         }
     }
     assertSafeUnfilteredPublish(sourceManifest, publishedManifestBeforeWrite, sourceManifestPath);
@@ -7009,7 +7012,8 @@ try {
         }
 
         if (structuresWithVisibleRawDestroyedRenders.has(structureId)
-            && structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes)) {
+            && structureHasResolvableDestroyedRenderScene(structure, structuresWithDestroyedRenderScenes)
+            && shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedPublishAllowlist)) {
             structuresWithRawDestroyedRenders.add(structureId);
         }
     }
@@ -7024,6 +7028,7 @@ try {
         structureRenderEntries.structureLayerEntriesByStructureId,
         structureRenderEntries.sharedPackagingEntriesByKey,
         structuresWithRawDestroyedRenders,
+        vehicleDestroyedPublishAllowlist,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
     const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifestWithNormalizedIconUrls);
@@ -7041,11 +7046,13 @@ try {
     );
     await syncSharedModificationDefaultIconAssets(manifestWithStrippedSlotNoise);
     const authoredModificationOverrides = await loadAuthoredSharedModificationOverrides();
+    const authoredStructurePreviewDirections = await loadAuthoredStructurePreviewDirections(assetOverridesDirectory);
     const manifestWithPreservedAuthoredPreviewDirections = preserveAuthoredSharedModificationPreviewDirections(
         preserveAuthoredModificationPreviewDirections(
             preserveAuthoredStructurePreviewDirections(
                 manifestWithStrippedSlotNoise,
                 manifestWithSeededSharedModificationIds,
+                authoredStructurePreviewDirections,
             ),
             manifestWithSeededSharedModificationIds,
             authoredModificationOverrides,
@@ -7064,6 +7071,7 @@ try {
         mergedManifest,
         structuresWithDestroyedRenderScenes,
         structuresWithVisibleRawDestroyedRenders,
+        vehicleDestroyedPublishAllowlist,
     );
     await removeDestroyedArtifactsWithoutManifestEntry(mergedManifestWithoutUnavailableDestroyedVisuals);
     await removeStaleRootStructureArtifacts(mergedManifestWithoutUnavailableDestroyedVisuals);
