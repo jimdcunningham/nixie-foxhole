@@ -770,6 +770,36 @@ function compactTextureVariant(value) {
     return compactNullableObject(value);
 }
 
+function stripRedundantPublishedColorVariantFields(structure) {
+    if (!isPlainObject(structure)) {
+        return structure;
+    }
+
+    const colors = Array.isArray(structure.colors) ? structure.colors : [];
+    const primaryColor = colors.find(color => color?.textureUrl || color?.previewUrl || color?.renderedIconUrl);
+    if (!primaryColor) {
+        return structure;
+    }
+
+    const nextStructure = { ...structure };
+    if (primaryColor.previewUrl && nextStructure.previewUrl === primaryColor.previewUrl) {
+        delete nextStructure.previewUrl;
+    }
+
+    if (primaryColor.renderedIconUrl && nextStructure.icons?.rendered === primaryColor.renderedIconUrl) {
+        nextStructure.icons = { ...nextStructure.icons };
+        delete nextStructure.icons.rendered;
+    }
+
+    if (primaryColor.textureUrl && nextStructure.variants?.default?.textureUrl === primaryColor.textureUrl) {
+        const nextVariants = { ...nextStructure.variants };
+        delete nextVariants.default;
+        nextStructure.variants = Object.keys(nextVariants).length > 0 ? nextVariants : undefined;
+    }
+
+    return nextStructure;
+}
+
 function compactTextureVariants(value) {
     return compactNullableObject(value, {
         default: undefined,
@@ -1547,7 +1577,7 @@ function compactStructure(value) {
             ? assetUrl
             : omitIfGeneratedAssetUrl(asset, assetUrl, suffix)
     );
-    const normalizedValue = isPlainObject(value)
+    const normalizedValue = stripRedundantPublishedColorVariantFields(isPlainObject(value)
         ? {
             ...value,
             subTypeIconUrl: undefined,
@@ -1573,7 +1603,7 @@ function compactStructure(value) {
                 }
                 : value.variants,
         }
-        : value;
+        : value);
     const inferredClipFloor = normalizedValue?.isVehicle === true || normalizedValue?.isItem === true ? false : true;
 
     return compactObject(normalizedValue, {
@@ -6249,6 +6279,10 @@ function applyStructureRenderUrls(
                     })
                     .filter(Boolean);
                 const defaultStructureColor = structureColors[0] ?? null;
+                const hasPublishedColorVariants = structureColors.some(color => (
+                    Boolean(color?.textureUrl || color?.previewUrl || color?.renderedIconUrl)
+                ));
+                const primaryColorTextureUrl = defaultStructureColor?.textureUrl ?? null;
                 const structureDefaultIconUrl = structure?.icons?.default ?? structure?.iconUrl ?? null;
                 const resolvedStructureDefaultIconUrl = structureDefaultIconUrl
                     ?? renderEntry?.defaultIconUrl
@@ -6302,12 +6336,14 @@ function applyStructureRenderUrls(
 
                 return {
                     ...structureWithoutLegacyIcons,
-                    icons: {
-                        default: resolvedStructureDefaultIconUrl,
-                        rendered: previewUrl
-                            ? (renderEntry?.renderedIconUrl ?? structureRenderedIconUrl ?? meshlessFallbackUrl)
-                            : (resolvedStructureDefaultIconUrl ?? meshlessFallbackUrl),
-                    },
+                    icons: hasPublishedColorVariants
+                        ? { default: resolvedStructureDefaultIconUrl }
+                        : {
+                            default: resolvedStructureDefaultIconUrl,
+                            rendered: previewUrl
+                                ? (renderEntry?.renderedIconUrl ?? structureRenderedIconUrl ?? meshlessFallbackUrl)
+                                : (resolvedStructureDefaultIconUrl ?? meshlessFallbackUrl),
+                        },
                     ...(hasPublishedDestroyedVisual
                         ? {
                             destroyed: {
@@ -6375,7 +6411,7 @@ function applyStructureRenderUrls(
                             },
                         }
                         : {}),
-                    previewUrl,
+                    previewUrl: hasPublishedColorVariants ? undefined : previewUrl,
                     previewDirection,
                     ...(structureColors.length > 0 ? { colors: structureColors } : {}),
                     renderLayers: renderLayers.length > 0
@@ -6400,9 +6436,15 @@ function applyStructureRenderUrls(
                         ...(renderEntry?.offsetY !== null && typeof renderEntry?.offsetY !== 'undefined' ? { offsetY: renderEntry.offsetY } : {}),
                     },
                     variants: {
-                        ...(defaultTextureUrl ? { default: { textureUrl: defaultTextureUrl } } : {}),
-                        ...(colonialTextureUrl && colonialTextureUrl !== defaultTextureUrl ? { c: { textureUrl: colonialTextureUrl } } : {}),
-                        ...(wardenTextureUrl && wardenTextureUrl !== defaultTextureUrl ? { w: { textureUrl: wardenTextureUrl } } : {}),
+                        ...(!hasPublishedColorVariants && defaultTextureUrl
+                            ? { default: { textureUrl: defaultTextureUrl } }
+                            : {}),
+                        ...(colonialTextureUrl && colonialTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl)
+                            ? { c: { textureUrl: colonialTextureUrl } }
+                            : {}),
+                        ...(wardenTextureUrl && wardenTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl)
+                            ? { w: { textureUrl: wardenTextureUrl } }
+                            : {}),
                     },
                     modifications: Object.fromEntries(Object.entries(structure.modifications ?? {}).map(([modificationId, modification]) => {
                         const modificationLookupKey = normalizeId(modification?.appliedModificationId ?? modificationId);

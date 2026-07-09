@@ -267,6 +267,38 @@ test('resolveRawIconSource invisible render falls back to blueprint', async () =
     assert.equal(metadata.height, 128);
 });
 
+test('resolveRawIconSource destroyed.icon.default falls back to living blueprint icon', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-publish-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    await mkdir(resolve(rawRenderedRoot, 'vehicles', 'gunboatw'), { recursive: true });
+    await mkdir(generatedIconsRoot, { recursive: true });
+    await writeFile(
+        resolve(generatedIconsRoot, 'gunboatw.png'),
+        await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+    );
+
+    const structure = {
+        id: 'gunboatw',
+        iconUrl: '/foxhole/assets/icons/gunboatw.png',
+        destroyed: { componentName: 'DestroyedMesh' },
+    };
+    const source = await resolveRawIconSource({
+        structureId: 'gunboatw',
+        assetKind: 'destroyed.icon.default',
+        structure,
+        sourceStructure: structure,
+        rawRenderedAssetTypesDirectory: rawRenderedRoot,
+        generatedIconsDirectory: generatedIconsRoot,
+        publicAssetsDirectory: publicAssetsRoot,
+        resolveAssetTypeName: () => 'vehicles',
+    });
+
+    assert.ok(source);
+    assert.match(source.sourceFilePath, /gunboatw\.png$/);
+});
+
 test('writeCoLocatedIcon composes wrecked subtype onto default icons', async () => {
     const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-compose-default-'));
     const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');

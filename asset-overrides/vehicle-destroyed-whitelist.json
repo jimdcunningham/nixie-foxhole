@@ -2,6 +2,8 @@
   "structureIds": [
     "ambulancec",
     "ambulancew",
+    "ambulanceflamec",
+    "ambulanceflamew",
     "barge",
     "battletankc",
     "bicycle",
@@ -11,6 +13,9 @@
     "fieldmgw",
     "freighter",
     "gunboat2w",
+    "gunboatc",
+    "gunboatw",
+    "harvester",
     "landingshipc",
     "landingshipw",
     "mediumboatc",

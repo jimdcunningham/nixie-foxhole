@@ -395,12 +395,22 @@ export function getStructureIconAssetKinds(structure) {
 
 function getBlueprintIconUrlCandidates(structure, sourceStructure, assetKind) {
     const source = sourceStructure ?? structure;
-    if (assetKind === 'destroyed.icon.default' || assetKind === 'destroyed.icon.rendered') {
+    if (assetKind === 'destroyed.icon.default') {
         return [
             source?.destroyed?.icons?.default,
             source?.destroyed?.iconUrl,
+            source?.icons?.default,
+            source?.iconUrl,
+            structure?.icons?.default,
+            structure?.iconUrl,
+        ].filter(Boolean);
+    }
+    if (assetKind === 'destroyed.icon.rendered') {
+        return [
             source?.destroyed?.icons?.rendered,
             source?.destroyed?.previewIconUrl,
+            source?.destroyed?.icons?.default,
+            source?.destroyed?.iconUrl,
         ].filter(Boolean);
     }
 
