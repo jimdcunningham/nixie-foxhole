@@ -3894,8 +3894,6 @@ async function generateSyntheticOilfieldAssets(manifest) {
             anchorPixelY: baseSize / 2,
             imageCenterPixelX: baseSize / 2,
             imageCenterPixelY: baseSize / 2,
-            geometryCenterPixelX: baseSize / 2,
-            geometryCenterPixelY: baseSize / 2,
             offsetXPixels: 0,
             offsetYPixels: 0,
             offsetX: 0,

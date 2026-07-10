@@ -93,9 +93,6 @@ def write_render_sidecar(output_path: str, structure_id: str, output_key: str, r
     resolution_x, resolution_y = render_state["resolution"]
     anchor_pixel_x = float(anchor.get("pixelX", float(resolution_x) * 0.5))
     anchor_pixel_y = float(anchor.get("pixelY", float(resolution_y) * 0.5))
-    geometry_center = render_state.get("boundsCenterProjection") or {}
-    geometry_center_x = float(geometry_center.get("pixelX", float(resolution_x) * 0.5))
-    geometry_center_y = float(geometry_center.get("pixelY", float(resolution_y) * 0.5))
     image_center_x = float(resolution_x) * 0.5
     image_center_y = float(resolution_y) * 0.5
     # Board-placement offsets describe how far the fitted render center must
@@ -116,8 +113,6 @@ def write_render_sidecar(output_path: str, structure_id: str, output_key: str, r
         "anchorPixelY": anchor_pixel_y,
         "imageCenterPixelX": image_center_x,
         "imageCenterPixelY": image_center_y,
-        "geometryCenterPixelX": geometry_center_x,
-        "geometryCenterPixelY": geometry_center_y,
         "offsetXPixels": offset_x_pixels,
         "offsetYPixels": offset_y_pixels,
         "offsetX": offset_x_pixels,
