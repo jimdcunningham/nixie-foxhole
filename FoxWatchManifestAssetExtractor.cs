@@ -780,6 +780,7 @@ public class FoxWatchManifestAssetExtractor
             NormalizeKnownVehicleComponentFrames(codeNameText, vehicleSeats, spotlights, ranges);
             var connector = ExtractConnector(blueprint, inheritedProperty);
             buildSockets = EnsureConnectorEndpointBuildSockets(buildSockets, connector);
+            buildSockets = CollapseLogicalBuildSocketDuplicates(buildSockets, connector);
 
             var structure = new FoxWatchManifestStructure
             {
@@ -5568,6 +5569,22 @@ public class FoxWatchManifestAssetExtractor
             return null;
         }
 
+        private static string NormalizeBuildSocketName(string? value)
+        {
+            var normalized = NormalizeString(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return string.Empty;
+            }
+
+            if (normalized.EndsWith("_GEN_VARIABLE", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = normalized[..^"_GEN_VARIABLE".Length];
+            }
+
+            return normalized;
+        }
+
         private static string BuildBuildSocketKey(FoxWatchManifestBuildSocket socket)
         {
             var tags = string.Join(
@@ -5575,7 +5592,7 @@ public class FoxWatchManifestAssetExtractor
                 socket.SocketTags.Select(tag => $"{tag.Mask?.ToString(CultureInfo.InvariantCulture) ?? "null"}:{tag.Category?.ToString(CultureInfo.InvariantCulture) ?? "null"}"));
             return string.Join(
                 "|",
-                socket.Name ?? string.Empty,
+                NormalizeBuildSocketName(socket.Name),
                 NormalizeManifestBuildSocketComponentType(socket.ComponentType) ?? string.Empty,
                 socket.PipeType ?? string.Empty,
                 socket.X?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty,
@@ -5583,6 +5600,119 @@ public class FoxWatchManifestAssetExtractor
                 socket.Z?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty,
                 socket.Rotation?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty,
                 tags);
+        }
+
+        private static string BuildLogicalBuildSocketKey(FoxWatchManifestBuildSocket socket)
+        {
+            return string.Join(
+                "|",
+                NormalizeBuildSocketName(socket.Name),
+                socket.PipeType ?? string.Empty,
+                Math.Round(socket.X ?? 0, 0).ToString("0", CultureInfo.InvariantCulture),
+                Math.Round(socket.Y ?? 0, 0).ToString("0", CultureInfo.InvariantCulture),
+                Math.Round(socket.Z ?? 0, 0).ToString("0", CultureInfo.InvariantCulture),
+                Math.Round(socket.Rotation ?? 0, 0).ToString("0", CultureInfo.InvariantCulture));
+        }
+
+        private static int ScoreBuildSocketCandidate(FoxWatchManifestBuildSocket socket)
+        {
+            var score = 0;
+            var name = NormalizeString(socket.Name);
+            if (!name.EndsWith("_GEN_VARIABLE", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 8;
+            }
+
+            if (socket.SocketTags.Count > 0)
+            {
+                score += 4;
+            }
+
+            if (!string.IsNullOrWhiteSpace(socket.PipeType))
+            {
+                score += 2;
+            }
+
+            var componentType = NormalizeManifestBuildSocketComponentType(socket.ComponentType) ?? string.Empty;
+            if (componentType.Contains("BuildSocketComponent", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 1;
+            }
+
+            return score;
+        }
+
+        private static bool IsSpuriousConnectorSideSocket(
+            FoxWatchManifestBuildSocket socket,
+            FoxWatchManifestConnector? connector)
+        {
+            var name = NormalizeString(socket.Name);
+            if (!name.Equals("LeftSocket", StringComparison.OrdinalIgnoreCase)
+                && !name.Equals("RightSocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (Math.Abs(socket.Y ?? 0) > 5000 || Math.Abs(socket.X ?? 0) > 5000)
+            {
+                return true;
+            }
+
+            if (socket.SocketTags.Count > 0 || !string.IsNullOrWhiteSpace(socket.PipeType))
+            {
+                return false;
+            }
+
+            if (connector == null || string.IsNullOrWhiteSpace(connector.BackSocketName))
+            {
+                return false;
+            }
+
+            return Math.Abs(socket.X ?? 0) < 0.01 && Math.Abs(socket.Y ?? 0) < 0.01;
+        }
+
+        private static bool AreNearDuplicateBuildSockets(
+            FoxWatchManifestBuildSocket left,
+            FoxWatchManifestBuildSocket right)
+        {
+            if (!string.Equals(
+                    NormalizeBuildSocketName(left.Name),
+                    NormalizeBuildSocketName(right.Name),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return Math.Abs((left.X ?? 0) - (right.X ?? 0)) < 1
+                && Math.Abs((left.Y ?? 0) - (right.Y ?? 0)) < 1
+                && Math.Abs((left.Z ?? 0) - (right.Z ?? 0)) < 1;
+        }
+
+        private static List<FoxWatchManifestBuildSocket> CollapseLogicalBuildSocketDuplicates(
+            List<FoxWatchManifestBuildSocket> buildSockets,
+            FoxWatchManifestConnector? connector)
+        {
+            var filtered = buildSockets
+                .Where(socket => !IsSpuriousConnectorSideSocket(socket, connector))
+                .ToList();
+            var collapsed = new List<FoxWatchManifestBuildSocket>();
+
+            foreach (var socket in filtered)
+            {
+                var duplicateIndex = collapsed.FindIndex(existing => AreNearDuplicateBuildSockets(existing, socket));
+                if (duplicateIndex < 0)
+                {
+                    collapsed.Add(socket);
+                    continue;
+                }
+
+                if (ScoreBuildSocketCandidate(socket) > ScoreBuildSocketCandidate(collapsed[duplicateIndex]))
+                {
+                    collapsed[duplicateIndex] = socket;
+                }
+            }
+
+            return collapsed;
         }
 
         private static List<FoxWatchManifestBuildSocket> EnsureConnectorEndpointBuildSockets(
