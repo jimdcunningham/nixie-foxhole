@@ -6242,6 +6242,24 @@ function resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer)
         : (Array.isArray(downgradeLayer?.ct) ? downgradeLayer.ct.filter(Boolean) : []);
 }
 
+function normalizeFoundationRenderLayerComponentTags(structureId, layerId, componentTags) {
+    const normalizedStructureId = normalizeId(structureId);
+    const normalizedLayerId = normalizeId(layerId);
+    if (normalizedStructureId !== 'foundation011x2t1' && normalizedStructureId !== 'foundation011x2t3') {
+        return componentTags;
+    }
+
+    if (normalizedLayerId === 'frontleftpillar') {
+        return ['Front', 'Left2'];
+    }
+
+    if (normalizedLayerId === 'frontrightpillar') {
+        return ['Front', 'Right2'];
+    }
+
+    return componentTags;
+}
+
 function applyStructureRenderUrls(
     manifest,
     entriesByKey,
@@ -6487,7 +6505,11 @@ function applyStructureRenderUrls(
                         ? renderLayers.map(entry => {
                             const manifestLayer = manifestRenderLayersById.get(normalizeId(entry.id));
                             const downgradeLayer = downgradeRenderLayersById.get(normalizeId(entry.id));
-                            const componentTags = resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer);
+                            const componentTags = normalizeFoundationRenderLayerComponentTags(
+                                structure.id,
+                                entry.id,
+                                resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer),
+                            );
                             const componentName = manifestLayer?.componentName ?? manifestLayer?.cn ?? null;
                             const downgradeEntry = downgradeLayerEntries[normalizeId(entry.id)];
                             const preferDowngradeOffsets = Number(structure?.tier) === 3 && downgradeEntry;

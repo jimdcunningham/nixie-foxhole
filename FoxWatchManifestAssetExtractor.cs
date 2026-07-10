@@ -870,13 +870,15 @@ public class FoxWatchManifestAssetExtractor
                 HideInList = false,
                 IsUpgrade = false,
                 UpgradeName = null,
-                RenderLayers = ExtractFoundationStructureRenderLayers(blueprintPackagePath),
+                RenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath),
             };
 
             return structure;
         }
 
-        private List<FoxWatchManifestStructureRenderLayer>? ExtractFoundationStructureRenderLayers(string? blueprintPackagePath)
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractFoundationStructureRenderLayers(
+            string structureId,
+            string? blueprintPackagePath)
         {
             if (string.IsNullOrWhiteSpace(blueprintPackagePath) ||
                 !IsFacilityFoundationBlueprintPackagePath(blueprintPackagePath) ||
@@ -924,11 +926,40 @@ public class FoxWatchManifestAssetExtractor
                     });
                 }
 
-                return renderLayers.Count > 0 ? renderLayers : null;
+                if (renderLayers.Count > 0)
+                {
+                    ApplyFoundationRenderLayerVisibilityTagCorrections(structureId, renderLayers);
+                    return renderLayers;
+                }
+
+                return null;
             }
             catch
             {
                 return null;
+            }
+        }
+
+        private static void ApplyFoundationRenderLayerVisibilityTagCorrections(
+            string? structureId,
+            List<FoxWatchManifestStructureRenderLayer> renderLayers)
+        {
+            if (!string.Equals(structureId, "foundation011x2t1", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(structureId, "foundation011x2t3", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            foreach (var layer in renderLayers)
+            {
+                if (string.Equals(layer.Id, "frontleftpillar", StringComparison.OrdinalIgnoreCase))
+                {
+                    layer.ComponentTags = ["Front", "Left2"];
+                }
+                else if (string.Equals(layer.Id, "frontrightpillar", StringComparison.OrdinalIgnoreCase))
+                {
+                    layer.ComponentTags = ["Front", "Right2"];
+                }
             }
         }
 
