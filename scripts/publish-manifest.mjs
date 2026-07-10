@@ -6197,6 +6197,51 @@ function getCoLocatedStructureIconPublicUrl(structureId, assetKind) {
     ));
 }
 
+function buildDowngradeStructureRenderLayersById(assets) {
+    const downgradeRenderLayersById = new Map();
+
+    for (const structure of assets ?? []) {
+        const upgradeStructureId = normalizeId(normalizeStructureReferenceCodeName(structure?.upgradeStructureCodeName));
+        const renderLayers = Array.isArray(structure?.renderLayers) ? structure.renderLayers : [];
+        if (!upgradeStructureId || renderLayers.length === 0) {
+            continue;
+        }
+
+        downgradeRenderLayersById.set(upgradeStructureId, renderLayers);
+    }
+
+    return downgradeRenderLayersById;
+}
+
+function buildDowngradeStructureIdByUpgradeId(assets) {
+    const downgradeStructureIdByUpgradeId = new Map();
+
+    for (const structure of assets ?? []) {
+        const upgradeStructureId = normalizeId(normalizeStructureReferenceCodeName(structure?.upgradeStructureCodeName));
+        const structureId = normalizeId(structure?.id);
+        if (!upgradeStructureId || !structureId) {
+            continue;
+        }
+
+        downgradeStructureIdByUpgradeId.set(upgradeStructureId, structureId);
+    }
+
+    return downgradeStructureIdByUpgradeId;
+}
+
+function resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer) {
+    const manifestTags = Array.isArray(manifestLayer?.componentTags)
+        ? manifestLayer.componentTags.filter(Boolean)
+        : (Array.isArray(manifestLayer?.ct) ? manifestLayer.ct.filter(Boolean) : []);
+    if (manifestTags.length > 0) {
+        return manifestTags;
+    }
+
+    return Array.isArray(downgradeLayer?.componentTags)
+        ? downgradeLayer.componentTags.filter(Boolean)
+        : (Array.isArray(downgradeLayer?.ct) ? downgradeLayer.ct.filter(Boolean) : []);
+}
+
 function applyStructureRenderUrls(
     manifest,
     entriesByKey,
@@ -6207,6 +6252,7 @@ function applyStructureRenderUrls(
     sharedPackagingEntriesByKey,
     structuresWithRawDestroyedRenders = new Set(),
     vehicleDestroyedPublishAllowlist = null,
+    downgradeLookupAssets = null,
 ) {
     function resolveSourceModification(structure, variantId, variant) {
         const candidateIds = [
@@ -6243,6 +6289,12 @@ function applyStructureRenderUrls(
             ...(typeof entry?.offsetY === 'number' ? { offsetY: entry.offsetY } : {}),
         }])),
     });
+
+    const downgradeAssets = Array.isArray(downgradeLookupAssets) && downgradeLookupAssets.length > 0
+        ? downgradeLookupAssets
+        : manifest.assets;
+    const downgradeStructureRenderLayersById = buildDowngradeStructureRenderLayersById(downgradeAssets);
+    const downgradeStructureIdByUpgradeId = buildDowngradeStructureIdByUpgradeId(downgradeAssets);
 
     return foxholeManifestSchema.parse({
         ...manifest,
@@ -6338,6 +6390,15 @@ function applyStructureRenderUrls(
                         .map(layer => [normalizeId(layer?.id), layer])
                         .filter(([layerId]) => layerId),
                 );
+                const downgradeRenderLayersById = new Map(
+                    (downgradeStructureRenderLayersById.get(normalizeId(structure.id)) ?? [])
+                        .map(layer => [normalizeId(layer?.id), layer])
+                        .filter(([layerId]) => layerId),
+                );
+                const downgradeStructureId = downgradeStructureIdByUpgradeId.get(normalizeId(structure.id)) ?? null;
+                const downgradeLayerEntries = downgradeStructureId
+                    ? structureLayerEntriesByStructureId?.[downgradeStructureId] ?? {}
+                    : {};
                 const renderLayers = Object.values(structureLayerEntries)
                     .filter(entry => entry?.textureUrl)
                     .sort(compareStructureRenderLayers);
@@ -6425,10 +6486,17 @@ function applyStructureRenderUrls(
                     renderLayers: renderLayers.length > 0
                         ? renderLayers.map(entry => {
                             const manifestLayer = manifestRenderLayersById.get(normalizeId(entry.id));
-                            const componentTags = Array.isArray(manifestLayer?.componentTags)
-                                ? manifestLayer.componentTags.filter(Boolean)
-                                : (Array.isArray(manifestLayer?.ct) ? manifestLayer.ct.filter(Boolean) : []);
+                            const downgradeLayer = downgradeRenderLayersById.get(normalizeId(entry.id));
+                            const componentTags = resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer);
                             const componentName = manifestLayer?.componentName ?? manifestLayer?.cn ?? null;
+                            const downgradeEntry = downgradeLayerEntries[normalizeId(entry.id)];
+                            const preferDowngradeOffsets = Number(structure?.tier) === 3 && downgradeEntry;
+                            const offsetX = preferDowngradeOffsets && typeof downgradeEntry?.offsetX === 'number'
+                                ? downgradeEntry.offsetX
+                                : entry?.offsetX;
+                            const offsetY = preferDowngradeOffsets && typeof downgradeEntry?.offsetY === 'number'
+                                ? downgradeEntry.offsetY
+                                : entry?.offsetY;
                             return {
                                 id: entry.id,
                                 textureUrl: entry.textureUrl,
@@ -6436,8 +6504,8 @@ function applyStructureRenderUrls(
                                 ...(entry?.height ? { height: entry.height } : {}),
                                 ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
                                 ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
-                                ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
-                                ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
+                                ...(offsetX !== null && typeof offsetX !== 'undefined' ? { offsetX } : {}),
+                                ...(offsetY !== null && typeof offsetY !== 'undefined' ? { offsetY } : {}),
                                 ...(componentName ? { componentName } : {}),
                                 ...(componentTags.length > 0 ? { componentTags } : {}),
                             };
@@ -7012,12 +7080,13 @@ try {
         }
     }
     assertSafeUnfilteredPublish(sourceManifest, publishedManifestBeforeWrite, sourceManifestPath);
+    const rebasedSourceManifestForDowngradeLookup = rebaseFoxholeManifestAssetUrls(
+        sourceManifest,
+        getManifestBaseAssetsUrl(sourceManifest),
+        createFoxholeAssetsBaseUrl('/'),
+    );
     const filteredSourceManifest = attachSourceStructureMetadata(applyTargetFilter(
-        rebaseFoxholeManifestAssetUrls(
-            sourceManifest,
-            getManifestBaseAssetsUrl(sourceManifest),
-            createFoxholeAssetsBaseUrl('/'),
-        ),
+        rebasedSourceManifestForDowngradeLookup,
         targetFilter,
     ), sourceManifest.__sourceStructureMetadataById);
     const manifestForPublish = attachSourceStructureMetadata(
@@ -7094,6 +7163,7 @@ try {
         structureRenderEntries.sharedPackagingEntriesByKey,
         structuresWithRawDestroyedRenders,
         vehicleDestroyedPublishAllowlist,
+        rebasedSourceManifestForDowngradeLookup.assets,
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
     const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifestWithNormalizedIconUrls);

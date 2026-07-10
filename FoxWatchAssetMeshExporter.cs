@@ -2678,6 +2678,12 @@ public sealed class FoxWatchAssetMeshExporter
             targetReference.AbsoluteScale = fallbackReference.AbsoluteScale;
         }
 
+        if (targetReference.ComponentTags.Count == 0 &&
+            fallbackReference.ComponentTags.Count > 0)
+        {
+            targetReference.ComponentTags = [.. fallbackReference.ComponentTags];
+        }
+
         if (targetReference.SocketTags.Count == 0 &&
             fallbackReference.SocketTags.Count > 0)
         {
@@ -2687,6 +2693,7 @@ public sealed class FoxWatchAssetMeshExporter
                 {
                     Mask = tag.Mask,
                     Category = tag.Category,
+                    Tag = tag.Tag,
                 })
             ];
         }

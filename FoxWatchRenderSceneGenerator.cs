@@ -4613,7 +4613,7 @@ public sealed class FoxWatchRenderSceneGenerator
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["FacilityFoundationConcrete"] = "War/Content/Meshes/Structures/Foundations/Foundation01T3.uasset",
-            ["FacilityFoundationDirt"] = "War/Content/Meshes/Structures/Foundations/Foundation01T1.uasset",
+            ["FacilityFoundationDirt"] = "War/Content/Meshes/Structures/Foundations/Foundation01_1x2_T1.uasset",
         };
 
     private async Task PopulateMeshExportsAsync(IEnumerable<FoxWatchRenderSceneMeshAsset> meshAssets, string? renderAssetOutputDirectory, CancellationToken cancellationToken)

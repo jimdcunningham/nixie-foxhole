@@ -656,8 +656,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             {
                 componentReference.MaterialSidecarNameOverride = FacilityFoundationConcreteMaterialSidecarName;
             }
-            else if (string.Equals(foundationTier, "t1", StringComparison.OrdinalIgnoreCase) &&
-                     UsesConcreteFoundationFloorMesh(componentReference.MeshPath))
+            else if (string.Equals(foundationTier, "t1", StringComparison.OrdinalIgnoreCase))
             {
                 componentReference.MaterialSidecarNameOverride = FacilityFoundationDirtMaterialSidecarName;
             }
