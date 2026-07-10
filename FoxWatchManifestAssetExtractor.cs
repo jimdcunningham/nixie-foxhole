@@ -870,9 +870,100 @@ public class FoxWatchManifestAssetExtractor
                 HideInList = false,
                 IsUpgrade = false,
                 UpgradeName = null,
+                RenderLayers = ExtractFoundationStructureRenderLayers(blueprintPackagePath),
             };
 
             return structure;
+        }
+
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractFoundationStructureRenderLayers(string? blueprintPackagePath)
+        {
+            if (string.IsNullOrWhiteSpace(blueprintPackagePath) ||
+                !IsFacilityFoundationBlueprintPackagePath(blueprintPackagePath) ||
+                _meshAssetExporter == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var componentReferences = _meshAssetExporter
+                    .InspectBlueprintComponentsAsync(blueprintPackagePath)
+                    .GetAwaiter()
+                    .GetResult();
+                var renderLayers = new List<FoxWatchManifestStructureRenderLayer>();
+
+                foreach (var componentReference in componentReferences)
+                {
+                    if (IsFoundationFloorComponentReference(componentReference))
+                    {
+                        renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                        {
+                            Id = "floor",
+                            ComponentName = componentReference.ComponentName,
+                            ComponentTags = [],
+                        });
+                        continue;
+                    }
+
+                    if (!IsFoundationBorderTrimComponentReference(componentReference))
+                    {
+                        continue;
+                    }
+
+                    renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = NormalizeFoundationRenderLayerId(componentReference.ComponentName),
+                        ComponentName = componentReference.ComponentName,
+                        ComponentTags =
+                        [
+                            .. componentReference.ComponentTags
+                                .Select(tag => tag?.Trim() ?? string.Empty)
+                                .Where(tag => !string.IsNullOrWhiteSpace(tag)),
+                        ],
+                    });
+                }
+
+                return renderLayers.Count > 0 ? renderLayers : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsFacilityFoundationBlueprintPackagePath(string blueprintPackagePath)
+        {
+            var normalizedPath = blueprintPackagePath.Replace('\\', '/');
+            var fileName = Path.GetFileNameWithoutExtension(normalizedPath);
+            return fileName.StartsWith("BPFoundation", StringComparison.OrdinalIgnoreCase) &&
+                !fileName.Contains("railtracksplinefoundation", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFoundationFloorComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            return string.Equals(
+                NormalizeComponentReferenceName(componentReference.ComponentName),
+                "Foundation",
+                StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(componentReference.MeshPath);
+        }
+
+        private static bool IsFoundationBorderTrimComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            return normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase) ||
+                normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeFoundationRenderLayerId(string componentName)
+        {
+            return NormalizeComponentReferenceName(componentName).ToLowerInvariant();
         }
 
         private static bool ComputeIsDestroyedStructure(dynamic obj, UBlueprintGeneratedClass blueprint, bool isVehicle, string? profileType, string? armourType)
@@ -5027,6 +5118,7 @@ public class FoxWatchManifestAssetExtractor
                     {
                         Mask = tag.Mask,
                         Category = tag.Category,
+                        Tag = tag.Tag,
                     })
                 ],
                 X = transform.X,
@@ -5084,8 +5176,9 @@ public class FoxWatchManifestAssetExtractor
                 {
                     Mask = ExtractNullableLong(GetNamedValue(entry, "SocketTypeMask")),
                     Category = ExtractNullableLong(GetNamedValue(entry, "SocketTypeCategory")),
+                    Tag = NullIfWhiteSpace(NormalizeString(ExtractText(GetNamedValue(entry, "Tag")))),
                 })
-                .Where(entry => entry.Mask != null || entry.Category != null)
+                .Where(entry => entry.Mask != null || entry.Category != null || !string.IsNullOrWhiteSpace(entry.Tag))
                 .ToList();
         }
 

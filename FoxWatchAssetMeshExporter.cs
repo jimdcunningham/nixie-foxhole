@@ -1225,7 +1225,7 @@ public sealed class FoxWatchAssetMeshExporter
                     return null;
                 }
 
-                return new FoxWatchBlueprintComponentReference
+                var componentReference = new FoxWatchBlueprintComponentReference
                 {
                     SourceClassName = component.Class?.Name.Text ?? string.Empty,
                     ComponentName = componentName,
@@ -1245,6 +1245,8 @@ public sealed class FoxWatchAssetMeshExporter
                     IsVisible = IsComponentVisible(component),
                     IsHiddenInGame = IsComponentHiddenInGame(component),
                 };
+                ApplyComponentMetadata(componentReference, component);
+                return componentReference;
             }
             case USkeletalMeshComponent skeletalMeshComponent:
             {
@@ -1260,7 +1262,7 @@ public sealed class FoxWatchAssetMeshExporter
                     return null;
                 }
 
-                return new FoxWatchBlueprintComponentReference
+                var componentReference = new FoxWatchBlueprintComponentReference
                 {
                     SourceClassName = component.Class?.Name.Text ?? string.Empty,
                     ComponentName = componentName,
@@ -1281,6 +1283,8 @@ public sealed class FoxWatchAssetMeshExporter
                     IsVisible = IsComponentVisible(component),
                     IsHiddenInGame = IsComponentHiddenInGame(component),
                 };
+                ApplyComponentMetadata(componentReference, component);
+                return componentReference;
             }
             case USceneComponent sceneComponent:
             {
@@ -1624,8 +1628,38 @@ public sealed class FoxWatchAssetMeshExporter
     private void ApplyComponentMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
     {
         ApplyBuildSocketMetadata(targetReference, export);
+        ApplyComponentTagsMetadata(targetReference, export);
         ApplySplineConnectorMetadata(targetReference, export);
         ApplyStaticMeshOverrideMetadata(targetReference, export);
+    }
+
+    private static void ApplyComponentTagsMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
+    {
+        var componentTags = new List<string>();
+        foreach (var tag in export.GetOrDefault<string[]>("ComponentTags", []))
+        {
+            var normalized = tag?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(normalized) &&
+                !string.Equals(normalized, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                componentTags.Add(normalized);
+            }
+        }
+
+        if (componentTags.Count == 0)
+        {
+            foreach (var tag in export.GetOrDefault<FName[]>("ComponentTags", []))
+            {
+                var normalized = tag.Text?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(normalized) &&
+                    !string.Equals(normalized, "None", StringComparison.OrdinalIgnoreCase))
+                {
+                    componentTags.Add(normalized);
+                }
+            }
+        }
+
+        targetReference.ComponentTags = componentTags;
     }
 
     private static void ApplyBuildSocketMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
@@ -1643,8 +1677,11 @@ public sealed class FoxWatchAssetMeshExporter
                 {
                     Mask = tag.GetOrDefault<long?>("SocketTypeMask"),
                     Category = tag.GetOrDefault<long?>("SocketTypeCategory"),
+                    Tag = NormalizeOptionalNameTag(
+                        tag.GetOrDefault<string>("Tag")
+                        ?? tag.GetOrDefault<FName>("Tag").Text),
                 })
-                .Where(tag => tag.Mask != null || tag.Category != null)
+                .Where(tag => tag.Mask != null || tag.Category != null || !string.IsNullOrWhiteSpace(tag.Tag))
         ];
     }
 
@@ -1867,6 +1904,18 @@ public sealed class FoxWatchAssetMeshExporter
         }
 
         return normalized.Length > 0 ? char.ToUpperInvariant(normalized[0]) : 'X';
+    }
+
+    private static string? NormalizeOptionalNameTag(string? value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized) ||
+            string.Equals(normalized, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return normalized;
     }
 
     private static string ReadFallbackString(FStructFallback fallback, string propertyName)
@@ -3261,6 +3310,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public string AbsoluteRotation { get; set; } = string.Empty;
     public string AbsoluteScale { get; set; } = string.Empty;
     public List<FoxWatchBlueprintSocketTagReference> SocketTags { get; set; } = [];
+    public List<string> ComponentTags { get; set; } = [];
     public List<double>? SplineDefaultTargetUnrealLocationCentimeters { get; set; }
     public string? SplinePathMode { get; set; }
     public double? SplineMinBufferCentimeters { get; set; }
@@ -3284,6 +3334,8 @@ public sealed class FoxWatchBlueprintSocketTagReference
     public long? Mask { get; set; }
 
     public long? Category { get; set; }
+
+    public string? Tag { get; set; }
 }
 
 public sealed class FoxWatchStaticMeshOverrideReference

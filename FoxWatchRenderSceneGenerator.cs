@@ -1920,6 +1920,13 @@ public sealed class FoxWatchRenderSceneGenerator
             return ["floor", "walls", "corners"];
         }
 
+        if (IsFacilityFoundationStructure(structure))
+        {
+            return structure.RenderLayers?.Count > 0
+                ? [.. structure.RenderLayers.Select(layer => layer.Id)]
+                : [];
+        }
+
         if (string.Equals(structure.Id, "facilitypipe", StringComparison.OrdinalIgnoreCase))
         {
             return ["backtrim", "span", "fronttrim"];
@@ -1985,6 +1992,13 @@ public sealed class FoxWatchRenderSceneGenerator
 
         return IsCraneRailTrackSplineStructure(structure)
             && string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFacilityFoundationStructure(FoxWatchManifestStructure structure)
+    {
+        var structureId = structure.Id ?? string.Empty;
+        return structureId.StartsWith("foundation", StringComparison.OrdinalIgnoreCase) &&
+            !structureId.Contains("railtracksplinefoundation", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsFacilityRoadStructure(FoxWatchManifestStructure structure)
@@ -2766,6 +2780,21 @@ public sealed class FoxWatchRenderSceneGenerator
                 "frontswitch" => string.Equals(normalizedNodeName, "FrontSwitchMesh", StringComparison.OrdinalIgnoreCase),
                 _ => false,
             };
+        }
+
+        if (IsFacilityFoundationStructure(structure))
+        {
+            var renderLayer = structure.RenderLayers?
+                .FirstOrDefault(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase));
+            if (renderLayer == null || string.IsNullOrWhiteSpace(renderLayer.ComponentName))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                normalizedNodeName,
+                renderLayer.ComponentName,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         return layerId.ToLowerInvariant() switch

@@ -829,9 +829,11 @@ function compactSocketTag(value) {
     return compactObject({
         m: compactJsonValue(value.mask),
         c: compactJsonValue(value.category),
+        g: value.tag,
     }, {
         m: null,
         c: null,
+        g: null,
     });
 }
 
@@ -1238,6 +1240,8 @@ function compactStructureRenderLayer(value) {
         ay: compactJsonValue(value.anchorY),
         ox: compactJsonValue(value.offsetX),
         oy: compactJsonValue(value.offsetY),
+        cn: value.componentName,
+        ct: compactArray(value.componentTags, compactJsonValue),
     }, {
         w: null,
         h: null,
@@ -1245,6 +1249,8 @@ function compactStructureRenderLayer(value) {
         ay: null,
         ox: 0,
         oy: 0,
+        cn: null,
+        ct: [],
     });
 }
 
@@ -4351,6 +4357,8 @@ async function readRenderSidecar(filePath) {
         const height = Number(parsed.height ?? 0);
         const anchorPixelX = Number(parsed.anchorPixelX ?? NaN);
         const anchorPixelY = Number(parsed.anchorPixelY ?? NaN);
+        const imageCenterPixelX = Number(parsed.imageCenterPixelX ?? NaN);
+        const imageCenterPixelY = Number(parsed.imageCenterPixelY ?? NaN);
         const offsetX = Number(parsed.offsetXPixels ?? parsed.offsetX ?? NaN);
         const offsetY = Number(parsed.offsetYPixels ?? parsed.offsetY ?? NaN);
 
@@ -4361,11 +4369,19 @@ async function readRenderSidecar(filePath) {
         return {
             width: Number.isFinite(width) && width > 0 ? width : null,
             height: Number.isFinite(height) && height > 0 ? height : null,
-            anchorX: Number.isFinite(anchorPixelX) && Number.isFinite(width) && width > 0
-                ? anchorPixelX / width
+            anchorX: Number.isFinite(width) && width > 0
+                ? (Number.isFinite(imageCenterPixelX)
+                    ? imageCenterPixelX / width
+                    : Number.isFinite(anchorPixelX)
+                        ? anchorPixelX / width
+                        : null)
                 : null,
-            anchorY: Number.isFinite(anchorPixelY) && Number.isFinite(height) && height > 0
-                ? anchorPixelY / height
+            anchorY: Number.isFinite(height) && height > 0
+                ? (Number.isFinite(imageCenterPixelY)
+                    ? imageCenterPixelY / height
+                    : Number.isFinite(anchorPixelY)
+                        ? anchorPixelY / height
+                        : null)
                 : null,
             offsetX: Number.isFinite(offsetX) ? offsetX : null,
             offsetY: Number.isFinite(offsetY) ? offsetY : null,
@@ -6317,6 +6333,11 @@ function applyStructureRenderUrls(
                     || structure?.packaged?.palletOffset,
                 );
                 const structureLayerEntries = structureLayerEntriesByStructureId?.[normalizeId(structure.id)] ?? {};
+                const manifestRenderLayersById = new Map(
+                    (Array.isArray(structure.renderLayers) ? structure.renderLayers : [])
+                        .map(layer => [normalizeId(layer?.id), layer])
+                        .filter(([layerId]) => layerId),
+                );
                 const renderLayers = Object.values(structureLayerEntries)
                     .filter(entry => entry?.textureUrl)
                     .sort(compareStructureRenderLayers);
@@ -6402,17 +6423,28 @@ function applyStructureRenderUrls(
                     previewDirection,
                     ...(structureColors.length > 0 ? { colors: structureColors } : {}),
                     renderLayers: renderLayers.length > 0
-                        ? renderLayers.map(entry => ({
-                            id: entry.id,
-                            textureUrl: entry.textureUrl,
-                            ...(entry?.width ? { width: entry.width } : {}),
-                            ...(entry?.height ? { height: entry.height } : {}),
-                            ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
-                            ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
-                            ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
-                            ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
-                        }))
-                        : structure.renderLayers,
+                        ? renderLayers.map(entry => {
+                            const manifestLayer = manifestRenderLayersById.get(normalizeId(entry.id));
+                            const componentTags = Array.isArray(manifestLayer?.componentTags)
+                                ? manifestLayer.componentTags.filter(Boolean)
+                                : (Array.isArray(manifestLayer?.ct) ? manifestLayer.ct.filter(Boolean) : []);
+                            const componentName = manifestLayer?.componentName ?? manifestLayer?.cn ?? null;
+                            return {
+                                id: entry.id,
+                                textureUrl: entry.textureUrl,
+                                ...(entry?.width ? { width: entry.width } : {}),
+                                ...(entry?.height ? { height: entry.height } : {}),
+                                ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
+                                ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
+                                ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
+                                ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
+                                ...(componentName ? { componentName } : {}),
+                                ...(componentTags.length > 0 ? { componentTags } : {}),
+                            };
+                        })
+                        : (Array.isArray(structure.renderLayers)
+                            ? structure.renderLayers.filter(layer => String(layer?.textureUrl ?? '').trim())
+                            : structure.renderLayers),
                     sprite: {
                         ...structure.sprite,
                         ...(renderEntry?.textureWidth ? { width: renderEntry.textureWidth } : {}),

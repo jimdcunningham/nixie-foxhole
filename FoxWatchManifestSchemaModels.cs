@@ -247,6 +247,9 @@ public sealed class FoxWatchManifestStructure
 
     public List<FoxWatchManifestBuildSocket> BuildSockets { get; set; } = [];
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<FoxWatchManifestStructureRenderLayer>? RenderLayers { get; set; }
+
     public List<FoxWatchManifestCraneSpawn> CraneSpawns { get; set; } = [];
 
     public List<FoxWatchManifestHitPolygon> FootprintPolygons { get; set; } = [];
@@ -546,6 +549,17 @@ public sealed class FoxWatchManifestSocketTag
     public long? Mask { get; set; }
 
     public long? Category { get; set; }
+
+    public string? Tag { get; set; }
+}
+
+public sealed class FoxWatchManifestStructureRenderLayer
+{
+    public string Id { get; set; } = string.Empty;
+
+    public string? ComponentName { get; set; }
+
+    public List<string> ComponentTags { get; set; } = [];
 }
 
 public sealed class FoxWatchManifestBuildFootprintBox
