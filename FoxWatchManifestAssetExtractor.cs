@@ -652,8 +652,9 @@ public class FoxWatchManifestAssetExtractor
                 inheritedProperty("ItemCategory"),
                 inheritedProperty("ItemProfileType"),
                 inheritedProperty("UniformType"));
-            var buildOrder = ExtractInt(inheritedProperty("BuildOrder"));
-            var buildOrderValue = ExtractNullableInt(inheritedProperty("BuildOrder"));
+            var buildOrderValue = ExtractNullableInt(GetNamedValue(obj, "BuildOrder"))
+                ?? ExtractNullableInt(inheritedProperty("BuildOrder"));
+            var buildOrder = buildOrderValue ?? 0;
             var categoryId = ResolveStructureCategoryId(structureId, codeNameText, rawBuildCategory, itemCategoryId, buildOrderValue);
 
             var categoryDisplayName = HumanizeCategory(categoryId);
@@ -1601,13 +1602,6 @@ public class FoxWatchManifestAssetExtractor
             if (existingHasResolvedCategory != candidateHasResolvedCategory)
             {
                 return candidateHasResolvedCategory;
-            }
-
-            var existingHasBuildOrder = existingStructure.BuildOrder > 0;
-            var candidateHasBuildOrder = candidateStructure.BuildOrder > 0;
-            if (existingHasBuildOrder != candidateHasBuildOrder)
-            {
-                return candidateHasBuildOrder;
             }
 
             var existingVehicleSeatCount = existingStructure.VehicleSeats?.Count ?? 0;
