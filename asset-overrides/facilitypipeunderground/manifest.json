@@ -1,6 +1,9 @@
 {
   "clipFloorZ": -0.5,
   "connector": {
-    "pathStyle": "spline"
+    "pathStyle": "spline",
+    "behavior": {
+      "undergroundPipe": true
+    }
   }
 }

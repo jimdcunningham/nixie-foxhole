@@ -1,5 +1,4 @@
 {
-  "clipFloor": false,
   "connector": {
     "behavior": {
       "mineSpline": true

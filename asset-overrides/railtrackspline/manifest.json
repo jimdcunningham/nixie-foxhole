@@ -1,4 +1,11 @@
 {
   "previewDirection": "ne",
-  "clipFloorZ": -0.5
+  "clipFloorZ": -0.5,
+  "connector": {
+    "behavior": {
+      "railTrack": true,
+      "socketSnapping": true,
+      "renderEndCaps": false
+    }
+  }
 }

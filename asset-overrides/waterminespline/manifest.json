@@ -1,3 +1,8 @@
 {
-  "clipFloor": false
+  "clipFloor": false,
+  "connector": {
+    "behavior": {
+      "mineSpline": true
+    }
+  }
 }

@@ -1,3 +1,9 @@
 {
-  "clipFloorZ": -0.5
+  "clipFloorZ": -0.5,
+  "connector": {
+    "behavior": {
+      "powerline": true,
+      "socketSnapping": true
+    }
+  }
 }

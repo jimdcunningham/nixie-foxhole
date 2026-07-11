@@ -1,4 +1,11 @@
 {
   "clipFloorZ": -0.5,
-  "previewDirection": "sw"
+  "previewDirection": "sw",
+  "connector": {
+    "behavior": {
+      "pipeCurveScale": true,
+      "pipeExtension": true,
+      "socketSnapping": true
+    }
+  }
 }

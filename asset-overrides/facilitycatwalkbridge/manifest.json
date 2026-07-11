@@ -5,6 +5,14 @@
     "pathStyle": "straight-telescoping",
     "frontSocketName": "FrontSocket",
     "backSocketName": "BackSocket",
-    "defaultTargetUnrealLocationCm": [250, 0, 0]
+    "defaultTargetUnrealLocationCm": [
+      250,
+      0,
+      0
+    ],
+    "behavior": {
+      "trimSpan": true,
+      "fieldConnectorSpan": true
+    }
   }
 }

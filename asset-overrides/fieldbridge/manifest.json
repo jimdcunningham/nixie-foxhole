@@ -5,6 +5,10 @@
   "connector": {
     "pathStyle": "straight-telescoping",
     "frontSocketName": "FrontSocket",
-    "backSocketName": "BackSocket"
+    "backSocketName": "BackSocket",
+    "behavior": {
+      "trimSpan": true,
+      "fieldConnectorSpan": true
+    }
   }
 }

@@ -2,6 +2,9 @@
   "connector": {
     "pathStyle": "straight-telescoping",
     "frontSocketName": "WallSplineCommon:FrontSocket",
-    "backSocketName": "WallSplineCommon:BackSocket"
+    "backSocketName": "WallSplineCommon:BackSocket",
+    "behavior": {
+      "trimSpan": true
+    }
   }
 }
