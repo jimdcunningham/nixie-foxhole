@@ -2478,6 +2478,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 var parentName = ResolveSceneGraphParentName(componentReference, componentNames);
                 if (!string.IsNullOrWhiteSpace(parentName) &&
                     !ShouldIncludeHiddenAircraftRoofComponent(componentReference) &&
+                    !ShouldIncludeHiddenTrenchOpenWallComponent(componentReference) &&
                     hiddenSubtreeComponentNames.Contains(parentName))
                 {
                     hiddenSubtreeComponentNames.Add(componentReference.ComponentName);
@@ -2552,7 +2553,8 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     private static bool IsHiddenFromSceneGraph(FoxWatchBlueprintComponentReference componentReference)
     {
         return (!componentReference.IsVisible || componentReference.IsHiddenInGame)
-            && !ShouldIncludeHiddenAircraftRoofComponent(componentReference);
+            && !ShouldIncludeHiddenAircraftRoofComponent(componentReference)
+            && !ShouldIncludeHiddenTrenchOpenWallComponent(componentReference);
     }
 
     private static bool HasExplicitLocalTransform(FoxWatchBlueprintComponentReference componentReference)
@@ -2862,6 +2864,29 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             && (meshFileName.Contains("upper", StringComparison.OrdinalIgnoreCase)
                 || meshFileName.Contains("roof", StringComparison.OrdinalIgnoreCase))
             && !meshFileName.Contains("fuselage_roof", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldIncludeHiddenTrenchOpenWallComponent(
+        FoxWatchBlueprintComponentReference componentReference)
+    {
+        if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
+        {
+            return false;
+        }
+
+        var componentName = NormalizeReferenceName(componentReference.ComponentName);
+        var separatorIndex = componentName.LastIndexOf(':');
+        if (separatorIndex >= 0 && separatorIndex + 1 < componentName.Length)
+        {
+            componentName = componentName[(separatorIndex + 1)..];
+        }
+
+        if (!componentName.StartsWith("OpenWall", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return componentReference.MeshPath.Contains("/Structures/FortTrenches/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolveAircraftHiddenRoofParentName(

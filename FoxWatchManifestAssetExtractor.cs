@@ -782,6 +782,7 @@ public class FoxWatchManifestAssetExtractor
             var connector = ExtractConnector(blueprint, inheritedProperty);
             buildSockets = EnsureConnectorEndpointBuildSockets(buildSockets, connector);
             buildSockets = CollapseLogicalBuildSocketDuplicates(buildSockets, connector);
+            buildSockets = ApplyEntrenchmentSocketVisibilityTags(buildSockets);
 
             var structure = new FoxWatchManifestStructure
             {
@@ -870,10 +871,227 @@ public class FoxWatchManifestAssetExtractor
                 HideInList = false,
                 IsUpgrade = false,
                 UpgradeName = null,
-                RenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath),
+                RenderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets),
             };
 
             return structure;
+        }
+
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractStructureRenderLayers(
+            string structureId,
+            string? blueprintPackagePath,
+            string? profileType,
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets)
+        {
+            var foundationRenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath);
+            if (foundationRenderLayers != null)
+            {
+                return foundationRenderLayers;
+            }
+
+            if (string.Equals(profileType, "Trench", StringComparison.OrdinalIgnoreCase))
+            {
+                return ExtractTrenchStructureRenderLayers(blueprintPackagePath);
+            }
+
+            if (!ShouldExtractFortEntrenchmentRenderLayers(profileType, buildSockets, blueprintPackagePath))
+            {
+                return null;
+            }
+
+            return ExtractFortEntrenchmentStructureRenderLayers(structureId, blueprintPackagePath, buildSockets);
+        }
+
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractTrenchStructureRenderLayers(string? blueprintPackagePath)
+        {
+            if (string.IsNullOrWhiteSpace(blueprintPackagePath) || _meshAssetExporter == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var componentReferences = _meshAssetExporter
+                    .InspectBlueprintComponentsAsync(blueprintPackagePath)
+                    .GetAwaiter()
+                    .GetResult();
+                var renderLayers = new List<FoxWatchManifestStructureRenderLayer>();
+
+                foreach (var componentReference in componentReferences)
+                {
+                    if (IsTrenchFloorComponentReference(componentReference))
+                    {
+                        if (!renderLayers.Any(layer =>
+                                string.Equals(layer.Id, "floor", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                            {
+                                Id = "floor",
+                                ComponentName = componentReference.ComponentName,
+                                ComponentTags = [],
+                            });
+                        }
+
+                        continue;
+                    }
+
+                    if (TryResolveTrenchDirectionalWallRenderLayer(
+                            componentReference,
+                            out var wallLayerId,
+                            out var wallTags))
+                    {
+                        if (renderLayers.Any(layer =>
+                                string.Equals(layer.Id, wallLayerId, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                        {
+                            Id = wallLayerId,
+                            ComponentName = componentReference.ComponentName,
+                            ComponentTags = wallTags,
+                        });
+                        continue;
+                    }
+
+                    if (TryResolveTrenchCornerRenderLayer(
+                            componentReference,
+                            out var cornerLayerId,
+                            out var cornerTags))
+                    {
+                        if (renderLayers.Any(layer =>
+                                string.Equals(layer.Id, cornerLayerId, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                        {
+                            Id = cornerLayerId,
+                            ComponentName = componentReference.ComponentName,
+                            ComponentTags = cornerTags,
+                        });
+                    }
+                }
+
+                return renderLayers.Count > 0 ? renderLayers : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsTrenchFloorComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath) ||
+                IsTrenchNonFloorMeshComponent(componentReference))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                GetTrenchComponentShortName(componentReference.ComponentName),
+                "Floor",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsTrenchNonFloorMeshComponent(FoxWatchBlueprintComponentReference componentReference)
+        {
+            var shortName = GetTrenchComponentShortName(componentReference.ComponentName);
+            if (shortName.Contains("puddle", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath ?? string.Empty);
+            return meshFileName.Contains("puddle", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryResolveTrenchDirectionalWallRenderLayer(
+            FoxWatchBlueprintComponentReference componentReference,
+            out string layerId,
+            out List<string> componentTags)
+        {
+            layerId = string.Empty;
+            componentTags = [];
+
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath) ||
+                IsTrenchNonFloorMeshComponent(componentReference))
+            {
+                return false;
+            }
+
+            var shortName = GetTrenchComponentShortName(componentReference.ComponentName);
+            switch (shortName)
+            {
+                case "WallBack":
+                    layerId = "backwall";
+                    componentTags = ["Back"];
+                    return true;
+                case "WallFront":
+                    layerId = "frontwall";
+                    componentTags = ["Front"];
+                    return true;
+                case "WallLeft":
+                    layerId = "leftwall";
+                    componentTags = ["Left"];
+                    return true;
+                case "WallRight":
+                    layerId = "rightwall";
+                    componentTags = ["Right"];
+                    return true;
+                case "OpenWallLeft":
+                    layerId = "openwallleft";
+                    componentTags = ["Left"];
+                    return true;
+                case "OpenWallRight":
+                    layerId = "openwallright";
+                    componentTags = ["Right"];
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryResolveTrenchCornerRenderLayer(
+            FoxWatchBlueprintComponentReference componentReference,
+            out string layerId,
+            out List<string> componentTags)
+        {
+            layerId = string.Empty;
+            componentTags = [];
+
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var shortName = GetTrenchComponentShortName(componentReference.ComponentName);
+            if (!shortName.StartsWith("Corner", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            layerId = shortName.ToLowerInvariant();
+            componentTags = DeriveDirectionalTagsFromComponentName(shortName);
+            return componentTags.Count > 0;
+        }
+
+        private static string GetTrenchComponentShortName(string? componentName)
+        {
+            var normalizedComponentName = NormalizeComponentReferenceName(componentName);
+            var separatorIndex = normalizedComponentName.LastIndexOf(':');
+            if (separatorIndex >= 0 && separatorIndex + 1 < normalizedComponentName.Length)
+            {
+                return normalizedComponentName[(separatorIndex + 1)..];
+            }
+
+            return normalizedComponentName;
         }
 
         private List<FoxWatchManifestStructureRenderLayer>? ExtractFoundationStructureRenderLayers(
@@ -995,6 +1213,655 @@ public class FoxWatchManifestAssetExtractor
         private static string NormalizeFoundationRenderLayerId(string componentName)
         {
             return NormalizeComponentReferenceName(componentName).ToLowerInvariant();
+        }
+
+        private static List<FoxWatchManifestBuildSocket> ApplyEntrenchmentSocketVisibilityTags(
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets)
+        {
+            if (buildSockets.Count == 0)
+            {
+                return [];
+            }
+
+            return
+            [
+                .. buildSockets.Select(socket =>
+                {
+                    var visibilityTag = ResolveEntrenchmentSocketVisibilityTag(socket.Name, socket.ComponentType);
+                    if (string.IsNullOrWhiteSpace(visibilityTag))
+                    {
+                        return socket;
+                    }
+
+                    if (socket.SocketTags.Any(tag => !string.IsNullOrWhiteSpace(tag.Tag)))
+                    {
+                        return socket;
+                    }
+
+                    var socketTags = socket.SocketTags.Count > 0
+                        ? socket.SocketTags.Select(CloneSocketTag).ToList()
+                        : [new FoxWatchManifestSocketTag()];
+                    socketTags[0].Tag = visibilityTag;
+
+                    return new FoxWatchManifestBuildSocket
+                    {
+                        Name = socket.Name,
+                        ComponentType = socket.ComponentType,
+                        PipeType = socket.PipeType,
+                        SocketTags = socketTags,
+                        X = socket.X,
+                        Y = socket.Y,
+                        Z = socket.Z,
+                        Rotation = socket.Rotation,
+                    };
+                }),
+            ];
+        }
+
+        private static FoxWatchManifestSocketTag CloneSocketTag(FoxWatchManifestSocketTag tag)
+        {
+            return new FoxWatchManifestSocketTag
+            {
+                Mask = tag.Mask,
+                Category = tag.Category,
+                Tag = tag.Tag,
+            };
+        }
+
+        private static bool ShouldExtractFortEntrenchmentRenderLayers(
+            string? profileType,
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets,
+            string? blueprintPackagePath)
+        {
+            if (IsFacilityFoundationBlueprintPackagePath(blueprintPackagePath ?? string.Empty))
+            {
+                return false;
+            }
+
+            if (UsesFortEntrenchmentProfileType(profileType))
+            {
+                return true;
+            }
+
+            if (HasFortDirectionalBuildSockets(buildSockets))
+            {
+                return true;
+            }
+
+            return IsFortEntrenchmentBlueprintPackagePath(blueprintPackagePath);
+        }
+
+        private static bool UsesFortEntrenchmentProfileType(string? profileType)
+        {
+            return string.Equals(profileType, "FortBase", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profileType, "Fort", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profileType, "FortRotatableUpgrade", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profileType, "FortForwardBase", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasFortDirectionalBuildSockets(IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets)
+        {
+            return buildSockets.Any(socket =>
+                !string.IsNullOrWhiteSpace(ResolveFortEntrenchmentSocketVisibilityTag(socket.Name, socket.ComponentType)));
+        }
+
+        private static bool IsFortEntrenchmentBlueprintPackagePath(string? blueprintPackagePath)
+        {
+            if (string.IsNullOrWhiteSpace(blueprintPackagePath))
+            {
+                return false;
+            }
+
+            var normalizedPath = blueprintPackagePath.Replace('\\', '/');
+            return normalizedPath.Contains("/FortTrenches/", StringComparison.OrdinalIgnoreCase)
+                || normalizedPath.Contains("/Forts/", StringComparison.OrdinalIgnoreCase)
+                || normalizedPath.Contains("/Bunker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractFortEntrenchmentStructureRenderLayers(
+            string structureId,
+            string? blueprintPackagePath,
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets)
+        {
+            if (string.IsNullOrWhiteSpace(blueprintPackagePath) || _meshAssetExporter == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var componentReferences = _meshAssetExporter
+                    .InspectBlueprintComponentsAsync(blueprintPackagePath)
+                    .GetAwaiter()
+                    .GetResult();
+                var renderLayers = new List<FoxWatchManifestStructureRenderLayer>();
+
+                foreach (var componentReference in componentReferences)
+                {
+                    if (IsFortEntrenchmentFloorComponentReference(componentReference))
+                    {
+                        if (renderLayers.Any(layer =>
+                                string.Equals(layer.Id, "floor", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                        {
+                            Id = "floor",
+                            ComponentName = componentReference.ComponentName,
+                            ComponentTags = [],
+                        });
+                        continue;
+                    }
+
+                    if (IsFortEntrenchmentRoofRenderComponent(componentReference))
+                    {
+                        if (!renderLayers.Any(layer =>
+                                string.Equals(layer.Id, "roof", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                            {
+                                Id = "roof",
+                                ComponentName = componentReference.ComponentName,
+                                ComponentTags = [],
+                            });
+                        }
+
+                        continue;
+                    }
+
+                    if (TryResolveFortModSlotWallRenderLayer(componentReference, out var wallLayerId, out var wallTags))
+                    {
+                        if (renderLayers.Any(layer =>
+                                string.Equals(layer.Id, wallLayerId, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                        {
+                            Id = wallLayerId,
+                            ComponentName = ResolveFortModSlotWallLayerComponentName(componentReference),
+                            ComponentTags = wallTags,
+                        });
+                        continue;
+                    }
+
+                    if (!IsFortEntrenchmentVisibilityComponentReference(componentReference))
+                    {
+                        continue;
+                    }
+
+                    renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = NormalizeFortEntrenchmentRenderLayerId(componentReference.ComponentName),
+                        ComponentName = componentReference.ComponentName,
+                        ComponentTags = ResolveFortEntrenchmentRenderLayerComponentTags(
+                            componentReference.ComponentName,
+                            componentReference.ComponentTags),
+                    });
+                }
+
+                EnsureFortModSlotWallRenderLayers(renderLayers, buildSockets, componentReferences);
+                EnsureFortEntrenchmentRoofRenderLayer(renderLayers, componentReferences);
+
+                return renderLayers.Count > 0 ? renderLayers : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsFortEntrenchmentFloorComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                NormalizeComponentReferenceName(componentReference.ComponentName),
+                "Floor",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFortEntrenchmentVisibilityComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            if (string.Equals(normalizedComponentName, "Floor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedComponentName, "Roof", StringComparison.OrdinalIgnoreCase) ||
+                IsFortEntrenchmentRoofRenderComponent(componentReference))
+            {
+                return false;
+            }
+
+            if (IsFortEntrenchmentBreachedWallComponentReference(componentReference))
+            {
+                return false;
+            }
+
+            if (TryResolveFortModSlotWallRenderLayer(componentReference, out _, out _))
+            {
+                return false;
+            }
+
+            if (componentReference.ComponentTags.Any(tag => MapFortSideTagToVisibilityTag(tag) != null))
+            {
+                return normalizedComponentName.Contains("corner", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("wall", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("trim", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("ramp", StringComparison.OrdinalIgnoreCase)
+                    || ContainsDirectionalComponentNameToken(normalizedComponentName);
+            }
+
+            if (ContainsDirectionalComponentNameToken(normalizedComponentName))
+            {
+                return normalizedComponentName.Contains("wall", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("corner", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("trim", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("ramp", StringComparison.OrdinalIgnoreCase)
+                    || IsFortEntrenchmentMeshPath(componentReference.MeshPath);
+            }
+
+            return false;
+        }
+
+        private static bool IsFortEntrenchmentRoofRenderComponent(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            if (!string.Equals(normalizedComponentName, "Roof", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
+            return meshFileName.Contains("roof", StringComparison.OrdinalIgnoreCase)
+                && !meshFileName.Contains("dirt", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureFortEntrenchmentRoofRenderLayer(
+            List<FoxWatchManifestStructureRenderLayer> renderLayers,
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            if (renderLayers.Any(layer => string.Equals(layer.Id, "roof", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            var roofModSlotComponentName = ResolveFortRoofModSlotLayerComponentName(componentReferences);
+            if (!string.IsNullOrWhiteSpace(roofModSlotComponentName))
+            {
+                renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                {
+                    Id = "roof",
+                    ComponentName = roofModSlotComponentName,
+                    ComponentTags = [],
+                });
+                return;
+            }
+
+            var roofComponent = componentReferences.FirstOrDefault(IsFortEntrenchmentRoofRenderComponent);
+            if (roofComponent == null)
+            {
+                return;
+            }
+
+            renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+            {
+                Id = "roof",
+                ComponentName = roofComponent.ComponentName,
+                ComponentTags = [],
+            });
+        }
+
+        private static string? ResolveFortRoofModSlotLayerComponentName(
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            foreach (var componentReference in componentReferences)
+            {
+                var componentName = componentReference.ComponentName ?? string.Empty;
+                var roofModSlotIndex = componentName.IndexOf("FortRoofModSlot", StringComparison.OrdinalIgnoreCase);
+                if (roofModSlotIndex < 0)
+                {
+                    continue;
+                }
+
+                return componentName[..(roofModSlotIndex + "FortRoofModSlot".Length)];
+            }
+
+            return null;
+        }
+
+        private static bool IsFortEntrenchmentBreachedWallComponentReference(FoxWatchBlueprintComponentReference componentReference)
+        {
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            return normalizedComponentName.Contains("breached", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryResolveFortModSlotWallRenderLayer(
+            FoxWatchBlueprintComponentReference componentReference,
+            out string layerId,
+            out List<string> componentTags)
+        {
+            layerId = string.Empty;
+            componentTags = [];
+
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
+            if (!meshFileName.Contains("wall", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var direction = ResolveFortModSlotDirection(
+                componentReference.ComponentName,
+                componentReference.AttachParentName);
+            if (string.IsNullOrWhiteSpace(direction))
+            {
+                return false;
+            }
+
+            layerId = $"{direction.ToLowerInvariant()}wall";
+            componentTags = [direction];
+            return true;
+        }
+
+        private static string ResolveFortModSlotWallLayerComponentName(FoxWatchBlueprintComponentReference componentReference)
+        {
+            var direction = ResolveFortModSlotDirection(
+                componentReference.ComponentName,
+                componentReference.AttachParentName);
+            if (string.IsNullOrWhiteSpace(direction))
+            {
+                return componentReference.ComponentName;
+            }
+
+            return $"FortCommonMods:{direction}ModSlot";
+        }
+
+        private static string? ResolveFortModSlotDirection(string? componentName, string? attachParentName)
+        {
+            var context = $"{NormalizeComponentReferenceName(componentName)}:{NormalizeComponentReferenceName(attachParentName)}";
+            if (context.Contains("backinframodslot", StringComparison.OrdinalIgnoreCase) ||
+                context.Contains("frontinframodslot", StringComparison.OrdinalIgnoreCase) ||
+                context.Contains("leftinframodslot", StringComparison.OrdinalIgnoreCase) ||
+                context.Contains("rightinframodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (context.Contains("backmodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Back";
+            }
+
+            if (context.Contains("frontmodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Front";
+            }
+
+            if (context.Contains("leftmodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Left";
+            }
+
+            if (context.Contains("rightmodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Right";
+            }
+
+            return null;
+        }
+
+        private static void EnsureFortModSlotWallRenderLayers(
+            List<FoxWatchManifestStructureRenderLayer> renderLayers,
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets,
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            var directions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (HasFortDirectionalBuildSockets(buildSockets))
+            {
+                directions.Add("Back");
+                directions.Add("Front");
+                directions.Add("Left");
+                directions.Add("Right");
+            }
+
+            foreach (var componentReference in componentReferences)
+            {
+                var direction = ResolveFortModSlotDirection(
+                    componentReference.ComponentName,
+                    componentReference.AttachParentName);
+                if (!string.IsNullOrWhiteSpace(direction))
+                {
+                    directions.Add(direction);
+                }
+            }
+
+            foreach (var direction in directions)
+            {
+                var slotName = $"{direction}ModSlot";
+                var layerId = $"{direction.ToLowerInvariant()}wall";
+                if (renderLayers.Any(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                {
+                    Id = layerId,
+                    ComponentName = $"FortCommonMods:{slotName}",
+                    ComponentTags = [direction],
+                });
+            }
+        }
+
+        private static bool IsFortEntrenchmentDirtFillMesh(string meshPath)
+        {
+            var meshFileName = Path.GetFileNameWithoutExtension(meshPath);
+            if (!meshFileName.Contains("dirt", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return meshFileName.Contains("fort", StringComparison.OrdinalIgnoreCase)
+                || meshFileName.Contains("trench", StringComparison.OrdinalIgnoreCase)
+                || meshFileName.Contains("corner", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFortEntrenchmentMeshPath(string meshPath)
+        {
+            var normalizedPath = meshPath.Replace('\\', '/');
+            return normalizedPath.Contains("/FortTrenches/", StringComparison.OrdinalIgnoreCase)
+                || normalizedPath.Contains("/Forts/", StringComparison.OrdinalIgnoreCase)
+                || normalizedPath.Contains("/Bunker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ContainsDirectionalComponentNameToken(string normalizedComponentName)
+        {
+            return normalizedComponentName.Contains("back", StringComparison.OrdinalIgnoreCase)
+                || normalizedComponentName.Contains("front", StringComparison.OrdinalIgnoreCase)
+                || normalizedComponentName.Contains("left", StringComparison.OrdinalIgnoreCase)
+                || normalizedComponentName.Contains("right", StringComparison.OrdinalIgnoreCase)
+                || normalizedComponentName.Contains("center", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeFortEntrenchmentRenderLayerId(string componentName)
+        {
+            return NormalizeComponentReferenceName(componentName).ToLowerInvariant();
+        }
+
+        private static List<string> ResolveFortEntrenchmentRenderLayerComponentTags(
+            string componentName,
+            IReadOnlyList<string> componentTags)
+        {
+            var resolvedTags = componentTags
+                .Select(MapFortSideTagToVisibilityTag)
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (resolvedTags.Count > 0)
+            {
+                return resolvedTags;
+            }
+
+            return DeriveDirectionalTagsFromComponentName(componentName);
+        }
+
+        private static string? MapFortSideTagToVisibilityTag(string? tag)
+        {
+            var normalizedTag = tag?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedTag))
+            {
+                return null;
+            }
+
+            if (normalizedTag.StartsWith("Side", StringComparison.OrdinalIgnoreCase) && normalizedTag.Length > 4)
+            {
+                return normalizedTag[4..];
+            }
+
+            if (string.Equals(normalizedTag, "Back", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedTag, "Front", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedTag, "Left", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedTag, "Right", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedTag, "Center", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedTag;
+            }
+
+            return null;
+        }
+
+        private static List<string> DeriveDirectionalTagsFromComponentName(string componentName)
+        {
+            var normalizedComponentName = NormalizeComponentReferenceName(componentName);
+            var tags = new List<string>();
+
+            if (normalizedComponentName.Contains("back", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Back");
+            }
+
+            if (normalizedComponentName.Contains("front", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Front");
+            }
+
+            if (normalizedComponentName.Contains("left", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Left");
+            }
+
+            if (normalizedComponentName.Contains("right", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Right");
+            }
+
+            if (normalizedComponentName.Contains("center", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Center");
+            }
+
+            return tags;
+        }
+
+        private static string? ResolveEntrenchmentSocketVisibilityTag(string? socketName, string? componentType)
+        {
+            var fortTag = ResolveFortEntrenchmentSocketVisibilityTag(socketName, componentType);
+            if (!string.IsNullOrWhiteSpace(fortTag))
+            {
+                return fortTag;
+            }
+
+            return ResolveTrenchSocketVisibilityTag(socketName, componentType);
+        }
+
+        private static string? ResolveTrenchSocketVisibilityTag(string? socketName, string? componentType)
+        {
+            var normalizedSocketName = NormalizeComponentReferenceName(socketName);
+            if (System.Text.RegularExpressions.Regex.IsMatch(normalizedSocketName, @"\w+Socket\d+$", RegexOptions.IgnoreCase))
+            {
+                return null;
+            }
+
+            var normalizedComponentType = NormalizeComponentReferenceName(componentType);
+            var haystack = $"{normalizedSocketName}:{normalizedComponentType}";
+
+            if (haystack.Contains("backsocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Back";
+            }
+
+            if (haystack.Contains("frontsocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Front";
+            }
+
+            if (haystack.Contains("leftsocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Left";
+            }
+
+            if (haystack.Contains("rightsocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Right";
+            }
+
+            return null;
+        }
+
+        private static string? ResolveFortEntrenchmentSocketVisibilityTag(string? socketName, string? componentType)
+        {
+            var normalizedSocketName = NormalizeComponentReferenceName(socketName);
+            var normalizedComponentType = NormalizeComponentReferenceName(componentType);
+            var haystack = $"{normalizedSocketName}:{normalizedComponentType}";
+
+            if (haystack.Contains("backfort", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Back";
+            }
+
+            if (haystack.Contains("frontfort", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Front";
+            }
+
+            if (haystack.Contains("leftfort", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Left";
+            }
+
+            if (haystack.Contains("rightfort", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Right";
+            }
+
+            return null;
         }
 
         private static bool ComputeIsDestroyedStructure(dynamic obj, UBlueprintGeneratedClass blueprint, bool isVehicle, string? profileType, string? armourType)
@@ -2281,11 +3148,7 @@ public class FoxWatchManifestAssetExtractor
                 Name = value.Name,
                 ComponentType = value.ComponentType,
                 PipeType = value.PipeType,
-                SocketTags = value.SocketTags.Select(tag => new FoxWatchManifestSocketTag
-                {
-                    Mask = tag.Mask,
-                    Category = tag.Category,
-                }).ToList(),
+                SocketTags = value.SocketTags.Select(CloneSocketTag).ToList(),
                 X = value.X,
                 Y = value.Y,
                 Z = value.Z,

@@ -6068,6 +6068,22 @@ function buildSharedModificationStore(manifest) {
     );
 }
 
+const legacyEntrenchmentAggregateRenderLayerIds = new Set(['walls', 'corners']);
+
+function structureHasDirectionalEntrenchmentRenderLayers(manifestRenderLayersById) {
+    return ['backwall', 'frontwall', 'leftwall', 'rightwall']
+        .some(layerId => manifestRenderLayersById.has(layerId));
+}
+
+function filterLegacyEntrenchmentAggregateRenderLayerEntries(layerEntries, manifestRenderLayersById) {
+    if (!structureHasDirectionalEntrenchmentRenderLayers(manifestRenderLayersById)) {
+        return layerEntries;
+    }
+
+    return layerEntries.filter(entry =>
+        !legacyEntrenchmentAggregateRenderLayerIds.has(normalizeId(entry?.id)));
+}
+
 function compareStructureRenderLayers(left, right) {
     const orderById = new Map([
         ['floor', 0],
@@ -6417,9 +6433,10 @@ function applyStructureRenderUrls(
                 const downgradeLayerEntries = downgradeStructureId
                     ? structureLayerEntriesByStructureId?.[downgradeStructureId] ?? {}
                     : {};
-                const renderLayers = Object.values(structureLayerEntries)
-                    .filter(entry => entry?.textureUrl)
-                    .sort(compareStructureRenderLayers);
+                const renderLayers = filterLegacyEntrenchmentAggregateRenderLayerEntries(
+                    Object.values(structureLayerEntries).filter(entry => entry?.textureUrl),
+                    manifestRenderLayersById,
+                ).sort(compareStructureRenderLayers);
 
                 return {
                     ...structureWithoutLegacyIcons,

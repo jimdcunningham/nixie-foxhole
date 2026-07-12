@@ -391,8 +391,9 @@ public sealed class FoxWatchRenderSceneGenerator
                     $"components/{layerId}",
                     ["topdown"],
                     includePoseVariants: false,
-                    clipFloorOverride: ShouldDisableClipFloorForRenderLayer(structure, layerId) ? false : null,
-                    cancellationToken),
+                    clipFloorOverride: GetClipFloorOverrideForRenderLayer(structure, layerId),
+                    cancellationToken,
+                    componentLayerId: layerId),
             });
         }
 
@@ -800,7 +801,8 @@ public sealed class FoxWatchRenderSceneGenerator
         bool includePoseVariants,
         bool? clipFloorOverride,
         CancellationToken cancellationToken,
-        string? previewDirectionOverride = null)
+        string? previewDirectionOverride = null,
+        string? componentLayerId = null)
     {
 
         var roots = blueprintScene?.Roots.Count > 0
@@ -850,7 +852,7 @@ public sealed class FoxWatchRenderSceneGenerator
                 GenerateDefaultIcon = structure.GenerateDefaultIcon == true ? true : null,
                 ClipFloor = clipFloorOverride ?? GetClipFloor(structure),
                 FloorZ = GetFloorZ(structure),
-                ClipBounds = GetClipBounds(structure),
+                ClipBounds = GetClipBoundsForRenderLayer(structure, componentLayerId),
                 TopdownPaddingFactor = GetTopdownPaddingFactor(structure),
                 TopdownPaddingMeters = GetTopdownPaddingMeters(structure),
                 MaterialMode = blueprintScene?.Meshes.Count > 0 ? "sidecar" : null,
@@ -1917,10 +1919,19 @@ public sealed class FoxWatchRenderSceneGenerator
 
         if (string.Equals(structure.ProfileType, "Trench", StringComparison.OrdinalIgnoreCase))
         {
-            return ["floor", "walls", "corners"];
+            return structure.RenderLayers?.Count > 0 && HasTrenchComponentRenderLayers(structure)
+                ? [.. structure.RenderLayers.Select(layer => layer.Id)]
+                : ["floor", "walls", "corners"];
         }
 
         if (IsFacilityFoundationStructure(structure))
+        {
+            return structure.RenderLayers?.Count > 0
+                ? [.. structure.RenderLayers.Select(layer => layer.Id)]
+                : [];
+        }
+
+        if (IsFortEntrenchmentStructure(structure))
         {
             return structure.RenderLayers?.Count > 0
                 ? [.. structure.RenderLayers.Select(layer => layer.Id)]
@@ -1982,16 +1993,174 @@ public sealed class FoxWatchRenderSceneGenerator
         return [];
     }
 
-    private static bool ShouldDisableClipFloorForRenderLayer(FoxWatchManifestStructure structure, string layerId)
+    private static bool? GetClipFloorOverrideForRenderLayer(FoxWatchManifestStructure structure, string layerId)
     {
         if (string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
             || string.Equals(layerId, "underlay", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return IsEntrenchmentStructureForFloorClipping(structure)
+                ? null
+                : false;
         }
 
-        return IsCraneRailTrackSplineStructure(structure)
-            && string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase);
+        if (IsCraneRailTrackSplineStructure(structure)
+            && string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return null;
+    }
+
+    private static bool IsEntrenchmentStructureForFloorClipping(FoxWatchManifestStructure structure)
+    {
+        return IsTrenchStructureWithComponentLayers(structure) || IsFortEntrenchmentStructure(structure);
+    }
+
+    private static FoxWatchBounds3D? GetClipBoundsForRenderLayer(
+        FoxWatchManifestStructure structure,
+        string? layerId)
+    {
+        var authoredClipBounds = GetClipBounds(structure);
+        if (authoredClipBounds != null)
+        {
+            return authoredClipBounds;
+        }
+
+        if (!string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
+            || !IsEntrenchmentStructureForFloorClipping(structure))
+        {
+            return null;
+        }
+
+        return TryDeriveEntrenchmentFloorClipBoundsFromFootprint(structure);
+    }
+
+    private static FoxWatchBounds3D? TryDeriveEntrenchmentFloorClipBoundsFromFootprint(
+        FoxWatchManifestStructure structure)
+    {
+        if (TryGetSmallestFootprintAxisAlignedBounds(structure.FootprintPolygons, out var minX, out var minY, out var maxX, out var maxY))
+        {
+            return CreateEntrenchmentFloorClipBounds(minX, minY, maxX, maxY);
+        }
+
+        if (string.Equals(structure.ProfileType, "Trench", StringComparison.OrdinalIgnoreCase))
+        {
+            // Trench interior pit is roughly 11m x 4m (long axis x short axis).
+            return CreateEntrenchmentFloorClipBounds(-5.5, -2.0, 5.5, 2.0);
+        }
+
+        if (IsFortEntrenchmentStructure(structure))
+        {
+            // Fort interior pit is roughly 4.5m x 4.5m inside the 5m x 5m shell.
+            return CreateEntrenchmentFloorClipBounds(-2.25, -2.25, 2.25, 2.25);
+        }
+
+        return null;
+    }
+
+    private static bool TryGetSmallestFootprintAxisAlignedBounds(
+        IReadOnlyList<FoxWatchManifestHitPolygon>? footprintPolygons,
+        out double minX,
+        out double minY,
+        out double maxX,
+        out double maxY)
+    {
+        minX = 0;
+        minY = 0;
+        maxX = 0;
+        maxY = 0;
+
+        if (footprintPolygons == null || footprintPolygons.Count == 0)
+        {
+            return false;
+        }
+
+        var bestArea = double.PositiveInfinity;
+        var found = false;
+
+        foreach (var footprintPolygon in footprintPolygons)
+        {
+            if (!TryGetHitPolygonAxisAlignedBounds(footprintPolygon, out var polygonMinX, out var polygonMinY, out var polygonMaxX, out var polygonMaxY))
+            {
+                continue;
+            }
+
+            var area = (polygonMaxX - polygonMinX) * (polygonMaxY - polygonMinY);
+            if (area >= bestArea)
+            {
+                continue;
+            }
+
+            bestArea = area;
+            minX = polygonMinX;
+            minY = polygonMinY;
+            maxX = polygonMaxX;
+            maxY = polygonMaxY;
+            found = true;
+        }
+
+        return found;
+    }
+
+    private static bool TryGetHitPolygonAxisAlignedBounds(
+        FoxWatchManifestHitPolygon footprintPolygon,
+        out double minX,
+        out double minY,
+        out double maxX,
+        out double maxY)
+    {
+        minX = 0;
+        minY = 0;
+        maxX = 0;
+        maxY = 0;
+
+        var shape = footprintPolygon.Shape;
+        if (shape == null || shape.Count < 6)
+        {
+            return false;
+        }
+
+        minX = double.PositiveInfinity;
+        minY = double.PositiveInfinity;
+        maxX = double.NegativeInfinity;
+        maxY = double.NegativeInfinity;
+
+        for (var index = 0; index + 1 < shape.Count; index += 2)
+        {
+            var x = shape[index];
+            var y = shape[index + 1];
+            minX = Math.Min(minX, x);
+            minY = Math.Min(minY, y);
+            maxX = Math.Max(maxX, x);
+            maxY = Math.Max(maxY, y);
+        }
+
+        return minX <= maxX && minY <= maxY;
+    }
+
+    private static FoxWatchBounds3D CreateEntrenchmentFloorClipBounds(
+        double minX,
+        double minY,
+        double maxX,
+        double maxY)
+    {
+        return new FoxWatchBounds3D
+        {
+            Min = [minX, minY, -5.0],
+            Max = [maxX, maxY, 5.0],
+        };
+    }
+
+    private static bool HasTrenchComponentRenderLayers(FoxWatchManifestStructure structure)
+    {
+        return structure.RenderLayers?.Any(layer => !string.IsNullOrWhiteSpace(layer.ComponentName)) == true;
+    }
+
+    private static bool IsTrenchStructureWithComponentLayers(FoxWatchManifestStructure structure)
+    {
+        return string.Equals(structure.ProfileType, "Trench", StringComparison.OrdinalIgnoreCase)
+            && HasTrenchComponentRenderLayers(structure);
     }
 
     private static bool IsFacilityFoundationStructure(FoxWatchManifestStructure structure)
@@ -1999,6 +2168,28 @@ public sealed class FoxWatchRenderSceneGenerator
         var structureId = structure.Id ?? string.Empty;
         return structureId.StartsWith("foundation", StringComparison.OrdinalIgnoreCase) &&
             !structureId.Contains("railtracksplinefoundation", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFortEntrenchmentStructure(FoxWatchManifestStructure structure)
+    {
+        if (string.Equals(structure.ProfileType, "Trench", StringComparison.OrdinalIgnoreCase) ||
+            IsFacilityFoundationStructure(structure) ||
+            structure.RenderLayers == null ||
+            structure.RenderLayers.Count == 0)
+        {
+            return false;
+        }
+
+        return UsesFortEntrenchmentProfileType(structure.ProfileType)
+            || structure.RenderLayers.Any(layer => layer.ComponentTags.Count > 0);
+    }
+
+    private static bool UsesFortEntrenchmentProfileType(string? profileType)
+    {
+        return string.Equals(profileType, "FortBase", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profileType, "Fort", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profileType, "FortRotatableUpgrade", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profileType, "FortForwardBase", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsFacilityRoadStructure(FoxWatchManifestStructure structure)
@@ -2661,15 +2852,16 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
+            var includeMesh = includeFullSubtree && ShouldIncludeFortRoofLayerMesh(layerId, node.Name, node.MeshId);
             filteredNodes.Add(new FoxWatchRenderSceneNode
             {
                 Id = node.Id,
                 Name = node.Name,
                 Visible = node.Visible,
                 VariantIds = null,
-                MeshId = includeFullSubtree ? node.MeshId : null,
-                Primitive = includeFullSubtree ? ClonePrimitive(node.Primitive) : null,
-                MaterialIds = includeFullSubtree ? [.. node.MaterialIds] : [],
+                MeshId = includeMesh ? node.MeshId : null,
+                Primitive = includeMesh ? ClonePrimitive(node.Primitive) : null,
+                MaterialIds = includeMesh ? [.. node.MaterialIds] : [],
                 Location = node.Location == null ? null : [.. node.Location],
                 RotationEulerDegrees = node.RotationEulerDegrees == null ? null : [.. node.RotationEulerDegrees],
                 Scale = node.Scale == null ? null : [.. node.Scale],
@@ -2688,6 +2880,28 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return filteredNodes;
+    }
+
+    private static bool ShouldIncludeFortRoofLayerMesh(string layerId, string? nodeName, string? meshId)
+    {
+        if (string.IsNullOrWhiteSpace(meshId))
+        {
+            return false;
+        }
+
+        if (!string.Equals(layerId, "roof", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var normalizedNodeName = nodeName ?? string.Empty;
+        var separatorIndex = normalizedNodeName.LastIndexOf(':');
+        if (separatorIndex >= 0 && separatorIndex + 1 < normalizedNodeName.Length)
+        {
+            normalizedNodeName = normalizedNodeName[(separatorIndex + 1)..];
+        }
+
+        return string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesTopdownStructureComponentLayer(FoxWatchManifestStructure structure, string? nodeName, string layerId)
@@ -2795,6 +3009,46 @@ public sealed class FoxWatchRenderSceneGenerator
                 normalizedNodeName,
                 renderLayer.ComponentName,
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (IsTrenchStructureWithComponentLayers(structure))
+        {
+            var renderLayer = structure.RenderLayers?
+                .FirstOrDefault(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase));
+            if (renderLayer == null || string.IsNullOrWhiteSpace(renderLayer.ComponentName))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = renderLayer.ComponentName;
+            var componentSeparatorIndex = normalizedComponentName.LastIndexOf(':');
+            if (componentSeparatorIndex >= 0 && componentSeparatorIndex + 1 < normalizedComponentName.Length)
+            {
+                normalizedComponentName = normalizedComponentName[(componentSeparatorIndex + 1)..];
+            }
+
+            return string.Equals(normalizedNodeName, normalizedComponentName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedNodeName, renderLayer.ComponentName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (IsFortEntrenchmentStructure(structure))
+        {
+            var renderLayer = structure.RenderLayers?
+                .FirstOrDefault(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase));
+            if (renderLayer == null || string.IsNullOrWhiteSpace(renderLayer.ComponentName))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = renderLayer.ComponentName;
+            var componentSeparatorIndex = normalizedComponentName.LastIndexOf(':');
+            if (componentSeparatorIndex >= 0 && componentSeparatorIndex + 1 < normalizedComponentName.Length)
+            {
+                normalizedComponentName = normalizedComponentName[(componentSeparatorIndex + 1)..];
+            }
+
+            return string.Equals(normalizedNodeName, normalizedComponentName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedNodeName, renderLayer.ComponentName, StringComparison.OrdinalIgnoreCase);
         }
 
         return layerId.ToLowerInvariant() switch
