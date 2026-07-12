@@ -17,6 +17,7 @@ public static class FoxWatchWorkspace
     public const string ImportedCategoryCatalogRelativePath = "tools/foxwatch/asset-overrides/categories.json";
     public const string NonCodeNameStructureWhitelistRelativePath = "tools/foxwatch/asset-overrides/non-codename-whitelist.json";
     public const string DefaultManifestOutputRelativePath = "tools/foxwatch/tmp/foxwatch-manifest.v1.json";
+    public const string DefaultModificationRenderIndexRelativePath = "tools/foxwatch/tmp/modification-render-index.v1.json";
     public const string DefaultBlueprintTargetIndexRelativePath = "tools/foxwatch/tmp/foxwatch-blueprint-target-index.v1.json";
     public const string DefaultMapDataOutputRelativePath = "tools/foxwatch/tmp/foxwatch-map-data.v1.json";
     public const string DefaultIconOutputRelativePath = "tools/foxwatch/tmp/foxhole-icons";

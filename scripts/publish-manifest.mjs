@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { access, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
@@ -96,6 +97,7 @@ const sourcePublishedIconAliasByKey = new Map([
 let publishedAssetTypeById = new Map();
 let sourcePublishedIconPathByKeyPromise = null;
 let renderedPublishedIconFallbackPathByKeyPromise = null;
+let publishedSharedModificationIdsCache = null;
 const renderVisibilityByFilePath = new Map();
 let temporaryFileWriteSequence = 0;
 
@@ -2258,6 +2260,42 @@ function getModificationRenderIndexEntries(modificationRenderIndexDocument) {
     return Object.values(entries);
 }
 
+function getPublishedSharedModificationIds() {
+    if (publishedSharedModificationIdsCache) {
+        return publishedSharedModificationIdsCache;
+    }
+
+    const sharedModificationIds = new Set();
+    try {
+        const overrideDocument = JSON.parse(readFileSync(sharedModificationOverrideManifestPath, 'utf8'));
+        for (const renderId of Object.keys(overrideDocument ?? {})) {
+            const normalizedRenderId = normalizeId(renderId);
+            if (normalizedRenderId) {
+                sharedModificationIds.add(normalizedRenderId);
+            }
+        }
+    } catch {
+    }
+
+    try {
+        const manifest = JSON.parse(readFileSync(publishedManifestPath, 'utf8'));
+        for (const renderId of Object.keys(manifest?.shared?.modifications ?? {})) {
+            const normalizedRenderId = normalizeId(renderId);
+            if (normalizedRenderId) {
+                sharedModificationIds.add(normalizedRenderId);
+            }
+        }
+    } catch {
+    }
+
+    publishedSharedModificationIdsCache = sharedModificationIds;
+    return sharedModificationIds;
+}
+
+function isPublishedSharedModificationRenderId(renderId) {
+    return getPublishedSharedModificationIds().has(normalizeId(renderId));
+}
+
 function isSharedModificationRenderIndexEntryFromModificationIndex(entry) {
     const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
     if (consumers.length <= 1) {
@@ -2279,7 +2317,8 @@ function buildSharedModificationConsumerLookupFromModificationIndex(modification
         }
 
         if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)
-            && normalizeId(entry?.storage) !== 'shared') {
+            && normalizeId(entry?.storage) !== 'shared'
+            && !isPublishedSharedModificationRenderId(renderId)) {
             continue;
         }
 
@@ -2308,7 +2347,8 @@ function collectSharedModificationIdsFromModificationRenderIndex(modificationRen
         }
 
         if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)
-            && normalizeId(entry?.storage) !== 'shared') {
+            && normalizeId(entry?.storage) !== 'shared'
+            && !isPublishedSharedModificationRenderId(renderId)) {
             continue;
         }
 
@@ -2455,6 +2495,35 @@ function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument 
     };
 }
 
+function shouldSkipHostLocalModificationSync(location, scopedTargets) {
+    if (!scopedTargets || location.scope !== 'assetModification') {
+        return false;
+    }
+
+    const modificationId = normalizeId(location.modificationId);
+    if (!modificationId) {
+        return false;
+    }
+
+    if (scopedTargets.sharedModificationIds.has(modificationId)) {
+        return true;
+    }
+
+    const modificationPrefix = getSharedModificationVariantPrefix(modificationId);
+    for (const sharedModificationId of scopedTargets.sharedModificationIds) {
+        const normalizedSharedModificationId = normalizeId(sharedModificationId);
+        if (!hasStandaloneModificationContentHashSuffix(normalizedSharedModificationId)) {
+            continue;
+        }
+
+        if (getSharedModificationVariantPrefix(normalizedSharedModificationId) === modificationPrefix) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
     if (!scopedTargets) {
         return true;
@@ -2471,6 +2540,14 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
 
     if (location.scope === 'sharedPackaging') {
         return scopedTargets.sharedPackagingKeys.has(location.shippableType);
+    }
+
+    if (location.scope === 'assetModification') {
+        if (!scopedTargets.assetIds.has(location.assetId)) {
+            return false;
+        }
+
+        return !shouldSkipHostLocalModificationSync(location, scopedTargets);
     }
 
     return scopedTargets.assetIds.has(location.assetId);
@@ -5535,16 +5612,18 @@ function isReferencedSharedModificationArtifactDirectory(
     return referencedPrefixes.has(getSharedModificationVariantPrefix(directoryName));
 }
 
-async function removeUnreferencedGeneratedModificationArtifactDirectories(manifest) {
+async function removeUnreferencedGeneratedModificationArtifactDirectories(manifest, structureIds = null) {
     const referencedDirectories = collectReferencedPublicAssetDirectories(manifest);
     const { referencedPrefixes } = collectReferencedSharedModificationArtifactDirectories(manifest, referencedDirectories);
-    const structureIds = new Set((manifest?.assets ?? [])
-        .map(structure => normalizeId(structure?.id))
-        .filter(Boolean));
+    const scopedStructureIds = structureIds instanceof Set
+        ? structureIds
+        : new Set((manifest?.assets ?? [])
+            .map(structure => normalizeId(structure?.id))
+            .filter(Boolean));
     let removedHostModificationDirectories = 0;
     let removedSharedModificationDirectories = 0;
 
-    for (const structureId of structureIds) {
+    for (const structureId of scopedStructureIds) {
         const modificationsDirectory = resolve(
             getPublishedAssetDirectory(structureId)
             ?? resolve(assetTypesDirectory, resolvePublishedAssetTypeName(structureId), structureId),
@@ -5572,7 +5651,7 @@ async function removeUnreferencedGeneratedModificationArtifactDirectories(manife
     }
 
     const sharedModificationsDirectory = resolve(sharedAssetsDirectory, 'modifications');
-    if (await pathExists(sharedModificationsDirectory)) {
+    if (!structureIds && await pathExists(sharedModificationsDirectory)) {
         const sharedEntries = await readdir(sharedModificationsDirectory, { withFileTypes: true });
         for (const entry of sharedEntries) {
             if (!entry.isDirectory()) {
@@ -7274,6 +7353,11 @@ try {
 
     if (!hasTargetFilters(targetFilter)) {
         await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
+    } else {
+        await removeUnreferencedGeneratedModificationArtifactDirectories(
+            prunedMergedManifest,
+            scopedRawRenderedAssetTargets.assetIds,
+        );
     }
 
     const prunedMergedManifestWithCompactLocalizationIds = compactManifestLocalizationIds(prunedMergedManifest);

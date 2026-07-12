@@ -883,6 +883,11 @@ public class FoxWatchManifestAssetExtractor
             string? profileType,
             IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets)
         {
+            if (IsStandaloneDestroyedOrBreachedStructure(structureId, profileType))
+            {
+                return null;
+            }
+
             var foundationRenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath);
             if (foundationRenderLayers != null)
             {
@@ -1273,6 +1278,11 @@ public class FoxWatchManifestAssetExtractor
             IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets,
             string? blueprintPackagePath)
         {
+            if (IsDestroyedOrBreachedEntrenchmentProfileType(profileType))
+            {
+                return false;
+            }
+
             if (IsFacilityFoundationBlueprintPackagePath(blueprintPackagePath ?? string.Empty))
             {
                 return false;
@@ -1519,7 +1529,19 @@ public class FoxWatchManifestAssetExtractor
             }
 
             var roofComponent = componentReferences.FirstOrDefault(IsFortEntrenchmentRoofRenderComponent);
-            if (roofComponent == null)
+            if (roofComponent != null)
+            {
+                renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                {
+                    Id = "roof",
+                    ComponentName = roofComponent.ComponentName,
+                    ComponentTags = [],
+                });
+                return;
+            }
+
+            var aiTurretGunComponent = componentReferences.FirstOrDefault(IsFortEntrenchmentAiTurretGunRenderComponent);
+            if (aiTurretGunComponent == null)
             {
                 return;
             }
@@ -1527,9 +1549,52 @@ public class FoxWatchManifestAssetExtractor
             renderLayers.Add(new FoxWatchManifestStructureRenderLayer
             {
                 Id = "roof",
-                ComponentName = roofComponent.ComponentName,
+                ComponentName = aiTurretGunComponent.ComponentName,
                 ComponentTags = [],
             });
+        }
+
+        private static bool IsFortEntrenchmentAiTurretGunRenderComponent(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                !componentReference.ComponentType.Contains("SkeletalMeshComponent", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var normalizedMeshPath = componentReference.MeshPath.Replace('\\', '/');
+            if (!normalizedMeshPath.Contains("/AIBunkers/", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
+            if (meshFileName.Contains("husk", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                NormalizeComponentReferenceName(componentReference.AttachParentName),
+                "StructureArrow",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsDestroyedOrBreachedEntrenchmentProfileType(string? profileType)
+        {
+            return string.Equals(profileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsStandaloneDestroyedOrBreachedStructure(string structureId, string? profileType)
+        {
+            if (IsDestroyedOrBreachedEntrenchmentProfileType(profileType))
+            {
+                return true;
+            }
+
+            return structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string? ResolveFortRoofModSlotLayerComponentName(

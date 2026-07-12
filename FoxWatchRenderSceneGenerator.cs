@@ -125,7 +125,13 @@ public sealed class FoxWatchRenderSceneGenerator
                 renderAssetOutputDirectory,
                 cancellationToken));
 
-            foreach (var sceneDocument in DeduplicateStandaloneModificationSceneDocuments(generatedSceneDocuments).OrderBy(entry => entry.RelativeScenePath, StringComparer.Ordinal))
+            var modificationRenderIndex = await FoxWatchModificationRenderIndexWriter.LoadAsync(
+                FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultModificationRenderIndexRelativePath)!,
+                cancellationToken);
+
+            foreach (var sceneDocument in DeduplicateStandaloneModificationSceneDocuments(
+                generatedSceneDocuments,
+                modificationRenderIndex).OrderBy(entry => entry.RelativeScenePath, StringComparer.Ordinal))
             {
                 var filePath = Path.Combine(outputDirectory, sceneDocument.RelativeScenePath);
                 var fileDirectory = Path.GetDirectoryName(filePath);
@@ -414,7 +420,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     CollapseBlueprintSceneVariants(structure, CloneBlueprintSceneExtraction(blueprintScene), requestedVariantIds),
                     structure.Id,
                     target.VariantId,
-                    target.SlotName);
+                    string.IsNullOrWhiteSpace(target.SlotName) ? null : target.SlotName);
 
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
@@ -438,16 +444,18 @@ public sealed class FoxWatchRenderSceneGenerator
                     cancellationToken,
                     previewDirectionOverride: target.PreviewDirection),
                 IsStandaloneModification = true,
-                Consumers =
-                [
-                    new FoxWatchRenderSceneConsumer
-                    {
-                        StructureId = structure.Id,
-                        SlotName = target.SlotName,
-                        DataClassPath = target.DataClassPath,
-                        VariantId = target.VariantId,
-                    },
-                ],
+                Consumers = target.Consumers.Count > 0
+                    ? target.Consumers
+                    :
+                    [
+                        new FoxWatchRenderSceneConsumer
+                        {
+                            StructureId = structure.Id,
+                            SlotName = target.SlotName,
+                            DataClassPath = target.DataClassPath,
+                            VariantId = target.VariantId,
+                        },
+                    ],
             });
         }
 
@@ -512,7 +520,8 @@ public sealed class FoxWatchRenderSceneGenerator
     }
 
     private static List<FoxWatchGeneratedRenderSceneDocument> DeduplicateStandaloneModificationSceneDocuments(
-        IReadOnlyList<FoxWatchGeneratedRenderSceneDocument> sceneDocuments)
+        IReadOnlyList<FoxWatchGeneratedRenderSceneDocument> sceneDocuments,
+        FoxWatchModificationRenderIndex? modificationRenderIndex = null)
     {
         var nonModificationDocuments = sceneDocuments
             .Where(document => !document.IsStandaloneModification)
@@ -536,11 +545,15 @@ public sealed class FoxWatchRenderSceneGenerator
                 .Select(CreateStandaloneModificationSceneFingerprint)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
+            var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(documentsInGroup[0]));
 
-            if (fingerprints.Count == 1 && documentsInGroup.Count > 1)
+            if (fingerprints.Count == 1
+                && (documentsInGroup.Count > 1
+                    || FoxWatchModificationRenderIdentity.IsSharedModificationRenderIndexEntry(
+                        FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(modificationRenderIndex, renderId))
+                    || FoxWatchPublishedSharedModificationCatalog.IsSharedModificationRenderId(renderId)))
             {
                 var representative = documentsInGroup[0];
-                var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(representative));
                 representative.StructureId = "mods";
                 representative.CodeName = renderId;
                 representative.Name = renderId;
@@ -560,6 +573,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     .ThenBy(consumer => consumer.SlotName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(consumer => consumer.VariantId, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                MergeConsumersFromModificationRenderIndex(representative, modificationRenderIndex, renderId);
                 representative.PreviewUrl = null;
                 representative.IconUrl = null;
                 nonModificationDocuments.Add(representative);
@@ -568,7 +582,6 @@ public sealed class FoxWatchRenderSceneGenerator
 
             foreach (var document in documentsInGroup)
             {
-                var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(document));
                 document.RelativeScenePath = Path.Combine(document.StructureId, "modifications", $"{renderId}.scene.json");
                 document.Document.Render.OutputKey = $"modifications/{renderId}";
                 nonModificationDocuments.Add(document);
@@ -576,6 +589,46 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return nonModificationDocuments;
+    }
+
+    private static void MergeConsumersFromModificationRenderIndex(
+        FoxWatchGeneratedRenderSceneDocument document,
+        FoxWatchModificationRenderIndex? modificationRenderIndex,
+        string renderId)
+    {
+        var indexEntry = FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(modificationRenderIndex, renderId);
+        if (indexEntry == null)
+        {
+            return;
+        }
+
+        foreach (var consumer in indexEntry.Consumers)
+        {
+            if (document.Consumers.Any(existing =>
+                string.Equals(existing.StructureId, consumer.StructureId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.SlotName, consumer.SlotName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.DataClassPath, consumer.DataClassPath, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.VariantId, consumer.VariantId, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            document.Consumers.Add(new FoxWatchRenderSceneConsumer
+            {
+                StructureId = consumer.StructureId,
+                SlotName = consumer.SlotName,
+                DataClassPath = consumer.DataClassPath,
+                VariantId = consumer.VariantId,
+            });
+        }
+
+        document.AllowedStructureIds = document.Consumers
+            .Select(consumer => consumer.StructureId)
+            .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
+            .Concat(document.AllowedStructureIds)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static string GetDocumentRenderId(FoxWatchGeneratedRenderSceneDocument sceneDocument)
@@ -1697,35 +1750,73 @@ public sealed class FoxWatchRenderSceneGenerator
             .Where(variantId => !string.IsNullOrWhiteSpace(variantId))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return [.. (structure.ModificationSlots ?? [])
-            .Where(slot => !string.IsNullOrWhiteSpace(slot.Name))
-            .SelectMany(slot => (slot.Variants ?? [])
-                .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
-                .Where(entry => availableVariantIds.Contains(entry.Key.Trim()))
-                .Select(entry =>
+        var targetsByRenderId = new Dictionary<string, StandaloneModificationRenderTarget>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var slot in structure.ModificationSlots ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(slot.Name))
+            {
+                continue;
+            }
+
+            foreach (var entry in slot.Variants ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key))
                 {
-                    var variantId = entry.Key.Trim();
-                    var isUpgrade = IsUpgradeModificationVariant(structure, variantId);
-                    var previewDirection = ResolveModificationPreviewDirection(entry.Value, structure);
-                    var renderId = ResolveModificationRenderId(
-                        structure,
-                        slot,
-                        slot.Name.Trim(),
-                        variantId,
-                        entry.Value,
-                        previewDirection);
-                    return new StandaloneModificationRenderTarget
+                    continue;
+                }
+
+                var variantId = entry.Key.Trim();
+                if (!availableVariantIds.Contains(variantId))
+                {
+                    continue;
+                }
+
+                var isUpgrade = IsUpgradeModificationVariant(structure, variantId);
+                var previewDirection = ResolveModificationPreviewDirection(entry.Value, structure);
+                var renderId = ResolveModificationRenderId(
+                    structure,
+                    slot,
+                    slot.Name.Trim(),
+                    variantId,
+                    entry.Value,
+                    previewDirection);
+                var normalizedRenderId = NormalizeStandaloneModificationKeyComponent(renderId);
+                if (!targetsByRenderId.TryGetValue(normalizedRenderId, out var target))
+                {
+                    target = new StandaloneModificationRenderTarget
                     {
                         VariantId = variantId,
                         SlotName = slot.Name.Trim(),
                         DataClassPath = slot.DataClassPath,
-                        OutputKey = NormalizeStandaloneModificationKeyComponent(renderId),
+                        OutputKey = normalizedRenderId,
                         IsUpgrade = isUpgrade,
                         RenderId = renderId,
                         SharedModificationId = renderId,
                         PreviewDirection = previewDirection,
                     };
-                }))];
+                    targetsByRenderId[normalizedRenderId] = target;
+                }
+
+                target.Consumers.Add(new FoxWatchRenderSceneConsumer
+                {
+                    StructureId = structure.Id,
+                    SlotName = slot.Name.Trim(),
+                    DataClassPath = slot.DataClassPath,
+                    VariantId = variantId,
+                });
+            }
+        }
+
+        foreach (var target in targetsByRenderId.Values)
+        {
+            if (target.Consumers.Count > 1)
+            {
+                target.SlotName = string.Empty;
+            }
+        }
+
+        return [.. targetsByRenderId.Values];
     }
 
     private string ResolveModificationRenderId(
@@ -1917,6 +2008,11 @@ public sealed class FoxWatchRenderSceneGenerator
             return [];
         }
 
+        if (IsStandaloneDestroyedOrBreachedStructure(structure))
+        {
+            return [];
+        }
+
         if (string.Equals(structure.ProfileType, "Trench", StringComparison.OrdinalIgnoreCase))
         {
             return structure.RenderLayers?.Count > 0 && HasTrenchComponentRenderLayers(structure)
@@ -2014,7 +2110,26 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool IsEntrenchmentStructureForFloorClipping(FoxWatchManifestStructure structure)
     {
+        if (IsStandaloneDestroyedOrBreachedStructure(structure))
+        {
+            return false;
+        }
+
         return IsTrenchStructureWithComponentLayers(structure) || IsFortEntrenchmentStructure(structure);
+    }
+
+    private static bool IsStandaloneDestroyedOrBreachedStructure(FoxWatchManifestStructure structure)
+    {
+        if (structure.IsDestroyed == true || structure.IsBreached == true)
+        {
+            return true;
+        }
+
+        var structureId = structure.Id ?? string.Empty;
+        return string.Equals(structure.ProfileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
+            || structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+            || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase);
     }
 
     private static FoxWatchBounds3D? GetClipBoundsForRenderLayer(
@@ -2852,7 +2967,7 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
-            var includeMesh = includeFullSubtree && ShouldIncludeFortRoofLayerMesh(layerId, node.Name, node.MeshId);
+            var includeMesh = includeFullSubtree && ShouldIncludeFortRoofLayerMesh(structure, layerId, node.Name, node.MeshId);
             filteredNodes.Add(new FoxWatchRenderSceneNode
             {
                 Id = node.Id,
@@ -2882,7 +2997,11 @@ public sealed class FoxWatchRenderSceneGenerator
         return filteredNodes;
     }
 
-    private static bool ShouldIncludeFortRoofLayerMesh(string layerId, string? nodeName, string? meshId)
+    private static bool ShouldIncludeFortRoofLayerMesh(
+        FoxWatchManifestStructure structure,
+        string layerId,
+        string? nodeName,
+        string? meshId)
     {
         if (string.IsNullOrWhiteSpace(meshId))
         {
@@ -2901,7 +3020,23 @@ public sealed class FoxWatchRenderSceneGenerator
             normalizedNodeName = normalizedNodeName[(separatorIndex + 1)..];
         }
 
-        return string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase);
+        var roofLayer = structure.RenderLayers?
+            .FirstOrDefault(layer => string.Equals(layer.Id, "roof", StringComparison.OrdinalIgnoreCase));
+        var roofComponentName = roofLayer?.ComponentName ?? string.Empty;
+        var normalizedRoofComponentName = roofComponentName;
+        var componentSeparatorIndex = normalizedRoofComponentName.LastIndexOf(':');
+        if (componentSeparatorIndex >= 0 && componentSeparatorIndex + 1 < normalizedRoofComponentName.Length)
+        {
+            normalizedRoofComponentName = normalizedRoofComponentName[(componentSeparatorIndex + 1)..];
+        }
+
+        if (string.Equals(normalizedRoofComponentName, "Roof", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(normalizedNodeName, normalizedRoofComponentName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedNodeName, roofComponentName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesTopdownStructureComponentLayer(FoxWatchManifestStructure structure, string? nodeName, string layerId)
@@ -5233,6 +5368,8 @@ public sealed class FoxWatchRenderSceneGenerator
         public string SharedModificationId { get; set; } = string.Empty;
 
         public string PreviewDirection { get; set; } = string.Empty;
+
+        public List<FoxWatchRenderSceneConsumer> Consumers { get; set; } = [];
     }
 
     private sealed class FoxWatchCraneRenderAsset

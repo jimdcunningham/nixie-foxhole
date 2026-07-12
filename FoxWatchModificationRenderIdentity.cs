@@ -150,10 +150,159 @@ internal static class FoxWatchModificationRenderIdentity
             }
         }
 
-        return new FoxWatchModificationRenderIndex
+        var index = new FoxWatchModificationRenderIndex
         {
             Entries = entries,
         };
+        AssignStorageFlags(index);
+        return index;
+    }
+
+    public static FoxWatchModificationRenderIndex MergeRenderIndex(
+        FoxWatchModificationRenderIndex existingIndex,
+        FoxWatchModificationRenderIndex scopedIndex,
+        IReadOnlySet<string> scopedStructureIds)
+    {
+        var mergedEntries = new Dictionary<string, FoxWatchModificationRenderIndexEntry>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in existingIndex.Entries.Values)
+        {
+            var renderId = entry.RenderId?.Trim();
+            if (string.IsNullOrWhiteSpace(renderId))
+            {
+                continue;
+            }
+
+            var retainedConsumers = entry.Consumers
+                .Where(consumer => !scopedStructureIds.Contains(consumer.StructureId))
+                .ToList();
+            if (retainedConsumers.Count == 0 && !scopedIndex.Entries.ContainsKey(renderId))
+            {
+                continue;
+            }
+
+            mergedEntries[renderId] = new FoxWatchModificationRenderIndexEntry
+            {
+                RenderId = renderId,
+                VariantId = entry.VariantId,
+                Identity = entry.Identity,
+                DataClassPath = entry.DataClassPath,
+                TemplatePath = entry.TemplatePath,
+                Consumers = retainedConsumers,
+            };
+        }
+
+        foreach (var entry in scopedIndex.Entries.Values)
+        {
+            var renderId = entry.RenderId?.Trim();
+            if (string.IsNullOrWhiteSpace(renderId))
+            {
+                continue;
+            }
+
+            if (!mergedEntries.TryGetValue(renderId, out var mergedEntry))
+            {
+                mergedEntry = new FoxWatchModificationRenderIndexEntry
+                {
+                    RenderId = renderId,
+                    Consumers = [],
+                };
+                mergedEntries[renderId] = mergedEntry;
+            }
+
+            mergedEntry.VariantId = entry.VariantId;
+            mergedEntry.Identity = entry.Identity;
+            mergedEntry.DataClassPath = entry.DataClassPath;
+            mergedEntry.TemplatePath = entry.TemplatePath;
+
+            foreach (var consumer in entry.Consumers)
+            {
+                if (mergedEntry.Consumers.Any(existing => ModificationRenderConsumersMatch(existing, consumer)))
+                {
+                    continue;
+                }
+
+                mergedEntry.Consumers.Add(consumer);
+            }
+        }
+
+        var mergedIndex = new FoxWatchModificationRenderIndex
+        {
+            Entries = mergedEntries,
+        };
+        AssignStorageFlags(mergedIndex);
+        return mergedIndex;
+    }
+
+    public static void AssignStorageFlags(FoxWatchModificationRenderIndex index)
+    {
+        foreach (var entry in index.Entries.Values)
+        {
+            var structureIds = entry.Consumers
+                .Select(consumer => consumer.StructureId?.Trim())
+                .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            entry.Storage = structureIds > 1 || FoxWatchPublishedSharedModificationCatalog.IsSharedModificationRenderId(entry.RenderId)
+                ? "shared"
+                : null;
+        }
+    }
+
+    public static bool IsSharedModificationRenderIndexEntry(FoxWatchModificationRenderIndexEntry? entry)
+    {
+        if (entry == null)
+        {
+            return false;
+        }
+
+        if (string.Equals(entry.Storage, "shared", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var structureIds = entry.Consumers
+            .Select(consumer => consumer.StructureId?.Trim())
+            .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        return structureIds > 1;
+    }
+
+    public static FoxWatchModificationRenderIndexEntry? TryGetModificationRenderIndexEntry(
+        FoxWatchModificationRenderIndex? index,
+        string renderId)
+    {
+        if (index?.Entries == null || string.IsNullOrWhiteSpace(renderId))
+        {
+            return null;
+        }
+
+        var normalizedRenderId = NormalizeKeyComponent(renderId);
+        if (index.Entries.TryGetValue(normalizedRenderId, out var directMatch))
+        {
+            return directMatch;
+        }
+
+        foreach (var entry in index.Entries.Values)
+        {
+            if (string.Equals(NormalizeKeyComponent(entry.RenderId), normalizedRenderId, StringComparison.OrdinalIgnoreCase))
+            {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool ModificationRenderConsumersMatch(
+        FoxWatchModificationRenderIndexConsumer left,
+        FoxWatchModificationRenderIndexConsumer right)
+    {
+        return string.Equals(left.StructureId, right.StructureId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.SlotName, right.SlotName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.DataClassPath, right.DataClassPath, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.VariantId, right.VariantId, StringComparison.OrdinalIgnoreCase);
     }
 
     public static string ResolveTemplatePath(FoxWatchManifestModificationSlotVariant? variant)
@@ -264,6 +413,25 @@ public sealed class FoxWatchModificationRenderIndexConsumer
 
 internal static class FoxWatchModificationRenderIndexWriter
 {
+    public static async Task<FoxWatchModificationRenderIndex?> LoadAsync(
+        string outputPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(outputPath))
+        {
+            return null;
+        }
+
+        var serializerOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+        };
+
+        await using var stream = File.OpenRead(outputPath);
+        return await JsonSerializer.DeserializeAsync<FoxWatchModificationRenderIndex>(stream, serializerOptions, cancellationToken);
+    }
+
     public static async Task WriteAsync(
         FoxWatchModificationRenderIndex index,
         string outputPath,

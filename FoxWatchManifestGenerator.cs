@@ -50,6 +50,21 @@ public sealed class FoxWatchManifestGenerator
         var renderIndexPath = Path.Combine(
             outputDirectory ?? FoxWatchWorkspace.ResolvePath("tmp"),
             "modification-render-index.v1.json");
+        if (targetFilter is { HasFilters: true })
+        {
+            var existingRenderIndex = await FoxWatchModificationRenderIndexWriter.LoadAsync(renderIndexPath, cancellationToken);
+            if (existingRenderIndex != null)
+            {
+                var scopedStructureIds = manifest.Assets
+                    .Select(structure => structure.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                renderIndex = FoxWatchModificationRenderIdentity.MergeRenderIndex(
+                    existingRenderIndex,
+                    renderIndex,
+                    scopedStructureIds);
+            }
+        }
+
         await FoxWatchModificationRenderIndexWriter.WriteAsync(renderIndex, renderIndexPath, cancellationToken);
         _logger.LogInformation("Wrote modification render index to {RenderIndexPath}", renderIndexPath);
     }
