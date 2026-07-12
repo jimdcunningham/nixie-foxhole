@@ -888,6 +888,11 @@ public class FoxWatchManifestAssetExtractor
                 return null;
             }
 
+            if (IsFortForwardBaseStructure(structureId))
+            {
+                return null;
+            }
+
             var foundationRenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath);
             if (foundationRenderLayers != null)
             {
@@ -1595,6 +1600,11 @@ public class FoxWatchManifestAssetExtractor
 
             return structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
                 || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFortForwardBaseStructure(string structureId)
+        {
+            return structureId.StartsWith("fortbaset", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string? ResolveFortRoofModSlotLayerComponentName(

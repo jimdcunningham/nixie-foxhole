@@ -2997,6 +2997,40 @@ public sealed class FoxWatchRenderSceneGenerator
         return filteredNodes;
     }
 
+    private static bool ShouldIncludeFortEntrenchmentPipelineInfrastructureInLayer(
+        FoxWatchManifestStructure structure,
+        string layerId,
+        string? nodeName)
+    {
+        return IsFortEntrenchmentStructure(structure)
+            && string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
+            && IsFortEntrenchmentPipelineInfrastructureNode(nodeName);
+    }
+
+    private static bool IsFortEntrenchmentPipelineInfrastructureNode(string? nodeName)
+    {
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            return false;
+        }
+
+        var normalizedNodeName = nodeName;
+        var separatorIndex = normalizedNodeName.LastIndexOf(':');
+        if (separatorIndex >= 0 && separatorIndex + 1 < normalizedNodeName.Length)
+        {
+            normalizedNodeName = normalizedNodeName[(separatorIndex + 1)..];
+        }
+
+        return normalizedNodeName.StartsWith("PipeInput", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("PipeOutput", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("PipeInputMesh", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("PipeOutputMesh", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("InputMesh", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("OutputMesh", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("InputDecal", StringComparison.OrdinalIgnoreCase)
+            || normalizedNodeName.StartsWith("OutputDecal", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool ShouldIncludeFortRoofLayerMesh(
         FoxWatchManifestStructure structure,
         string layerId,
@@ -3033,6 +3067,12 @@ public sealed class FoxWatchRenderSceneGenerator
         if (string.Equals(normalizedRoofComponentName, "Roof", StringComparison.OrdinalIgnoreCase))
         {
             return string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (normalizedRoofComponentName.Contains("FortRoofModSlot", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedNodeName, "RoofDirt", StringComparison.OrdinalIgnoreCase);
         }
 
         return string.Equals(normalizedNodeName, normalizedRoofComponentName, StringComparison.OrdinalIgnoreCase)
@@ -3168,6 +3208,11 @@ public sealed class FoxWatchRenderSceneGenerator
 
         if (IsFortEntrenchmentStructure(structure))
         {
+            if (ShouldIncludeFortEntrenchmentPipelineInfrastructureInLayer(structure, layerId, normalizedNodeName))
+            {
+                return true;
+            }
+
             var renderLayer = structure.RenderLayers?
                 .FirstOrDefault(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase));
             if (renderLayer == null || string.IsNullOrWhiteSpace(renderLayer.ComponentName))
@@ -5133,6 +5178,11 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool GetClipFloor(FoxWatchManifestStructure structure)
     {
+        if (IsStandaloneDestroyedOrBreachedStructure(structure))
+        {
+            return false;
+        }
+
         return structure.ClipFloor ?? (structure.IsVehicle != true && structure.IsItem != true);
     }
 

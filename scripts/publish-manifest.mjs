@@ -2490,6 +2490,10 @@ function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument 
 
     return {
         assetIds,
+        assetIdsWithAuthoredRenderLayers: new Set((manifest?.assets ?? [])
+            .filter(shouldPublishStructureComponentRenderLayers)
+            .map(structure => normalizeId(structure?.id))
+            .filter(Boolean)),
         sharedModificationIds,
         sharedPackagingKeys,
     };
@@ -2525,13 +2529,17 @@ function shouldSkipHostLocalModificationSync(location, scopedTargets) {
 }
 
 function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
-    if (!scopedTargets) {
-        return true;
-    }
-
     const location = parseAssetRelativeLocation(outputPath);
     if (!location) {
         return false;
+    }
+
+    if (location.scope === 'component' && isStandaloneDestroyedOrBreachedStructureId(location.assetId)) {
+        return false;
+    }
+
+    if (!scopedTargets) {
+        return true;
     }
 
     if (location.scope === 'sharedModification') {
@@ -2540,6 +2548,10 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
 
     if (location.scope === 'sharedPackaging') {
         return scopedTargets.sharedPackagingKeys.has(location.shippableType);
+    }
+
+    if (location.scope === 'component') {
+        return scopedTargets.assetIdsWithAuthoredRenderLayers.has(location.assetId);
     }
 
     if (location.scope === 'assetModification') {
@@ -4557,7 +4569,7 @@ async function collectStructureComponentRenderEntries(structureLayerEntriesByStr
 
     const layerId = normalizeId(componentId);
     const normalizedStructureId = normalizeId(structureId);
-    if (!layerId || !normalizedStructureId) {
+    if (!layerId || !normalizedStructureId || isStandaloneDestroyedOrBreachedStructureId(normalizedStructureId)) {
         return;
     }
 
@@ -5346,12 +5358,57 @@ async function removeStaleRootStructureArtifacts(manifest) {
     }
 }
 
+function isStandaloneDestroyedOrBreachedStructure(structure) {
+    if (structure?.isDestroyed === true || structure?.isBreached === true) {
+        return true;
+    }
+
+    const structureId = normalizeId(structure?.id);
+    const profileType = normalizeId(structure?.profileType);
+    if (profileType === 'destroyedfort' || profileType === 'destroyedstructure') {
+        return true;
+    }
+
+    return isStandaloneDestroyedOrBreachedStructureId(structureId);
+}
+
+function isStandaloneDestroyedOrBreachedStructureId(structureId) {
+    const normalizedStructureId = normalizeId(structureId);
+    if (!normalizedStructureId) {
+        return false;
+    }
+
+    return normalizedStructureId.includes('destroyed') || normalizedStructureId.includes('breached');
+}
+
+function structureHasAuthoredRenderLayers(structure) {
+    return Array.isArray(structure?.renderLayers) && structure.renderLayers.length > 0;
+}
+
+function shouldPublishStructureComponentRenderLayers(structure) {
+    return structureHasAuthoredRenderLayers(structure)
+        && !isStandaloneDestroyedOrBreachedStructure(structure);
+}
+
 async function removeStaleStructureArtifactDirectories(manifest) {
     const structureIds = new Set((manifest?.assets ?? [])
         .map(structure => normalizeId(structure?.id))
         .filter(Boolean));
 
     for (const structureId of structureIds) {
+        const structure = (manifest?.assets ?? []).find(asset => normalizeId(asset?.id) === structureId) ?? null;
+        if (isStandaloneDestroyedOrBreachedStructure(structure ?? { id: structureId })
+            || !shouldPublishStructureComponentRenderLayers(structure ?? { id: structureId })) {
+            const publishedAssetDirectory = getPublishedAssetDirectory(structureId);
+            const componentsDirectory = publishedAssetDirectory
+                ? resolve(publishedAssetDirectory, 'components')
+                : null;
+            if (componentsDirectory && await pathExists(componentsDirectory)) {
+                await rm(componentsDirectory, { recursive: true, force: true });
+                logPublishDetail(`removed stale component artifacts for ${structureId} at ${componentsDirectory}`);
+            }
+        }
+
         const publishedAssetDirectory = getPublishedAssetDirectory(structureId);
         const staleDirectories = [
             publishedAssetDirectory ? resolve(publishedAssetDirectory, 'mods') : null,
@@ -6512,10 +6569,12 @@ function applyStructureRenderUrls(
                 const downgradeLayerEntries = downgradeStructureId
                     ? structureLayerEntriesByStructureId?.[downgradeStructureId] ?? {}
                     : {};
-                const renderLayers = filterLegacyEntrenchmentAggregateRenderLayerEntries(
-                    Object.values(structureLayerEntries).filter(entry => entry?.textureUrl),
-                    manifestRenderLayersById,
-                ).sort(compareStructureRenderLayers);
+                const renderLayers = shouldPublishStructureComponentRenderLayers(structure)
+                    ? filterLegacyEntrenchmentAggregateRenderLayerEntries(
+                        Object.values(structureLayerEntries).filter(entry => entry?.textureUrl),
+                        manifestRenderLayersById,
+                    ).sort(compareStructureRenderLayers)
+                    : [];
 
                 return {
                     ...structureWithoutLegacyIcons,
