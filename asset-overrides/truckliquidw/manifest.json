@@ -1,5 +1,8 @@
 {
   "categoryId": "vehicles",
   "buildOrder": 4,
-  "previewDirection": "sw"
+  "previewDirection": "sw",
+  "markedCargoOverlay": {
+    "offsetX": -52
+  }
 }

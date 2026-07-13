@@ -241,6 +241,8 @@ public sealed class FoxWatchManifestStructure
 
     public FoxWatchManifestStockpile? Stockpile { get; set; }
 
+    public FoxWatchManifestHoldProfile? HoldProfile { get; set; }
+
     public int? MaxHealth { get; set; }
 
     public int? MaxOrders { get; set; }
@@ -431,6 +433,23 @@ public sealed class FoxWatchManifestStockpile
     public Dictionary<string, int>? ItemQuantityLimits { get; set; }
 
     public List<string>? ValidItems { get; set; }
+
+    public int? ItemCategoryFilter { get; set; }
+}
+
+public sealed class FoxWatchManifestHoldProfile
+{
+    public string Mode { get; set; } = string.Empty;
+
+    public int? Capacity { get; set; }
+
+    public int? StackLimit { get; set; }
+
+    public List<string>? AllowedItems { get; set; }
+
+    public Dictionary<string, int>? ItemQuantityLimits { get; set; }
+
+    public bool? AllowsAnyItem { get; set; }
 }
 
 public sealed class FoxWatchManifestBuildSocket

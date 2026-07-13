@@ -30,7 +30,9 @@ import { getDefaultPublishConcurrency, mapWithConcurrency } from './publish-conc
 import {
     augmentTargetedOnlyPublishedStructures,
     getExplicitlyRemovedStructureIdsForTargetedPublish,
+    loadAuthoredStructureMarkedCargoOverlays,
     loadAuthoredStructurePreviewDirections,
+    preserveAuthoredStructureMarkedCargoOverlays,
     preserveAuthoredStructurePreviewDirections,
     shouldPublishVehicleDestroyedVisual,
 } from './publish-manifest-overrides.mjs';
@@ -1033,6 +1035,39 @@ function compactFuelTank(value) {
     });
 }
 
+function compactStockpile(value) {
+    return compactNullableObject(value, {
+        totalItemCapacity: null,
+        totalCrateCapacity: null,
+        itemQuantityLimits: null,
+        validItems: null,
+    }, {
+        itemQuantityLimits: compactStringRecord,
+        validItems: entryValue => compactArray(entryValue, compactJsonValue),
+    });
+}
+
+function compactHoldProfile(value) {
+    return compactNullableObject(value, {
+        mode: null,
+        capacity: null,
+        stackLimit: null,
+        allowedItems: null,
+        itemQuantityLimits: null,
+        allowsAnyItem: null,
+    }, {
+        allowedItems: entryValue => compactArray(entryValue, compactJsonValue),
+        itemQuantityLimits: compactStringRecord,
+    });
+}
+
+function compactMarkedCargoOverlay(value) {
+    return compactNullableObject(value, {
+        offsetX: undefined,
+        offsetY: undefined,
+    });
+}
+
 function compactRecipeResource(value) {
     if (!isPlainObject(value)) {
         return value;
@@ -1656,6 +1691,9 @@ function compactStructure(value) {
         repairCost: null,
         structuralIntegrity: null,
         inventorySlots: null,
+        stockpile: null,
+        holdProfile: null,
+        markedCargoOverlay: null,
         maxHealth: null,
         maxOrders: null,
         buildLocationType: null,
@@ -1691,6 +1729,9 @@ function compactStructure(value) {
         vehicleSeats: entryValue => compactArray(entryValue, compactVehicleSeat),
         spotlights: entryValue => compactArray(entryValue, compactSpotlight),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
+        stockpile: compactStockpile,
+        holdProfile: compactHoldProfile,
+        markedCargoOverlay: compactMarkedCargoOverlay,
         conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
         ranges: entryValue => compactArray(entryValue, compactRange),
         cost: compactRecipeResourceMap,
@@ -7359,12 +7400,17 @@ try {
     await syncSharedModificationDefaultIconAssets(manifestWithStrippedSlotNoise);
     const authoredModificationOverrides = await loadAuthoredSharedModificationOverrides();
     const authoredStructurePreviewDirections = await loadAuthoredStructurePreviewDirections(assetOverridesDirectory);
+    const authoredStructureMarkedCargoOverlays = await loadAuthoredStructureMarkedCargoOverlays(assetOverridesDirectory);
     const manifestWithPreservedAuthoredPreviewDirections = preserveAuthoredSharedModificationPreviewDirections(
         preserveAuthoredModificationPreviewDirections(
-            preserveAuthoredStructurePreviewDirections(
-                manifestWithStrippedSlotNoise,
+            preserveAuthoredStructureMarkedCargoOverlays(
+                preserveAuthoredStructurePreviewDirections(
+                    manifestWithStrippedSlotNoise,
+                    manifestWithSeededSharedModificationIds,
+                    authoredStructurePreviewDirections,
+                ),
                 manifestWithSeededSharedModificationIds,
-                authoredStructurePreviewDirections,
+                authoredStructureMarkedCargoOverlays,
             ),
             manifestWithSeededSharedModificationIds,
             authoredModificationOverrides,

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+import { foxholeManifestSchema } from '../../../apps/foxhole-planner/app/plugins/foxhole/nixie/manifest.ts';
 import {
     augmentTargetedOnlyPublishedStructures,
     getExplicitlyRemovedStructureIdsForTargetedPublish,
+    preserveAuthoredStructureMarkedCargoOverlays,
     preserveAuthoredStructurePreviewDirections,
     shouldPublishVehicleDestroyedVisual,
 } from './publish-manifest-overrides.mjs';
@@ -48,6 +51,28 @@ test('preserveAuthoredStructurePreviewDirections prefers authored override over 
     assert.equal(published.assets[1].previewDirection, 'sw');
 });
 
+test('preserveAuthoredStructureMarkedCargoOverlays prefers authored override over published defaults', () => {
+    const published = preserveAuthoredStructureMarkedCargoOverlays(
+        {
+            assets: [
+                { id: 'facilitytransferresource', markedCargoOverlay: { offsetY: 12 } },
+                { id: 'trailerresource', markedCargoOverlay: { offsetX: 4 } },
+            ],
+        },
+        {
+            assets: [
+                { id: 'facilitytransferresource', markedCargoOverlay: { offsetY: 20 } },
+            ],
+        },
+        new Map([
+            ['trailerresource', { offsetY: -18 }],
+        ]),
+    );
+
+    assert.deepEqual(published.assets[0].markedCargoOverlay, { offsetY: 20 });
+    assert.deepEqual(published.assets[1].markedCargoOverlay, { offsetY: -18 });
+});
+
 test('augmentTargetedOnlyPublishedStructures keeps --only targets missing from partial source', () => {
     const publishedManifest = {
         assets: [
@@ -64,4 +89,31 @@ test('augmentTargetedOnlyPublishedStructures keeps --only targets missing from p
 
 test('getExplicitlyRemovedStructureIdsForTargetedPublish never treats missing partial source as removal', () => {
     assert.equal(getExplicitlyRemovedStructureIdsForTargetedPublish().size, 0);
+});
+
+test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manifests', () => {
+    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+    const sourceAsset = rawManifest.assets.find(asset => asset.id === 'facilitytransfermaterial');
+    assert.ok(sourceAsset?.stockpile);
+
+    const parsedManifest = foxholeManifestSchema.parse(rawManifest);
+    const parsedAsset = parsedManifest.assets.find(asset => asset.id === 'facilitytransfermaterial');
+
+    assert.deepEqual(parsedAsset?.stockpile, sourceAsset.stockpile);
+    assert.ok(parsedManifest.assets.some(asset => asset.stockpile));
+});
+
+test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch manifests', () => {
+    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+    const sourceAsset = rawManifest.assets.find(asset => asset.id === 'resourcecontainer');
+    assert.ok(sourceAsset?.holdProfile);
+
+    const parsedManifest = foxholeManifestSchema.parse(rawManifest);
+    const parsedAsset = parsedManifest.assets.find(asset => asset.id === 'resourcecontainer');
+
+    assert.deepEqual(
+        JSON.parse(JSON.stringify(parsedAsset?.holdProfile)),
+        JSON.parse(JSON.stringify(sourceAsset.holdProfile)),
+    );
+    assert.ok(parsedManifest.assets.some(asset => asset.holdProfile));
 });

@@ -855,6 +855,7 @@ public class FoxWatchManifestAssetExtractor
                 StructuralIntegrity = constructionDynamicData?.StructuralIntegrity,
                 InventorySlots = constructionDynamicData?.InventorySlots,
                 Stockpile = stockpile,
+                HoldProfile = BuildHoldProfile(stockpile, fuelTanks, constructionDynamicData, codeNameText),
                 MaxHealth = ExtractNullableInt(inheritedProperty("MaxHealth")),
                 MaxOrders = ExtractNullableInt(inheritedProperty("MaxOrders")) ?? specializedFactoryMetadata.MaxQueueSize,
                 BuildSockets = buildSockets,
@@ -5476,6 +5477,8 @@ public class FoxWatchManifestAssetExtractor
                     inventorySlots = null;
                 }
 
+                var itemSlotFilters = ExtractItemSlotFiltersFromJsonToken(value["ItemSlotFilters"]);
+
                 var crateQuantity = value.Value<double?>("QuantityPerCrate");
                 if (crateQuantity == 0)
                 {
@@ -5516,6 +5519,7 @@ public class FoxWatchManifestAssetExtractor
                         RepairCost = repairCost,
                         StructuralIntegrity = structuralIntegrity,
                         InventorySlots = inventorySlots,
+                        ItemSlotFilters = itemSlotFilters,
                     };
                     continue;
                 }
@@ -5574,7 +5578,53 @@ public class FoxWatchManifestAssetExtractor
                 {
                     existingEntry.InventorySlots = inventorySlots;
                 }
+
+                if (existingEntry.ItemSlotFilters.Count == 0 && itemSlotFilters.Count > 0)
+                {
+                    existingEntry.ItemSlotFilters = itemSlotFilters;
+                }
             }
+        }
+
+        private static List<FoxWatchConstructionDynamicDataItemSlotFilter> ExtractItemSlotFiltersFromJsonToken(JToken? value)
+        {
+            var filters = new List<FoxWatchConstructionDynamicDataItemSlotFilter>();
+            if (value is not JArray array)
+            {
+                return filters;
+            }
+
+            foreach (var entry in array.OfType<JObject>())
+            {
+                var codeName = NormalizeString(entry.Value<string>("CodeName"));
+                var extraCodeNames = entry["ExtraCodeNames"]?
+                    .ToObject<List<string>>()?
+                    .Select(NormalizeString)
+                    .Where(candidate =>
+                        !string.IsNullOrWhiteSpace(candidate)
+                        && !string.Equals(candidate, "None", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList() ?? [];
+                var stackLimit = entry.Value<int?>("StackLimit");
+                if (stackLimit == 0)
+                {
+                    stackLimit = null;
+                }
+
+                if (string.IsNullOrWhiteSpace(codeName) && extraCodeNames.Count == 0)
+                {
+                    continue;
+                }
+
+                filters.Add(new FoxWatchConstructionDynamicDataItemSlotFilter
+                {
+                    CodeName = codeName,
+                    ExtraCodeNames = extraCodeNames,
+                    StackLimit = stackLimit,
+                });
+            }
+
+            return filters;
         }
 
         private FoxWatchSpecializedFactoryMetadata ExtractSpecializedFactoryMetadata(
@@ -7463,6 +7513,183 @@ public class FoxWatchManifestAssetExtractor
                 .ToList();
         }
 
+        private static FoxWatchManifestHoldProfile? BuildHoldProfile(
+            FoxWatchManifestStockpile? stockpile,
+            IReadOnlyList<FoxWatchManifestFuelTank> fuelTanks,
+            FoxWatchConstructionDynamicDataEntry? constructionDynamicData,
+            string? structureCodeName = null)
+        {
+            if (stockpile?.TotalCrateCapacity is int crateCapacity && crateCapacity > 0)
+            {
+                var hasExplicitCrateItems = stockpile.ValidItems is { Count: > 0 };
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "crate-stockpile",
+                    Capacity = crateCapacity,
+                    AllowedItems = hasExplicitCrateItems ? stockpile.ValidItems : null,
+                    ItemQuantityLimits = stockpile.ItemQuantityLimits is { Count: > 0 } ? stockpile.ItemQuantityLimits : null,
+                    AllowsAnyItem = !hasExplicitCrateItems ? true : null,
+                };
+            }
+
+            if (stockpile?.ValidItems is { Count: > 0 } || stockpile?.ItemQuantityLimits is { Count: > 0 })
+            {
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "stockpile",
+                    Capacity = stockpile.TotalItemCapacity,
+                    AllowedItems = stockpile.ValidItems,
+                    ItemQuantityLimits = stockpile.ItemQuantityLimits,
+                };
+            }
+
+            if (fuelTanks.Count > 0)
+            {
+                var allowedItems = fuelTanks
+                    .Select(tank => NormalizeString(tank.CodeName))
+                    .Where(codeName => !string.IsNullOrWhiteSpace(codeName))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var itemQuantityLimits = fuelTanks
+                    .Select(tank => new
+                    {
+                        CodeName = NormalizeString(tank.CodeName),
+                        Capacity = tank.Capacity,
+                    })
+                    .Where(entry => !string.IsNullOrWhiteSpace(entry.CodeName) && entry.Capacity is > 0)
+                    .GroupBy(entry => entry.CodeName!, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => (int)Math.Round(group.First().Capacity!.Value),
+                        StringComparer.Ordinal);
+
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "fuel-tank",
+                    AllowedItems = allowedItems.Count > 0 ? allowedItems : null,
+                    ItemQuantityLimits = itemQuantityLimits.Count > 0 ? itemQuantityLimits : null,
+                };
+            }
+
+            if (stockpile?.TotalItemCapacity is int itemCapacity && itemCapacity > 0)
+            {
+                if (ShouldUseLiquidContainerHoldProfile(stockpile, structureCodeName))
+                {
+                    return new FoxWatchManifestHoldProfile
+                    {
+                        Mode = "fuel-tank",
+                        AllowedItems = GetStandardLiquidItemCodeNames(),
+                    };
+                }
+
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "stockpile",
+                    Capacity = itemCapacity,
+                    ItemQuantityLimits = stockpile.ItemQuantityLimits is { Count: > 0 } ? stockpile.ItemQuantityLimits : null,
+                };
+            }
+
+            var slotFilters = constructionDynamicData?.ItemSlotFilters;
+            if (slotFilters is { Count: > 0 })
+            {
+                var allowedItems = new List<string>();
+                var itemQuantityLimits = new Dictionary<string, int>(StringComparer.Ordinal);
+                int? stackLimit = null;
+
+                foreach (var filter in slotFilters)
+                {
+                    var codes = new[] { filter.CodeName }
+                        .Concat(filter.ExtraCodeNames)
+                        .Select(NormalizeString)
+                        .Where(codeName =>
+                            !string.IsNullOrWhiteSpace(codeName)
+                            && !string.Equals(codeName, "None", StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var codeName in codes)
+                    {
+                        if (!allowedItems.Contains(codeName, StringComparer.OrdinalIgnoreCase))
+                        {
+                            allowedItems.Add(codeName);
+                        }
+
+                        if (filter.StackLimit is int filterStackLimit && filterStackLimit > 0)
+                        {
+                            itemQuantityLimits.TryAdd(codeName, filterStackLimit);
+                        }
+                    }
+
+                    stackLimit ??= filter.StackLimit;
+                }
+
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "inventory",
+                    Capacity = constructionDynamicData?.InventorySlots,
+                    StackLimit = stackLimit,
+                    AllowedItems = allowedItems.Count > 0 ? allowedItems : null,
+                    ItemQuantityLimits = itemQuantityLimits.Count > 0 ? itemQuantityLimits : null,
+                };
+            }
+
+            if (stockpile?.TotalItemCapacity == 0)
+            {
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "stockpile",
+                    Capacity = 0,
+                    AllowsAnyItem = true,
+                };
+            }
+
+            if (constructionDynamicData?.InventorySlots is int inventorySlots && inventorySlots > 0)
+            {
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "inventory",
+                    Capacity = inventorySlots,
+                };
+            }
+
+            return null;
+        }
+
+        private static bool ShouldUseLiquidContainerHoldProfile(
+            FoxWatchManifestStockpile stockpile,
+            string? structureCodeName)
+        {
+            if (!string.Equals(structureCodeName, "LiquidContainer", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (stockpile.ValidItems is { Count: > 0 })
+            {
+                return false;
+            }
+
+            if (stockpile.ItemQuantityLimits is { Count: > 0 })
+            {
+                return false;
+            }
+
+            return stockpile.TotalItemCapacity is > 0;
+        }
+
+        private static List<string> GetStandardLiquidItemCodeNames()
+        {
+            return
+            [
+                "Water",
+                "Diesel",
+                "FacilityOil1",
+                "FacilityOil2",
+                "Oil",
+                "Petrol",
+            ];
+        }
+
         private FoxWatchManifestStockpile? ExtractStockpile(
             IEnumerable<dynamic> rootObjects,
             UBlueprintGeneratedClass blueprint)
@@ -7507,6 +7734,12 @@ public class FoxWatchManifestAssetExtractor
                     if (isItemStockpile && stockpile.TotalItemCapacity == null && totalQuantityLimit != null)
                     {
                         stockpile.TotalItemCapacity = totalQuantityLimit;
+                    }
+
+                    var itemCategoryFilter = ExtractNullableInt(GetNamedValue(config, "ItemCategoryFilter"));
+                    if (itemCategoryFilter != null && stockpile.ItemCategoryFilter == null)
+                    {
+                        stockpile.ItemCategoryFilter = itemCategoryFilter;
                     }
 
                     if (isCrateStockpile && stockpile.TotalCrateCapacity == null && totalQuantityLimit != null)
@@ -11635,6 +11868,17 @@ public class FoxWatchManifestAssetExtractor
             public double? StructuralIntegrity { get; set; }
 
             public int? InventorySlots { get; set; }
+
+            public List<FoxWatchConstructionDynamicDataItemSlotFilter> ItemSlotFilters { get; set; } = [];
+        }
+
+        private sealed class FoxWatchConstructionDynamicDataItemSlotFilter
+        {
+            public string? CodeName { get; set; }
+
+            public List<string> ExtraCodeNames { get; set; } = [];
+
+            public int? StackLimit { get; set; }
         }
 
         private sealed class FoxWatchSpecializedFactoryMetadata

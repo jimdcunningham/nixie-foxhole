@@ -1,5 +1,22 @@
 {
   "categoryId": "vehicles",
   "buildOrder": 1,
-  "previewDirection": "sw"
+  "previewDirection": "sw",
+  "holdProfile": {
+    "allowedItems": [
+      "Metal",
+      "Sulfur",
+      "Components",
+      "FacilityComponents1",
+      "Coal",
+      "GroundMaterials",
+      "Explosive",
+      "HeavyExplosive",
+      "FacilityCoal1",
+      "Aluminum",
+      "Iron",
+      "Copper"
+    ],
+    "stackLimit": 100
+  }
 }
