@@ -1,4 +1,5 @@
 {
   "categoryId": "garrisons",
-  "buildOrder": 10
+  "buildOrder": 10,
+  "clipFloor": false
 }

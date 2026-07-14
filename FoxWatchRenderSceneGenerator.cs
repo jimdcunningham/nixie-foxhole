@@ -129,9 +129,30 @@ public sealed class FoxWatchRenderSceneGenerator
                 FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultModificationRenderIndexRelativePath)!,
                 cancellationToken);
 
-            foreach (var sceneDocument in DeduplicateStandaloneModificationSceneDocuments(
+            var deduplicatedSceneDocuments = DeduplicateStandaloneModificationSceneDocuments(
                 generatedSceneDocuments,
-                modificationRenderIndex).OrderBy(entry => entry.RelativeScenePath, StringComparer.Ordinal))
+                modificationRenderIndex);
+            if (modificationRenderIndex != null)
+            {
+                var sharedRenderIds = deduplicatedSceneDocuments
+                    .Where(document => document.IsStandaloneModification
+                        && string.Equals(document.StructureId, "mods", StringComparison.OrdinalIgnoreCase))
+                    .Select(GetDocumentRenderId);
+                var hostLocalRenderIds = deduplicatedSceneDocuments
+                    .Where(document => document.IsStandaloneModification
+                        && !string.Equals(document.StructureId, "mods", StringComparison.OrdinalIgnoreCase))
+                    .Select(GetDocumentRenderId);
+                FoxWatchModificationRenderIdentity.AssignStorageFlagsFromGeneratedScenes(
+                    modificationRenderIndex,
+                    sharedRenderIds,
+                    hostLocalRenderIds);
+                await FoxWatchModificationRenderIndexWriter.WriteAsync(
+                    modificationRenderIndex,
+                    FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultModificationRenderIndexRelativePath)!,
+                    cancellationToken);
+            }
+
+            foreach (var sceneDocument in deduplicatedSceneDocuments.OrderBy(entry => entry.RelativeScenePath, StringComparer.Ordinal))
             {
                 var filePath = Path.Combine(outputDirectory, sceneDocument.RelativeScenePath);
                 var fileDirectory = Path.GetDirectoryName(filePath);
@@ -548,10 +569,9 @@ public sealed class FoxWatchRenderSceneGenerator
             var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(documentsInGroup[0]));
 
             if (fingerprints.Count == 1
-                && (documentsInGroup.Count > 1
-                    || FoxWatchModificationRenderIdentity.IsSharedModificationRenderIndexEntry(
-                        FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(modificationRenderIndex, renderId))
-                    || FoxWatchPublishedSharedModificationCatalog.IsSharedModificationRenderId(renderId)))
+                    && (documentsInGroup.Count > 1
+                        || FoxWatchModificationRenderIdentity.IsSharedModificationRenderIndexEntry(
+                            FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(modificationRenderIndex, renderId))))
             {
                 var representative = documentsInGroup[0];
                 representative.StructureId = "mods";
@@ -580,6 +600,7 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
+            // Divergent fingerprints: keep per-host scenes even when multiple hosts share a renderId.
             foreach (var document in documentsInGroup)
             {
                 document.RelativeScenePath = Path.Combine(document.StructureId, "modifications", $"{renderId}.scene.json");
@@ -5178,11 +5199,6 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool GetClipFloor(FoxWatchManifestStructure structure)
     {
-        if (IsStandaloneDestroyedOrBreachedStructure(structure))
-        {
-            return false;
-        }
-
         return structure.ClipFloor ?? (structure.IsVehicle != true && structure.IsItem != true);
     }
 

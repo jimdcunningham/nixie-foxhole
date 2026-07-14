@@ -1962,11 +1962,6 @@ function mergeModificationVariantPublishedContext(variant, publishedVariant) {
         nextVariant.appliedModificationId = publishedVariant.appliedModificationId;
     }
 
-    const publishedSharedModificationId = normalizeId(publishedVariant?.sharedModificationId);
-    if (publishedSharedModificationId && hasStandaloneModificationContentHashSuffix(publishedSharedModificationId)) {
-        nextVariant.sharedModificationId = publishedSharedModificationId;
-    }
-
     return nextVariant;
 }
 
@@ -2338,15 +2333,9 @@ function isPublishedSharedModificationRenderId(renderId) {
 }
 
 function isSharedModificationRenderIndexEntryFromModificationIndex(entry) {
-    const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
-    if (consumers.length <= 1) {
-        return false;
-    }
-
-    const structureIds = new Set(consumers
-        .map(consumer => normalizeId(consumer?.structureId))
-        .filter(Boolean));
-    return structureIds.size > 1;
+    // Storage is finalized after scene-fingerprint routing. Multi-consumer alone
+    // is not enough — pipe/silo insulation stays host-local when fingerprints differ.
+    return normalizeId(entry?.storage) === 'shared';
 }
 
 function buildSharedModificationConsumerLookupFromModificationIndex(modificationRenderIndexDocument) {
@@ -2357,9 +2346,7 @@ function buildSharedModificationConsumerLookupFromModificationIndex(modification
             continue;
         }
 
-        if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)
-            && normalizeId(entry?.storage) !== 'shared'
-            && !isPublishedSharedModificationRenderId(renderId)) {
+        if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)) {
             continue;
         }
 
@@ -2387,9 +2374,7 @@ function collectSharedModificationIdsFromModificationRenderIndex(modificationRen
             continue;
         }
 
-        if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)
-            && normalizeId(entry?.storage) !== 'shared'
-            && !isPublishedSharedModificationRenderId(renderId)) {
+        if (!isSharedModificationRenderIndexEntryFromModificationIndex(entry)) {
             continue;
         }
 
@@ -2468,43 +2453,46 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
         ...buildSharedModificationConsumerLookup(renderScenesIndexDocument),
         ...buildSharedModificationConsumerLookupFromModificationIndex(modificationRenderIndexDocument),
     ]);
-    if (sharedModificationIdByConsumer.size === 0) {
-        return manifest;
-    }
 
     return attachSourceStructureMetadata({
         ...manifest,
         assets: (manifest?.assets ?? []).map(structure => {
             const structureId = normalizeId(structure?.id);
-            if (!structureId || !Array.isArray(structure?.modificationSlots) || structure.modificationSlots.length === 0) {
+            const slots = getStructurePublishedModificationSlots(structure);
+            if (!structureId || slots.length === 0) {
                 return structure;
             }
 
-            return {
-                ...structure,
-                modificationSlots: structure.modificationSlots.map(slot => ({
-                    ...slot,
-                    variants: Object.fromEntries(Object.entries(slot?.variants ?? {}).map(([variantId, variant]) => {
-                        if (normalizeId(variantId) === 'default') {
-                            return [variantId, variant];
-                        }
+            const nextSlots = slots.map(slot => ({
+                ...slot,
+                variants: Object.fromEntries(Object.entries(slot?.variants ?? {}).map(([variantId, variant]) => {
+                    if (normalizeId(variantId) === 'default') {
+                        return [variantId, variant];
+                    }
 
-                        const existingRenderId = normalizeId(variant?.renderId)
-                            ?? normalizeId(variant?.sharedModificationId);
-                        const consumerKey = `${structureId}|${normalizeId(variantId)}`;
-                        const sharedModificationId = sharedModificationIdByConsumer.get(consumerKey);
-                        const nextVariant = { ...variant };
-                        if (existingRenderId) {
-                            nextVariant.renderId = existingRenderId;
-                        }
-                        if (sharedModificationId) {
-                            nextVariant.sharedModificationId = sharedModificationId;
-                        } else {
-                            delete nextVariant.sharedModificationId;
-                        }
-                        return [variantId, nextVariant];
-                    })),
+                    const existingRenderId = normalizeId(variant?.renderId)
+                        ?? normalizeId(variant?.sharedModificationId);
+                    const consumerKey = `${structureId}|${normalizeId(variantId)}`;
+                    const sharedModificationId = sharedModificationIdByConsumer.get(consumerKey);
+                    const nextVariant = { ...variant };
+                    if (existingRenderId) {
+                        nextVariant.renderId = existingRenderId;
+                    }
+                    if (sharedModificationId) {
+                        nextVariant.sharedModificationId = sharedModificationId;
+                    } else {
+                        delete nextVariant.sharedModificationId;
+                    }
+                    return [variantId, nextVariant];
                 })),
+            }));
+
+            const { modifications: _modifications, modificationSlots: _modificationSlots, ...rest } = structure;
+            return {
+                ...rest,
+                ...(Array.isArray(structure?.modificationSlots)
+                    ? { modificationSlots: nextSlots }
+                    : { modifications: nextSlots }),
             };
         }),
     }, manifest);
@@ -2531,7 +2519,7 @@ function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument 
 
     return {
         assetIds,
-        assetIdsWithAuthoredRenderLayers: new Set((manifest?.assets ?? [])
+        assetIdsEligibleForComponentPublish: new Set((manifest?.assets ?? [])
             .filter(shouldPublishStructureComponentRenderLayers)
             .map(structure => normalizeId(structure?.id))
             .filter(Boolean)),
@@ -2550,23 +2538,9 @@ function shouldSkipHostLocalModificationSync(location, scopedTargets) {
         return false;
     }
 
-    if (scopedTargets.sharedModificationIds.has(modificationId)) {
-        return true;
-    }
-
-    const modificationPrefix = getSharedModificationVariantPrefix(modificationId);
-    for (const sharedModificationId of scopedTargets.sharedModificationIds) {
-        const normalizedSharedModificationId = normalizeId(sharedModificationId);
-        if (!hasStandaloneModificationContentHashSuffix(normalizedSharedModificationId)) {
-            continue;
-        }
-
-        if (getSharedModificationVariantPrefix(normalizedSharedModificationId) === modificationPrefix) {
-            return true;
-        }
-    }
-
-    return false;
+    // Only skip exact shared renderId folders. Prefix matching (insulation vs
+    // insulation-<hash>) incorrectly drops host-local fingerprint-divergent mods.
+    return scopedTargets.sharedModificationIds.has(modificationId);
 }
 
 function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
@@ -2592,7 +2566,7 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
     }
 
     if (location.scope === 'component') {
-        return scopedTargets.assetIdsWithAuthoredRenderLayers.has(location.assetId);
+        return scopedTargets.assetIdsEligibleForComponentPublish.has(location.assetId);
     }
 
     if (location.scope === 'assetModification') {
@@ -2621,65 +2595,9 @@ function pruneSharedModificationEntries(manifest) {
 }
 
 function preservePublishedVariantSharedModificationIds(publishedStructure, partialStructure) {
-    const publishedSlots = getStructurePublishedModificationSlots(publishedStructure);
-    if (publishedSlots.length === 0) {
-        return partialStructure;
-    }
-
-    const publishedSlotsByName = new Map(publishedSlots
-        .map(slot => {
-            const slotName = String(slot?.name ?? '').trim();
-            return slotName ? [slotName, slot] : null;
-        })
-        .filter(Boolean));
-
-    const partialSlots = getStructurePublishedModificationSlots(partialStructure);
-    if (partialSlots.length === 0) {
-        return partialStructure;
-    }
-
-    let structureChanged = false;
-    const nextSlots = partialSlots.map(partialSlot => {
-        const slotName = String(partialSlot?.name ?? '').trim();
-        const publishedSlot = slotName ? publishedSlotsByName.get(slotName) : null;
-        if (!publishedSlot) {
-            return partialSlot;
-        }
-
-        const nextVariants = Object.fromEntries(Object.entries(partialSlot?.variants ?? {}).map(([variantId, variant]) => {
-            const publishedVariant = publishedSlot?.variants?.[variantId];
-            const publishedSharedModificationId = normalizeId(publishedVariant?.sharedModificationId);
-            const partialSharedModificationId = normalizeId(variant?.sharedModificationId);
-            if (!publishedSharedModificationId || !hasStandaloneModificationContentHashSuffix(publishedSharedModificationId)) {
-                return [variantId, variant];
-            }
-
-            if (partialSharedModificationId === publishedSharedModificationId) {
-                return [variantId, variant];
-            }
-
-            structureChanged = true;
-            return [variantId, {
-                ...variant,
-                sharedModificationId: publishedSharedModificationId,
-            }];
-        }));
-
-        return {
-            ...partialSlot,
-            variants: nextVariants,
-        };
-    });
-
-    if (!structureChanged) {
-        return partialStructure;
-    }
-
-    const { modifications: _modifications, modificationSlots: _modificationSlots, ...nextStructure } = partialStructure;
-    return {
-        ...nextStructure,
-        modifications: nextSlots,
-    };
+    // Fingerprint routing via seedSharedModificationIdsFromRenderIndex is authoritative.
+    // Never force a previously published sharedModificationId onto host-local variants.
+    return partialStructure;
 }
 
 function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds = new Set()) {
@@ -4240,6 +4158,17 @@ function resolvePublishedSharedModificationId(candidateId, variantId, variant, s
     throw new Error(`Missing canonical renderId for modification variant '${variantId}'`);
 }
 
+function resolveSeededSharedModificationId(...candidates) {
+    for (const candidate of candidates) {
+        const normalized = normalizeId(candidate);
+        if (normalized && hasStandaloneModificationContentHashSuffix(normalized)) {
+            return normalized;
+        }
+    }
+
+    return null;
+}
+
 function isSharedModificationRenderIndexEntry(entry) {
     if (normalizeId(entry?.structureId) === 'mods') {
         return true;
@@ -5422,13 +5351,11 @@ function isStandaloneDestroyedOrBreachedStructureId(structureId) {
     return normalizedStructureId.includes('destroyed') || normalizedStructureId.includes('breached');
 }
 
-function structureHasAuthoredRenderLayers(structure) {
-    return Array.isArray(structure?.renderLayers) && structure.renderLayers.length > 0;
-}
-
 function shouldPublishStructureComponentRenderLayers(structure) {
-    return structureHasAuthoredRenderLayers(structure)
-        && !isStandaloneDestroyedOrBreachedStructure(structure);
+    // Standalone destroyed/breached structures intentionally have no component layers.
+    // Spline/connector components are render-scene derived and may not appear as authored
+    // renderLayers on the source manifest — keep publishing whatever component textures exist.
+    return !isStandaloneDestroyedOrBreachedStructure(structure);
 }
 
 async function removeStaleStructureArtifactDirectories(manifest) {
@@ -5438,8 +5365,7 @@ async function removeStaleStructureArtifactDirectories(manifest) {
 
     for (const structureId of structureIds) {
         const structure = (manifest?.assets ?? []).find(asset => normalizeId(asset?.id) === structureId) ?? null;
-        if (isStandaloneDestroyedOrBreachedStructure(structure ?? { id: structureId })
-            || !shouldPublishStructureComponentRenderLayers(structure ?? { id: structureId })) {
+        if (isStandaloneDestroyedOrBreachedStructure(structure ?? { id: structureId })) {
             const publishedAssetDirectory = getPublishedAssetDirectory(structureId);
             const componentsDirectory = publishedAssetDirectory
                 ? resolve(publishedAssetDirectory, 'components')
@@ -6754,15 +6680,14 @@ function applyStructureRenderUrls(
                     modifications: Object.fromEntries(Object.entries(structure.modifications ?? {}).map(([modificationId, modification]) => {
                         const modificationLookupKey = normalizeId(modification?.appliedModificationId ?? modificationId);
                         const renderEntry = modificationEntriesByAssetId?.[normalizeId(structure.id)]?.[modificationLookupKey] ?? null;
+                        // Only keep explicitly seeded sharedModificationId values. Never derive
+                        // from renderId — host-local fingerprint-divergent mods share a renderId
+                        // without belonging in shared.modifications.
                         const preferredSharedModificationId = normalizeId(modificationLookupKey || modificationId) === 'default'
                             ? null
-                            : resolvePublishedSharedModificationId(
-                                renderEntry?.sharedModificationId
-                                ?? modification?.sharedModificationId
-                                ?? null,
-                                modificationLookupKey || modificationId,
-                                modification,
-                                renderEntry?.previewDirection ?? modification?.previewDirection ?? structure?.previewDirection,
+                            : resolveSeededSharedModificationId(
+                                renderEntry?.sharedModificationId,
+                                modification?.sharedModificationId,
                             );
                         const nextModification = {
                             ...modification,
@@ -6812,20 +6737,10 @@ function applyStructureRenderUrls(
                                 ?? modificationEntriesByKey?.[normalizeId(variantId)];
                             const preferredSharedModificationId = normalizeId(variantId) === 'default'
                                 ? null
-                                : resolvePublishedSharedModificationId(
-                                    renderEntry?.sharedModificationId
-                                    ?? variant?.sharedModificationId
-                                    ?? sourceModification?.sharedModificationId
-                                    ?? null,
-                                    variantId,
-                                    {
-                                        ...sourceModification,
-                                        ...variant,
-                                    },
-                                    renderEntry?.previewDirection
-                                    ?? variant?.previewDirection
-                                    ?? sourceModification?.previewDirection
-                                    ?? structure?.previewDirection,
+                                : resolveSeededSharedModificationId(
+                                    renderEntry?.sharedModificationId,
+                                    variant?.sharedModificationId,
+                                    sourceModification?.sharedModificationId,
                                 );
                             const nextVariant = {
                                 ...variant,
@@ -7050,48 +6965,10 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
 
                     const preferredSharedModificationId = normalizeId(variantId) === 'default'
                         ? null
-                        : resolvePublishedSharedModificationId(
-                            renderEntry?.sharedModificationId
-                            ?? variant?.sharedModificationId
-                            ?? sourceModification?.sharedModificationId
-                            ?? null,
-                            variantId,
-                            {
-                                ...sourceModification,
-                                ...variant,
-                                name: getStandaloneModificationIdentityText(variant?.name)
-                                    || getStandaloneModificationIdentityText(sourceModification?.name),
-                                description: getStandaloneModificationIdentityText(variant?.description)
-                                    || getStandaloneModificationIdentityText(sourceModification?.description),
-                            },
-                            renderEntry?.previewDirection
-                            ?? variant?.previewDirection
-                            ?? sourceModification?.previewDirection
-                            ?? structure?.previewDirection,
-                            {
-                                structureId: normalizeId(structure?.id),
-                                structureCodeName: structure?.codeName ?? null,
-                                slotName: slot?.name ?? null,
-                                variantId,
-                                variantSharedModificationId: variant?.sharedModificationId ?? null,
-                                sourceModificationSharedModificationId: sourceModification?.sharedModificationId ?? null,
-                                renderEntrySharedModificationId: renderEntry?.sharedModificationId ?? null,
-                                variantPreviewDirection: variant?.previewDirection ?? null,
-                                sourceModificationPreviewDirection: sourceModification?.previewDirection ?? null,
-                                renderEntryPreviewDirection: renderEntry?.previewDirection ?? null,
-                                structurePreviewDirection: structure?.previewDirection ?? null,
-                                variantSnapshot: cloneSharedModificationHashDiagnosticValue({
-                                    templateActorPath: variant?.templateActorPath ?? sourceModification?.templateActorPath ?? null,
-                                    templateMeshPath: variant?.templateMeshPath ?? sourceModification?.templateMeshPath ?? null,
-                                    previewMeshPath: variant?.previewMeshPath ?? sourceModification?.previewMeshPath ?? null,
-                                    name: getStandaloneModificationIdentityText(variant?.name)
-                                        || getStandaloneModificationIdentityText(sourceModification?.name)
-                                        || null,
-                                    description: getStandaloneModificationIdentityText(variant?.description)
-                                        || getStandaloneModificationIdentityText(sourceModification?.description)
-                                        || null,
-                                }),
-                            },
+                        : resolveSeededSharedModificationId(
+                            renderEntry?.sharedModificationId,
+                            variant?.sharedModificationId,
+                            sourceModification?.sharedModificationId,
                         );
                     const parentStructureId = normalizeId(variant?.parentStructureId ?? sourceModification?.parentStructureId);
                     const rootStructureId = normalizeId(variant?.rootStructureId ?? sourceModification?.rootStructureId);

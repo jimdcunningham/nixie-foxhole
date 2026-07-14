@@ -73,7 +73,9 @@ internal static class FoxWatchModificationRenderIdentity
 
                     var computation = ComputeRenderIdWithDiagnostics(variantId, slot.DataClassPath, entry.Value);
                     entry.Value.RenderId = computation.RenderId;
-                    entry.Value.SharedModificationId = computation.RenderId;
+                    // SharedModificationId is publish/fingerprint-routing only. Multi-host
+                    // renderIds (pipe insulation) stay host-local when scenes diverge.
+                    entry.Value.SharedModificationId = null;
 
                     var consumerKey = $"{structure.Id}|{slot.Name}|{slot.DataClassPath}|{variantId}";
                     if (renderIdsByConsumer.TryGetValue(consumerKey, out var existingRenderId)
@@ -122,7 +124,7 @@ internal static class FoxWatchModificationRenderIdentity
                         var computation = ComputeRenderIdWithDiagnostics(variantId, slot.DataClassPath, variant);
                         renderId = computation.RenderId;
                         variant.RenderId = renderId;
-                        variant.SharedModificationId = renderId;
+                        variant.SharedModificationId = null;
                     }
 
                     if (!entries.TryGetValue(renderId, out var indexEntry))
@@ -238,35 +240,45 @@ internal static class FoxWatchModificationRenderIdentity
     {
         foreach (var entry in index.Entries.Values)
         {
-            var structureIds = entry.Consumers
-                .Select(consumer => consumer.StructureId?.Trim())
-                .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
-            entry.Storage = structureIds > 1 || FoxWatchPublishedSharedModificationCatalog.IsSharedModificationRenderId(entry.RenderId)
-                ? "shared"
-                : null;
+            // Leave storage unset until scene-fingerprint routing finalizes it.
+            // Multi-consumer alone must not imply shared — pipe/silo insulation shares a
+            // renderId but keeps host-local pixels when fingerprints diverge.
+            entry.Storage = null;
+        }
+    }
+
+    public static void AssignStorageFlagsFromGeneratedScenes(
+        FoxWatchModificationRenderIndex index,
+        IEnumerable<string> sharedRenderIds,
+        IEnumerable<string> hostLocalRenderIds)
+    {
+        var sharedIds = sharedRenderIds
+            .Select(NormalizeKeyComponent)
+            .Where(renderId => !string.IsNullOrWhiteSpace(renderId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hostIds = hostLocalRenderIds
+            .Select(NormalizeKeyComponent)
+            .Where(renderId => !string.IsNullOrWhiteSpace(renderId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in index.Entries.Values)
+        {
+            var renderId = NormalizeKeyComponent(entry.RenderId);
+            if (sharedIds.Contains(renderId))
+            {
+                entry.Storage = "shared";
+            }
+            else if (hostIds.Contains(renderId))
+            {
+                entry.Storage = null;
+            }
         }
     }
 
     public static bool IsSharedModificationRenderIndexEntry(FoxWatchModificationRenderIndexEntry? entry)
     {
-        if (entry == null)
-        {
-            return false;
-        }
-
-        if (string.Equals(entry.Storage, "shared", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var structureIds = entry.Consumers
-            .Select(consumer => consumer.StructureId?.Trim())
-            .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
-        return structureIds > 1;
+        return entry != null
+            && string.Equals(entry.Storage, "shared", StringComparison.OrdinalIgnoreCase);
     }
 
     public static FoxWatchModificationRenderIndexEntry? TryGetModificationRenderIndexEntry(
