@@ -7532,6 +7532,26 @@ public class FoxWatchManifestAssetExtractor
                 };
             }
 
+            // Must run before the generic ValidItems stockpile branch (TrailerLiquid / SmallTrainLiquid
+            // already list liquids in ValidItems but still only hold one type at a time).
+            if (ShouldUseSingleTypeLiquidHoldProfile(structureCodeName)
+                && stockpile?.TotalItemCapacity is int singleTypeLiquidCapacity
+                && singleTypeLiquidCapacity > 0)
+            {
+                var allowedItems = stockpile.ValidItems is { Count: > 0 }
+                    ? stockpile.ValidItems
+                    : GetStandardLiquidItemCodeNames();
+                return new FoxWatchManifestHoldProfile
+                {
+                    Mode = "fuel-tank",
+                    Capacity = singleTypeLiquidCapacity,
+                    AllowedItems = allowedItems,
+                    ItemQuantityLimits = stockpile.ItemQuantityLimits is { Count: > 0 }
+                        ? stockpile.ItemQuantityLimits
+                        : null,
+                };
+            }
+
             if (stockpile?.ValidItems is { Count: > 0 } || stockpile?.ItemQuantityLimits is { Count: > 0 })
             {
                 return new FoxWatchManifestHoldProfile
@@ -7573,11 +7593,12 @@ public class FoxWatchManifestAssetExtractor
 
             if (stockpile?.TotalItemCapacity is int itemCapacity && itemCapacity > 0)
             {
-                if (ShouldUseLiquidContainerHoldProfile(stockpile, structureCodeName))
+                if (ShouldUseFacilityTransferLiquidHoldProfile(stockpile, structureCodeName))
                 {
                     return new FoxWatchManifestHoldProfile
                     {
-                        Mode = "fuel-tank",
+                        Mode = "stockpile",
+                        Capacity = itemCapacity,
                         AllowedItems = GetStandardLiquidItemCodeNames(),
                     };
                 }
@@ -7649,21 +7670,36 @@ public class FoxWatchManifestAssetExtractor
                 {
                     Mode = "inventory",
                     Capacity = inventorySlots,
+                    // No ItemSlotFilters means any inventory item is allowed (e.g. StorageBox).
+                    AllowsAnyItem = true,
                 };
             }
 
             return null;
         }
 
-        private static bool ShouldUseLiquidContainerHoldProfile(
+        private static bool ShouldUseSingleTypeLiquidHoldProfile(string? structureCodeName)
+        {
+            // Wiki: Liquid Container, Rooster-Lamploader, and BMS Tinderbox only hold one liquid type at a time.
+            return string.Equals(structureCodeName, "LiquidContainer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(structureCodeName, "TrailerLiquid", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(structureCodeName, "SmallTrainLiquid", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldUseFacilityTransferLiquidHoldProfile(
             FoxWatchManifestStockpile stockpile,
             string? structureCodeName)
         {
-            if (!string.Equals(structureCodeName, "LiquidContainer", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(structureCodeName, "FacilityTransferLiquid", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
+            return ShouldInjectStandardLiquidAllowedItems(stockpile);
+        }
+
+        private static bool ShouldInjectStandardLiquidAllowedItems(FoxWatchManifestStockpile stockpile)
+        {
             if (stockpile.ValidItems is { Count: > 0 })
             {
                 return false;

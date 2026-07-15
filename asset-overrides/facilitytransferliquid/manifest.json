@@ -1,3 +1,6 @@
 {
-  "previewDirection": "ne"
+  "previewDirection": "ne",
+  "markedCargoOverlay": {
+    "offsetX": 60
+  }
 }

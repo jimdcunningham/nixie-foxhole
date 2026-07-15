@@ -1,4 +1,7 @@
 {
   "clipFloorZ": -0.5,
-  "buildOrder": 1
+  "buildOrder": 1,
+  "packaged": {
+    "shippableType": "normal"
+  }
 }
