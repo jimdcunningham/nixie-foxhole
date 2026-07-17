@@ -478,6 +478,53 @@ public sealed class FoxWatchRenderSceneGenerator
                         },
                     ],
             });
+
+            if (!target.IsUpgrade)
+            {
+                continue;
+            }
+
+            foreach (var layerId in GetStandaloneStructureRenderLayerIds(structure))
+            {
+                var layerScene = CreateTopdownStructureComponentScene(
+                    structure,
+                    CloneBlueprintSceneExtraction(modificationScene),
+                    layerId);
+                if (layerScene?.Roots.Count is not > 0)
+                {
+                    continue;
+                }
+
+                documents.Add(new FoxWatchGeneratedRenderSceneDocument
+                {
+                    StructureId = structure.Id,
+                    AllowedStructureIds = GetAllowedStructureIds(structure),
+                    CodeName = structure.CodeName,
+                    Name = structure.Name.Fallback,
+                    CategoryId = structure.CategoryId,
+                    PreviewUrl = structure.PreviewUrl,
+                    IconUrl = structure.IconUrl,
+                    RelativeScenePath = Path.Combine(
+                        structure.Id,
+                        "modifications",
+                        target.OutputKey,
+                        "components",
+                        $"{layerId}.scene.json"),
+                    RenderId = target.RenderId,
+                    SharedModificationId = target.RenderId,
+                    Document = await CreateDocumentAsync(
+                        structure,
+                        layerScene,
+                        $"modifications/{target.OutputKey}/components/{layerId}",
+                        ["topdown"],
+                        includePoseVariants: false,
+                        clipFloorOverride: GetClipFloorOverrideForRenderLayer(structure, layerId),
+                        cancellationToken,
+                        previewDirectionOverride: target.PreviewDirection,
+                        componentLayerId: layerId),
+                    IsStandaloneModification = false,
+                });
+            }
         }
 
         return documents;

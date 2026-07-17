@@ -1491,6 +1491,7 @@ function compactModificationVariant(value) {
         parentStructureId: null,
         rootStructureId: null,
         appliedModificationId: null,
+        renderLayers: [],
     }, {
         name: compactLocalizedText,
         description: compactLocalizedText,
@@ -1502,6 +1503,7 @@ function compactModificationVariant(value) {
         cost: compactRecipeResourceMap,
         icons: compactIcons,
         sprite: compactSprite,
+        renderLayers: entryValue => compactArray(entryValue, compactStructureRenderLayer),
     });
 }
 
@@ -2570,7 +2572,10 @@ function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument 
 }
 
 function shouldSkipHostLocalModificationSync(location, scopedTargets) {
-    if (!scopedTargets || location.scope !== 'assetModification') {
+    if (
+        !scopedTargets
+        || (location.scope !== 'assetModification' && location.scope !== 'assetModificationComponent')
+    ) {
         return false;
     }
 
@@ -2610,7 +2615,7 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
         return scopedTargets.assetIdsEligibleForComponentPublish.has(location.assetId);
     }
 
-    if (location.scope === 'assetModification') {
+    if (location.scope === 'assetModification' || location.scope === 'assetModificationComponent') {
         if (!scopedTargets.assetIds.has(location.assetId)) {
             return false;
         }
@@ -4219,6 +4224,21 @@ function parseAssetRelativeLocation(filePath) {
         };
     }
 
+    if (
+        segments.length === 8
+        && segments[3] === 'modifications'
+        && segments[5] === 'components'
+    ) {
+        return {
+            scope: 'assetModificationComponent',
+            assetType,
+            assetId,
+            modificationId: normalizeId(segments[4]),
+            componentId: normalizeId(segments[6]),
+            fileName: segments[7],
+        };
+    }
+
     return null;
 }
 
@@ -4672,6 +4692,35 @@ async function collectStructureComponentRenderEntries(structureLayerEntriesByStr
     structureLayerEntriesByStructureId[normalizedStructureId][layerId] = entry;
 }
 
+async function collectModificationComponentRenderEntries(
+    modificationLayerEntriesByAssetId,
+    structureId,
+    modificationId,
+    componentId,
+    fileName,
+    publicPath,
+    filePath,
+) {
+    const normalized = fileName.toLowerCase();
+    if (!normalized.endsWith('.texture.webp')) {
+        return;
+    }
+
+    const layerId = normalizeId(componentId);
+    const normalizedStructureId = normalizeId(structureId);
+    const normalizedModificationId = normalizeId(modificationId);
+    if (!layerId || !normalizedStructureId || !normalizedModificationId) {
+        return;
+    }
+
+    modificationLayerEntriesByAssetId[normalizedStructureId] ??= {};
+    modificationLayerEntriesByAssetId[normalizedStructureId][normalizedModificationId] ??= {};
+    const entry = modificationLayerEntriesByAssetId[normalizedStructureId][normalizedModificationId][layerId] ?? { id: layerId };
+    entry.textureUrl = publicPath;
+    await applyTextureMetadata(entry, filePath, 'width', 'height');
+    modificationLayerEntriesByAssetId[normalizedStructureId][normalizedModificationId][layerId] = entry;
+}
+
 async function collectSharedPackagedPalletRenderEntries(sharedPackagingEntriesByKey, shippableType, fileName, publicPath, filePath) {
     const normalized = fileName.toLowerCase();
     const normalizedShippableType = normalizeFoxholePackagedPalletKey(shippableType);
@@ -4697,7 +4746,15 @@ function getStructureColorRenderEntry(entriesByKey, key, colorHex) {
     return entriesByKey[normalizedKey].colors[normalizedColorHex];
 }
 
-async function collectAssetRenderEntries(entriesByKey, modificationEntriesByKey, modificationEntriesByAssetId, structureLayerEntriesByStructureId, sharedPackagingEntriesByKey, filePath) {
+async function collectAssetRenderEntries(
+    entriesByKey,
+    modificationEntriesByKey,
+    modificationEntriesByAssetId,
+    structureLayerEntriesByStructureId,
+    modificationLayerEntriesByAssetId,
+    sharedPackagingEntriesByKey,
+    filePath,
+) {
     const location = parseAssetRelativeLocation(filePath);
     if (!location) {
         return;
@@ -4722,6 +4779,19 @@ async function collectAssetRenderEntries(entriesByKey, modificationEntriesByKey,
         await collectModificationRenderEntries(
             modificationEntriesByAssetId[location.assetId],
             location.modificationId,
+            fileName,
+            publicPath,
+            filePath,
+        );
+        return;
+    }
+
+    if (location.scope === 'assetModificationComponent') {
+        await collectModificationComponentRenderEntries(
+            modificationLayerEntriesByAssetId,
+            location.assetId,
+            location.modificationId,
+            location.componentId,
             fileName,
             publicPath,
             filePath,
@@ -5262,6 +5332,7 @@ async function buildStructureRenderEntries(manifest, scopedTargets = null) {
     const modificationEntriesByKey = {};
     const modificationEntriesByAssetId = {};
     const structureLayerEntriesByStructureId = {};
+    const modificationLayerEntriesByAssetId = {};
     const sharedPackagingEntriesByKey = {};
     const candidateDirectories = [assetTypesDirectory, sharedAssetsDirectory];
     if (!(await Promise.all(candidateDirectories.map(directory => pathExists(directory)))).some(Boolean)) {
@@ -5270,6 +5341,7 @@ async function buildStructureRenderEntries(manifest, scopedTargets = null) {
             modificationEntriesByKey,
             modificationEntriesByAssetId,
             structureLayerEntriesByStructureId,
+            modificationLayerEntriesByAssetId,
             sharedPackagingEntriesByKey,
         };
     }
@@ -5285,6 +5357,7 @@ async function buildStructureRenderEntries(manifest, scopedTargets = null) {
             modificationEntriesByKey,
             modificationEntriesByAssetId,
             structureLayerEntriesByStructureId,
+            modificationLayerEntriesByAssetId,
             sharedPackagingEntriesByKey,
             filePath,
         ),
@@ -5304,6 +5377,7 @@ async function buildStructureRenderEntries(manifest, scopedTargets = null) {
         modificationEntriesByKey,
         modificationEntriesByAssetId,
         structureLayerEntriesByStructureId,
+        modificationLayerEntriesByAssetId,
         sharedPackagingEntriesByKey,
     };
 }
@@ -6508,6 +6582,7 @@ function applyStructureRenderUrls(
     modificationEntriesByKey,
     modificationEntriesByAssetId,
     structureLayerEntriesByStructureId,
+    modificationLayerEntriesByAssetId,
     sharedPackagingEntriesByKey,
     structuresWithRawDestroyedRenders = new Set(),
     vehicleDestroyedPublishAllowlist = null,
@@ -6864,6 +6939,36 @@ function applyStructureRenderUrls(
                                     variant?.sharedModificationId,
                                     sourceModification?.sharedModificationId,
                                 );
+                            const modificationLayerLookupKeys = [
+                                variant?.renderId,
+                                variant?.sharedModificationId,
+                                variantId,
+                                variant?.id,
+                                variant?.appliedModificationId,
+                                preferredSharedModificationId,
+                            ]
+                                .map(normalizeId)
+                                .filter(Boolean);
+                            const assetModificationLayerEntries = modificationLayerEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
+                            const modificationLayerEntries = modificationLayerLookupKeys
+                                .map(lookupKey => assetModificationLayerEntries?.[lookupKey])
+                                .find(entries => entries && Object.keys(entries).length > 0)
+                                ?? null;
+                            const modificationRenderLayers = modificationLayerEntries
+                                ? Object.values(modificationLayerEntries)
+                                    .filter(entry => entry?.textureUrl)
+                                    .sort(compareStructureRenderLayers)
+                                    .map(entry => ({
+                                        id: entry.id,
+                                        textureUrl: entry.textureUrl,
+                                        ...(entry?.width ? { width: entry.width } : {}),
+                                        ...(entry?.height ? { height: entry.height } : {}),
+                                        ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
+                                        ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
+                                        ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
+                                        ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
+                                    }))
+                                : [];
                             const nextVariant = {
                                 ...variant,
                                 ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
@@ -6882,6 +6987,7 @@ function applyStructureRenderUrls(
                                 ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
                                 ...(renderEntry?.rootStructureId ? { rootStructureId: renderEntry.rootStructureId } : {}),
                                 ...(renderEntry?.appliedModificationId ? { appliedModificationId: renderEntry.appliedModificationId } : {}),
+                                ...(modificationRenderLayers.length > 0 ? { renderLayers: modificationRenderLayers } : {}),
                             };
                             if (preferredSharedModificationId) {
                                 nextVariant.sharedModificationId = preferredSharedModificationId;
@@ -6896,7 +7002,12 @@ function applyStructureRenderUrls(
     });
 }
 
-function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey, modificationEntriesByAssetId) {
+function stripPublishedModificationSlotNoise(
+    manifest,
+    modificationEntriesByKey,
+    modificationEntriesByAssetId,
+    modificationLayerEntriesByAssetId = {},
+) {
     const localizedStrings = new Map();
     const assetsById = new Map((manifest?.assets ?? [])
         .map(asset => {
@@ -7106,6 +7217,39 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                         ?? sourceModification?.previewDirection
                         ?? targetStructure?.previewDirection
                         ?? null;
+                    const modificationLayerLookupKeys = [
+                        variant?.renderId,
+                        variant?.sharedModificationId,
+                        variantId,
+                        variant?.modificationId,
+                        variant?.appliedModificationId,
+                        sourceModificationId,
+                        preferredSharedModificationId,
+                    ]
+                        .map(normalizeId)
+                        .filter(Boolean);
+                    const assetModificationLayerEntries = modificationLayerEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
+                    const modificationLayerEntries = modificationLayerLookupKeys
+                        .map(lookupKey => assetModificationLayerEntries?.[lookupKey])
+                        .find(entries => entries && Object.keys(entries).length > 0)
+                        ?? null;
+                    const modificationRenderLayers = Array.isArray(variant?.renderLayers) && variant.renderLayers.length > 0
+                        ? variant.renderLayers
+                        : (modificationLayerEntries
+                            ? Object.values(modificationLayerEntries)
+                                .filter(entry => entry?.textureUrl)
+                                .sort(compareStructureRenderLayers)
+                                .map(entry => ({
+                                    id: entry.id,
+                                    textureUrl: entry.textureUrl,
+                                    ...(entry?.width ? { width: entry.width } : {}),
+                                    ...(entry?.height ? { height: entry.height } : {}),
+                                    ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
+                                    ...(entry?.anchorY !== null && typeof entry?.anchorY !== 'undefined' ? { anchorY: entry.anchorY } : {}),
+                                    ...(entry?.offsetX !== null && typeof entry?.offsetX !== 'undefined' ? { offsetX: entry.offsetX } : {}),
+                                    ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
+                                }))
+                            : []);
 
                     return [variantId, {
                         name: localizedName,
@@ -7145,6 +7289,7 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                                 },
                             }
                             : {}),
+                        ...(modificationRenderLayers.length > 0 ? { renderLayers: modificationRenderLayers } : {}),
                         ...(variant?.isUpgrade === true || sourceModification?.isUpgrade === true || resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification).isUpgrade
                             ? { isUpgrade: true }
                             : {}),
@@ -7381,6 +7526,7 @@ try {
         structureRenderEntries.modificationEntriesByKey,
         structureRenderEntries.modificationEntriesByAssetId,
         structureRenderEntries.structureLayerEntriesByStructureId,
+        structureRenderEntries.modificationLayerEntriesByAssetId,
         structureRenderEntries.sharedPackagingEntriesByKey,
         structuresWithRawDestroyedRenders,
         vehicleDestroyedPublishAllowlist,
@@ -7399,6 +7545,7 @@ try {
         manifestWithCoLocatedFallbackAssets,
         structureRenderEntries.modificationEntriesByKey,
         structureRenderEntries.modificationEntriesByAssetId,
+        structureRenderEntries.modificationLayerEntriesByAssetId,
     );
     const {
         manifest: manifestAfterHostLocalModDefaultIcons,
