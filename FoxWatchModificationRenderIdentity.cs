@@ -73,9 +73,6 @@ internal static class FoxWatchModificationRenderIdentity
 
                     var computation = ComputeRenderIdWithDiagnostics(variantId, slot.DataClassPath, entry.Value);
                     entry.Value.RenderId = computation.RenderId;
-                    // SharedModificationId is publish/fingerprint-routing only. Multi-host
-                    // renderIds (pipe insulation) stay host-local when scenes diverge.
-                    entry.Value.SharedModificationId = null;
 
                     var consumerKey = $"{structure.Id}|{slot.Name}|{slot.DataClassPath}|{variantId}";
                     if (renderIdsByConsumer.TryGetValue(consumerKey, out var existingRenderId)
@@ -124,7 +121,6 @@ internal static class FoxWatchModificationRenderIdentity
                         var computation = ComputeRenderIdWithDiagnostics(variantId, slot.DataClassPath, variant);
                         renderId = computation.RenderId;
                         variant.RenderId = renderId;
-                        variant.SharedModificationId = null;
                     }
 
                     if (!entries.TryGetValue(renderId, out var indexEntry))

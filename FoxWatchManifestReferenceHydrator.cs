@@ -1691,11 +1691,6 @@ public sealed class FoxWatchManifestReferenceHydrator
             yield return NormalizeModificationVariantLookupKey(variant.RenderId);
         }
 
-        if (!string.IsNullOrWhiteSpace(variant.SharedModificationId))
-        {
-            yield return NormalizeModificationVariantLookupKey(variant.SharedModificationId);
-        }
-
         if (!string.IsNullOrWhiteSpace(normalizedVariantId))
         {
             yield return normalizedVariantId;

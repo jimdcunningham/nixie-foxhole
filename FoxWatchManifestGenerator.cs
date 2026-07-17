@@ -48,7 +48,7 @@ public sealed class FoxWatchManifestGenerator
 
         var renderIndex = FoxWatchModificationRenderIdentity.BuildRenderIndex(manifest);
         var renderIndexPath = Path.Combine(
-            outputDirectory ?? FoxWatchWorkspace.ResolvePath("tmp"),
+            outputDirectory ?? FoxWatchWorkspace.ResolvePath("tools/foxwatch/tmp") ?? Path.Combine(FoxWatchWorkspace.RepositoryRoot, "tools", "foxwatch", "tmp"),
             "modification-render-index.v1.json");
         if (targetFilter is { HasFilters: true })
         {

@@ -1886,9 +1886,7 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                             // normalizeId('') is falsy for if-checks but truthy for ?? — do not chain it with ??.
                             let renderId = resolveSeededRenderId([
                                 rawVariant?.renderId,
-                                rawVariant?.sharedModificationId,
                                 variant?.renderId,
-                                variant?.sharedModificationId,
                             ]);
                             if (!renderId) {
                                 try {
@@ -2475,8 +2473,7 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
                         return [variantId, variant];
                     }
 
-                    const existingRenderId = normalizeId(variant?.renderId)
-                        ?? normalizeId(variant?.sharedModificationId);
+                    const existingRenderId = normalizeId(variant?.renderId);
                     const consumerKey = `${structureId}|${normalizeId(variantId)}`;
                     const sharedModificationId = sharedModificationIdByConsumer.get(consumerKey);
                     const nextVariant = { ...variant };
@@ -2775,10 +2772,7 @@ function preserveAuthoredModificationPreviewDirections(publishedManifest, source
                         variant,
                     );
                     const authoredPreviewDirection = normalizeId(authoredOverride?.previewDirection)
-                        ?? authoredPreviewDirectionByStructureVariant.get(`${structureId}|${normalizeId(variantId)}`)
-                        ?? (normalizeId(variant?.sharedModificationId)
-                            ? authoredPreviewDirectionByStructureVariant.get(`${structureId}|${normalizeId(variant.sharedModificationId)}`)
-                            : null);
+                        ?? authoredPreviewDirectionByStructureVariant.get(`${structureId}|${normalizeId(variantId)}`);
                     if (!authoredPreviewDirection || normalizeId(variant?.previewDirection) === authoredPreviewDirection) {
                         return [variantId, variant];
                     }
@@ -2826,7 +2820,7 @@ function enumerateModificationVariantOverrideLookupKeys(structureId, slotName, v
         keys.push(`${normalizedStructureId}/${normalizedVariantId}`);
     }
 
-    const renderId = normalizeId(variant?.renderId) || normalizeId(variant?.sharedModificationId);
+    const renderId = normalizeId(variant?.renderId);
     if (renderId) {
         keys.push(renderId);
     }
@@ -3446,7 +3440,7 @@ function resolveManifestOwnerForPublicRenderedAsset(manifest, outputPath) {
                 if (normalizeId(variantId) === 'default') {
                     continue;
                 }
-                const variantRenderId = normalizeId(variant?.renderId ?? variant?.sharedModificationId);
+                const variantRenderId = normalizeId(variant?.renderId);
                 if (variantRenderId === modificationId || normalizeId(variantId) === modificationId) {
                     return { structure: variant, sourceStructure: variant };
                 }
@@ -4269,7 +4263,6 @@ function hasStandaloneModificationContentHashSuffix(value) {
 
 function resolvePublishedSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
     const renderId = normalizeId(variant?.renderId)
-        || normalizeId(variant?.sharedModificationId)
         || normalizeId(candidateId);
     if (renderId && hasStandaloneModificationContentHashSuffix(renderId)) {
         if (diagnosticsContext) {

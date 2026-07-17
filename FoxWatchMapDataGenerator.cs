@@ -159,7 +159,7 @@ public sealed class FoxWatchMapDataGenerator
         var publishedMaps = new JsonObject();
         var mapDatabaseEntries = LoadMapDatabaseEntries();
         var eligibleEntries = mapDatabaseEntries
-            .Where(entry => entry.Value.Value<bool?>("bIsInHexGrid") == true)
+            .Where(entry => entry.Value?.Value<bool?>("bIsInHexGrid") == true)
             .ToArray();
         var totalStaticIconCount = 0;
 
@@ -177,11 +177,17 @@ public sealed class FoxWatchMapDataGenerator
 
             _logger.LogInformation("Processing map {MapIndex}/{MapCount}: {MapKey}", index + 1, eligibleEntries.Length, mapKey);
 
+            var mapValue = entry.Value;
+            if (mapValue is null)
+            {
+                continue;
+            }
+
             var overrideMap = overrideMaps[mapKey] as JsonObject;
-            var displayName = entry.Value["DisplayName"]?["LocalizedString"]?.Value<string>()
-                ?? entry.Value["DisplayName"]?["SourceString"]?.Value<string>()
+            var displayName = mapValue["DisplayName"]?["LocalizedString"]?.Value<string>()
+                ?? mapValue["DisplayName"]?["SourceString"]?.Value<string>()
                 ?? string.Empty;
-            var imageObjectPath = entry.Value["Image"]?["ObjectPath"]?.Value<string>() ?? string.Empty;
+            var imageObjectPath = mapValue["Image"]?["ObjectPath"]?.Value<string>() ?? string.Empty;
             var publishedMap = new JsonObject
             {
                 ["name"] = !string.IsNullOrWhiteSpace(displayName) ? displayName : overrideMap?["name"]?.GetValue<string>()?.Trim() ?? mapKey,
@@ -189,7 +195,7 @@ public sealed class FoxWatchMapDataGenerator
                 ["textureKey"] = BuildTextureKey(imageObjectPath),
                 ["showForResistance"] = CloneNode(overrideMap?["showForResistance"]),
                 ["regionId"] = CloneNode(overrideMap?["regionId"]),
-                ["gridCoord"] = SanitizeGridCoordinate(entry.Value["GridCoord"] as JObject),
+                ["gridCoord"] = SanitizeGridCoordinate(mapValue["GridCoord"] as JObject),
             };
 
             var staticIcons = LoadStaticIconsForMap(mapKey);

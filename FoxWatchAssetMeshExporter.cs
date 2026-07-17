@@ -50,6 +50,7 @@ public sealed class FoxWatchAssetMeshExporter
     private readonly ILogger<FoxWatchAssetMeshExporter> _logger;
     private readonly string? _pakDirectoryPath;
     private DefaultFileProvider? _fileProvider;
+    private DefaultFileProvider FileProvider => EnsureMounted();
     private readonly Dictionary<string, IReadOnlyList<FoxWatchBlueprintComponentReference>> _blueprintComponentReferencesByPackagePath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FoxWatchBlueprintComponentReference?> _pickupMeshFallbackByItemComponentClassPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _meshTypeByPackagePath = new(StringComparer.OrdinalIgnoreCase);
@@ -65,9 +66,7 @@ public sealed class FoxWatchAssetMeshExporter
 
     public IReadOnlyList<string> FindMeshPackages(string query, int limit = 20)
     {
-        EnsureMounted();
-
-        return _fileProvider.Files
+        return EnsureMounted().Files
             .Where(entry => entry.Value.IsUePackage)
             .Select(entry => entry.Key)
             .Where(path => path.StartsWith("War/Content/Meshes/", StringComparison.Ordinal))
@@ -79,9 +78,7 @@ public sealed class FoxWatchAssetMeshExporter
 
     public IReadOnlyList<string> FindPackages(string query, int limit = 20, string? pathPrefix = null)
     {
-        EnsureMounted();
-
-        return _fileProvider.Files
+        return EnsureMounted().Files
             .Where(entry => entry.Value.IsUePackage)
             .Select(entry => entry.Key)
             .Where(path => string.IsNullOrWhiteSpace(pathPrefix) || path.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase))
@@ -100,7 +97,7 @@ public sealed class FoxWatchAssetMeshExporter
             .Select(prefix => prefix.Replace('\\', '/').Trim())
             .ToArray();
 
-        return _fileProvider.Files
+        return FileProvider.Files
             .Where(entry => entry.Value.IsUePackage)
             .Select(entry => entry.Key)
             .Where(path => normalizedPrefixes.Length == 0 || normalizedPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
@@ -122,7 +119,7 @@ public sealed class FoxWatchAssetMeshExporter
         }
 
         _logger.LogInformation("Loading blueprint package {PackagePath}", packagePath);
-        var package = _fileProvider.LoadPackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
 
         var blueprintClass = exports.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
@@ -165,7 +162,7 @@ public sealed class FoxWatchAssetMeshExporter
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "Stopping blueprint superclass traversal at {StructName}", currentStruct.Name);
+                _logger.LogWarning(exception, "Stopping blueprint superclass traversal at {StructName}", currentStruct?.Name);
                 currentStruct = null;
             }
         }
@@ -189,7 +186,7 @@ public sealed class FoxWatchAssetMeshExporter
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve blueprint package '{assetPath}' from mounted Foxhole pak files.");
 
-        var package = _fileProvider.LoadPackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
         var blueprintClass = exports.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
         if (blueprintClass == null)
@@ -231,7 +228,7 @@ public sealed class FoxWatchAssetMeshExporter
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "Stopping targeted component superclass traversal at {StructName}", currentStruct.Name);
+                _logger.LogWarning(exception, "Stopping targeted component superclass traversal at {StructName}", currentStruct?.Name);
                 currentStruct = null;
             }
         }
@@ -279,7 +276,7 @@ public sealed class FoxWatchAssetMeshExporter
             ?? throw new FileNotFoundException($"Could not resolve modification data package '{assetPath}' from mounted Foxhole pak files.");
 
         _logger.LogInformation("Loading modification data package {PackagePath}", packagePath);
-        var package = _fileProvider.LoadPackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
         var exportsJson = JsonConvert.SerializeObject(exports, Formatting.None);
         var exportTokens = JArray.Parse(exportsJson);
@@ -393,7 +390,7 @@ public sealed class FoxWatchAssetMeshExporter
 
         var packageStopwatch = Stopwatch.StartNew();
         _logger.LogInformation("Loading mesh package {PackagePath}", packagePath);
-        var package = _fileProvider.LoadPackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
         _logger.LogInformation("Loaded mesh package {PackagePath} in {ElapsedMs} ms", packagePath, packageStopwatch.ElapsedMilliseconds);
         if (package is AbstractUePackage uePackage && !uePackage.Summary.PackageFlags.HasFlag(EPackageFlags.PKG_FilterEditorOnly))
         {
@@ -438,8 +435,8 @@ public sealed class FoxWatchAssetMeshExporter
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve mesh package '{assetPath}' from mounted Foxhole pak files.");
 
-        var package = _fileProvider.LoadPackage(packagePath);
-        var packageFiles = _fileProvider.SavePackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
+        var packageFiles = FileProvider.SavePackage(packagePath);
         var writtenFiles = new List<string>(packageFiles.Count + 1);
 
         foreach (var entry in packageFiles.OrderBy(entry => entry.Key, StringComparer.Ordinal))
@@ -489,7 +486,7 @@ public sealed class FoxWatchAssetMeshExporter
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve animation package '{assetPath}' from mounted Foxhole pak files.");
 
-        var package = _fileProvider.LoadPackage(packagePath);
+        var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
         var preferredObjectName = Path.GetFileNameWithoutExtension(packagePath);
         var animationExport = SelectPreferredExport(exports.OfType<UAnimSequence>().ToArray(), preferredObjectName)
@@ -592,7 +589,7 @@ public sealed class FoxWatchAssetMeshExporter
         var animationPackagePath = ResolvePackagePath(animationAssetPath)
             ?? throw new FileNotFoundException($"Could not resolve animation package '{animationAssetPath}' from mounted Foxhole pak files.");
 
-        var animationPackage = _fileProvider.LoadPackage(animationPackagePath);
+        var animationPackage = FileProvider.LoadPackage(animationPackagePath);
         var animationExports = animationPackage.GetExports().ToArray();
         var preferredAnimationObjectName = Path.GetFileNameWithoutExtension(animationPackagePath);
         var animationExport = SelectPreferredExport(animationExports.OfType<UAnimSequence>().ToArray(), preferredAnimationObjectName)
@@ -618,7 +615,7 @@ public sealed class FoxWatchAssetMeshExporter
         var meshPackagePath = ResolvePackagePath(normalizedMeshAssetPath)
             ?? throw new FileNotFoundException($"Could not resolve reference mesh package '{referenceMeshAssetPath}' from mounted Foxhole pak files.");
 
-        var meshPackage = _fileProvider.LoadPackage(meshPackagePath);
+        var meshPackage = FileProvider.LoadPackage(meshPackagePath);
         var meshExports = meshPackage.GetExports().ToArray();
         var preferredMeshObjectName = Path.GetFileNameWithoutExtension(meshPackagePath);
         var skeletalMeshExport = SelectPreferredExport(meshExports.OfType<USkeletalMesh>().ToArray(), preferredMeshObjectName)
@@ -729,7 +726,7 @@ public sealed class FoxWatchAssetMeshExporter
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve package '{assetPath}' from mounted Foxhole pak files.");
 
-        var packageFiles = _fileProvider.SavePackage(packagePath);
+        var packageFiles = FileProvider.SavePackage(packagePath);
         var writtenFiles = new List<string>(packageFiles.Count);
 
         foreach (var entry in packageFiles.OrderBy(entry => entry.Key, StringComparer.Ordinal))
@@ -1157,7 +1154,7 @@ public sealed class FoxWatchAssetMeshExporter
     private string? ResolvePackagePath(string assetPath)
     {
         var normalized = assetPath.Replace('\\', '/').Trim();
-        if (_fileProvider.Files.ContainsKey(normalized))
+        if (FileProvider.Files.ContainsKey(normalized))
         {
             return normalized;
         }
@@ -1165,14 +1162,14 @@ public sealed class FoxWatchAssetMeshExporter
         if (!normalized.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase))
         {
             var withExtension = $"{normalized}.uasset";
-            if (_fileProvider.Files.ContainsKey(withExtension))
+            if (FileProvider.Files.ContainsKey(withExtension))
             {
                 return withExtension;
             }
         }
 
-        return _fileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, normalized, StringComparison.OrdinalIgnoreCase))
-            ?? _fileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, $"{normalized}.uasset", StringComparison.OrdinalIgnoreCase));
+        return FileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, normalized, StringComparison.OrdinalIgnoreCase))
+            ?? FileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, $"{normalized}.uasset", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string NormalizeMeshAssetPath(string assetPath)
@@ -1183,11 +1180,11 @@ public sealed class FoxWatchAssetMeshExporter
             : normalized;
     }
 
-    private void EnsureMounted()
+    private DefaultFileProvider EnsureMounted()
     {
         if (_mounted)
         {
-            return;
+            return _fileProvider ?? throw new InvalidOperationException("FoxWatch pak file provider is not initialized.");
         }
 
         if (string.IsNullOrWhiteSpace(_pakDirectoryPath) || !Directory.Exists(_pakDirectoryPath))
@@ -1198,6 +1195,7 @@ public sealed class FoxWatchAssetMeshExporter
         _fileProvider ??= CreateFileProvider(_pakDirectoryPath);
         _fileProvider.Mount();
         _mounted = true;
+        return _fileProvider;
     }
 
     private DefaultFileProvider CreateFileProvider(string pakDirectoryPath)
@@ -1462,7 +1460,7 @@ public sealed class FoxWatchAssetMeshExporter
 
         try
         {
-            var package = _fileProvider.LoadPackage(classPackagePath);
+            var package = FileProvider.LoadPackage(classPackagePath);
             var exports = package.GetExports().OfType<UObject>().ToArray();
             var blueprintClass = exports.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
             if (blueprintClass == null)
@@ -1855,7 +1853,7 @@ public sealed class FoxWatchAssetMeshExporter
         try
         {
             EnsureMounted();
-            var package = _fileProvider.LoadPackage(packagePath);
+            var package = FileProvider.LoadPackage(packagePath);
             var exports = package.GetExports().ToArray();
             var preferredObjectName = Path.GetFileNameWithoutExtension(packagePath);
             var staticMeshExport = SelectPreferredExport(exports.OfType<UStaticMesh>().ToArray(), preferredObjectName);
@@ -2160,7 +2158,7 @@ public sealed class FoxWatchAssetMeshExporter
 
         try
         {
-            var package = _fileProvider.LoadPackage(packagePath);
+            var package = FileProvider.LoadPackage(packagePath);
             var exports = package.GetExports().ToArray();
             AddPackageExportComponentReferences(blueprintClass, exports, references);
             AddBlueprintConstructionScriptExportComponentReferences(blueprintClass, exports, references);
@@ -2239,7 +2237,7 @@ public sealed class FoxWatchAssetMeshExporter
         try
         {
             var packagePath = ResolvePackagePath(itemComponentClassPath) ?? itemComponentClassPath;
-            var package = _fileProvider.LoadPackage(packagePath);
+            var package = FileProvider.LoadPackage(packagePath);
             var itemComponentExports = package.GetExports().ToArray();
             var itemComponentDefaultObject = itemComponentExports.FirstOrDefault(export =>
                 export.Name.StartsWith("Default__", StringComparison.OrdinalIgnoreCase));
@@ -2884,7 +2882,7 @@ public sealed class FoxWatchAssetMeshExporter
         try
         {
             var packagePath = ResolvePackagePath(meshPackagePath) ?? meshPackagePath;
-            var package = _fileProvider.LoadPackage(packagePath);
+            var package = FileProvider.LoadPackage(packagePath);
             var packageExports = package.GetExports();
             if (packageExports.Any(export => export is USkeletalMesh))
             {

@@ -216,21 +216,27 @@ public class FoxWatchManifestAssetExtractor
                         var structure = defaultObject == null
                             ? null
                             : TryBuildStructure(defaultObject, objects, blueprint, baseAssetsUrl, iconOutputDirectory, categoriesById, englishStrings, localizationReferencesById, fallbackCodeName);
-                        if (structure != null && !string.IsNullOrWhiteSpace(structure.Id))
+                        if (structure != null)
                         {
+                            var structureId = structure.Id;
+                            if (string.IsNullOrWhiteSpace(structureId))
+                            {
+                                continue;
+                            }
+
                             FoxWatchManifestStructure resolvedStructure;
-                            if (structuresById.TryGetValue(structure.Id, out FoxWatchManifestStructure existingStructure))
+                            if (structuresById.TryGetValue(structureId, out FoxWatchManifestStructure existingStructure))
                             {
                                 var shouldPreferCandidate = ShouldPreferStructureCandidate(existingStructure, structure);
                                 var preferredStructure = shouldPreferCandidate ? structure : existingStructure;
                                 var supplementalStructure = shouldPreferCandidate ? existingStructure : structure;
                                 MergeStructureCandidateData(preferredStructure, supplementalStructure);
-                                structuresById[structure.Id] = preferredStructure;
+                                structuresById[structureId] = preferredStructure;
                                 resolvedStructure = preferredStructure;
                             }
                             else
                             {
-                                structuresById[structure.Id] = structure;
+                                structuresById[structureId] = structure;
                                 resolvedStructure = structure;
                             }
 
@@ -3439,7 +3445,6 @@ public class FoxWatchManifestAssetExtractor
                 OffsetX = variant.OffsetX,
                 OffsetY = variant.OffsetY,
                 RenderId = variant.RenderId,
-                SharedModificationId = variant.SharedModificationId,
             };
         }
 

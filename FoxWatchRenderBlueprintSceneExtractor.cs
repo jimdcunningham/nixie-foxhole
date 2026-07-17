@@ -714,6 +714,11 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         }
 
         var normalizedComponentName = NormalizeReferenceName(componentReference.ComponentName);
+        if (string.IsNullOrWhiteSpace(normalizedComponentName))
+        {
+            return false;
+        }
+
         return normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase) ||
             normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase);
     }
@@ -1562,7 +1567,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
         var clone = CloneRenderSceneNodeForVariant(variantNodeIdPrefix, sourceNode);
         clone.Children = clonedChildren;
-        clone.MeshId = hasMatchedMesh
+        clone.MeshId = hasMatchedMesh && !string.IsNullOrWhiteSpace(overrideMeshSourcePath)
             ? GetOrAddMeshId(meshIdBySourcePath, overrideMeshSourcePath)
             : null;
         return clone;
@@ -2875,6 +2880,11 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         }
 
         var componentName = NormalizeReferenceName(componentReference.ComponentName);
+        if (string.IsNullOrWhiteSpace(componentName))
+        {
+            return false;
+        }
+
         var separatorIndex = componentName.LastIndexOf(':');
         if (separatorIndex >= 0 && separatorIndex + 1 < componentName.Length)
         {
