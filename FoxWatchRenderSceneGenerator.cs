@@ -238,6 +238,7 @@ public sealed class FoxWatchRenderSceneGenerator
             CloneBlueprintSceneExtraction(blueprintScene));
 
         FoxWatchBlueprintSceneExtraction? collapsedStructureScene;
+        FoxWatchBlueprintSceneExtraction? componentStructureScene = null;
         IReadOnlyList<string>? baseSceneModes = null;
         if (IsFacilityCatwalkBridgeStructure(structure))
         {
@@ -246,6 +247,19 @@ public sealed class FoxWatchRenderSceneGenerator
                 collapsedBlueprint,
                 shortenSpanForPreview: false);
             baseSceneModes = ["topdown"];
+        }
+        else if (IsFacilityPipeOverheadStructure(structure))
+        {
+            // Aggregate preview/topdown may stretch the span to the default socket gap.
+            // Tileable span component textures must stay at native mesh length.
+            collapsedStructureScene = PrepareFacilityPipeOverheadScene(
+                structure,
+                collapsedBlueprint,
+                stretchSpanToSockets: true);
+            componentStructureScene = PrepareFacilityPipeOverheadScene(
+                structure,
+                collapsedBlueprint,
+                stretchSpanToSockets: false);
         }
         else if (IsRailTrackSplineStructure(structure))
         {
@@ -395,7 +409,7 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             var layerScene = CreateTopdownStructureComponentScene(
                 structure,
-                CloneBlueprintSceneExtraction(collapsedStructureScene),
+                CloneBlueprintSceneExtraction(componentStructureScene ?? collapsedStructureScene),
                 layerId);
             if (layerScene?.Roots.Count is not > 0)
             {
@@ -435,13 +449,41 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
-            var modificationScene = target.IsUpgrade
-                ? CollapseBlueprintSceneVariants(structure, CloneBlueprintSceneExtraction(blueprintScene), requestedVariantIds)
-                : CreateTopdownModificationScene(
-                    CollapseBlueprintSceneVariants(structure, CloneBlueprintSceneExtraction(blueprintScene), requestedVariantIds),
+            // Overhead-pipe insulation replaces host meshes via an overlay tree. Collapsing
+            // variants keeps unmarked host span/trim nodes, so component renders would bake
+            // bare + insulated meshes together. Extract the upgrade overlay alone instead.
+            FoxWatchBlueprintSceneExtraction? modificationScene;
+            if (IsFacilityPipeOverheadStructure(structure) && target.IsUpgrade)
+            {
+                modificationScene = CreateTopdownModificationScene(
+                    CloneBlueprintSceneExtraction(blueprintScene),
                     structure.Id,
                     target.VariantId,
                     string.IsNullOrWhiteSpace(target.SlotName) ? null : target.SlotName);
+            }
+            else if (target.IsUpgrade)
+            {
+                modificationScene = CollapseBlueprintSceneVariants(
+                    structure,
+                    CloneBlueprintSceneExtraction(blueprintScene),
+                    requestedVariantIds);
+            }
+            else
+            {
+                modificationScene = CreateTopdownModificationScene(
+                    CollapseBlueprintSceneVariants(
+                        structure,
+                        CloneBlueprintSceneExtraction(blueprintScene),
+                        requestedVariantIds),
+                    structure.Id,
+                    target.VariantId,
+                    string.IsNullOrWhiteSpace(target.SlotName) ? null : target.SlotName);
+            }
+
+            if (modificationScene?.Roots.Count is not > 0)
+            {
+                continue;
+            }
 
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
@@ -484,11 +526,23 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
+            var modificationComponentSource = IsFacilityPipeOverheadStructure(structure)
+                ? PrepareFacilityPipeOverheadScene(
+                    structure,
+                    CloneBlueprintSceneExtraction(modificationScene),
+                    stretchSpanToSockets: false)
+                : modificationScene;
+            // Prefer stable variant folder names (insulation) over hashed renderIds so
+            // published component paths stay host-local and human-readable.
+            var modificationFolderKey = string.IsNullOrWhiteSpace(target.VariantId)
+                ? target.OutputKey
+                : target.VariantId;
+
             foreach (var layerId in GetStandaloneStructureRenderLayerIds(structure))
             {
                 var layerScene = CreateTopdownStructureComponentScene(
                     structure,
-                    CloneBlueprintSceneExtraction(modificationScene),
+                    CloneBlueprintSceneExtraction(modificationComponentSource),
                     layerId);
                 if (layerScene?.Roots.Count is not > 0)
                 {
@@ -507,7 +561,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     RelativeScenePath = Path.Combine(
                         structure.Id,
                         "modifications",
-                        target.OutputKey,
+                        modificationFolderKey,
                         "components",
                         $"{layerId}.scene.json"),
                     RenderId = target.RenderId,
@@ -515,7 +569,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     Document = await CreateDocumentAsync(
                         structure,
                         layerScene,
-                        $"modifications/{target.OutputKey}/components/{layerId}",
+                        $"modifications/{modificationFolderKey}/components/{layerId}",
                         ["topdown"],
                         includePoseVariants: false,
                         clipFloorOverride: GetClipFloorOverrideForRenderLayer(structure, layerId),
@@ -1047,23 +1101,12 @@ public sealed class FoxWatchRenderSceneGenerator
             return null;
         }
 
-        if (string.Equals(structure.Id, "facilitypipeoverhead", StringComparison.OrdinalIgnoreCase))
+        if (IsFacilityPipeOverheadStructure(structure))
         {
-            var preparedRoots = AdjustOverheadPipePreviewNodes(
+            return PrepareFacilityPipeOverheadScene(
                 structure,
-                FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots));
-            preparedRoots = AdjustTelescopingSpanPreviewNodes(
-                structure,
-                preparedRoots,
-                ["PipelineoverheadConnect", "PipelineSegment01"]);
-            EnsureFacilityPipeOverheadCompositeSpan(structure, preparedRoots);
-
-            return new FoxWatchBlueprintSceneExtraction
-            {
-                Roots = preparedRoots,
-                Meshes = EnsureFacilityPipeOverheadCompositeMeshes(blueprintScene.Meshes),
-                Variants = blueprintScene.Variants,
-            };
+                blueprintScene,
+                stretchSpanToSockets: true);
         }
 
         if (IsFieldBridgeOrPierStructure(structure))
@@ -1160,6 +1203,135 @@ public sealed class FoxWatchRenderSceneGenerator
             Meshes = CloneMeshAssets(blueprintScene.Meshes),
             Variants = blueprintScene.Variants,
         };
+    }
+
+    private static bool IsFacilityPipeOverheadStructure(FoxWatchManifestStructure structure)
+    {
+        return string.Equals(structure.Id, "facilitypipeoverhead", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FoxWatchBlueprintSceneExtraction? PrepareFacilityPipeOverheadScene(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? blueprintScene,
+        bool stretchSpanToSockets)
+    {
+        if (blueprintScene == null)
+        {
+            return null;
+        }
+
+        var preparedRoots = AdjustOverheadPipePreviewNodes(
+            structure,
+            FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots));
+
+        if (stretchSpanToSockets)
+        {
+            preparedRoots = AdjustTelescopingSpanPreviewNodes(
+                structure,
+                preparedRoots,
+                ["PipelineoverheadConnect", "PipelineSegment01"]);
+            EnsureFacilityPipeOverheadCompositeSpan(structure, preparedRoots);
+        }
+        else
+        {
+            // Component span textures must stay at native mesh length. Do not depend on
+            // telescoping metrics succeeding (upgrade variants often omit sockets / unreal
+            // locations and would otherwise keep blueprint extractor stretch).
+            preparedRoots = NormalizeFacilityPipeOverheadNativeSpanNodes(structure, preparedRoots);
+            var forceSpanLengthCm = ResolveNativeTelescopingForceSpanLengthCm(structure);
+            EnsureFacilityPipeOverheadCompositeSpan(structure, preparedRoots, forceSpanLengthCm);
+        }
+
+        return new FoxWatchBlueprintSceneExtraction
+        {
+            Roots = preparedRoots,
+            Meshes = EnsureFacilityPipeOverheadCompositeMeshes(blueprintScene.Meshes),
+            Variants = blueprintScene.Variants,
+        };
+    }
+
+    private static List<FoxWatchRenderSceneNode> NormalizeFacilityPipeOverheadNativeSpanNodes(
+        FoxWatchManifestStructure structure,
+        List<FoxWatchRenderSceneNode> nodes)
+    {
+        var meshConfig = ResolvePrimaryConnectorMeshConfig(structure.Connector);
+        var startOffset = Math.Max(0, meshConfig?.StartOffset ?? 0);
+        return [.. nodes.Select(node => NormalizeFacilityPipeOverheadNativeSpanNode(node, startOffset))];
+    }
+
+    private static FoxWatchRenderSceneNode NormalizeFacilityPipeOverheadNativeSpanNode(
+        FoxWatchRenderSceneNode node,
+        double startOffsetCm)
+    {
+        var normalizedNodeName = NormalizeRenderSceneNodeName(node.Name);
+        var isSpanNode = string.Equals(normalizedNodeName, "PipelineoverheadConnect", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedNodeName, "PipelineSegment01", StringComparison.OrdinalIgnoreCase);
+
+        List<double>? unrealLocationCentimeters = node.UnrealLocationCentimeters == null
+            ? null
+            : [.. node.UnrealLocationCentimeters];
+        List<double>? scale = node.Scale == null ? null : [.. node.Scale];
+
+        if (isSpanNode)
+        {
+            if (unrealLocationCentimeters is not { Count: > 0 })
+            {
+                unrealLocationCentimeters = [startOffsetCm, 0.0, 0.0];
+            }
+            else
+            {
+                unrealLocationCentimeters[0] = startOffsetCm;
+            }
+
+            if (scale is { Count: > 0 })
+            {
+                scale[0] = 1.0;
+            }
+            else
+            {
+                scale = [1.0, 1.0, 1.0];
+            }
+        }
+
+        return new FoxWatchRenderSceneNode
+        {
+            Id = node.Id,
+            Name = node.Name,
+            Visible = node.Visible,
+            VariantIds = node.VariantIds == null ? null : [.. node.VariantIds],
+            MeshId = node.MeshId,
+            Primitive = ClonePrimitive(node.Primitive),
+            MaterialIds = [.. node.MaterialIds],
+            // Prefer unreal centimeters for native span placement; clear blender location so it cannot fight scale.
+            Location = isSpanNode ? null : node.Location == null ? null : [.. node.Location],
+            RotationEulerDegrees = node.RotationEulerDegrees == null ? null : [.. node.RotationEulerDegrees],
+            Scale = scale,
+            UnrealLocationCentimeters = unrealLocationCentimeters,
+            UnrealSceneLocationCentimeters = node.UnrealSceneLocationCentimeters == null ? null : [.. node.UnrealSceneLocationCentimeters],
+            UnrealRotationDegrees = node.UnrealRotationDegrees == null ? null : [.. node.UnrealRotationDegrees],
+            DebugColor = node.DebugColor == null ? null : [.. node.DebugColor],
+            MarkerColor = node.MarkerColor == null ? null : [.. node.MarkerColor],
+            MarkerSize = node.MarkerSize,
+            Pose = ClonePose(node.Pose),
+            PoseVariants = ClonePoseVariants(node.PoseVariants),
+            AttachBoneName = node.AttachBoneName,
+            TransformMatrix = [.. node.TransformMatrix],
+            Children = [.. node.Children.Select(child => NormalizeFacilityPipeOverheadNativeSpanNode(child, startOffsetCm))],
+        };
+    }
+
+    private static double? ResolveNativeTelescopingForceSpanLengthCm(FoxWatchManifestStructure structure)
+    {
+        var meshConfig = ResolvePrimaryConnectorMeshConfig(structure.Connector);
+        var nativeLength = meshConfig?.NativeMeshLengthCm ?? meshConfig?.Interval ?? 0;
+        if (nativeLength <= 0.001)
+        {
+            return null;
+        }
+
+        var startOffset = Math.Max(0, meshConfig?.StartOffset ?? 0);
+        var endOffset = Math.Max(0, meshConfig?.EndOffset ?? 0);
+        return nativeLength + startOffset + endOffset;
     }
 
     private static double? ResolveConnectorPreviewSpanLengthCm(FoxWatchManifestStructure structure)
@@ -1423,11 +1595,21 @@ public sealed class FoxWatchRenderSceneGenerator
             : [.. node.UnrealLocationCentimeters];
         List<double>? scale = node.Scale == null ? null : [.. node.Scale];
         if (spanNodeNames.Any(spanNodeName =>
-                string.Equals(normalizedNodeName, spanNodeName, StringComparison.OrdinalIgnoreCase)) &&
-            unrealLocationCentimeters is { Count: > 0 } location)
+                string.Equals(normalizedNodeName, spanNodeName, StringComparison.OrdinalIgnoreCase)))
         {
-            var placementX = Math.Abs(location[0]) < 1.0 ? metrics.StartX : metrics.CenterX;
-            unrealLocationCentimeters[0] = placementX;
+            // Upgrade/mod spans (e.g. insulated overhead pipe) may only carry transform matrix /
+            // location without unreal centimeters. Still reset length scale so tileable component
+            // textures do not inherit extractor stretch.
+            if (unrealLocationCentimeters is not { Count: > 0 })
+            {
+                unrealLocationCentimeters = [metrics.StartX, 0.0, 0.0];
+            }
+            else
+            {
+                var placementX = Math.Abs(unrealLocationCentimeters[0]) < 1.0 ? metrics.StartX : metrics.CenterX;
+                unrealLocationCentimeters[0] = placementX;
+            }
+
             if (scale is { Count: > 0 })
             {
                 scale[0] = metrics.ScaleX;
@@ -1483,9 +1665,10 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static void EnsureFacilityPipeOverheadCompositeSpan(
         FoxWatchManifestStructure structure,
-        List<FoxWatchRenderSceneNode> roots)
+        List<FoxWatchRenderSceneNode> roots,
+        double? forceSpanLengthCm = null)
     {
-        if (!TryResolveTelescopingSpanMetrics(structure, roots, out var metrics))
+        if (!TryResolveTelescopingSpanMetrics(structure, roots, out var metrics, forceSpanLengthCm))
         {
             return;
         }
@@ -1948,25 +2131,51 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool IsUpgradeModificationVariant(FoxWatchManifestStructure structure, string variantId)
     {
-        if (string.IsNullOrWhiteSpace(variantId) || structure.Modifications.Count == 0)
+        if (string.IsNullOrWhiteSpace(variantId))
         {
             return false;
         }
 
         var normalizedVariantId = NormalizeStandaloneModificationKeyComponent(variantId);
-        foreach (var modificationEntry in structure.Modifications)
+        if (string.Equals(normalizedVariantId, "default", StringComparison.OrdinalIgnoreCase))
         {
-            var normalizedModificationId = NormalizeStandaloneModificationKeyComponent(
-                string.IsNullOrWhiteSpace(modificationEntry.Value.AppliedModificationId)
-                    ? modificationEntry.Key
-                    : modificationEntry.Value.AppliedModificationId);
-            if (string.Equals(normalizedModificationId, normalizedVariantId, StringComparison.OrdinalIgnoreCase))
+            return false;
+        }
+
+        if (structure.Modifications.Count > 0)
+        {
+            foreach (var modificationEntry in structure.Modifications)
             {
-                return modificationEntry.Value.IsUpgrade;
+                var normalizedModificationId = NormalizeStandaloneModificationKeyComponent(
+                    string.IsNullOrWhiteSpace(modificationEntry.Value.AppliedModificationId)
+                        ? modificationEntry.Key
+                        : modificationEntry.Value.AppliedModificationId);
+                if (string.Equals(normalizedModificationId, normalizedVariantId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return modificationEntry.Value.IsUpgrade;
+                }
             }
         }
 
-        return false;
+        // Some hosts (e.g. facility pipes) expose upgrades only via UpgradeSlotComponent
+        // modification slots and leave the Modifications dictionary empty.
+        return structure.ModificationSlots?.Any(slot =>
+        {
+            var componentType = slot.ComponentType ?? string.Empty;
+            var slotName = slot.Name ?? string.Empty;
+            var isUpgradeSlot = componentType.Contains("UpgradeSlotComponent", StringComparison.OrdinalIgnoreCase)
+                || slotName.Contains("UpgradeSlot", StringComparison.OrdinalIgnoreCase);
+            if (!isUpgradeSlot || slot.Variants == null || slot.Variants.Count == 0)
+            {
+                return false;
+            }
+
+            return slot.Variants.Keys.Any(key =>
+                string.Equals(
+                    NormalizeStandaloneModificationKeyComponent(key),
+                    normalizedVariantId,
+                    StringComparison.OrdinalIgnoreCase));
+        }) == true;
     }
 
     private static FoxWatchBlueprintSceneExtraction? CreateTopdownModificationScene(

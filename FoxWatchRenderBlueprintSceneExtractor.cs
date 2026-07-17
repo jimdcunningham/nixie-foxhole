@@ -1428,11 +1428,16 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 return null;
             }
 
+            // Modification template actors (e.g. insulated pipe) often omit sockets / default
+            // spline targets. Inherit the host span length so BuildExtraction can emit span meshes.
+            var mutableComponentReferences = componentReferences.ToList();
+            InheritHostSplineConnectorTargets(baseExtraction, mutableComponentReferences);
+
             var blueprintExtraction = BuildExtraction(
                 variantNodeIdPrefix,
                 modificationVariant.Name,
                 modificationVariant.TemplateActorPath,
-                componentReferences);
+                mutableComponentReferences);
             if (blueprintExtraction.Meshes.Count > 0)
             {
                 return blueprintExtraction;
@@ -1443,7 +1448,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 modificationVariant.Name,
                 attachNode,
                 baseExtraction,
-                componentReferences);
+                mutableComponentReferences);
         }
 
         if (!string.IsNullOrWhiteSpace(modificationVariant.TemplateMeshPath))
@@ -1469,6 +1474,85 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                     },
                 ],
             };
+        }
+
+        return null;
+    }
+
+    private static void InheritHostSplineConnectorTargets(
+        FoxWatchBlueprintSceneExtraction baseExtraction,
+        IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+    {
+        if (!componentReferences.Any(reference => reference.SplineConnectorMeshConfigs.Count > 0))
+        {
+            return;
+        }
+
+        var backSocketX = TryFindSceneNodeUnrealLocationX(baseExtraction.Roots, "BackSocket") ?? 0;
+        var frontSocketX = TryFindSceneNodeUnrealLocationX(baseExtraction.Roots, "FrontSocket");
+        if (frontSocketX == null)
+        {
+            return;
+        }
+
+        var fallbackTarget = new List<double>
+        {
+            frontSocketX.Value - backSocketX,
+            0.0,
+            0.0,
+        };
+        var magnitudeSquared = (fallbackTarget[0] * fallbackTarget[0])
+            + (fallbackTarget[1] * fallbackTarget[1])
+            + (fallbackTarget[2] * fallbackTarget[2]);
+        if (magnitudeSquared <= 0.001d)
+        {
+            return;
+        }
+
+        foreach (var componentReference in componentReferences.Where(reference => reference.SplineConnectorMeshConfigs.Count > 0))
+        {
+            if (componentReference.SplineDefaultTargetUnrealLocationCentimeters is not { Count: >= 3 } existingTarget)
+            {
+                componentReference.SplineDefaultTargetUnrealLocationCentimeters = [.. fallbackTarget];
+                continue;
+            }
+
+            var existingMagnitudeSquared = (existingTarget[0] * existingTarget[0])
+                + (existingTarget[1] * existingTarget[1])
+                + (existingTarget[2] * existingTarget[2]);
+            if (existingMagnitudeSquared <= 0.001d)
+            {
+                componentReference.SplineDefaultTargetUnrealLocationCentimeters = [.. fallbackTarget];
+            }
+        }
+    }
+
+    private static double? TryFindSceneNodeUnrealLocationX(
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        string nodeName)
+    {
+        foreach (var node in nodes)
+        {
+            var normalizedNodeName = NormalizeReferenceName(node.Name) ?? node.Name;
+            if (string.Equals(normalizedNodeName, nodeName, StringComparison.OrdinalIgnoreCase))
+            {
+                if (node.UnrealLocationCentimeters is { Count: > 0 } unrealLocation)
+                {
+                    return unrealLocation[0];
+                }
+
+                if (node.Location is { Count: > 0 } location)
+                {
+                    // Blender-space meters → Unreal centimeters.
+                    return location[0] * 100.0;
+                }
+            }
+
+            var childLocationX = TryFindSceneNodeUnrealLocationX(node.Children, nodeName);
+            if (childLocationX != null)
+            {
+                return childLocationX;
+            }
         }
 
         return null;
@@ -1502,7 +1586,10 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             .Where(meshAsset => !string.IsNullOrWhiteSpace(meshAsset.Id) && !string.IsNullOrWhiteSpace(meshAsset.SourcePath))
             .ToDictionary(meshAsset => meshAsset.Id, meshAsset => meshAsset.SourcePath!, StringComparer.OrdinalIgnoreCase);
         var meshIdBySourcePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var variantChildren = attachNode.Children
+        // Upgrade-slot attach nodes are often empty; pipe insulation overrides live on the host
+        // StructureArrow mesh tree (BackMesh / span / FrontMesh), so search there when needed.
+        var overrideSourceNodes = ResolveStaticMeshOverrideSourceNodes(attachNode, baseExtraction);
+        var variantChildren = overrideSourceNodes
             .Select(child => CloneStaticMeshOverrideSubtree(
                 variantNodeIdPrefix,
                 child,
@@ -1536,6 +1623,29 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 })
                 .ToList(),
         };
+    }
+
+    private static IReadOnlyList<FoxWatchRenderSceneNode> ResolveStaticMeshOverrideSourceNodes(
+        FoxWatchRenderSceneNode attachNode,
+        FoxWatchBlueprintSceneExtraction baseExtraction)
+    {
+        if (attachNode.Children.Count > 0)
+        {
+            return attachNode.Children;
+        }
+
+        var structureArrow = FindNodeByName(baseExtraction.Roots, StructureArrowComponentName);
+        if (structureArrow?.Children.Count > 0)
+        {
+            return structureArrow.Children;
+        }
+
+        if (baseExtraction.Roots.Count == 1 && baseExtraction.Roots[0].Children.Count > 0)
+        {
+            return baseExtraction.Roots[0].Children;
+        }
+
+        return baseExtraction.Roots;
     }
 
     private static FoxWatchRenderSceneNode? CloneStaticMeshOverrideSubtree(

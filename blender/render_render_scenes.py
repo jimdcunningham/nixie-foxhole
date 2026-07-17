@@ -925,6 +925,21 @@ def resolve_render_output_path(base_output_dir: str, asset_type: str, structure_
         return os.path.join(output_directory, stem(base_name))
 
     if normalized_output_key.startswith("modifications/"):
+        modification_parts = [part for part in normalized_output_key.split("/") if part]
+        # modifications/<id>/components/<layerId>
+        if len(modification_parts) >= 4 and modification_parts[2] == "components":
+            modification_id = modification_parts[1]
+            component_id = modification_parts[3]
+            output_directory = os.path.join(
+                typed_output_directory,
+                structure_id,
+                "modifications",
+                modification_id,
+                "components",
+                component_id,
+            )
+            return os.path.join(output_directory, stem(component_id))
+
         base_name = os.path.basename(normalized_output_key)
         output_directory = os.path.join(typed_output_directory, structure_id, "modifications", base_name)
         return os.path.join(output_directory, stem(base_name))
