@@ -1,0 +1,275 @@
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+
+import {
+    extractPublishedIconKey,
+    isSharedPublishedIconUrl,
+    normalizeId,
+} from './publish-structure-icons.mjs';
+import { logPublishDetail, logPublishSummary, logPublishWarn } from './publish-log.mjs';
+
+/**
+ * Resolve the co-located `<renderId>.icon.default.webp` URL for a host-local modification
+ * from an existing co-located texture/preview/rendered URL.
+ */
+export function resolveHostLocalModificationDefaultIconUrl(variant) {
+    const candidates = [
+        variant?.icons?.rendered,
+        variant?.previewUrl,
+        variant?.sprite?.source,
+        variant?.textureUrl,
+    ];
+
+    for (const candidate of candidates) {
+        const normalized = String(candidate ?? '').trim().replace(/\\/g, '/');
+        const match = normalized.match(
+            /^(\/foxhole\/assets\/types\/(?:structures|items|vehicles)\/[^/]+\/modifications\/([^/]+)\/)/i,
+        );
+        if (!match) {
+            continue;
+        }
+
+        const folderPrefix = match[1];
+        const renderId = match[2];
+        if (!renderId) {
+            continue;
+        }
+
+        return `${folderPrefix}${renderId}.icon.default.webp`;
+    }
+
+    return null;
+}
+
+function addSharedIconKeyReference(counts, value) {
+    const iconKey = extractPublishedIconKey(value);
+    if (!iconKey) {
+        return;
+    }
+
+    counts.set(iconKey, (counts.get(iconKey) ?? 0) + 1);
+}
+
+function getStructureModificationSlots(structure) {
+    if (Array.isArray(structure?.modificationSlots) && structure.modificationSlots.length > 0) {
+        return structure.modificationSlots;
+    }
+
+    if (Array.isArray(structure?.modifications)) {
+        return structure.modifications;
+    }
+
+    return [];
+}
+
+/**
+ * Count `/foxhole/assets/icons/<key>` references across the published manifest.
+ * Multi-referenced keys stay in the global icons pool; single-use keys can co-locate.
+ */
+export function collectSharedPublishedIconKeyReferenceCounts(manifest) {
+    const counts = new Map();
+
+    for (const category of Object.values(manifest?.categories ?? {})) {
+        addSharedIconKeyReference(counts, category?.iconUrl);
+    }
+
+    for (const structure of manifest?.assets ?? []) {
+        addSharedIconKeyReference(counts, structure?.icons?.default ?? structure?.iconUrl);
+        addSharedIconKeyReference(counts, structure?.icons?.rendered ?? structure?.previewIconUrl);
+        addSharedIconKeyReference(counts, structure?.previewUrl);
+        addSharedIconKeyReference(counts, structure?.subTypeIconUrl);
+        addSharedIconKeyReference(counts, structure?.destroyed?.icons?.default ?? structure?.destroyed?.iconUrl);
+        addSharedIconKeyReference(counts, structure?.destroyed?.icons?.rendered ?? structure?.destroyed?.previewIconUrl);
+        addSharedIconKeyReference(counts, structure?.packaged?.icons?.default ?? structure?.packaged?.iconUrl);
+        addSharedIconKeyReference(counts, structure?.packaged?.icons?.rendered ?? structure?.packaged?.previewIconUrl);
+
+        for (const slot of getStructureModificationSlots(structure)) {
+            for (const variant of Object.values(slot?.variants ?? {})) {
+                addSharedIconKeyReference(counts, variant?.icons?.default ?? variant?.iconUrl);
+                addSharedIconKeyReference(counts, variant?.icons?.rendered);
+                addSharedIconKeyReference(counts, variant?.previewUrl);
+                addSharedIconKeyReference(counts, variant?.subTypeIconUrl);
+            }
+        }
+    }
+
+    for (const modification of Object.values(manifest?.shared?.modifications ?? {})) {
+        addSharedIconKeyReference(counts, modification?.icons?.default ?? modification?.iconUrl);
+        addSharedIconKeyReference(counts, modification?.icons?.rendered);
+        addSharedIconKeyReference(counts, modification?.previewUrl);
+    }
+
+    return counts;
+}
+
+export function shouldCoLocateSingleUseModificationDefaultIcon(defaultIconUrl, referenceCounts) {
+    if (!isSharedPublishedIconUrl(defaultIconUrl)) {
+        return false;
+    }
+
+    const iconKey = extractPublishedIconKey(defaultIconUrl);
+    if (!iconKey) {
+        return false;
+    }
+
+    return (referenceCounts.get(iconKey) ?? 0) === 1;
+}
+
+/**
+ * Copy single-use host-local modification default icons next to the mod folder and
+ * rewrite manifest URLs. Multi-referenced `/icons/` keys are left in the shared pool.
+ */
+export async function coLocateSingleUseHostLocalModificationDefaultIcons(manifest, {
+    readIconSource,
+    writeIconFile,
+    resolvePublicAssetFilePath,
+}) {
+    const referenceCounts = collectSharedPublishedIconKeyReferenceCounts(manifest);
+    const coLocatedIconKeys = new Set();
+    let coLocatedCount = 0;
+
+    const assets = [];
+    for (const structure of manifest?.assets ?? []) {
+        const slots = getStructureModificationSlots(structure);
+        if (slots.length === 0) {
+            assets.push(structure);
+            continue;
+        }
+
+        const nextSlots = [];
+        for (const slot of slots) {
+            const nextVariants = {};
+            for (const [variantId, variant] of Object.entries(slot?.variants ?? {})) {
+                if (normalizeId(variantId) === 'default' || variant?.sharedModificationId) {
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                const defaultIconUrl = String(variant?.icons?.default ?? variant?.iconUrl ?? '').trim();
+                if (!shouldCoLocateSingleUseModificationDefaultIcon(defaultIconUrl, referenceCounts)) {
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                const coLocatedDefaultUrl = resolveHostLocalModificationDefaultIconUrl(variant);
+                if (!coLocatedDefaultUrl) {
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                const outputPath = resolvePublicAssetFilePath(coLocatedDefaultUrl);
+                if (!outputPath) {
+                    logPublishWarn(`could not resolve co-located mod default path for ${coLocatedDefaultUrl}`);
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                try {
+                    const source = await readIconSource(defaultIconUrl);
+                    await mkdir(dirname(outputPath), { recursive: true });
+                    await writeIconFile(outputPath, source.content);
+                    logPublishDetail(`co-located single-use mod icon ${source.sourceFilePath} -> ${outputPath}`);
+
+                    const iconKey = extractPublishedIconKey(defaultIconUrl);
+                    if (iconKey) {
+                        coLocatedIconKeys.add(iconKey);
+                    }
+                    coLocatedCount += 1;
+
+                    nextVariants[variantId] = {
+                        ...variant,
+                        icons: {
+                            ...(variant?.icons ?? {}),
+                            default: coLocatedDefaultUrl,
+                        },
+                    };
+                } catch (error) {
+                    logPublishWarn(
+                        `failed to co-locate single-use mod icon ${defaultIconUrl} -> ${coLocatedDefaultUrl}: ${error}`,
+                    );
+                    nextVariants[variantId] = variant;
+                }
+            }
+
+            nextSlots.push({
+                ...slot,
+                variants: nextVariants,
+            });
+        }
+
+        if (Array.isArray(structure?.modificationSlots) && structure.modificationSlots.length > 0) {
+            assets.push({ ...structure, modificationSlots: nextSlots });
+        } else {
+            assets.push({ ...structure, modifications: nextSlots });
+        }
+    }
+
+    if (coLocatedCount > 0) {
+        logPublishSummary(`publish-manifest: co-located ${coLocatedCount} single-use modification default icons`);
+    }
+
+    const nextManifest = {
+        ...manifest,
+        assets,
+    };
+    // Preserve non-enumerable shared-modification source metadata across the rebuild.
+    for (const key of ['__sharedModificationDefaultIconSourceById', '__sharedModificationSourceById']) {
+        const value = manifest?.[key];
+        if (typeof value === 'undefined') {
+            continue;
+        }
+
+        Object.defineProperty(nextManifest, key, {
+            value,
+            enumerable: false,
+            configurable: true,
+            writable: false,
+        });
+    }
+
+    return {
+        manifest: nextManifest,
+        coLocatedIconKeys,
+        coLocatedCount,
+    };
+}
+
+export async function removePublicIconsByKey(publicIconsDirectory, iconKeys, {
+    pathExists,
+    unlink,
+    walkFiles,
+}) {
+    if (!iconKeys?.size) {
+        return 0;
+    }
+
+    let directoryExists = false;
+    try {
+        directoryExists = await pathExists(publicIconsDirectory);
+    } catch {
+        directoryExists = false;
+    }
+    if (!directoryExists) {
+        return 0;
+    }
+
+    let removed = 0;
+    for await (const filePath of walkFiles(publicIconsDirectory)) {
+        const fileName = filePath.replace(/\\/g, '/').split('/').pop() ?? '';
+        const match = fileName.match(/^(.+)\.webp$/i);
+        if (!match) {
+            continue;
+        }
+
+        const iconKey = normalizeId(match[1]);
+        if (!iconKeys.has(iconKey)) {
+            continue;
+        }
+
+        await unlink(filePath);
+        removed += 1;
+        logPublishDetail(`removed co-located-away shared icon ${filePath}`);
+    }
+
+    return removed;
+}

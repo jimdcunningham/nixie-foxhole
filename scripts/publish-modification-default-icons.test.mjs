@@ -1,0 +1,264 @@
+﻿import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, writeFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import sharp from 'sharp';
+
+import {
+    collectSharedPublishedIconKeyReferenceCounts,
+    coLocateSingleUseHostLocalModificationDefaultIcons,
+    resolveHostLocalModificationDefaultIconUrl,
+    shouldCoLocateSingleUseModificationDefaultIcon,
+} from './publish-modification-default-icons.mjs';
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const fixtureRoot = resolve(currentDir, '../../../tests/fixtures/foxhole/icon-publish');
+
+test('resolveHostLocalModificationDefaultIconUrl derives from rendered path', () => {
+    assert.equal(
+        resolveHostLocalModificationDefaultIconUrl({
+            icons: {
+                rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.rendered.webp',
+            },
+        }),
+        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.default.webp',
+    );
+});
+
+test('shouldCoLocateSingleUseModificationDefaultIcon keeps multi-use icons shared', () => {
+    const counts = new Map([
+        ['facilityelectricoilwellicon', 1],
+        ['barbedwirestructureicon', 82],
+    ]);
+
+    assert.equal(
+        shouldCoLocateSingleUseModificationDefaultIcon(
+            '/foxhole/assets/icons/facilityelectricoilwellicon.webp',
+            counts,
+        ),
+        true,
+    );
+    assert.equal(
+        shouldCoLocateSingleUseModificationDefaultIcon(
+            '/foxhole/assets/icons/barbedwirestructureicon.webp',
+            counts,
+        ),
+        false,
+    );
+    assert.equal(
+        shouldCoLocateSingleUseModificationDefaultIcon(
+            '/foxhole/assets/types/structures/x/modifications/y/y.icon.default.webp',
+            counts,
+        ),
+        false,
+    );
+});
+
+test('collectSharedPublishedIconKeyReferenceCounts counts mod defaults', () => {
+    const counts = collectSharedPublishedIconKeyReferenceCounts({
+        assets: [
+            {
+                id: 'facilitymineoil',
+                modifications: [
+                    {
+                        variants: {
+                            electric: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/facilityelectricoilwellicon.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'trencht2',
+                modifications: [
+                    {
+                        variants: {
+                            barbedwire: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'trencht1',
+                modifications: [
+                    {
+                        variants: {
+                            barbedwire: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
+    });
+
+    assert.equal(counts.get('facilityelectricoilwellicon'), 1);
+    assert.equal(counts.get('barbedwirestructureicon'), 2);
+});
+
+test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use defaults only', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-mod-default-icons-'));
+    const publicAssetsRoot = resolve(tempRoot, 'public/foxhole/assets');
+    const iconsRoot = resolve(publicAssetsRoot, 'icons');
+    const modDir = resolve(
+        publicAssetsRoot,
+        'types/structures/facilitymineoil/modifications/electric-d0e9b79d4503',
+    );
+    await mkdir(iconsRoot, { recursive: true });
+    await mkdir(modDir, { recursive: true });
+
+    const blueprint = await readFile(resolve(fixtureRoot, 'blueprint-128.png'));
+    const iconWebp = await sharp(blueprint).webp({ lossless: true, quality: 100, effort: 6 }).toBuffer();
+    await writeFile(resolve(iconsRoot, 'facilityelectricoilwellicon.webp'), iconWebp);
+    await writeFile(resolve(iconsRoot, 'barbedwirestructureicon.webp'), iconWebp);
+
+    const manifest = {
+        assets: [
+            {
+                id: 'facilitymineoil',
+                modifications: [
+                    {
+                        variants: {
+                            electric: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/facilityelectricoilwellicon.webp',
+                                    rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.rendered.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'trencht2',
+                modifications: [
+                    {
+                        variants: {
+                            barbedwire: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
+                                    rendered: '/foxhole/assets/types/structures/trencht2/modifications/barbedwire-4ba3702b0c45/barbedwire-4ba3702b0c45.icon.rendered.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'trencht1',
+                modifications: [
+                    {
+                        variants: {
+                            barbedwire: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
+                                    rendered: '/foxhole/assets/types/structures/trencht1/modifications/barbedwire-4ba3702b0c45/barbedwire-4ba3702b0c45.icon.rendered.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+
+    const written = [];
+    const result = await coLocateSingleUseHostLocalModificationDefaultIcons(manifest, {
+        readIconSource: async (sourceUrl) => {
+            const key = sourceUrl.split('/').pop();
+            return {
+                sourceFilePath: resolve(iconsRoot, key),
+                content: await readFile(resolve(iconsRoot, key)),
+            };
+        },
+        writeIconFile: async (outputPath, content) => {
+            await mkdir(dirname(outputPath), { recursive: true });
+            await writeFile(outputPath, content);
+            written.push(outputPath);
+            return true;
+        },
+        resolvePublicAssetFilePath: (publicUrl) => resolve(
+            publicAssetsRoot,
+            String(publicUrl).replace(/^\/?foxhole\/assets\//i, ''),
+        ),
+    });
+
+    assert.equal(result.coLocatedCount, 1);
+    assert.deepEqual([...result.coLocatedIconKeys], ['facilityelectricoilwellicon']);
+    assert.equal(
+        result.manifest.assets[0].modifications[0].variants.electric.icons.default,
+        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.default.webp',
+    );
+    assert.equal(
+        result.manifest.assets[1].modifications[0].variants.barbedwire.icons.default,
+        '/foxhole/assets/icons/barbedwirestructureicon.webp',
+    );
+    assert.equal(written.length, 1);
+
+    await unlink(resolve(iconsRoot, 'facilityelectricoilwellicon.webp'));
+});
+
+test('coLocateSingleUseHostLocalModificationDefaultIcons preserves shared modification source metadata', async () => {
+    const defaultIconSources = new Map([
+        ['advcoalliquefier-4d35ba008d6a', '/foxhole/assets/icons/facilityadvancedcoalliquefiericon.webp'],
+    ]);
+    const sharedSources = new Map([
+        ['advcoalliquefier-4d35ba008d6a', {
+            defaultIconSourceUrl: '/foxhole/assets/icons/facilityadvancedcoalliquefiericon.webp',
+        }],
+    ]);
+    const manifest = {
+        assets: [],
+        shared: {
+            modifications: {
+                'advcoalliquefier-4d35ba008d6a': {
+                    icons: {
+                        default: '/foxhole/assets/shared/modifications/advcoalliquefier-4d35ba008d6a/advcoalliquefier-4d35ba008d6a.icon.default.webp',
+                    },
+                },
+            },
+        },
+    };
+    Object.defineProperty(manifest, '__sharedModificationDefaultIconSourceById', {
+        value: defaultIconSources,
+        enumerable: false,
+        configurable: true,
+        writable: false,
+    });
+    Object.defineProperty(manifest, '__sharedModificationSourceById', {
+        value: sharedSources,
+        enumerable: false,
+        configurable: true,
+        writable: false,
+    });
+
+    const result = await coLocateSingleUseHostLocalModificationDefaultIcons(manifest, {
+        readIconSource: async () => {
+            throw new Error('should not read icons when there are no host-local mods');
+        },
+        writeIconFile: async () => true,
+        resolvePublicAssetFilePath: () => null,
+    });
+
+    assert.equal(result.coLocatedCount, 0);
+    assert.equal(
+        result.manifest.__sharedModificationDefaultIconSourceById,
+        defaultIconSources,
+    );
+    assert.equal(
+        result.manifest.__sharedModificationSourceById,
+        sharedSources,
+    );
+});

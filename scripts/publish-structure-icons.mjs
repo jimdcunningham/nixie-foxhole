@@ -501,15 +501,48 @@ export async function normalizeIconContentDimensions(content, webpOptions = LOSS
         .toBuffer();
 }
 
+async function resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory) {
+    const normalizedKey = normalizeId(iconKey);
+    if (!normalizedKey || !generatedIconsDirectory) {
+        return null;
+    }
+
+    for (const extension of ICON_SOURCE_EXTENSIONS) {
+        const candidatePath = resolve(generatedIconsDirectory, `${normalizedKey}${extension}`);
+        if (await pathExists(candidatePath)) {
+            return candidatePath;
+        }
+    }
+
+    return null;
+}
+
 async function resolveGeneratedIconFilePath(iconUrl, generatedIconsDirectory) {
     const iconKey = extractPublishedIconKey(iconUrl);
     if (!iconKey) {
         return null;
     }
 
-    for (const extension of ICON_SOURCE_EXTENSIONS) {
-        const candidatePath = resolve(generatedIconsDirectory, `${iconKey}${extension}`);
-        if (await pathExists(candidatePath)) {
+    return resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory);
+}
+
+export function getGeneratedIconLookupKeysForAssetId(assetId) {
+    const normalizedAssetId = normalizeId(assetId);
+    if (!normalizedAssetId) {
+        return [];
+    }
+
+    return [
+        normalizedAssetId,
+        `${normalizedAssetId}itemicon`,
+        `${normalizedAssetId}icon`,
+    ];
+}
+
+export async function resolveGeneratedIconFilePathForAssetId(assetId, generatedIconsDirectory) {
+    for (const iconKey of getGeneratedIconLookupKeysForAssetId(assetId)) {
+        const candidatePath = await resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory);
+        if (candidatePath) {
             return candidatePath;
         }
     }
@@ -585,7 +618,17 @@ export async function resolveRawIconSource({
         return readRawSourceFile(generatedIconPath, roots);
     }
 
-    if (await pathExists(rawRenderedPath) && isAllowedRawSourcePath(rawRenderedPath, roots)) {
+    const generatedIconPathForAsset = await resolveGeneratedIconFilePathForAssetId(
+        structureId,
+        generatedIconsDirectory,
+    );
+    if (generatedIconPathForAsset && isAllowedRawSourcePath(generatedIconPathForAsset, roots)) {
+        return readRawSourceFile(generatedIconPathForAsset, roots);
+    }
+
+    if (await pathExists(rawRenderedPath)
+        && isAllowedRawSourcePath(rawRenderedPath, roots)
+        && await imageFileHasVisiblePixelsFromPath(rawRenderedPath)) {
         return readRawSourceFile(rawRenderedPath, roots);
     }
 

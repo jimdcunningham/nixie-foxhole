@@ -875,7 +875,43 @@ public class FoxWatchManifestAssetExtractor
                 RenderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets),
             };
 
+            ApplyModificationUpgradeClassification(structure);
+
             return structure;
+        }
+
+        private static bool IsUpgradeSlotComponentType(string? componentType, string? slotName)
+        {
+            var normalizedComponentType = NormalizeString(componentType);
+            var normalizedSlotName = NormalizeString(slotName);
+            return normalizedComponentType.Contains("UpgradeSlotComponent", StringComparison.OrdinalIgnoreCase)
+                || normalizedSlotName.Contains("UpgradeSlot", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ApplyModificationUpgradeClassification(FoxWatchManifestStructure structure)
+        {
+            if (structure.Modifications.Count == 0)
+            {
+                return;
+            }
+
+            var hasUpgradeSlot = structure.ModificationSlots?.Any(slot =>
+                IsUpgradeSlotComponentType(slot.ComponentType, slot.Name)) == true;
+
+            foreach (var modification in structure.Modifications.Values)
+            {
+                var isUpgrade = hasUpgradeSlot
+                    && !string.Equals(NormalizeModificationVariantId(modification.CodeName), "default", StringComparison.OrdinalIgnoreCase);
+                modification.IsUpgrade = isUpgrade;
+
+                if (!isUpgrade)
+                {
+                    modification.UpgradeName = null;
+                    modification.ParentStructureId = null;
+                    modification.RootStructureId = null;
+                    modification.AppliedModificationId = null;
+                }
+            }
         }
 
         private List<FoxWatchManifestStructureRenderLayer>? ExtractStructureRenderLayers(
@@ -6789,6 +6825,20 @@ public class FoxWatchManifestAssetExtractor
                 return false;
             }
 
+            var leftNearOrigin = IsNearOriginBuildSocket(left);
+            var rightNearOrigin = IsNearOriginBuildSocket(right);
+
+            // Many blueprints leak "same socket, default transform" duplicates from the
+            // CDO scope. When we see an origin socket with no tags/pipe data, collapse it
+            // into the positioned socket (even if far outside the < 1 unit tolerance).
+            if (leftNearOrigin != rightNearOrigin)
+            {
+                var originSocket = leftNearOrigin ? left : right;
+                var originIsPlain = originSocket.SocketTags.Count == 0
+                    && string.IsNullOrWhiteSpace(originSocket.PipeType);
+                return originIsPlain;
+            }
+
             return Math.Abs((left.X ?? 0) - (right.X ?? 0)) < 1
                 && Math.Abs((left.Y ?? 0) - (right.Y ?? 0)) < 1
                 && Math.Abs((left.Z ?? 0) - (right.Z ?? 0)) < 1;
@@ -6812,13 +6862,35 @@ public class FoxWatchManifestAssetExtractor
                     continue;
                 }
 
-                if (ScoreBuildSocketCandidate(socket) > ScoreBuildSocketCandidate(collapsed[duplicateIndex]))
+                var existing = collapsed[duplicateIndex];
+                var newScore = ScoreBuildSocketCandidate(socket);
+                var existingScore = ScoreBuildSocketCandidate(existing);
+
+                if (newScore > existingScore)
                 {
                     collapsed[duplicateIndex] = socket;
+                }
+                else if (newScore == existingScore)
+                {
+                    // If one candidate is an origin leak, prefer the positioned socket.
+                    var newNearOrigin = IsNearOriginBuildSocket(socket);
+                    var existingNearOrigin = IsNearOriginBuildSocket(existing);
+
+                    if (existingNearOrigin && !newNearOrigin)
+                    {
+                        collapsed[duplicateIndex] = socket;
+                    }
                 }
             }
 
             return collapsed;
+        }
+
+        private static bool IsNearOriginBuildSocket(FoxWatchManifestBuildSocket socket)
+        {
+            return Math.Abs(socket.X ?? 0) < 0.01
+                && Math.Abs(socket.Y ?? 0) < 0.01
+                && Math.Abs(socket.Z ?? 0) < 0.01;
         }
 
         private static List<FoxWatchManifestBuildSocket> EnsureConnectorEndpointBuildSockets(
@@ -8643,7 +8715,7 @@ public class FoxWatchManifestAssetExtractor
                     FuelTanks = ExtractFuelTanks(GetNamedValue(modValue, "FuelTanks")),
                     ConversionEntries = ExtractConversionEntries(GetNamedValue(modValue, "ConversionEntries")),
                     Cost = cost,
-                    IsUpgrade = !string.Equals(normalizedKey, "default", StringComparison.OrdinalIgnoreCase),
+                    IsUpgrade = false,
                     UpgradeName = displayName,
                     ParentStructureId = structureId,
                     RootStructureId = structureId,

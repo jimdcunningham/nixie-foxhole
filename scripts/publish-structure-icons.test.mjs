@@ -267,6 +267,78 @@ test('resolveRawIconSource invisible render falls back to blueprint', async () =
     assert.equal(metadata.height, 128);
 });
 
+test('resolveRawIconSource falls back to generated icon by asset id when urls are colocated', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-assetid-fallback-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    await mkdir(resolve(rawRenderedRoot, 'items', 'navaluniformw'), { recursive: true });
+    await mkdir(generatedIconsRoot, { recursive: true });
+    await writeFile(
+        resolve(rawRenderedRoot, 'items', 'navaluniformw', 'navaluniformw.icon.rendered.webp'),
+        await readFile(resolve(fixtureRoot, 'blank-render-256.webp')),
+    );
+    await writeFile(
+        resolve(generatedIconsRoot, 'navaluniformw.png'),
+        await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+    );
+
+    const colocated = {
+        id: 'navaluniformw',
+        icons: {
+            default: '/foxhole/assets/types/items/navaluniformw/navaluniformw.icon.default.webp',
+            rendered: '/foxhole/assets/types/items/navaluniformw/navaluniformw.icon.rendered.webp',
+        },
+    };
+    const source = await resolveRawIconSource({
+        structureId: 'navaluniformw',
+        assetKind: 'icon.rendered',
+        structure: colocated,
+        sourceStructure: colocated,
+        rawRenderedAssetTypesDirectory: rawRenderedRoot,
+        generatedIconsDirectory: generatedIconsRoot,
+        publicAssetsDirectory: publicAssetsRoot,
+        resolveAssetTypeName: () => 'items',
+    });
+
+    assert.ok(source);
+    assert.match(source.sourceFilePath, /navaluniformw\.png$/);
+    const metadata = await sharp(source.content).metadata();
+    assert.equal(metadata.width, 128);
+    assert.equal(metadata.height, 128);
+});
+
+test('resolveRawIconSource does not return invisible raw last resort', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-no-blank-lastresort-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    await mkdir(resolve(rawRenderedRoot, 'items', 'minitankammo'), { recursive: true });
+    await mkdir(generatedIconsRoot, { recursive: true });
+    await writeFile(
+        resolve(rawRenderedRoot, 'items', 'minitankammo', 'minitankammo.icon.rendered.webp'),
+        await readFile(resolve(fixtureRoot, 'blank-render-256.webp')),
+    );
+
+    const source = await resolveRawIconSource({
+        structureId: 'minitankammo',
+        assetKind: 'icon.rendered',
+        structure: {
+            id: 'minitankammo',
+            icons: {
+                default: '/foxhole/assets/types/items/minitankammo/minitankammo.icon.default.webp',
+            },
+        },
+        sourceStructure: null,
+        rawRenderedAssetTypesDirectory: rawRenderedRoot,
+        generatedIconsDirectory: generatedIconsRoot,
+        publicAssetsDirectory: publicAssetsRoot,
+        resolveAssetTypeName: () => 'items',
+    });
+
+    assert.equal(source, null);
+});
+
 test('resolveRawIconSource destroyed.icon.default falls back to living blueprint icon', async () => {
     const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-publish-'));
     const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');

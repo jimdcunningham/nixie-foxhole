@@ -12,11 +12,16 @@ import {
     getCoLocatedStructureAssetFileName,
     hasRawDestroyedRenderAssets,
     publishStructureIconsForManifest,
+    resolveGeneratedIconFilePathForAssetId,
     resolveSubtypeOverlayUrl,
     sanitizeVehicleDestroyedVisuals,
     shouldSyncRenderedAssetToPublic,
     structureHasResolvableDestroyedRenderScene,
 } from './publish-structure-icons.mjs';
+import {
+    coLocateSingleUseHostLocalModificationDefaultIcons,
+    removePublicIconsByKey,
+} from './publish-modification-default-icons.mjs';
 import {
     buildRenderIdComputation,
     buildSharedModificationIdComputation,
@@ -2487,15 +2492,54 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
                 })),
             }));
 
+            const canonicalModifications = structure?.modifications
+                && !Array.isArray(structure.modifications)
+                && typeof structure.modifications === 'object'
+                ? structure.modifications
+                : null;
             const { modifications: _modifications, modificationSlots: _modificationSlots, ...rest } = structure;
             return {
                 ...rest,
+                ...(canonicalModifications ? { modifications: canonicalModifications } : {}),
                 ...(Array.isArray(structure?.modificationSlots)
                     ? { modificationSlots: nextSlots }
                     : { modifications: nextSlots }),
             };
         }),
     }, manifest);
+}
+
+function isUpgradeModificationSlot(slot) {
+    const componentType = String(slot?.componentType ?? '').toLowerCase();
+    const slotName = String(slot?.name ?? '').toLowerCase();
+    return componentType.includes('upgradeslotcomponent')
+        || slotName.includes('upgradeslot');
+}
+
+function resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification) {
+    const isUpgradeVariant = variant?.isUpgrade === true
+        || sourceModification?.isUpgrade === true
+        || (isUpgradeModificationSlot(slot) && normalizeId(variantId) !== 'default');
+
+    if (!isUpgradeVariant) {
+        return {};
+    }
+
+    return {
+        isUpgrade: true,
+        ...(sourceModification?.upgradeName || variant?.upgradeName
+            ? { upgradeName: sourceModification?.upgradeName ?? variant?.upgradeName }
+            : {}),
+        ...(sourceModification?.parentStructureId || variant?.parentStructureId
+            ? { parentStructureId: sourceModification?.parentStructureId ?? variant?.parentStructureId }
+            : {}),
+        ...(sourceModification?.rootStructureId || variant?.rootStructureId
+            ? { rootStructureId: sourceModification?.rootStructureId ?? variant?.rootStructureId }
+            : {}),
+        ...(sourceModification?.appliedModificationId || variant?.appliedModificationId
+            ? { appliedModificationId: sourceModification?.appliedModificationId ?? variant?.appliedModificationId }
+            : {}),
+    };
 }
 
 function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument = null, modificationRenderIndexDocument = null) {
@@ -3438,22 +3482,21 @@ function resolveDerivedDefaultIconAssetKind(fileName) {
     return 'icon.default';
 }
 
-async function deriveRenderedIconWebpFromPreviewPng(previewPngPath, subTypeIconUrl = null) {
-    const previewPng = await readFileWithRetries(previewPngPath);
-    let workingImage = previewPng;
+async function deriveRenderedIconWebpFromSourceImage(sourceImage, subTypeIconUrl = null) {
+    let workingImage = sourceImage;
 
     const normalizedSubTypeIconUrl = String(subTypeIconUrl ?? '').trim();
     if (normalizedSubTypeIconUrl) {
         try {
             const subTypeIconSource = await readPublishedIconSourceFile(generatedIconsDirectory, normalizedSubTypeIconUrl);
-            // Compose at full preview resolution before downscale (matches ASSET-OUTPUT.md).
+            // Compose at full source resolution before downscale (matches ASSET-OUTPUT.md).
             workingImage = await composeSubtypeIcon(
-                previewPng,
+                sourceImage,
                 subTypeIconSource.content,
                 { lossless: true, quality: 100, effort: 6 },
             );
         } catch (error) {
-            logPublishWarn(`failed to compose subtype icon ${normalizedSubTypeIconUrl} onto preview ${previewPngPath}: ${error}`);
+            logPublishWarn(`failed to compose subtype icon ${normalizedSubTypeIconUrl}: ${error}`);
         }
     }
 
@@ -3461,6 +3504,59 @@ async function deriveRenderedIconWebpFromPreviewPng(previewPngPath, subTypeIconU
         .resize(maxRenderedIconEdgePx, maxRenderedIconEdgePx, { fit: 'inside', withoutEnlargement: true })
         .webp(lossyRenderedIconWebpOptions)
         .toBuffer();
+}
+
+async function deriveRenderedIconWebpFromPreviewPng(previewPngPath, subTypeIconUrl = null) {
+    const previewPng = await readFileWithRetries(previewPngPath);
+    return deriveRenderedIconWebpFromSourceImage(previewPng, subTypeIconUrl);
+}
+
+async function resolveBlankPreviewRenderedIconFallbackSource(previewPngPath, renderedIconPath, manifest = null) {
+    const pencilDefaultPath = previewPngPath.replace(/\.preview\.png$/i, '.icon.default.png');
+    if (await pathExists(pencilDefaultPath) && await imageFileHasVisiblePixels(pencilDefaultPath)) {
+        return {
+            sourceFilePath: pencilDefaultPath,
+            content: await readFileWithRetries(pencilDefaultPath),
+            kind: 'pencil-default',
+        };
+    }
+
+    const publicDefaultPath = renderedIconPath.replace(/\.icon\.rendered\.webp$/i, '.icon.default.webp');
+    if (await pathExists(publicDefaultPath) && await imageFileHasVisiblePixels(publicDefaultPath)) {
+        return {
+            sourceFilePath: publicDefaultPath,
+            content: await readFileWithRetries(publicDefaultPath),
+            kind: 'colocated-default',
+        };
+    }
+
+    const location = parseAssetRelativeLocation(renderedIconPath);
+    const assetId = normalizeId(location?.assetId ?? location?.modificationId);
+    if (assetId) {
+        const generatedIconPath = await resolveGeneratedIconFilePathForAssetId(assetId, generatedIconsDirectory);
+        if (generatedIconPath) {
+            return {
+                sourceFilePath: generatedIconPath,
+                content: await readFileWithRetries(generatedIconPath),
+                kind: 'generated-icon',
+            };
+        }
+    }
+
+    const owner = resolveManifestOwnerForPublicRenderedAsset(manifest, renderedIconPath);
+    const ownerId = normalizeId(owner?.structure?.id ?? owner?.sourceStructure?.id);
+    if (ownerId && ownerId !== assetId) {
+        const generatedIconPath = await resolveGeneratedIconFilePathForAssetId(ownerId, generatedIconsDirectory);
+        if (generatedIconPath) {
+            return {
+                sourceFilePath: generatedIconPath,
+                content: await readFileWithRetries(generatedIconPath),
+                kind: 'generated-icon',
+            };
+        }
+    }
+
+    return null;
 }
 
 function createEmptyRawRenderedAssetSyncStats() {
@@ -3530,14 +3626,19 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
     if (extension === '.png') {
         const previewWebpPath = outputPath.replace(/\.png$/i, '.webp');
         if (basename(filePath).toLowerCase().endsWith('.preview.png')) {
-            await mkdir(dirname(previewWebpPath), { recursive: true });
-            const previewPng = await readFileWithRetries(filePath);
-            const previewWebp = await sharp(previewPng).webp(lossyPreviewWebpOptions).toBuffer();
-            if (await writeFileIfChanged(previewWebpPath, previewWebp)) {
-                stats.previewSynced += 1;
-                logPublishDetail(`synced preview master ${filePath} -> ${previewWebpPath}`);
+            const previewPngHasVisiblePixels = await imageFileHasVisiblePixels(filePath);
+            if (previewPngHasVisiblePixels) {
+                await mkdir(dirname(previewWebpPath), { recursive: true });
+                const previewPng = await readFileWithRetries(filePath);
+                const previewWebp = await sharp(previewPng).webp(lossyPreviewWebpOptions).toBuffer();
+                if (await writeFileIfChanged(previewWebpPath, previewWebp)) {
+                    stats.previewSynced += 1;
+                    logPublishDetail(`synced preview master ${filePath} -> ${previewWebpPath}`);
+                } else {
+                    stats.reused += 1;
+                }
             } else {
-                stats.reused += 1;
+                logPublishDetail(`skipping blank preview master ${filePath}`);
             }
 
             const renderedIconPath = previewWebpPath.replace(/\.preview\.webp$/i, '.icon.rendered.webp');
@@ -3552,14 +3653,40 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
                         defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
                     })
                     : null;
-                const renderedIcon = await deriveRenderedIconWebpFromPreviewPng(filePath, subTypeIconUrl);
-                if (await writeFileIfChanged(renderedIconPath, renderedIcon)) {
+
+                let renderedIcon = null;
+                let derivedFrom = filePath;
+                if (previewPngHasVisiblePixels) {
+                    renderedIcon = await deriveRenderedIconWebpFromPreviewPng(filePath, subTypeIconUrl);
+                } else {
+                    const fallbackSource = await resolveBlankPreviewRenderedIconFallbackSource(
+                        filePath,
+                        renderedIconPath,
+                        manifest,
+                    );
+                    if (fallbackSource?.content) {
+                        renderedIcon = await deriveRenderedIconWebpFromSourceImage(
+                            fallbackSource.content,
+                            subTypeIconUrl,
+                        );
+                        derivedFrom = fallbackSource.sourceFilePath;
+                        logPublishDetail(
+                            `blank preview ${filePath}; deriving icon.rendered from ${fallbackSource.kind} ${derivedFrom}`,
+                        );
+                    } else {
+                        logPublishWarn(
+                            `blank preview ${filePath}; no icon fallback for ${renderedIconPath}`,
+                        );
+                    }
+                }
+
+                if (renderedIcon && await writeFileIfChanged(renderedIconPath, renderedIcon)) {
                     stats.derivedIcons += 1;
                     logPublishDetail(
-                        `derived icon.rendered ${filePath} -> ${renderedIconPath}`
+                        `derived icon.rendered ${derivedFrom} -> ${renderedIconPath}`
                         + (subTypeIconUrl ? ' (with subtype)' : ''),
                     );
-                } else {
+                } else if (renderedIcon) {
                     stats.reused += 1;
                 }
             }
@@ -3706,15 +3833,17 @@ async function syncSharedModificationDefaultIconAssets(manifest) {
     let coLocatedSharedModificationAssets = 0;
 
     for (const [sharedModificationId, modification] of Object.entries(manifest?.shared?.modifications ?? {})) {
-        const sharedDefaultIconUrl = String(modification?.icons?.default ?? modification?.iconUrl ?? '').trim();
-        if (!sharedDefaultIconUrl) {
-            continue;
-        }
-
         const normalizedSharedModificationId = normalizeId(sharedModificationId);
         const sharedModificationSources = sharedModificationSourceById.get(normalizedSharedModificationId);
+        // Prefer explicit source metadata from buildSharedModificationStore. Falling back to the
+        // published/generated default URL only helps when that file already exists on disk.
+        const defaultIconSourceUrl = sharedModificationSources?.defaultIconSourceUrl
+            ?? sharedModificationDefaultIconSourceById.get(normalizedSharedModificationId)
+            ?? (normalizePublishedIconAssetUrl(String(
+                modification?.icons?.default ?? modification?.iconUrl ?? '',
+            ).trim()) || null);
         const sourceEntries = [
-            ['.icon.default', sharedModificationSources?.defaultIconSourceUrl ?? sharedModificationDefaultIconSourceById.get(normalizedSharedModificationId) ?? null],
+            ['.icon.default', defaultIconSourceUrl],
             ['.icon.rendered', sharedModificationSources?.renderedIconSourceUrl ?? null],
             ['.preview', sharedModificationSources?.previewSourceUrl ?? null],
             ['.texture', sharedModificationSources?.textureSourceUrl ?? null],
@@ -5861,7 +5990,7 @@ function extractSharedModificationPayload(sharedModificationId, variant) {
 
     const sourceIcons = isPlainObject(variant.icons) ? variant.icons : {};
     const sourceSprite = isPlainObject(variant.sprite) ? variant.sprite : {};
-    const hasDefaultIcon = Boolean(sourceIcons.default);
+    const hasDefaultIcon = Boolean(sourceIcons.default || variant.iconUrl);
     const hasPreview = Boolean(variant.previewUrl);
     const hasRenderedVisual = Boolean(sourceIcons.rendered || hasPreview || sourceSprite.source);
     const hasSpriteMetadata = [
@@ -6754,6 +6883,7 @@ function applyStructureRenderUrls(
                                 ...(renderEntry?.anchorY !== null && typeof renderEntry?.anchorY !== 'undefined' ? { anchorY: renderEntry.anchorY } : {}),
                                 ...(renderEntry?.offsetX !== null && typeof renderEntry?.offsetX !== 'undefined' ? { offsetX: renderEntry.offsetX } : {}),
                                 ...(renderEntry?.offsetY !== null && typeof renderEntry?.offsetY !== 'undefined' ? { offsetY: renderEntry.offsetY } : {}),
+                                ...resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification),
                                 ...(renderEntry?.isUpgrade ? { isUpgrade: true } : {}),
                                 ...(renderEntry?.upgradeName ? { upgradeName: renderEntry.upgradeName } : {}),
                                 ...(renderEntry?.parentStructureId ? { parentStructureId: renderEntry.parentStructureId } : {}),
@@ -6924,6 +7054,7 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                     }
 
                     const defaultIconUrl = variant?.icons?.default
+                        ?? variant?.iconUrl
                         ?? sourceModification?.icons?.default
                         ?? sourceModification?.iconUrl
                         ?? targetStructure?.icons?.default
@@ -7021,7 +7152,9 @@ function stripPublishedModificationSlotNoise(manifest, modificationEntriesByKey,
                                 },
                             }
                             : {}),
-                        ...(variant?.isUpgrade === true || sourceModification?.isUpgrade === true ? { isUpgrade: true } : {}),
+                        ...(variant?.isUpgrade === true || sourceModification?.isUpgrade === true || resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification).isUpgrade
+                            ? { isUpgrade: true }
+                            : {}),
                         ...(upgradeName ? { upgradeName } : {}),
                         ...(parentStructureId ? { parentStructureId } : {}),
                         ...(rootStructureId ? { rootStructureId } : {}),
@@ -7274,7 +7407,24 @@ try {
         structureRenderEntries.modificationEntriesByKey,
         structureRenderEntries.modificationEntriesByAssetId,
     );
-    await syncSharedModificationDefaultIconAssets(manifestWithStrippedSlotNoise);
+    const {
+        manifest: manifestAfterHostLocalModDefaultIcons,
+        coLocatedIconKeys: coLocatedSingleUseModDefaultIconKeys,
+    } = await coLocateSingleUseHostLocalModificationDefaultIcons(manifestWithStrippedSlotNoise, {
+        readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
+        writeIconFile: writeFileIfChanged,
+        resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
+    });
+    // coLocate rebuilds the manifest via object spread, which drops non-enumerable
+    // __sharedModification* source metadata. Reattach before shared default icon sync.
+    const manifestWithCoLocatedModDefaultIcons = attachSharedModificationSourceMetadata(
+        attachSharedModificationDefaultIconSourceMetadata(
+            manifestAfterHostLocalModDefaultIcons,
+            manifestWithStrippedSlotNoise.__sharedModificationDefaultIconSourceById,
+        ),
+        manifestWithStrippedSlotNoise.__sharedModificationSourceById,
+    );
+    await syncSharedModificationDefaultIconAssets(manifestWithCoLocatedModDefaultIcons);
     const authoredModificationOverrides = await loadAuthoredSharedModificationOverrides();
     const authoredStructurePreviewDirections = await loadAuthoredStructurePreviewDirections(assetOverridesDirectory);
     const authoredStructureMarkedCargoOverlays = await loadAuthoredStructureMarkedCargoOverlays(assetOverridesDirectory);
@@ -7282,7 +7432,7 @@ try {
         preserveAuthoredModificationPreviewDirections(
             preserveAuthoredStructureMarkedCargoOverlays(
                 preserveAuthoredStructurePreviewDirections(
-                    manifestWithStrippedSlotNoise,
+                    manifestWithCoLocatedModDefaultIcons,
                     manifestWithSeededSharedModificationIds,
                     authoredStructurePreviewDirections,
                 ),
@@ -7327,6 +7477,19 @@ try {
 
     if (referencedSharedGeneratedIconKeys.size > 0) {
         await syncPublishedIconsToPublicDirectoryByKey(generatedIconsDirectory, publicIconsDirectory, referencedSharedGeneratedIconKeys);
+    }
+
+    const removedCoLocatedAwayIcons = await removePublicIconsByKey(
+        publicIconsDirectory,
+        new Set([...coLocatedSingleUseModDefaultIconKeys].filter(key => !referencedSharedGeneratedIconKeys.has(key))),
+        {
+            pathExists,
+            unlink,
+            walkFiles,
+        },
+    );
+    if (removedCoLocatedAwayIcons > 0) {
+        logPublishSummary(`publish-manifest: removed ${removedCoLocatedAwayIcons} icons after co-locating single-use mod defaults`);
     }
 
     await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
