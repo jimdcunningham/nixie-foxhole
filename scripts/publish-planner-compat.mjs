@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +49,7 @@ export async function publishPlannerCompat(options = {}) {
     }
 
     const outputPath = options.plannerCompatPath ?? resolve(root, 'apps', 'foxhole-planner', 'public', 'foxhole', 'assets', 'planner-compat.json');
+    await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(compatDocument, null, 2)}\n`, 'utf8');
     return compatDocument;
 }

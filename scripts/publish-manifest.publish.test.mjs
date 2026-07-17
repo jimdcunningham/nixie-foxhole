@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { foxholeManifestSchema } from '../../../apps/foxhole-planner/app/plugins/foxhole/nixie/manifest.ts';
+import { foxholeManifestSchema } from '../../../apps/foxhole-planner/app/plugins/foxhole/nixie/manifest-schema.ts';
 import {
     augmentTargetedOnlyPublishedStructures,
     getExplicitlyRemovedStructureIdsForTargetedPublish,
