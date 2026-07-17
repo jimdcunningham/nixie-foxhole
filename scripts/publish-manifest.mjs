@@ -4311,6 +4311,30 @@ function resolveSeededSharedModificationId(...candidates) {
     return null;
 }
 
+function isHostLocalModificationRenderUrl(structureId, url) {
+    const normalizedStructureId = normalizeId(structureId);
+    const normalizedUrl = String(url ?? '').trim().toLowerCase();
+    if (!normalizedStructureId || !normalizedUrl) {
+        return false;
+    }
+
+    return normalizedUrl.includes(`/types/structures/${normalizedStructureId}/modifications/`);
+}
+
+function renderEntryHasHostLocalModificationVisuals(structureId, renderEntry) {
+    if (!renderEntry || typeof renderEntry !== 'object') {
+        return false;
+    }
+
+    return [
+        renderEntry.previewUrl,
+        renderEntry.textureUrl,
+        renderEntry.defaultIconUrl,
+        renderEntry.renderedIconUrl,
+        renderEntry.iconUrl,
+    ].some(url => isHostLocalModificationRenderUrl(structureId, url));
+}
+
 function isSharedModificationRenderIndexEntry(entry) {
     if (normalizeId(entry?.structureId) === 'mods') {
         return true;
@@ -6881,6 +6905,7 @@ function applyStructureRenderUrls(
                         // from renderId — host-local fingerprint-divergent mods share a renderId
                         // without belonging in shared.modifications.
                         const preferredSharedModificationId = normalizeId(modificationLookupKey || modificationId) === 'default'
+                            || renderEntryHasHostLocalModificationVisuals(structure.id, renderEntry)
                             ? null
                             : resolveSeededSharedModificationId(
                                 renderEntry?.sharedModificationId,
@@ -7199,6 +7224,11 @@ function stripPublishedModificationSlotNoise(
                         : (variant?.sprite?.offsetY ?? sourceModification?.offsetY ?? targetStructure?.sprite?.offsetY);
 
                     const preferredSharedModificationId = normalizeId(variantId) === 'default'
+                        || renderEntryHasHostLocalModificationVisuals(structure.id, renderEntry)
+                        || (
+                            Array.isArray(variant?.renderLayers)
+                            && variant.renderLayers.some(layer => isHostLocalModificationRenderUrl(structure.id, layer?.textureUrl ?? layer?.u))
+                        )
                         ? null
                         : resolveSeededSharedModificationId(
                             renderEntry?.sharedModificationId,
