@@ -3,6 +3,9 @@
   "connector": {
     "pathStyle": "spline",
     "behavior": {
+      "pipeCurveScale": true,
+      "pipeExtension": true,
+      "socketSnapping": true,
       "undergroundPipe": true
     }
   }

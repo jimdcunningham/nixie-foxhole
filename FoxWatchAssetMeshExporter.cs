@@ -1447,7 +1447,10 @@ public sealed class FoxWatchAssetMeshExporter
 
     private void ApplyClassDefaultTransformFallback(FoxWatchBlueprintComponentReference targetReference, UObject export)
     {
-        if (!ShouldApplyClassDefaultTransformFallback(targetReference))
+        var shouldApplyTransform = ShouldApplyClassDefaultTransformFallback(targetReference);
+        var shouldFillEmptySocketTags = targetReference.SocketTags.Count == 0 &&
+            LooksLikeBuildSocketReference(targetReference);
+        if (!shouldApplyTransform && !shouldFillEmptySocketTags)
         {
             return;
         }
@@ -1476,25 +1479,32 @@ public sealed class FoxWatchAssetMeshExporter
                 return;
             }
 
-            if (ShouldReplaceRelativeLocationFromClassDefault(targetReference) &&
-                TryReadVector(defaultObject, "RelativeLocation", out var relativeLocation))
+            if (shouldApplyTransform)
             {
-                targetReference.RelativeLocation = relativeLocation.ToString();
-            }
+                if (ShouldReplaceRelativeLocationFromClassDefault(targetReference) &&
+                    TryReadVector(defaultObject, "RelativeLocation", out var relativeLocation))
+                {
+                    targetReference.RelativeLocation = relativeLocation.ToString();
+                }
 
-            if (ShouldReplaceRelativeRotationFromClassDefault(targetReference) &&
-                TryReadRotator(defaultObject, "RelativeRotation", out var relativeRotation))
+                if (ShouldReplaceRelativeRotationFromClassDefault(targetReference) &&
+                    TryReadRotator(defaultObject, "RelativeRotation", out var relativeRotation))
+                {
+                    targetReference.RelativeRotation = relativeRotation.ToString();
+                }
+
+                if (string.IsNullOrWhiteSpace(targetReference.RelativeScale) &&
+                    TryReadVector(defaultObject, "RelativeScale3D", out var relativeScale))
+                {
+                    targetReference.RelativeScale = relativeScale.ToString();
+                }
+
+                ApplyBuildSocketMetadata(targetReference, defaultObject);
+            }
+            else if (shouldFillEmptySocketTags)
             {
-                targetReference.RelativeRotation = relativeRotation.ToString();
+                ApplyBuildSocketMetadata(targetReference, defaultObject);
             }
-
-            if (string.IsNullOrWhiteSpace(targetReference.RelativeScale) &&
-                TryReadVector(defaultObject, "RelativeScale3D", out var relativeScale))
-            {
-                targetReference.RelativeScale = relativeScale.ToString();
-            }
-
-            ApplyBuildSocketMetadata(targetReference, defaultObject);
         }
         catch
         {
@@ -1545,9 +1555,23 @@ public sealed class FoxWatchAssetMeshExporter
 
     private static bool LooksLikeBuildSocketReference(FoxWatchBlueprintComponentReference targetReference)
     {
-        return targetReference.ComponentType.Contains("Socket", StringComparison.OrdinalIgnoreCase) ||
-            targetReference.ComponentName.Contains("Socket", StringComparison.OrdinalIgnoreCase) ||
-            targetReference.SourceClassName.Contains("Socket", StringComparison.OrdinalIgnoreCase);
+        return ContainsBuildSocketToken(targetReference.ComponentType) ||
+            ContainsBuildSocketToken(targetReference.ComponentName) ||
+            ContainsBuildSocketToken(targetReference.SourceClassName);
+    }
+
+    private static bool ContainsBuildSocketToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return value.Contains("Socket", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("PipelineInput", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("PipelineOutput", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("PipeInput", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("PipeOutput", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsIdentityVectorText(string? value)

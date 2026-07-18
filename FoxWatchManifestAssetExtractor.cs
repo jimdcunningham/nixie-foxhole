@@ -36,6 +36,8 @@ public class FoxWatchManifestAssetExtractor
         private const string VehicleDynamicDataPackagePath = "War/Content/Blueprints/Data/BPVehicleDynamicData.uasset";
         private const string ItemDynamicDataPackagePath = "War/Content/Blueprints/Data/BPItemDynamicData.uasset";
         private const string WreckedSubTypeIconObjectPath = "War/Content/Textures/UI/ItemIcons/SubtypeWreckedIcon.0";
+        private const long FacilityLiquidPipeSocketMask = 2048;
+        private const long FacilityLiquidPipeSocketCategory = 16384;
         private static readonly string[] InvalidAssetIconPackagePaths =
         [
             "War/Content/Textures/UI/StructureIcons/GarrisonStructureIcon.uasset",
@@ -6167,7 +6169,7 @@ public class FoxWatchManifestAssetExtractor
 
             var transform = ResolveComponentReferenceTransform(componentReference, componentReferences);
 
-            return new FoxWatchManifestBuildSocket
+            var socket = new FoxWatchManifestBuildSocket
             {
                 Name = componentName,
                 ComponentType = componentType,
@@ -6186,6 +6188,8 @@ public class FoxWatchManifestAssetExtractor
                 Z = transform.Z,
                 Rotation = transform.YawDegrees,
             };
+            EnsureFacilityLiquidPipeSocketTags(socket);
+            return socket;
         }
 
         private FoxWatchManifestBuildSocket? ExtractBuildSocket(
@@ -6216,7 +6220,7 @@ public class FoxWatchManifestAssetExtractor
 
             var transform = ResolveComponentTransform(component, componentLookup);
 
-            return new FoxWatchManifestBuildSocket
+            var socket = new FoxWatchManifestBuildSocket
             {
                 Name = componentName,
                 ComponentType = componentType,
@@ -6227,6 +6231,8 @@ public class FoxWatchManifestAssetExtractor
                 Z = transform.Z,
                 Rotation = transform.YawDegrees,
             };
+            EnsureFacilityLiquidPipeSocketTags(socket);
+            return socket;
         }
 
         private static List<FoxWatchManifestSocketTag> ExtractSocketTags(object? value)
@@ -9761,7 +9767,7 @@ public class FoxWatchManifestAssetExtractor
 
             var transform = ResolveComponentReferenceTransform(componentReference, componentReferences);
 
-            return new FoxWatchManifestBuildSocket
+            var socket = new FoxWatchManifestBuildSocket
             {
                 Name = componentName,
                 ComponentType = componentType,
@@ -9779,6 +9785,40 @@ public class FoxWatchManifestAssetExtractor
                 Z = transform.Z,
                 Rotation = transform.YawDegrees,
             };
+            EnsureFacilityLiquidPipeSocketTags(socket);
+            return socket;
+        }
+
+        private static void EnsureFacilityLiquidPipeSocketTags(FoxWatchManifestBuildSocket socket)
+        {
+            if (socket.SocketTags.Count > 0 || !IsFacilityLiquidPipeSocket(socket))
+            {
+                return;
+            }
+
+            // Facility liquid inputs/outputs snap against pipe-network sockets via cross-bit
+            // mask/category overlap. Game data often omits SocketTags on PipelineOutput CDOs.
+            socket.SocketTags.Add(new FoxWatchManifestSocketTag
+            {
+                Mask = FacilityLiquidPipeSocketMask,
+                Category = FacilityLiquidPipeSocketCategory,
+            });
+        }
+
+        private static bool IsFacilityLiquidPipeSocket(FoxWatchManifestBuildSocket socket)
+        {
+            if (string.Equals(socket.PipeType, "Input", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(socket.PipeType, "Output", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var componentType = socket.ComponentType ?? string.Empty;
+            var componentName = socket.Name ?? string.Empty;
+            return componentType.Contains("PipelineInput", StringComparison.OrdinalIgnoreCase) ||
+                componentType.Contains("PipelineOutput", StringComparison.OrdinalIgnoreCase) ||
+                componentName.Contains("PipeInput", StringComparison.OrdinalIgnoreCase) ||
+                componentName.Contains("PipeOutput", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool HasInheritedComponentRelativeLocation(
@@ -10042,7 +10082,7 @@ public class FoxWatchManifestAssetExtractor
 
             var transform = ResolveComponentTransform(component, componentLookup);
 
-            return new FoxWatchManifestBuildSocket
+            var socket = new FoxWatchManifestBuildSocket
             {
                 Name = componentName,
                 ComponentType = componentType,
@@ -10053,6 +10093,8 @@ public class FoxWatchManifestAssetExtractor
                 Z = transform.Z,
                 Rotation = transform.YawDegrees,
             };
+            EnsureFacilityLiquidPipeSocketTags(socket);
+            return socket;
         }
 
         private static List<FoxWatchManifestBuildFootprintBox> ExtractNestedBuildFootprintBoxes(object? value)
