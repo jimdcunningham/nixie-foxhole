@@ -9,7 +9,7 @@ import {
 import { logPublishDetail, logPublishSummary, logPublishWarn } from './publish-log.mjs';
 
 /**
- * Resolve the co-located `<renderId>.icon.default.webp` URL for a host-local modification
+ * Resolve the co-located `<variantId>.icon.default.webp` URL for a host-local modification
  * from an existing co-located texture/preview/rendered URL.
  */
 export function resolveHostLocalModificationDefaultIconUrl(variant) {
@@ -30,12 +30,12 @@ export function resolveHostLocalModificationDefaultIconUrl(variant) {
         }
 
         const folderPrefix = match[1];
-        const renderId = match[2];
-        if (!renderId) {
+        const variantId = match[2];
+        if (!variantId) {
             continue;
         }
 
-        return `${folderPrefix}${renderId}.icon.default.webp`;
+        return `${folderPrefix}${variantId}.icon.default.webp`;
     }
 
     return null;

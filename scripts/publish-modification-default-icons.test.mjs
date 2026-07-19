@@ -20,10 +20,10 @@ test('resolveHostLocalModificationDefaultIconUrl derives from rendered path', ()
     assert.equal(
         resolveHostLocalModificationDefaultIconUrl({
             icons: {
-                rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.rendered.webp',
+                rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric/electric.icon.rendered.webp',
             },
         }),
-        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.default.webp',
+        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric/electric.icon.default.webp',
     );
 });
 
@@ -114,7 +114,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
     const iconsRoot = resolve(publicAssetsRoot, 'icons');
     const modDir = resolve(
         publicAssetsRoot,
-        'types/structures/facilitymineoil/modifications/electric-d0e9b79d4503',
+        'types/structures/facilitymineoil/modifications/electric',
     );
     await mkdir(iconsRoot, { recursive: true });
     await mkdir(modDir, { recursive: true });
@@ -134,7 +134,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
                             electric: {
                                 icons: {
                                     default: '/foxhole/assets/icons/facilityelectricoilwellicon.webp',
-                                    rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.rendered.webp',
+                                    rendered: '/foxhole/assets/types/structures/facilitymineoil/modifications/electric/electric.icon.rendered.webp',
                                 },
                             },
                         },
@@ -149,7 +149,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
                             barbedwire: {
                                 icons: {
                                     default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
-                                    rendered: '/foxhole/assets/types/structures/trencht2/modifications/barbedwire-4ba3702b0c45/barbedwire-4ba3702b0c45.icon.rendered.webp',
+                                    rendered: '/foxhole/assets/types/structures/trencht2/modifications/barbedwire/barbedwire.icon.rendered.webp',
                                 },
                             },
                         },
@@ -164,7 +164,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
                             barbedwire: {
                                 icons: {
                                     default: '/foxhole/assets/icons/barbedwirestructureicon.webp',
-                                    rendered: '/foxhole/assets/types/structures/trencht1/modifications/barbedwire-4ba3702b0c45/barbedwire-4ba3702b0c45.icon.rendered.webp',
+                                    rendered: '/foxhole/assets/types/structures/trencht1/modifications/barbedwire/barbedwire.icon.rendered.webp',
                                 },
                             },
                         },
@@ -199,7 +199,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
     assert.deepEqual([...result.coLocatedIconKeys], ['facilityelectricoilwellicon']);
     assert.equal(
         result.manifest.assets[0].modifications[0].variants.electric.icons.default,
-        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric-d0e9b79d4503/electric-d0e9b79d4503.icon.default.webp',
+        '/foxhole/assets/types/structures/facilitymineoil/modifications/electric/electric.icon.default.webp',
     );
     assert.equal(
         result.manifest.assets[1].modifications[0].variants.barbedwire.icons.default,

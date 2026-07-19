@@ -110,7 +110,7 @@ Output files use these names:
 - `<structureId>.texture.webp` for top-down structure renders
 - `<structureId>.preview.png` for lossless preview masters (publish converts to `.preview.webp`)
 - `<structureId>.icon.default.png` when `generateDefaultIcon` applies and no blueprint default exists
-- `modifications/<renderId>/<renderId>.preview.png` for host-specific modification previews
+- `modifications/<variantId>/<variantId>.preview.png` for host-specific modification previews
 - `../../shared/modifications/<renderId>/<renderId>.*` for deduped cross-host modification renders
 - `components/<componentId>/<componentId>.texture.webp` for standalone render layers
 

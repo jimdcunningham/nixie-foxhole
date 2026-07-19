@@ -23,6 +23,15 @@ import {
     removePublicIconsByKey,
 } from './publish-modification-default-icons.mjs';
 import {
+    assertUniqueHostModificationVariantRenderIds,
+    buildHostLocalModificationRenderLookupKeys,
+    canShareModificationVariant,
+    hasStandaloneModificationContentHashSuffix,
+    isHashedHostLocalModificationDirectoryName,
+    isSharedModificationRenderSceneEntry,
+    resolveAssetScopedModificationRenderEntry,
+} from './modification-storage-policy.mjs';
+import {
     buildRenderIdComputation,
     buildSharedModificationIdComputation,
     createSharedModificationHashDiagnosticInput,
@@ -1576,6 +1585,10 @@ function compactModificationSlots(value) {
 }
 
 function getStructurePublishedModificationSlots(structure) {
+    if (isStandaloneDestroyedOrBreachedStructure(structure)) {
+        return [];
+    }
+
     if (Array.isArray(structure?.modifications)) {
         return structure.modifications;
     }
@@ -2044,6 +2057,11 @@ function augmentPartialManifestWithPublishedContext(partialManifest, publishedMa
 }
 
 function getRawStructureModificationSlots(rawStructure) {
+    if (isStandaloneDestroyedOrBreachedStructure(rawStructure)
+        || isStandaloneDestroyedOrBreachedStructureId(rawStructure?.id)) {
+        return [];
+    }
+
     if (Array.isArray(rawStructure?.modificationSlots)) {
         return rawStructure.modificationSlots;
     }
@@ -2475,6 +2493,12 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
                         return [variantId, variant];
                     }
 
+                    const isUpgradeVariant = resolvePublishedUpgradeVariantContext(
+                        slot,
+                        variantId,
+                        variant,
+                        null,
+                    ).isUpgrade === true;
                     const existingRenderId = normalizeId(variant?.renderId);
                     const consumerKey = `${structureId}|${normalizeId(variantId)}`;
                     const sharedModificationId = sharedModificationIdByConsumer.get(consumerKey);
@@ -2482,7 +2506,7 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
                     if (existingRenderId) {
                         nextVariant.renderId = existingRenderId;
                     }
-                    if (sharedModificationId) {
+                    if (sharedModificationId && !isUpgradeVariant) {
                         nextVariant.sharedModificationId = sharedModificationId;
                     } else {
                         delete nextVariant.sharedModificationId;
@@ -2508,17 +2532,8 @@ function seedSharedModificationIdsFromRenderIndex(manifest, renderScenesIndexDoc
     }, manifest);
 }
 
-function isUpgradeModificationSlot(slot) {
-    const componentType = String(slot?.componentType ?? '').toLowerCase();
-    const slotName = String(slot?.name ?? '').toLowerCase();
-    return componentType.includes('upgradeslotcomponent')
-        || slotName.includes('upgradeslot');
-}
-
 function resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification) {
-    const isUpgradeVariant = variant?.isUpgrade === true
-        || sourceModification?.isUpgrade === true
-        || (isUpgradeModificationSlot(slot) && normalizeId(variantId) !== 'default');
+    const isUpgradeVariant = !canShareModificationVariant(slot, variantId, variant, sourceModification);
 
     if (!isUpgradeVariant) {
         return {};
@@ -2596,6 +2611,14 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
     }
 
     if (location.scope === 'component' && isStandaloneDestroyedOrBreachedStructureId(location.assetId)) {
+        return false;
+    }
+
+    // Host-local published paths use variantId only. Never sync stale *-hash folders from tmp.
+    if (
+        (location.scope === 'assetModification' || location.scope === 'assetModificationComponent')
+        && isHashedHostLocalModificationDirectoryName(location.modificationId)
+    ) {
         return false;
     }
 
@@ -4277,10 +4300,6 @@ function createRenderGeneratorStyleSharedModificationId(variantId, variant, stru
     return computation.renderId;
 }
 
-function hasStandaloneModificationContentHashSuffix(value) {
-    return /-[a-f0-9]{12}(?:-\d+)?$/.test(normalizeId(value));
-}
-
 function resolvePublishedSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
     const renderId = normalizeId(variant?.renderId)
         || normalizeId(candidateId);
@@ -4336,12 +4355,7 @@ function renderEntryHasHostLocalModificationVisuals(structureId, renderEntry) {
 }
 
 function isSharedModificationRenderIndexEntry(entry) {
-    if (normalizeId(entry?.structureId) === 'mods') {
-        return true;
-    }
-
-    const consumers = Array.isArray(entry?.consumers) ? entry.consumers : [];
-    return consumers.length > 0;
+    return isSharedModificationRenderSceneEntry(entry);
 }
 
 function resolvePreferredSharedModificationId(candidateId, variantId, variant, structurePreviewDirection, diagnosticsContext = null) {
@@ -4799,6 +4813,10 @@ async function collectAssetRenderEntries(
     }
 
     if (location.scope === 'assetModification') {
+        // Ignore stale hashed host-local leftovers still on disk from older publishes.
+        if (isHashedHostLocalModificationDirectoryName(location.modificationId)) {
+            return;
+        }
         modificationEntriesByAssetId[location.assetId] ??= {};
         await collectModificationRenderEntries(
             modificationEntriesByAssetId[location.assetId],
@@ -4811,6 +4829,9 @@ async function collectAssetRenderEntries(
     }
 
     if (location.scope === 'assetModificationComponent') {
+        if (isHashedHostLocalModificationDirectoryName(location.modificationId)) {
+            return;
+        }
         await collectModificationComponentRenderEntries(
             modificationLayerEntriesByAssetId,
             location.assetId,
@@ -5812,14 +5833,7 @@ function hasReferencedArtifactDirectory(referencedDirectories, directoryPath) {
     return false;
 }
 
-function getSharedModificationVariantPrefix(sharedModificationId) {
-    const normalizedSharedModificationId = normalizeId(sharedModificationId);
-    const hashSuffixMatch = normalizedSharedModificationId.match(/^(.+)-[a-f0-9]{12}(?:-\d+)?$/);
-    return hashSuffixMatch ? hashSuffixMatch[1] : normalizedSharedModificationId;
-}
-
 function collectReferencedSharedModificationArtifactDirectories(manifest, directories = new Set()) {
-    const referencedPrefixes = new Set();
     const referencedSharedModificationIds = collectReferencedSharedModificationIds(manifest);
     for (const sharedModificationId of Object.keys(manifest?.shared?.modifications ?? {})) {
         referencedSharedModificationIds.add(normalizeId(sharedModificationId));
@@ -5831,34 +5845,25 @@ function collectReferencedSharedModificationArtifactDirectories(manifest, direct
             continue;
         }
 
-        referencedPrefixes.add(getSharedModificationVariantPrefix(assetPathId));
         directories.add(normalizeFileSystemPathForComparison(
             resolve(sharedAssetsDirectory, 'modifications', assetPathId),
         ));
     }
 
-    return {
-        directories,
-        referencedPrefixes,
-    };
+    return directories;
 }
 
 function isReferencedSharedModificationArtifactDirectory(
     directoryName,
     referencedDirectories,
-    referencedPrefixes,
 ) {
     const candidateDirectory = resolve(sharedAssetsDirectory, 'modifications', directoryName);
-    if (hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory)) {
-        return true;
-    }
-
-    return referencedPrefixes.has(getSharedModificationVariantPrefix(directoryName));
+    return hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory);
 }
 
 async function removeUnreferencedGeneratedModificationArtifactDirectories(manifest, structureIds = null) {
     const referencedDirectories = collectReferencedPublicAssetDirectories(manifest);
-    const { referencedPrefixes } = collectReferencedSharedModificationArtifactDirectories(manifest, referencedDirectories);
+    collectReferencedSharedModificationArtifactDirectories(manifest, referencedDirectories);
     const scopedStructureIds = structureIds instanceof Set
         ? structureIds
         : new Set((manifest?.assets ?? [])
@@ -5884,7 +5889,11 @@ async function removeUnreferencedGeneratedModificationArtifactDirectories(manife
             }
 
             const candidateDirectory = resolve(modificationsDirectory, entry.name);
-            if (hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory)) {
+            // Hashed host-local folders are always stale under the variantId layout.
+            if (
+                !isHashedHostLocalModificationDirectoryName(entry.name)
+                && hasReferencedArtifactDirectory(referencedDirectories, candidateDirectory)
+            ) {
                 continue;
             }
 
@@ -5903,7 +5912,7 @@ async function removeUnreferencedGeneratedModificationArtifactDirectories(manife
             }
 
             const candidateDirectory = resolve(sharedModificationsDirectory, entry.name);
-            if (isReferencedSharedModificationArtifactDirectory(entry.name, referencedDirectories, referencedPrefixes)) {
+            if (isReferencedSharedModificationArtifactDirectory(entry.name, referencedDirectories)) {
                 continue;
             }
 
@@ -6198,6 +6207,11 @@ function buildSharedModificationStore(manifest) {
         modifications: getStructurePublishedModificationSlots(structure).map(slot => ({
             ...slot,
             variants: sortObjectEntries(Object.fromEntries(Object.entries(slot.variants ?? {}).map(([variantId, variant]) => {
+                if (resolvePublishedUpgradeVariantContext(slot, variantId, variant, null).isUpgrade === true) {
+                    const { sharedModificationId: _sharedModificationId, ...hostLocalVariant } = variant;
+                    return [variantId, hostLocalVariant];
+                }
+
                 const localVariantPayload = extractLocalSharedModificationPayload(variant);
                 const sharedModificationSources = {
                     defaultIconSourceUrl: normalizePublishedIconAssetUrl(String(
@@ -6905,6 +6919,7 @@ function applyStructureRenderUrls(
                         // from renderId — host-local fingerprint-divergent mods share a renderId
                         // without belonging in shared.modifications.
                         const preferredSharedModificationId = normalizeId(modificationLookupKey || modificationId) === 'default'
+                            || modification?.isUpgrade === true
                             || renderEntryHasHostLocalModificationVisuals(structure.id, renderEntry)
                             ? null
                             : resolveSeededSharedModificationId(
@@ -6942,38 +6957,33 @@ function applyStructureRenderUrls(
                             const sourceModificationEntry = resolveSourceModification(structure, variantId, variant);
                             const sourceModification = sourceModificationEntry?.[1] ?? null;
                             const assetScopedEntries = modificationEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
-                            const assetScopedLookupKeys = [
-                                variant?.renderId,
-                                variant?.sharedModificationId,
+                            const renderEntry = resolveAssetScopedModificationRenderEntry(
+                                assetScopedEntries,
+                                modificationEntriesByKey,
+                                {
+                                    variantId,
+                                    variant,
+                                },
+                            );
+                            const isUpgradeVariant = resolvePublishedUpgradeVariantContext(
+                                slot,
                                 variantId,
-                                variant?.id,
-                                variant?.appliedModificationId,
-                            ]
-                                .map(normalizeId)
-                                .filter(Boolean);
-                            const renderEntry = assetScopedLookupKeys
-                                .map(lookupKey => assetScopedEntries?.[lookupKey])
-                                .find(Boolean)
-                                ?? modificationEntriesByKey?.[normalizeId(variant?.renderId)]
-                                ?? modificationEntriesByKey?.[normalizeId(variant?.sharedModificationId)]
-                                ?? modificationEntriesByKey?.[normalizeId(variantId)];
+                                variant,
+                                sourceModification,
+                            ).isUpgrade === true;
                             const preferredSharedModificationId = normalizeId(variantId) === 'default'
+                                || isUpgradeVariant
                                 ? null
                                 : resolveSeededSharedModificationId(
                                     renderEntry?.sharedModificationId,
                                     variant?.sharedModificationId,
                                     sourceModification?.sharedModificationId,
                                 );
-                            const modificationLayerLookupKeys = [
-                                variant?.renderId,
-                                variant?.sharedModificationId,
+                            const modificationLayerLookupKeys = buildHostLocalModificationRenderLookupKeys({
                                 variantId,
-                                variant?.id,
-                                variant?.appliedModificationId,
-                                preferredSharedModificationId,
-                            ]
-                                .map(normalizeId)
-                                .filter(Boolean);
+                                variant,
+                                extraKeys: [preferredSharedModificationId],
+                            });
                             const assetModificationLayerEntries = modificationLayerEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
                             const modificationLayerEntries = modificationLayerLookupKeys
                                 .map(lookupKey => assetModificationLayerEntries?.[lookupKey])
@@ -7141,23 +7151,15 @@ function stripPublishedModificationSlotNoise(
                         ? variant.cost
                         : (Object.keys(sourceModification?.cost ?? {}).length > 0 ? sourceModification.cost : null);
                     const assetScopedEntries = modificationEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
-                    const assetScopedLookupKeys = [
-                        variant?.renderId,
-                        variant?.sharedModificationId,
-                        variantId,
-                        variant?.modificationId,
-                        variant?.appliedModificationId,
-                        sourceModificationId,
-                    ]
-                        .map(normalizeId)
-                        .filter(Boolean);
-                    const renderEntry = assetScopedLookupKeys
-                        .map(lookupKey => assetScopedEntries?.[lookupKey])
-                        .find(Boolean)
-                        ?? modificationEntriesByKey?.[normalizeId(variant?.renderId)]
-                        ?? modificationEntriesByKey?.[normalizeId(variant?.sharedModificationId)]
-                        ?? modificationEntriesByKey?.[normalizeId(variantId)]
-                        ?? null;
+                    const renderEntry = resolveAssetScopedModificationRenderEntry(
+                        assetScopedEntries,
+                        modificationEntriesByKey,
+                        {
+                            variantId,
+                            variant,
+                            extraKeys: [sourceModificationId],
+                        },
+                    );
                     const localizedName = normalizeLocalizedText(
                         getPreferredLocalizedTextValue(targetStructure?.name, variant?.name, sourceModification?.name),
                         createModificationLocalizationId(structure.id, sourceModificationId, 'name'),
@@ -7223,7 +7225,14 @@ function stripPublishedModificationSlotNoise(
                         ? renderEntry.offsetY
                         : (variant?.sprite?.offsetY ?? sourceModification?.offsetY ?? targetStructure?.sprite?.offsetY);
 
+                    const isUpgradeVariant = resolvePublishedUpgradeVariantContext(
+                        slot,
+                        variantId,
+                        variant,
+                        sourceModification,
+                    ).isUpgrade === true;
                     const preferredSharedModificationId = normalizeId(variantId) === 'default'
+                        || isUpgradeVariant
                         || renderEntryHasHostLocalModificationVisuals(structure.id, renderEntry)
                         || (
                             Array.isArray(variant?.renderLayers)
@@ -7320,7 +7329,7 @@ function stripPublishedModificationSlotNoise(
                             }
                             : {}),
                         ...(modificationRenderLayers.length > 0 ? { renderLayers: modificationRenderLayers } : {}),
-                        ...(variant?.isUpgrade === true || sourceModification?.isUpgrade === true || resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceModification).isUpgrade
+                        ...(isUpgradeVariant
                             ? { isUpgrade: true }
                             : {}),
                         ...(upgradeName ? { upgradeName } : {}),
@@ -7497,6 +7506,7 @@ try {
     );
     const renderScenesIndexDocument = await loadRenderScenesIndexDocument();
     const modificationRenderIndexDocument = await loadModificationRenderIndexDocument();
+    assertUniqueHostModificationVariantRenderIds(modificationRenderIndexDocument);
     const structuresWithDestroyedRenderScenes = await loadStructureIdsWithDestroyedRenderScenes();
     const vehicleDestroyedPublishAllowlist = await loadVehicleDestroyedPublishAllowlist(assetOverridesDirectory);
     const manifestForPublishWithoutBogusDestroyed = foxholeManifestSchema.parse(

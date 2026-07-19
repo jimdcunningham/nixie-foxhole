@@ -71,12 +71,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             normalizedComponentReferences,
             cancellationToken);
 
-        var includeDestroyedComponents =
-            structure.IsDestroyed == true
-            || string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(structure.ProfileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
-            || structure.Id.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-            || structure.CodeName.Contains("Destroyed", StringComparison.OrdinalIgnoreCase);
+        var includeDestroyedComponents = IsDestroyedOrBreachedStructure(structure);
 
         var extraction = BuildExtraction(
             structure.Id,
@@ -84,7 +79,10 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             blueprintPackagePath,
             normalizedComponentReferences,
             allowDestroyedComponents: includeDestroyedComponents);
-        await AppendModificationSlotVariantsAsync(structure, extraction, normalizedComponentReferences, cancellationToken);
+        if (!includeDestroyedComponents)
+        {
+            await AppendModificationSlotVariantsAsync(structure, extraction, normalizedComponentReferences, cancellationToken);
+        }
 
         return extraction;
     }
@@ -3653,6 +3651,23 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     private static double ParseDouble(string value)
     {
         return double.Parse(value, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsDestroyedOrBreachedStructure(FoxWatchManifestStructure structure)
+    {
+        if (structure.IsDestroyed == true || structure.IsBreached == true)
+        {
+            return true;
+        }
+
+        var structureId = structure.Id ?? string.Empty;
+        var codeName = structure.CodeName ?? string.Empty;
+        return string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure.ProfileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
+            || structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+            || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase)
+            || codeName.Contains("Destroyed", StringComparison.OrdinalIgnoreCase)
+            || codeName.Contains("Breached", StringComparison.OrdinalIgnoreCase);
     }
 }
 

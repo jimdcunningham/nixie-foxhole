@@ -60,8 +60,8 @@ Each renderable asset has a bundle folder containing:
 | --- | --- |
 | `scene.json` | Living structure scene graph for Blender |
 | `destroyed.scene.json` | Destroyed variant scene (when applicable) |
-| `modifications/<renderId>.scene.json` | Modification variant scene for a host structure |
-| `modifications/<renderId>/components/<layerId>.scene.json` | Component-layer scene (splines, pipe spans, etc.) |
+| `modifications/<variantId>.scene.json` | Host-local modification variant scene |
+| `modifications/<variantId>/components/<layerId>.scene.json` | Host-local component-layer scene (splines, pipe spans, etc.) |
 | `components/<layerId>.scene.json` | Structure component layer (when used) |
 
 Blueprint default icon sources for the asset (when extracted) travel with the mesh/material export and are referenced from manifest `iconUrl` / slot variant icons until publish co-locates them.
@@ -122,17 +122,17 @@ apps/foxhole-planner/public/foxhole/assets/
             │   └── <layerId>/
             │       └── <layerId>.texture.webp
             └── modifications/
-                └── <renderId>/
-                    ├── <renderId>.texture.webp
-                    ├── <renderId>.preview.webp
-                    ├── <renderId>.icon.default.webp
-                    ├── <renderId>.icon.rendered.webp
+                └── <variantId>/
+                    ├── <variantId>.texture.webp
+                    ├── <variantId>.preview.webp
+                    ├── <variantId>.icon.default.webp
+                    ├── <variantId>.icon.rendered.webp
                     └── components/
                         └── <layerId>/
                             └── <layerId>.texture.webp
 ```
 
-`<codename>` and `<renderId>` are lowercase normalized identifiers.
+`<codename>` and host-local `<variantId>` are lowercase normalized identifiers. Shared modification folders under `shared/modifications/` still use `<renderId>` (`variantId` + content hash).
 
 Color variants (when present) use a hex suffix: `<codename>.texture.<rrggbb>.webp`, `<codename>.preview.<rrggbb>.webp`, etc.
 
@@ -194,7 +194,7 @@ Publish syncs **only** icon keys still referenced by the manifest under `/foxhol
 
 Path: `/foxhole/assets/types/<structures|items|vehicles>/<codename>/...`
 
-Every structure (and modification `renderId` folder) owns its published visuals here. This is what the planner loads for board placement and inspectors.
+Every structure (and host-local modification `variantId` folder) owns its published visuals here. This is what the planner loads for board placement and inspectors.
 
 ## Modifications
 
@@ -207,7 +207,7 @@ Every structure (and modification `renderId` folder) owns its published visuals 
 
 ### Modification render identity (`renderId`)
 
-Dedup and file naming use a stable **`renderId`**, not bare `variantId`:
+Cross-host identity and shared file naming use a stable **`renderId`**, not bare `variantId`:
 
 ```
 identity = variantId | templatePath
@@ -228,17 +228,27 @@ renderId = {variantId}-{sha256(identity)[0:12]}
 1. Build a per-consumer modification scene for each `(structureId, slotName, variantId)`.
 2. Group consumers by `renderId`.
 3. Hash each scene (`CreateStandaloneModificationSceneFingerprint`: meshes, materials, node tree, render settings).
-4. If every consumer in the group has the **same fingerprint** → one Blender output under `shared/modifications/<renderId>/`.
-5. If fingerprints **differ** (host mesh overrides, pipe insulation components, etc.) → keep per-host scenes under `types/structures/<host>/modifications/<renderId>/` — still the same `renderId` folder name.
+4. Before fingerprinting a non-upgrade global mod (e.g. `FortCommonMods`, `TrenchCommonMods`, `TrenchIntCommonMods`), detach its authored `upgrade:<variant>:root` subtree from the host structure and slot ancestors. Host wall/slot position/yaw must never enter the standalone scene.
+5. Non-upgrade multi-host groups with one canonical fingerprint → one Blender output under `shared/modifications/<renderId>/`. The shared scene document’s `structure.id` is rewritten to `mods` (not the representative host).
+6. Upgrade variants (`isUpgrade`) are never shared, even when fingerprints match. They stay under `types/structures/<host>/modifications/<variantId>/` (facility upgrades, pipe insulation, etc.).
+7. Single-host non-upgrades stay host-local, even when used by several slots on that host. During a scoped refresh, an existing `storage: shared` entry is preserved only when its retained index consumers include at least two distinct host structures.
+8. Destroyed/breached structures never expose modification slots and never count as modification consumers.
 
-Fingerprint is a comparison tool available only after scene generation. It is **not** the public identity.
+Host-local paths deliberately omit the render hash: `types/structures/<host>/modifications/<variantId>/`. Generation and publish fail if one `(host, variantId)` resolves to multiple `renderId` values, because that would make the host-local path ambiguous. Shared paths retain `renderId`.
+
+Fingerprint validates the detached global visual. It is **not** the public identity. Fingerprint divergence after detachment means the global assets genuinely differ.
+
+Publish treats a render-scene entry as shared **only** when `structureId === "mods"`. Host-local modification scenes still list consumers; consumers alone must not mark them shared, or host-local Blender outputs are skipped during sync.
+
+Offline check (no Blender/publish): `node ./tools/foxwatch/scripts/audit-modification-storage.mjs` against `tmp/renders`.
 
 ### Modification manifest rules
 
 - Slot `variants` in `manifest.v1.json` reference URLs for texture, preview, and icons.
 - When a visual is identical to another URL already in the manifest (shared mod, or fallback to default), emit the **same URL string** — never duplicate bytes on disk.
+- Upgrade variants never receive `sharedModificationId` and never contribute entries to `shared.modifications`.
 - `sharedModificationId` is **not** a published manifest field in the target design; `renderId` is a **file-path** concept, not a manifest hydration indirection.
-- Publish sets `sharedModificationId` on slot variants **only** when the modification render index marks that consumer as fingerprint-shared (`storage: shared` or multi-host dedup). Same `renderId` with differing host fingerprints (pipe insulation, etc.) stays co-located under `types/structures/<host>/modifications/<renderId>/` and does **not** enter `shared.modifications`.
+- Publish sets `sharedModificationId` on slot variants **only** when the modification render index marks that consumer as fingerprint-shared (`storage: shared` or multi-host dedup). Same `renderId` with differing host fingerprints (pipe insulation, etc.) stays co-located under `types/structures/<host>/modifications/<variantId>/` and does **not** enter `shared.modifications`.
 
 ## Manifest URL rules (no duplicate files)
 
@@ -287,7 +297,7 @@ Some assets render extra top-down layers (pipe spans, barbed wire splines, trenc
 
 ```
 types/structures/<codename>/components/<layerId>/<layerId>.texture.webp
-types/structures/<codename>/modifications/<renderId>/components/<layerId>/<layerId>.texture.webp
+types/structures/<codename>/modifications/<variantId>/components/<layerId>/<layerId>.texture.webp
 ```
 
 Component layers are **texture-only** in the published tree unless a separate preview/icon spec is added later.
@@ -309,7 +319,7 @@ Publish never derives `icon.rendered` from an already-lossy `preview.webp`. It a
 
 1. **Manifest generation (C#)** computes `renderId` once per slot variant and writes `modification-render-index.v1.json`.
 2. **Render scene generation** keys scenes and Blender `outputKey` paths by `renderId`; groups identical fingerprints into `mods/{renderId}` for shared Blender output.
-3. **Blender** writes `shared/modifications/{renderId}/` when deduped, otherwise `types/structures/{host}/modifications/{renderId}/`.
+3. **Blender** writes `shared/modifications/{renderId}/` when deduped, otherwise `types/structures/{host}/modifications/{variantId}/`.
 4. **Publish** reads `renderId` from the raw manifest only, syncs assets, derives `preview.webp` and `icon.rendered` from PNG masters, and emits URL aliases instead of copying files.
 
 ## Pruning

@@ -51,6 +51,13 @@ internal static class FoxWatchModificationRenderIdentity
         var renderIdsByConsumer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var structure in manifest.Assets)
         {
+            if (IsDestroyedOrBreachedStructure(structure))
+            {
+                structure.ModificationSlots = null;
+                structure.Modifications = [];
+                continue;
+            }
+
             if (structure.ModificationSlots is not { Count: > 0 } modificationSlots)
             {
                 continue;
@@ -94,6 +101,11 @@ internal static class FoxWatchModificationRenderIdentity
 
         foreach (var structure in manifest.Assets)
         {
+            if (IsDestroyedOrBreachedStructure(structure))
+            {
+                continue;
+            }
+
             if (structure.ModificationSlots is not { Count: > 0 } modificationSlots)
             {
                 continue;
@@ -172,7 +184,8 @@ internal static class FoxWatchModificationRenderIdentity
             }
 
             var retainedConsumers = entry.Consumers
-                .Where(consumer => !scopedStructureIds.Contains(consumer.StructureId))
+                .Where(consumer => !scopedStructureIds.Contains(consumer.StructureId)
+                    && !IsDestroyedOrBreachedStructureId(consumer.StructureId))
                 .ToList();
             if (retainedConsumers.Count == 0 && !scopedIndex.Entries.ContainsKey(renderId))
             {
@@ -311,6 +324,30 @@ internal static class FoxWatchModificationRenderIdentity
             && string.Equals(left.SlotName, right.SlotName, StringComparison.OrdinalIgnoreCase)
             && string.Equals(left.DataClassPath, right.DataClassPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(left.VariantId, right.VariantId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDestroyedOrBreachedStructure(FoxWatchManifestStructure structure)
+    {
+        if (structure.IsDestroyed == true || structure.IsBreached == true)
+        {
+            return true;
+        }
+
+        return IsDestroyedOrBreachedStructureId(structure.Id)
+            || IsDestroyedOrBreachedStructureId(structure.CodeName)
+            || string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure.ProfileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDestroyedOrBreachedStructureId(string? structureId)
+    {
+        if (string.IsNullOrWhiteSpace(structureId))
+        {
+            return false;
+        }
+
+        return structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+            || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase);
     }
 
     public static string ResolveTemplatePath(FoxWatchManifestModificationSlotVariant? variant)

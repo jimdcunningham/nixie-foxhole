@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -435,6 +436,26 @@ def restore_view_transform(scene, previous_state):
         view_settings.gamma = previous_state["gamma"]
 
 
+@contextlib.contextmanager
+def suppress_native_stderr():
+    """Mute C/C++ stderr (e.g. Freestyle duplicate-edge noise) without hiding Python logs."""
+    sys.stderr.flush()
+    try:
+        os.fsync(2)
+    except OSError:
+        pass
+
+    with open(os.devnull, "w", encoding="utf-8") as devnull:
+        saved_fd = os.dup(2)
+        try:
+            os.dup2(devnull.fileno(), 2)
+            yield
+        finally:
+            sys.stderr.flush()
+            os.dup2(saved_fd, 2)
+            os.close(saved_fd)
+
+
 def render_fallback_source(output_path: str):
     view_layer = bpy.context.view_layer
     image_settings = bpy.context.scene.render.image_settings
@@ -479,7 +500,10 @@ def render_fallback_source(output_path: str):
     line_set.select_edge_mark = False
     line_set.select_suggestive_contour = False
     try:
-        bpy.ops.render.render(write_still=True)
+        # Freestyle prints non-fatal "edge appears twice, correcting" noise for
+        # non-manifold game meshes; mute only during this render.
+        with suppress_native_stderr():
+            bpy.ops.render.render(write_still=True)
     finally:
         bpy.context.scene.render.use_freestyle = previous_use_freestyle
         view_layer.material_override = previous_override
@@ -537,7 +561,8 @@ def render_flat_lineart_source(output_path: str, thickness: int):
     line_set.select_edge_mark = False
     line_set.select_suggestive_contour = False
     try:
-        bpy.ops.render.render(write_still=True)
+        with suppress_native_stderr():
+            bpy.ops.render.render(write_still=True)
     finally:
         bpy.context.scene.render.use_freestyle = previous_use_freestyle
         view_layer.material_override = previous_override

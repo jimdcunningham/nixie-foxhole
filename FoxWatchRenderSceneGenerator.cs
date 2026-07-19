@@ -470,14 +470,13 @@ public sealed class FoxWatchRenderSceneGenerator
             }
             else
             {
-                modificationScene = CreateTopdownModificationScene(
+                modificationScene = CreateGlobalModificationScene(
                     CollapseBlueprintSceneVariants(
                         structure,
                         CloneBlueprintSceneExtraction(blueprintScene),
                         requestedVariantIds),
                     structure.Id,
-                    target.VariantId,
-                    string.IsNullOrWhiteSpace(target.SlotName) ? null : target.SlotName);
+                    target.VariantId);
             }
 
             if (modificationScene?.Roots.Count is not > 0)
@@ -507,6 +506,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     cancellationToken,
                     previewDirectionOverride: target.PreviewDirection),
                 IsStandaloneModification = true,
+                IsUpgrade = target.IsUpgrade,
                 Consumers = target.Consumers.Count > 0
                     ? target.Consumers
                     :
@@ -656,6 +656,41 @@ public sealed class FoxWatchRenderSceneGenerator
             return nonModificationDocuments;
         }
 
+        var hostVariantRenderIdCollisions = modificationDocuments
+            .SelectMany(document => document.Consumers
+                .Select(consumer => new
+                {
+                    StructureId = NormalizeStandaloneModificationKeyComponent(consumer.StructureId),
+                    VariantId = NormalizeStandaloneModificationKeyComponent(consumer.VariantId),
+                    RenderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(document)),
+                }))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.StructureId)
+                && !string.IsNullOrWhiteSpace(entry.VariantId)
+                && !string.IsNullOrWhiteSpace(entry.RenderId))
+            .GroupBy(
+                entry => $"{entry.StructureId}|{entry.VariantId}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                Key = group.Key,
+                RenderIds = group
+                    .Select(entry => entry.RenderId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToList(),
+            })
+            .Where(group => group.RenderIds.Count > 1)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToList();
+        if (hostVariantRenderIdCollisions.Count > 0)
+        {
+            var collisionSummary = string.Join(
+                "; ",
+                hostVariantRenderIdCollisions.Select(group => $"{group.Key} => {string.Join(", ", group.RenderIds)}"));
+            throw new InvalidOperationException(
+                $"Modification render identity collision: each host variant must resolve to exactly one renderId. {collisionSummary}");
+        }
+
         foreach (var renderIdGroup in modificationDocuments
             .GroupBy(document => NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(document)), StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.Ordinal))
@@ -663,16 +698,37 @@ public sealed class FoxWatchRenderSceneGenerator
             var documentsInGroup = renderIdGroup
                 .OrderBy(document => document.RelativeScenePath, StringComparer.Ordinal)
                 .ToList();
+            var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(documentsInGroup[0]));
+            var renderIndexEntry = FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(
+                modificationRenderIndex,
+                renderId);
+            var indexHasMultipleConsumerStructures = renderIndexEntry?.Consumers
+                .Select(consumer => consumer.StructureId)
+                .Where(structureId => !string.IsNullOrWhiteSpace(structureId)
+                    && !IsStandaloneDestroyedOrBreachedStructureId(structureId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .Count() > 1;
+            var indexSupportsSharedStorage = indexHasMultipleConsumerStructures
+                && FoxWatchModificationRenderIdentity.IsSharedModificationRenderIndexEntry(renderIndexEntry);
+            var hasUpgrade = documentsInGroup.Any(document => document.IsUpgrade);
             var fingerprints = documentsInGroup
                 .Select(CreateStandaloneModificationSceneFingerprint)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-            var renderId = NormalizeStandaloneModificationKeyComponent(GetDocumentRenderId(documentsInGroup[0]));
+            var generatedConsumerStructureCount = documentsInGroup
+                .SelectMany(document => document.Consumers)
+                .Select(consumer => consumer.StructureId)
+                .Where(structureId => !string.IsNullOrWhiteSpace(structureId)
+                    && !IsStandaloneDestroyedOrBreachedStructureId(structureId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .Count();
+            var canShareNonUpgrade = !hasUpgrade
+                && fingerprints.Count == 1
+                && (generatedConsumerStructureCount > 1 || indexSupportsSharedStorage);
 
-            if (fingerprints.Count == 1
-                    && (documentsInGroup.Count > 1
-                        || FoxWatchModificationRenderIdentity.IsSharedModificationRenderIndexEntry(
-                            FoxWatchModificationRenderIdentity.TryGetModificationRenderIndexEntry(modificationRenderIndex, renderId))))
+            if (canShareNonUpgrade)
             {
                 var representative = documentsInGroup[0];
                 representative.StructureId = "mods";
@@ -681,13 +737,20 @@ public sealed class FoxWatchRenderSceneGenerator
                 representative.CategoryId = "mods";
                 representative.RelativeScenePath = Path.Combine("mods", $"{renderId}.scene.json");
                 representative.Document.Render.OutputKey = $"mods/{renderId}";
-                representative.AllowedStructureIds = documentsInGroup
-                    .SelectMany(document => document.AllowedStructureIds)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(value => value, StringComparer.Ordinal)
-                    .ToList();
+                // Shared mods are not host assets; drop the representative host's structure
+                // identity so Blender collections / tooling key off mods/<renderId>.
+                representative.Document.Structure = new FoxWatchRenderSceneStructure
+                {
+                    Id = "mods",
+                    AssetType = "structures",
+                    CodeName = renderId,
+                    Name = renderId,
+                    CategoryId = "mods",
+                    CategoryName = "Modifications",
+                };
                 representative.Consumers = documentsInGroup
                     .SelectMany(document => document.Consumers)
+                    .Where(consumer => !IsStandaloneDestroyedOrBreachedStructureId(consumer.StructureId))
                     .GroupBy(consumer => $"{consumer.StructureId}|{consumer.SlotName}|{consumer.DataClassPath}|{consumer.VariantId}", StringComparer.OrdinalIgnoreCase)
                     .Select(grouping => grouping.First())
                     .OrderBy(consumer => consumer.StructureId, StringComparer.OrdinalIgnoreCase)
@@ -695,17 +758,38 @@ public sealed class FoxWatchRenderSceneGenerator
                     .ThenBy(consumer => consumer.VariantId, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 MergeConsumersFromModificationRenderIndex(representative, modificationRenderIndex, renderId);
+                representative.Consumers = representative.Consumers
+                    .Where(consumer => !IsStandaloneDestroyedOrBreachedStructureId(consumer.StructureId))
+                    .ToList();
+                representative.AllowedStructureIds = representative.Consumers
+                    .Select(consumer => consumer.StructureId)
+                    .Where(structureId => !string.IsNullOrWhiteSpace(structureId))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToList();
                 representative.PreviewUrl = null;
                 representative.IconUrl = null;
                 nonModificationDocuments.Add(representative);
                 continue;
             }
 
-            // Divergent fingerprints: keep per-host scenes even when multiple hosts share a renderId.
+            // Upgrades, single-host non-upgrades, or genuinely divergent global assets stay host-local.
             foreach (var document in documentsInGroup)
             {
-                document.RelativeScenePath = Path.Combine(document.StructureId, "modifications", $"{renderId}.scene.json");
-                document.Document.Render.OutputKey = $"modifications/{renderId}";
+                var variantIds = document.Consumers
+                    .Select(consumer => NormalizeStandaloneModificationKeyComponent(consumer.VariantId))
+                    .Where(variantId => !string.IsNullOrWhiteSpace(variantId))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (variantIds.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Host-local modification '{document.StructureId}' / '{renderId}' must resolve to exactly one variantId.");
+                }
+
+                var variantId = variantIds[0];
+                document.RelativeScenePath = Path.Combine(document.StructureId, "modifications", $"{variantId}.scene.json");
+                document.Document.Render.OutputKey = $"modifications/{variantId}";
                 nonModificationDocuments.Add(document);
             }
         }
@@ -1987,10 +2071,11 @@ public sealed class FoxWatchRenderSceneGenerator
         FoxWatchManifestStructure structure,
         FoxWatchBlueprintSceneExtraction? blueprintScene)
     {
-        if (!string.IsNullOrWhiteSpace(structure.ParentStructureId) ||
-            !string.IsNullOrWhiteSpace(structure.AppliedModificationId) ||
-            blueprintScene?.Variants == null ||
-            blueprintScene.Variants.Count == 0)
+        if (IsStandaloneDestroyedOrBreachedStructure(structure)
+            || !string.IsNullOrWhiteSpace(structure.ParentStructureId)
+            || !string.IsNullOrWhiteSpace(structure.AppliedModificationId)
+            || blueprintScene?.Variants == null
+            || blueprintScene.Variants.Count == 0)
         {
             return [];
         }
@@ -2049,6 +2134,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     targetsByRenderId[normalizedRenderId] = target;
                 }
 
+                target.IsUpgrade |= isUpgrade;
                 target.Consumers.Add(new FoxWatchRenderSceneConsumer
                 {
                     StructureId = structure.Id,
@@ -2196,6 +2282,32 @@ public sealed class FoxWatchRenderSceneGenerator
         return new FoxWatchBlueprintSceneExtraction
         {
             Roots = filteredRoots,
+            Meshes = CloneMeshAssets(blueprintScene.Meshes),
+            Variants = null,
+        };
+    }
+
+    private static FoxWatchBlueprintSceneExtraction? CreateGlobalModificationScene(
+        FoxWatchBlueprintSceneExtraction? blueprintScene,
+        string structureId,
+        string variantId)
+    {
+        if (blueprintScene == null || string.IsNullOrWhiteSpace(structureId) || string.IsNullOrWhiteSpace(variantId))
+        {
+            return null;
+        }
+
+        // Global slot stores (FortCommonMods, TrenchCommonMods, TrenchIntCommonMods,
+        // FortEngineRoomMods, etc.) are consumed by host slots. Rendering the ancestor
+        // chain bakes the host slot position/yaw into the scene, exploding one global mod
+        // into per-host outputs. Detach the authored :upgrade:<variant>: subtree so all
+        // hosts produce the same canonical scene and dedupe can emit one mods/<renderId>.
+        var variantNodeIdPrefix = $"{structureId}:upgrade:{variantId}:";
+        var globalRoots = FindTopdownModificationVariantRoots(blueprintScene.Roots, variantNodeIdPrefix);
+
+        return new FoxWatchBlueprintSceneExtraction
+        {
+            Roots = globalRoots,
             Meshes = CloneMeshAssets(blueprintScene.Meshes),
             Variants = null,
         };
@@ -2405,7 +2517,17 @@ public sealed class FoxWatchRenderSceneGenerator
         var structureId = structure.Id ?? string.Empty;
         return string.Equals(structure.ProfileType, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
             || string.Equals(structure.ProfileType, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
-            || structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+            || IsStandaloneDestroyedOrBreachedStructureId(structureId);
+    }
+
+    private static bool IsStandaloneDestroyedOrBreachedStructureId(string? structureId)
+    {
+        if (string.IsNullOrWhiteSpace(structureId))
+        {
+            return false;
+        }
+
+        return structureId.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
             || structureId.Contains("breached", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -2881,6 +3003,8 @@ public sealed class FoxWatchRenderSceneGenerator
         public string? IconUrl { get; set; }
 
         public bool IsStandaloneModification { get; set; }
+
+        public bool IsUpgrade { get; set; }
 
         public string RenderId { get; set; } = string.Empty;
 

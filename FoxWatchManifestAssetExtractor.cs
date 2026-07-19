@@ -781,6 +781,10 @@ public class FoxWatchManifestAssetExtractor
             var constructionDynamicData = ResolveConstructionDynamicDataEntry(codeNameText);
             if (isDestroyed || isBreached)
             {
+                // Destroyed/breached husks are not editable hosts — they must not expose
+                // modification catalogs or inflate shared-modification consumer counts.
+                modifications = new Dictionary<string, FoxWatchManifestModification>(StringComparer.OrdinalIgnoreCase);
+                modificationSlots = [];
                 subTypeIconUrl = ExportReferencedIcon(WreckedSubTypeIconObjectPath, "subtypewreckedicon", baseAssetsUrl, iconOutputDirectory) ?? subTypeIconUrl;
             }
 
