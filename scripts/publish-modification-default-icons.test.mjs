@@ -9,8 +9,10 @@ import sharp from 'sharp';
 import {
     collectSharedPublishedIconKeyReferenceCounts,
     coLocateSingleUseHostLocalModificationDefaultIcons,
+    inheritParentStructureDefaultIconsForModifications,
     resolveHostLocalModificationDefaultIconUrl,
     shouldCoLocateSingleUseModificationDefaultIcon,
+    shouldInheritParentStructureDefaultIconForModification,
 } from './publish-modification-default-icons.mjs';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -260,5 +262,114 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons preserves shared modifi
     assert.equal(
         result.manifest.__sharedModificationSourceById,
         sharedSources,
+    );
+});
+
+test('shouldInheritParentStructureDefaultIconForModification targets valve and silo insulation', () => {
+    assert.equal(
+        shouldInheritParentStructureDefaultIconForModification('facilitypipevalve', 'insulation'),
+        true,
+    );
+    assert.equal(
+        shouldInheritParentStructureDefaultIconForModification('facilitysilooil', 'insulation'),
+        true,
+    );
+    assert.equal(
+        shouldInheritParentStructureDefaultIconForModification('facilitypipe', 'insulation'),
+        false,
+    );
+    assert.equal(
+        shouldInheritParentStructureDefaultIconForModification('facilitypipevalve', 'electric'),
+        false,
+    );
+});
+
+test('inheritParentStructureDefaultIconsForModifications copies parent default icons', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-inherit-mod-icon-'));
+    const publicAssetsRoot = resolve(tempRoot, 'public');
+    const structureDir = resolve(publicAssetsRoot, 'types/structures/facilitypipevalve');
+    const modDir = resolve(structureDir, 'modifications/insulation');
+    await mkdir(modDir, { recursive: true });
+
+    const blueprint = await readFile(resolve(fixtureRoot, 'blueprint-128.png'));
+    const iconWebp = await sharp(blueprint).webp({ lossless: true, quality: 100, effort: 6 }).toBuffer();
+    const parentIconPath = resolve(structureDir, 'facilitypipevalve.icon.default.webp');
+    await writeFile(parentIconPath, iconWebp);
+
+    const manifest = {
+        assets: [
+            {
+                id: 'facilitypipevalve',
+                icons: {
+                    default: '/foxhole/assets/types/structures/facilitypipevalve/facilitypipevalve.icon.default.webp',
+                },
+                modifications: [
+                    {
+                        variants: {
+                            insulation: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/pipelinesegmenticon.webp',
+                                    rendered: '/foxhole/assets/types/structures/facilitypipevalve/modifications/insulation/insulation.icon.rendered.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'facilitypipe',
+                icons: {
+                    default: '/foxhole/assets/types/structures/facilitypipe/facilitypipe.icon.default.webp',
+                },
+                modifications: [
+                    {
+                        variants: {
+                            insulation: {
+                                icons: {
+                                    default: '/foxhole/assets/icons/pipelinesegmenticon.webp',
+                                    rendered: '/foxhole/assets/types/structures/facilitypipe/modifications/insulation/insulation.icon.rendered.webp',
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+
+    const written = [];
+    const result = await inheritParentStructureDefaultIconsForModifications(manifest, {
+        readIconSource: async (sourceUrl) => {
+            const relative = String(sourceUrl).replace(/^\/?foxhole\/assets\//i, '');
+            return {
+                sourceFilePath: resolve(publicAssetsRoot, relative),
+                content: await readFile(resolve(publicAssetsRoot, relative)),
+            };
+        },
+        writeIconFile: async (outputPath, content) => {
+            await mkdir(dirname(outputPath), { recursive: true });
+            await writeFile(outputPath, content);
+            written.push(outputPath);
+            return true;
+        },
+        resolvePublicAssetFilePath: (publicUrl) => resolve(
+            publicAssetsRoot,
+            String(publicUrl).replace(/^\/?foxhole\/assets\//i, ''),
+        ),
+    });
+
+    assert.equal(result.inheritedCount, 1);
+    assert.equal(
+        result.manifest.assets[0].modifications[0].variants.insulation.icons.default,
+        '/foxhole/assets/types/structures/facilitypipevalve/modifications/insulation/insulation.icon.default.webp',
+    );
+    assert.equal(
+        result.manifest.assets[1].modifications[0].variants.insulation.icons.default,
+        '/foxhole/assets/icons/pipelinesegmenticon.webp',
+    );
+    assert.equal(written.length, 1);
+    assert.deepEqual(
+        await readFile(written[0]),
+        iconWebp,
     );
 });

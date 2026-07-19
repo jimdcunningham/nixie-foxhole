@@ -116,6 +116,52 @@ export function shouldCoLocateSingleUseModificationDefaultIcon(defaultIconUrl, r
 }
 
 /**
+ * Pipe valve/silo insulation blueprint icons resolve to the shared pipe-segment glyph.
+ * Force those host-local upgrades to reuse the parent structure default icon instead,
+ * matching underground/overhead insulation where default === host default.
+ */
+const INSULATION_DEFAULT_ICON_INHERIT_PARENT_STRUCTURE_IDS = new Set([
+    'facilitypipevalve',
+    'facilitysilooil',
+]);
+
+export function shouldInheritParentStructureDefaultIconForModification(structureId, variantId) {
+    return normalizeId(variantId) === 'insulation'
+        && INSULATION_DEFAULT_ICON_INHERIT_PARENT_STRUCTURE_IDS.has(normalizeId(structureId));
+}
+
+function rebuildManifestWithModificationSlots(manifest, assets) {
+    const nextManifest = {
+        ...manifest,
+        assets,
+    };
+    // Preserve non-enumerable shared-modification source metadata across the rebuild.
+    for (const key of ['__sharedModificationDefaultIconSourceById', '__sharedModificationSourceById']) {
+        const value = manifest?.[key];
+        if (typeof value === 'undefined') {
+            continue;
+        }
+
+        Object.defineProperty(nextManifest, key, {
+            value,
+            enumerable: false,
+            configurable: true,
+            writable: false,
+        });
+    }
+
+    return nextManifest;
+}
+
+function replaceStructureModificationSlots(structure, nextSlots) {
+    if (Array.isArray(structure?.modificationSlots) && structure.modificationSlots.length > 0) {
+        return { ...structure, modificationSlots: nextSlots };
+    }
+
+    return { ...structure, modifications: nextSlots };
+}
+
+/**
  * Copy single-use host-local modification default icons next to the mod folder and
  * rewrite manifest URLs. Multi-referenced `/icons/` keys are left in the shared pool.
  */
@@ -197,40 +243,112 @@ export async function coLocateSingleUseHostLocalModificationDefaultIcons(manifes
             });
         }
 
-        if (Array.isArray(structure?.modificationSlots) && structure.modificationSlots.length > 0) {
-            assets.push({ ...structure, modificationSlots: nextSlots });
-        } else {
-            assets.push({ ...structure, modifications: nextSlots });
-        }
+        assets.push(replaceStructureModificationSlots(structure, nextSlots));
     }
 
     if (coLocatedCount > 0) {
         logPublishSummary(`publish-manifest: co-located ${coLocatedCount} single-use modification default icons`);
     }
 
-    const nextManifest = {
-        ...manifest,
-        assets,
+    return {
+        manifest: rebuildManifestWithModificationSlots(manifest, assets),
+        coLocatedIconKeys,
+        coLocatedCount,
     };
-    // Preserve non-enumerable shared-modification source metadata across the rebuild.
-    for (const key of ['__sharedModificationDefaultIconSourceById', '__sharedModificationSourceById']) {
-        const value = manifest?.[key];
-        if (typeof value === 'undefined') {
+}
+
+/**
+ * Force selected host-local modification defaults to copy the parent structure icon.
+ */
+export async function inheritParentStructureDefaultIconsForModifications(manifest, {
+    readIconSource,
+    writeIconFile,
+    resolvePublicAssetFilePath,
+}) {
+    let inheritedCount = 0;
+    const assets = [];
+
+    for (const structure of manifest?.assets ?? []) {
+        const structureId = normalizeId(structure?.id);
+        const slots = getStructureModificationSlots(structure);
+        if (!structureId || slots.length === 0) {
+            assets.push(structure);
             continue;
         }
 
-        Object.defineProperty(nextManifest, key, {
-            value,
-            enumerable: false,
-            configurable: true,
-            writable: false,
-        });
+        const parentDefaultIconUrl = String(structure?.icons?.default ?? structure?.iconUrl ?? '').trim();
+        const nextSlots = [];
+        let structureChanged = false;
+
+        for (const slot of slots) {
+            const nextVariants = {};
+            for (const [variantId, variant] of Object.entries(slot?.variants ?? {})) {
+                if (!shouldInheritParentStructureDefaultIconForModification(structureId, variantId)) {
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                if (!parentDefaultIconUrl) {
+                    logPublishWarn(
+                        `cannot inherit parent default icon for ${structureId}/${variantId}: parent has no default icon`,
+                    );
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                const coLocatedDefaultUrl = resolveHostLocalModificationDefaultIconUrl(variant)
+                    ?? `/foxhole/assets/types/structures/${structureId}/modifications/${normalizeId(variantId)}/${normalizeId(variantId)}.icon.default.webp`;
+                const outputPath = resolvePublicAssetFilePath(coLocatedDefaultUrl);
+                if (!outputPath) {
+                    logPublishWarn(`could not resolve inherited mod default path for ${coLocatedDefaultUrl}`);
+                    nextVariants[variantId] = variant;
+                    continue;
+                }
+
+                try {
+                    const source = await readIconSource(parentDefaultIconUrl);
+                    await mkdir(dirname(outputPath), { recursive: true });
+                    await writeIconFile(outputPath, source.content);
+                    logPublishDetail(
+                        `inherited parent default icon ${source.sourceFilePath} -> ${outputPath}`,
+                    );
+                    inheritedCount += 1;
+                    structureChanged = true;
+                    nextVariants[variantId] = {
+                        ...variant,
+                        icons: {
+                            ...(variant?.icons ?? {}),
+                            default: coLocatedDefaultUrl,
+                        },
+                    };
+                } catch (error) {
+                    logPublishWarn(
+                        `failed to inherit parent default icon ${parentDefaultIconUrl} -> ${coLocatedDefaultUrl}: ${error}`,
+                    );
+                    nextVariants[variantId] = variant;
+                }
+            }
+
+            nextSlots.push({
+                ...slot,
+                variants: nextVariants,
+            });
+        }
+
+        assets.push(structureChanged
+            ? replaceStructureModificationSlots(structure, nextSlots)
+            : structure);
+    }
+
+    if (inheritedCount > 0) {
+        logPublishSummary(
+            `publish-manifest: inherited ${inheritedCount} modification default icons from parent structures`,
+        );
     }
 
     return {
-        manifest: nextManifest,
-        coLocatedIconKeys,
-        coLocatedCount,
+        manifest: rebuildManifestWithModificationSlots(manifest, assets),
+        inheritedCount,
     };
 }
 

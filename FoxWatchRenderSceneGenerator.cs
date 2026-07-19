@@ -449,11 +449,13 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
-            // Overhead-pipe insulation replaces host meshes via an overlay tree. Collapsing
-            // variants keeps unmarked host span/trim nodes, so component renders would bake
-            // bare + insulated meshes together. Extract the upgrade overlay alone instead.
+            // Spline pipe insulation replaces host meshes via an overlay tree. Collapsing
+            // variants keeps unmarked host span/trim nodes, so component renders bake bare +
+            // insulated together. Extract the upgrade overlay alone for those hosts.
+            // Point hosts (valve/silo) still need the collapsed composite — their insulation
+            // texture replaces the whole structure topdown, and overlay-only renders blank.
             FoxWatchBlueprintSceneExtraction? modificationScene;
-            if (IsFacilityPipeOverheadStructure(structure) && target.IsUpgrade)
+            if (IsFacilityPipeSplineInsulationOverlayHost(structure) && target.IsUpgrade)
             {
                 modificationScene = CreateTopdownModificationScene(
                     CloneBlueprintSceneExtraction(blueprintScene),
@@ -484,6 +486,14 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
+            // Aggregate insulation preview/icon must match the host base render prep
+            // (underground drops FrontMesh; overhead drops Connected/Pillar meshes).
+            // Component layers keep the raw overlay so both trims remain available.
+            var modificationPreviewScene = IsFacilityPipeSplineInsulationOverlayHost(structure) && target.IsUpgrade
+                ? PrepareBlueprintSceneForBaseRender(structure, CloneBlueprintSceneExtraction(modificationScene))
+                    ?? modificationScene
+                : modificationScene;
+
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
                 StructureId = structure.Id,
@@ -498,7 +508,7 @@ public sealed class FoxWatchRenderSceneGenerator
                 SharedModificationId = target.RenderId,
                 Document = await CreateDocumentAsync(
                     structure,
-                    modificationScene,
+                    modificationPreviewScene,
                     $"modifications/{target.OutputKey}",
                     ["topdown", "preview"],
                     includePoseVariants: false,
@@ -1294,6 +1304,13 @@ public sealed class FoxWatchRenderSceneGenerator
         return string.Equals(structure.Id, "facilitypipeoverhead", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsFacilityPipeSplineInsulationOverlayHost(FoxWatchManifestStructure structure)
+    {
+        return structure.Id.Equals("facilitypipe", StringComparison.OrdinalIgnoreCase)
+            || structure.Id.Equals("facilitypipeunderground", StringComparison.OrdinalIgnoreCase)
+            || structure.Id.Equals("facilitypipeoverhead", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static FoxWatchBlueprintSceneExtraction? PrepareFacilityPipeOverheadScene(
         FoxWatchManifestStructure structure,
         FoxWatchBlueprintSceneExtraction? blueprintScene,
@@ -1936,7 +1953,9 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         var frontSocketName = structure.Connector?.FrontSocketName ?? "FrontSocket";
-        var frontSocketX = TryFindNodeUnrealLocationX(nodes, frontSocketName);
+        var frontSocketX = TryFindNodeUnrealLocationX(nodes, frontSocketName)
+            ?? TryFindBuildSocketLocationX(structure, frontSocketName)
+            ?? structure.Connector?.MinLengthCm;
         if (frontSocketX == null)
         {
             return nodes;
@@ -2278,6 +2297,9 @@ public sealed class FoxWatchRenderSceneGenerator
         var variantNodeIdPrefix = $"{structureId}:upgrade:{variantId}:";
         var filteredRoots = ExtractTopdownModificationVariantRoots(blueprintScene.Roots, slotName, variantNodeIdPrefix);
         ApplyStandaloneModificationSlotYawOffset(filteredRoots, -90f);
+        // Overlay extraction already selected the variant. Clear variantIds so Blender does
+        // not skip these nodes when the scene document has no active color/pose variant.
+        filteredRoots = ClearRenderSceneVariantIds(filteredRoots);
 
         return new FoxWatchBlueprintSceneExtraction
         {
@@ -2303,7 +2325,8 @@ public sealed class FoxWatchRenderSceneGenerator
         // into per-host outputs. Detach the authored :upgrade:<variant>: subtree so all
         // hosts produce the same canonical scene and dedupe can emit one mods/<renderId>.
         var variantNodeIdPrefix = $"{structureId}:upgrade:{variantId}:";
-        var globalRoots = FindTopdownModificationVariantRoots(blueprintScene.Roots, variantNodeIdPrefix);
+        var globalRoots = ClearRenderSceneVariantIds(
+            FindTopdownModificationVariantRoots(blueprintScene.Roots, variantNodeIdPrefix));
 
         return new FoxWatchBlueprintSceneExtraction
         {
@@ -2917,6 +2940,34 @@ public sealed class FoxWatchRenderSceneGenerator
             AttachBoneName = node.AttachBoneName,
             TransformMatrix = [.. node.TransformMatrix],
             Children = CloneNodes(node.Children),
+        })];
+    }
+
+    private static List<FoxWatchRenderSceneNode> ClearRenderSceneVariantIds(IEnumerable<FoxWatchRenderSceneNode> nodes)
+    {
+        return [.. nodes.Select(node => new FoxWatchRenderSceneNode
+        {
+            Id = node.Id,
+            Name = node.Name,
+            Visible = node.Visible,
+            VariantIds = null,
+            MeshId = node.MeshId,
+            Primitive = ClonePrimitive(node.Primitive),
+            MaterialIds = [.. node.MaterialIds],
+            Location = node.Location == null ? null : [.. node.Location],
+            RotationEulerDegrees = node.RotationEulerDegrees == null ? null : [.. node.RotationEulerDegrees],
+            Scale = node.Scale == null ? null : [.. node.Scale],
+            UnrealLocationCentimeters = node.UnrealLocationCentimeters == null ? null : [.. node.UnrealLocationCentimeters],
+            UnrealSceneLocationCentimeters = node.UnrealSceneLocationCentimeters == null ? null : [.. node.UnrealSceneLocationCentimeters],
+            UnrealRotationDegrees = node.UnrealRotationDegrees == null ? null : [.. node.UnrealRotationDegrees],
+            DebugColor = node.DebugColor == null ? null : [.. node.DebugColor],
+            MarkerColor = node.MarkerColor == null ? null : [.. node.MarkerColor],
+            MarkerSize = node.MarkerSize,
+            Pose = ClonePose(node.Pose),
+            PoseVariants = ClonePoseVariants(node.PoseVariants),
+            AttachBoneName = node.AttachBoneName,
+            TransformMatrix = [.. node.TransformMatrix],
+            Children = ClearRenderSceneVariantIds(node.Children),
         })];
     }
 

@@ -20,6 +20,7 @@ import {
 } from './publish-structure-icons.mjs';
 import {
     coLocateSingleUseHostLocalModificationDefaultIcons,
+    inheritParentStructureDefaultIconsForModifications,
     removePublicIconsByKey,
 } from './publish-modification-default-icons.mjs';
 import {
@@ -7595,11 +7596,18 @@ try {
         writeIconFile: writeFileIfChanged,
         resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
     });
-    // coLocate rebuilds the manifest via object spread, which drops non-enumerable
+    const {
+        manifest: manifestAfterInheritedModDefaultIcons,
+    } = await inheritParentStructureDefaultIconsForModifications(manifestAfterHostLocalModDefaultIcons, {
+        readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
+        writeIconFile: writeFileIfChanged,
+        resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
+    });
+    // coLocate/inherit rebuild the manifest via object spread, which drops non-enumerable
     // __sharedModification* source metadata. Reattach before shared default icon sync.
     const manifestWithCoLocatedModDefaultIcons = attachSharedModificationSourceMetadata(
         attachSharedModificationDefaultIconSourceMetadata(
-            manifestAfterHostLocalModDefaultIcons,
+            manifestAfterInheritedModDefaultIcons,
             manifestWithStrippedSlotNoise.__sharedModificationDefaultIconSourceById,
         ),
         manifestWithStrippedSlotNoise.__sharedModificationSourceById,
