@@ -47,6 +47,7 @@ import {
     getExplicitlyRemovedStructureIdsForTargetedPublish,
     loadAuthoredStructureMarkedCargoOverlays,
     loadAuthoredStructurePreviewDirections,
+    loadExcludedStructureOverrideIds,
     preserveAuthoredStructureMarkedCargoOverlays,
     preserveAuthoredStructurePreviewDirections,
     shouldPublishVehicleDestroyedVisual,
@@ -7495,6 +7496,7 @@ try {
         rebasedSourceManifestForDowngradeLookup,
         targetFilter,
     ), sourceManifest.__sourceStructureMetadataById);
+    const excludedStructureOverrideIds = await loadExcludedStructureOverrideIds(assetOverridesDirectory);
     const manifestForPublish = attachSourceStructureMetadata(
         augmentTargetedOnlyPublishedStructures(
             hasTargetFilters(targetFilter) && publishedManifestBeforeWrite
@@ -7502,6 +7504,7 @@ try {
                 : filteredSourceManifest,
             publishedManifestBeforeWrite,
             targetFilter,
+            excludedStructureOverrideIds,
         ),
         sourceManifest.__sourceStructureMetadataById,
     );
@@ -7523,7 +7526,11 @@ try {
         modificationRenderIndexDocument,
     );
     publishedAssetTypeById = buildPublishedAssetTypeLookup(manifestWithSeededSharedModificationIds);
-    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIdsForTargetedPublish();
+    const explicitlyRemovedStructureIds = getExplicitlyRemovedStructureIdsForTargetedPublish(
+        targetFilter,
+        excludedStructureOverrideIds,
+        publishedManifestBeforeWrite,
+    );
     const referencedGeneratedIconKeys = hasTargetFilters(targetFilter)
         ? collectReferencedPublishedIconKeys(manifestWithSeededSharedModificationIds)
         : null;

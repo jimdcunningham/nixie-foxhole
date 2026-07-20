@@ -1,5 +1,6 @@
 {
   "categoryId": "logistics",
   "clipFloor": false,
-  "buildOrder": 12
+  "buildOrder": 12,
+  "exclude": true
 }

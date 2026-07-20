@@ -87,8 +87,41 @@ test('augmentTargetedOnlyPublishedStructures keeps --only targets missing from p
     assert.deepEqual(augmented.assets.map(structure => structure.id), ['liquidcontainer', 'resourcecontainer']);
 });
 
+test('augmentTargetedOnlyPublishedStructures skips authored exclude targets', () => {
+    const publishedManifest = {
+        assets: [
+            { id: 'destroyedbarn' },
+            { id: 'liquidcontainer' },
+        ],
+    };
+    const filteredManifest = { assets: [] };
+    const filter = { only: new Set(['destroyedbarn', 'liquidcontainer']) };
+    const excluded = new Set(['destroyedbarn']);
+
+    const augmented = augmentTargetedOnlyPublishedStructures(
+        filteredManifest,
+        publishedManifest,
+        filter,
+        excluded,
+    );
+    assert.deepEqual(augmented.assets.map(structure => structure.id), ['liquidcontainer']);
+});
+
+test('getExplicitlyRemovedStructureIdsForTargetedPublish removes authored excludes in --only', () => {
+    const removed = getExplicitlyRemovedStructureIdsForTargetedPublish(
+        { only: new Set(['destroyedbarn', 'liquidcontainer']) },
+        new Set(['destroyedbarn']),
+        { assets: [{ id: 'destroyedbarn' }, { id: 'liquidcontainer' }] },
+    );
+    assert.deepEqual([...removed], ['destroyedbarn']);
+});
+
 test('getExplicitlyRemovedStructureIdsForTargetedPublish never treats missing partial source as removal', () => {
-    assert.equal(getExplicitlyRemovedStructureIdsForTargetedPublish().size, 0);
+    assert.equal(getExplicitlyRemovedStructureIdsForTargetedPublish(
+        { only: new Set(['liquidcontainer']) },
+        new Set(),
+        { assets: [{ id: 'liquidcontainer' }] },
+    ).size, 0);
 });
 
 test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manifests', () => {

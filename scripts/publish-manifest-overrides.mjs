@@ -209,6 +209,43 @@ export function preserveAuthoredStructurePreviewDirections(
     };
 }
 
+export async function loadExcludedStructureOverrideIds(assetOverridesDirectory) {
+    const excludedStructureIds = new Set();
+    let overrideEntries = [];
+    try {
+        overrideEntries = await readdir(assetOverridesDirectory, { withFileTypes: true });
+    } catch {
+        return excludedStructureIds;
+    }
+
+    for (const entry of overrideEntries) {
+        if (!entry.isDirectory()) {
+            continue;
+        }
+
+        const structureId = normalizeId(entry.name);
+        if (!structureId) {
+            continue;
+        }
+
+        const manifestPath = resolve(assetOverridesDirectory, entry.name, 'manifest.json');
+        if (!await pathExists(manifestPath)) {
+            continue;
+        }
+
+        try {
+            const overrideManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+            if (overrideManifest?.exclude === true) {
+                excludedStructureIds.add(structureId);
+            }
+        } catch {
+            // Ignore malformed override manifests during exclude discovery.
+        }
+    }
+
+    return excludedStructureIds;
+}
+
 export function shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedPublishAllowlist) {
     const structureId = normalizeId(structure?.id);
     if (!structureId || structure?.isVehicle !== true) {
@@ -218,7 +255,12 @@ export function shouldPublishVehicleDestroyedVisual(structure, vehicleDestroyedP
     return isVehicleDestroyedPublishAllowlisted(structureId, vehicleDestroyedPublishAllowlist);
 }
 
-export function augmentTargetedOnlyPublishedStructures(filteredManifest, publishedManifest, filter) {
+export function augmentTargetedOnlyPublishedStructures(
+    filteredManifest,
+    publishedManifest,
+    filter,
+    excludedStructureIds = new Set(),
+) {
     if (!filter?.only?.size || !publishedManifest) {
         return filteredManifest;
     }
@@ -235,7 +277,7 @@ export function augmentTargetedOnlyPublishedStructures(filteredManifest, publish
 
     const augmentedAssets = [...(filteredManifest?.assets ?? [])];
     for (const onlyId of filter.only) {
-        if (filteredIds.has(onlyId)) {
+        if (filteredIds.has(onlyId) || excludedStructureIds.has(onlyId)) {
             continue;
         }
 
@@ -254,6 +296,29 @@ export function augmentTargetedOnlyPublishedStructures(filteredManifest, publish
     };
 }
 
-export function getExplicitlyRemovedStructureIdsForTargetedPublish() {
-    return new Set();
+/**
+ * Targeted publish keeps missing `--only` assets from the previous published
+ * manifest (partial extract gaps). Authored `exclude: true` overrides are the
+ * explicit removal signal for those same targets.
+ */
+export function getExplicitlyRemovedStructureIdsForTargetedPublish(
+    filter = null,
+    excludedStructureIds = new Set(),
+    publishedManifest = null,
+) {
+    if (!filter?.only?.size || !excludedStructureIds?.size) {
+        return new Set();
+    }
+
+    const publishedIds = new Set((publishedManifest?.assets ?? [])
+        .map(structure => normalizeId(structure?.id))
+        .filter(Boolean));
+
+    const removed = new Set();
+    for (const onlyId of filter.only) {
+        if (excludedStructureIds.has(onlyId) && publishedIds.has(onlyId)) {
+            removed.add(onlyId);
+        }
+    }
+    return removed;
 }
