@@ -274,6 +274,18 @@ The manifest is authoritative. The planner should not need runtime guesswork to 
 | `variants.default.textureUrl` | Board placement texture |
 | `sprite.*` | Anchor metadata; `sprite.source` typically matches texture URL |
 
+### Emplacement pad fields (structures)
+
+Emplacement snap is **not** a build socket. Extract publishes:
+
+| Field | Side | Meaning |
+| --- | --- | --- |
+| `supportsEmplacedStructures` | Host (trench emp) | `bSupportsEmplacedStructures` |
+| `emplacementLocation` | Host | Local `{ x, y, z }` from `EmplacementLocation` BoxComponent |
+| `isEmplacedWeapon` | Guest | Blueprint parent is native `EmplacedWeapon` |
+
+Do not invent `buildSockets` for these. Planner snaps guest origin to host pad XY only.
+
 ## Subtype overlays (publish only)
 
 Applied via `composeSubtypeIcon` in:

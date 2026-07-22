@@ -916,6 +916,18 @@ function compactBuildSocket(value) {
     });
 }
 
+function compactEmplacementLocation(value) {
+    if (!isPlainObject(value)) {
+        return value;
+    }
+
+    return compactNullableObject(value, {
+        x: 0,
+        y: 0,
+        z: 0,
+    });
+}
+
 function compactHitPolygon(value) {
     return compactObject(value, {
         shape: [],
@@ -1725,6 +1737,9 @@ function compactStructure(value) {
         bIsBuiltOnFoundation: null,
         bBuildOnWater: null,
         bIsBuiltOnLandscape: null,
+        supportsEmplacedStructures: false,
+        isEmplacedWeapon: false,
+        emplacementLocation: null,
         hideInList: false,
         isUpgrade: false,
         upgradeName: null,
@@ -1748,6 +1763,7 @@ function compactStructure(value) {
         buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         structureVolumes: entryValue => compactArray(entryValue, compactStructureVolume),
+        emplacementLocation: compactEmplacementLocation,
         vehicleSeats: entryValue => compactArray(entryValue, compactVehicleSeat),
         spotlights: entryValue => compactArray(entryValue, compactSpotlight),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),

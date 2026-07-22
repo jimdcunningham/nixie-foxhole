@@ -202,6 +202,13 @@ public sealed class FoxWatchManifestStructure
 
     public bool? bIsBuiltOnLandscape { get; set; }
 
+    public bool SupportsEmplacedStructures { get; set; }
+
+    public bool IsEmplacedWeapon { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FoxWatchManifestEmplacementLocation? EmplacementLocation { get; set; }
+
     public string? BuildLocationType { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -561,6 +568,15 @@ public sealed class FoxWatchManifestCraneSpawn
     public double? Z { get; set; }
 
     public double? Rotation { get; set; }
+}
+
+public sealed class FoxWatchManifestEmplacementLocation
+{
+    public double? X { get; set; }
+
+    public double? Y { get; set; }
+
+    public double? Z { get; set; }
 }
 
 public sealed class FoxWatchManifestSocketTag

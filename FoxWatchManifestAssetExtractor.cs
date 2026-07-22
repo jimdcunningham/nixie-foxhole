@@ -727,6 +727,9 @@ public class FoxWatchManifestAssetExtractor
             var shippableType = ResolveShippableType(shippableInfoValue);
             var buildSockets = ExtractBuildSockets(objects, blueprint, obj);
             var craneSpawns = ExtractCraneSpawns(objects, blueprint, obj);
+            var supportsEmplacedStructures = ExtractBoolValue(inheritedProperty("bSupportsEmplacedStructures")) == true;
+            var emplacementLocation = ExtractEmplacementLocation(objects, blueprint, obj);
+            var isEmplacedWeapon = IsEmplacedWeaponBlueprint(blueprint);
             var buildFootprintBoxes = ExtractBuildFootprintBoxes(objects, blueprint, obj);
             var structureVolumes = MergeStructureVolumes(
                 ExtractStructureVolumes(objects, blueprint, obj),
@@ -846,6 +849,9 @@ public class FoxWatchManifestAssetExtractor
                 bIsBuiltOnFoundation = ExtractBoolValue(inheritedProperty("bIsBuiltOnFoundation")),
                 bBuildOnWater = ExtractBoolValue(inheritedProperty("bBuildOnWater")),
                 bIsBuiltOnLandscape = ExtractBoolValue(inheritedProperty("bIsBuiltOnLandscape")),
+                SupportsEmplacedStructures = supportsEmplacedStructures,
+                IsEmplacedWeapon = isEmplacedWeapon,
+                EmplacementLocation = emplacementLocation,
                 BuildLocationType = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("BuildLocationType"))),
                 UpgradeStructureCodeName = upgradeStructureCodeName,
                 ConversionCodeNames = conversionCodeNames,
@@ -6666,6 +6672,115 @@ public class FoxWatchManifestAssetExtractor
         {
             return NormalizeString(componentType).Contains("CraneSpawn", StringComparison.OrdinalIgnoreCase)
                 || NormalizeString(componentName).Contains("CraneSpawn", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsEmplacedWeaponBlueprint(UBlueprintGeneratedClass blueprint)
+        {
+            var superStructName = NormalizeString(blueprint.SuperStruct?.Name);
+            var superStructReference = NormalizeString(blueprint.SuperStruct?.ToString());
+            return string.Equals(superStructName, "EmplacedWeapon", StringComparison.OrdinalIgnoreCase)
+                || superStructReference.Contains("EmplacedWeapon", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsEmplacementLocationComponent(string? componentType, string? componentName)
+        {
+            return string.Equals(NormalizeString(componentName), "EmplacementLocation", StringComparison.OrdinalIgnoreCase)
+                && (
+                    string.IsNullOrWhiteSpace(componentType)
+                    || componentType.Contains("BoxComponent", StringComparison.OrdinalIgnoreCase)
+                    || componentType.Contains("SceneComponent", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private FoxWatchManifestEmplacementLocation? ExtractEmplacementLocation(
+            IEnumerable<dynamic> objects,
+            UBlueprintGeneratedClass blueprint,
+            dynamic defaultObject)
+        {
+            if (_meshAssetExporter != null)
+            {
+                try
+                {
+                    var componentReferences = _meshAssetExporter
+                        .InspectBlueprintComponentsAsync(GetPackagePath(blueprint))
+                        .GetAwaiter()
+                        .GetResult();
+                    foreach (var componentReference in componentReferences)
+                    {
+                        var location = ExtractEmplacementLocation(componentReference, componentReferences);
+                        if (location != null)
+                        {
+                            return location;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            var scopes = EnumerateBlueprintComponentScopes(objects, blueprint).ToArray();
+            var componentLookup = BuildComponentLookup(scopes.SelectMany(scope => scope.Objects));
+
+            foreach (var scope in scopes)
+            {
+                foreach (var item in scope.Objects)
+                {
+                    if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName))
+                    {
+                        continue;
+                    }
+
+                    var location = ExtractEmplacementLocation(objects, blueprint, item, componentLookup);
+                    if (location != null)
+                    {
+                        return location;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private FoxWatchManifestEmplacementLocation? ExtractEmplacementLocation(
+            FoxWatchBlueprintComponentReference componentReference,
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            var componentType = NormalizeString(componentReference.ComponentType);
+            var componentName = NormalizeString(componentReference.ComponentName);
+            if (!IsEmplacementLocationComponent(componentType, componentName))
+            {
+                return null;
+            }
+
+            var transform = ResolveComponentReferenceTransform(componentReference, componentReferences);
+            return new FoxWatchManifestEmplacementLocation
+            {
+                X = transform.X,
+                Y = transform.Y,
+                Z = transform.Z,
+            };
+        }
+
+        private FoxWatchManifestEmplacementLocation? ExtractEmplacementLocation(
+            IEnumerable<dynamic> rootObjects,
+            UBlueprintGeneratedClass blueprint,
+            object component,
+            IReadOnlyDictionary<string, object> componentLookup)
+        {
+            var componentType = GetObjectTypeName(component);
+            var componentName = NormalizeString(ExtractText(GetNamedValue(component, "Name")));
+            if (!IsEmplacementLocationComponent(componentType, componentName))
+            {
+                return null;
+            }
+
+            var transform = ResolveComponentTransform(component, componentLookup);
+            return new FoxWatchManifestEmplacementLocation
+            {
+                X = transform.X,
+                Y = transform.Y,
+                Z = transform.Z,
+            };
         }
 
         private static string InferCraneSpawnStructureId(string? componentType, string? componentName)
