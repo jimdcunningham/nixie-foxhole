@@ -730,6 +730,7 @@ public class FoxWatchManifestAssetExtractor
             var supportsEmplacedStructures = ExtractBoolValue(inheritedProperty("bSupportsEmplacedStructures")) == true;
             var emplacementLocation = ExtractEmplacementLocation(objects, blueprint, obj);
             var isEmplacedWeapon = IsEmplacedWeaponBlueprint(blueprint);
+            var railCouplers = ExtractRailCouplers(objects, blueprint, obj);
             var buildFootprintBoxes = ExtractBuildFootprintBoxes(objects, blueprint, obj);
             var structureVolumes = MergeStructureVolumes(
                 ExtractStructureVolumes(objects, blueprint, obj),
@@ -852,6 +853,7 @@ public class FoxWatchManifestAssetExtractor
                 SupportsEmplacedStructures = supportsEmplacedStructures,
                 IsEmplacedWeapon = isEmplacedWeapon,
                 EmplacementLocation = emplacementLocation,
+                RailCouplers = railCouplers,
                 BuildLocationType = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("BuildLocationType"))),
                 UpgradeStructureCodeName = upgradeStructureCodeName,
                 ConversionCodeNames = conversionCodeNames,
@@ -6780,6 +6782,154 @@ public class FoxWatchManifestAssetExtractor
                 X = transform.X,
                 Y = transform.Y,
                 Z = transform.Z,
+            };
+        }
+
+        private static bool IsRailCouplerComponent(string? componentType, string? componentName)
+        {
+            var normalizedName = NormalizeString(componentName);
+            if (!string.Equals(normalizedName, "FrontCoupler", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedName, "RearCoupler", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.IsNullOrWhiteSpace(componentType)
+                || componentType.Contains("RailCoupler", StringComparison.OrdinalIgnoreCase)
+                || componentType.Contains("SceneComponent", StringComparison.OrdinalIgnoreCase)
+                || componentType.Contains("BoxComponent", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static double InferRailCouplerRotationDegrees(string? componentName, double? yawDegrees)
+        {
+            if (yawDegrees != null && NumberIsFinite(yawDegrees.Value) && Math.Abs(yawDegrees.Value) > 0.001)
+            {
+                return yawDegrees.Value;
+            }
+
+            return string.Equals(NormalizeString(componentName), "RearCoupler", StringComparison.OrdinalIgnoreCase)
+                ? 180
+                : 0;
+        }
+
+        private static bool NumberIsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private List<FoxWatchManifestRailCoupler> ExtractRailCouplers(
+            IEnumerable<dynamic> objects,
+            UBlueprintGeneratedClass blueprint,
+            dynamic defaultObject)
+        {
+            var couplers = new List<FoxWatchManifestRailCoupler>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (_meshAssetExporter != null)
+            {
+                try
+                {
+                    var componentReferences = _meshAssetExporter
+                        .InspectBlueprintComponentsAsync(GetPackagePath(blueprint))
+                        .GetAwaiter()
+                        .GetResult();
+                    foreach (var componentReference in componentReferences)
+                    {
+                        var coupler = ExtractRailCoupler(componentReference, componentReferences);
+                        if (coupler == null || string.IsNullOrWhiteSpace(coupler.Name) || !seen.Add(coupler.Name))
+                        {
+                            continue;
+                        }
+
+                        couplers.Add(coupler);
+                    }
+
+                    if (couplers.Count > 0)
+                    {
+                        return SortRailCouplers(couplers);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            var scopes = EnumerateBlueprintComponentScopes(objects, blueprint).ToArray();
+            var componentLookup = BuildComponentLookup(scopes.SelectMany(scope => scope.Objects));
+
+            foreach (var scope in scopes)
+            {
+                foreach (var item in scope.Objects)
+                {
+                    if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName))
+                    {
+                        continue;
+                    }
+
+                    var coupler = ExtractRailCoupler(objects, blueprint, item, componentLookup);
+                    if (coupler == null || string.IsNullOrWhiteSpace(coupler.Name) || !seen.Add(coupler.Name))
+                    {
+                        continue;
+                    }
+
+                    couplers.Add(coupler);
+                }
+            }
+
+            return SortRailCouplers(couplers);
+        }
+
+        private static List<FoxWatchManifestRailCoupler> SortRailCouplers(List<FoxWatchManifestRailCoupler> couplers)
+        {
+            return [.. couplers.OrderBy(coupler =>
+                string.Equals(NormalizeString(coupler.Name), "FrontCoupler", StringComparison.OrdinalIgnoreCase) ? 0
+                    : string.Equals(NormalizeString(coupler.Name), "RearCoupler", StringComparison.OrdinalIgnoreCase) ? 1
+                    : 2)];
+        }
+
+        private FoxWatchManifestRailCoupler? ExtractRailCoupler(
+            FoxWatchBlueprintComponentReference componentReference,
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            var componentType = NormalizeString(componentReference.ComponentType);
+            var componentName = NormalizeString(componentReference.ComponentName);
+            if (!IsRailCouplerComponent(componentType, componentName))
+            {
+                return null;
+            }
+
+            var transform = ResolveComponentReferenceTransform(componentReference, componentReferences);
+            return new FoxWatchManifestRailCoupler
+            {
+                Name = componentName,
+                X = transform.X,
+                Y = transform.Y,
+                Z = transform.Z,
+                Rotation = InferRailCouplerRotationDegrees(componentName, transform.YawDegrees),
+            };
+        }
+
+        private FoxWatchManifestRailCoupler? ExtractRailCoupler(
+            IEnumerable<dynamic> rootObjects,
+            UBlueprintGeneratedClass blueprint,
+            object component,
+            IReadOnlyDictionary<string, object> componentLookup)
+        {
+            var componentType = GetObjectTypeName(component);
+            var componentName = NormalizeString(ExtractText(GetNamedValue(component, "Name")));
+            if (!IsRailCouplerComponent(componentType, componentName))
+            {
+                return null;
+            }
+
+            var transform = ResolveComponentTransform(component, componentLookup);
+            return new FoxWatchManifestRailCoupler
+            {
+                Name = componentName,
+                X = transform.X,
+                Y = transform.Y,
+                Z = transform.Z,
+                Rotation = InferRailCouplerRotationDegrees(componentName, transform.YawDegrees),
             };
         }
 

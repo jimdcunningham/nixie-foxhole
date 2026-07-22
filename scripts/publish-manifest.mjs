@@ -928,6 +928,26 @@ function compactEmplacementLocation(value) {
     });
 }
 
+function compactRailCoupler(value) {
+    if (!isPlainObject(value)) {
+        return value;
+    }
+
+    return compactObject({
+        n: value.name,
+        x: compactJsonValue(value.x),
+        y: compactJsonValue(value.y),
+        z: compactJsonValue(value.z),
+        r: compactJsonValue(value.rotation),
+    }, {
+        n: null,
+        x: 0,
+        y: 0,
+        z: 0,
+        r: 0,
+    });
+}
+
 function compactHitPolygon(value) {
     return compactObject(value, {
         shape: [],
@@ -1740,6 +1760,7 @@ function compactStructure(value) {
         supportsEmplacedStructures: false,
         isEmplacedWeapon: false,
         emplacementLocation: null,
+        railCouplers: [],
         hideInList: false,
         isUpgrade: false,
         upgradeName: null,
@@ -1764,6 +1785,7 @@ function compactStructure(value) {
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         structureVolumes: entryValue => compactArray(entryValue, compactStructureVolume),
         emplacementLocation: compactEmplacementLocation,
+        railCouplers: entryValue => compactArray(entryValue, compactRailCoupler),
         vehicleSeats: entryValue => compactArray(entryValue, compactVehicleSeat),
         spotlights: entryValue => compactArray(entryValue, compactSpotlight),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),

@@ -209,6 +209,8 @@ public sealed class FoxWatchManifestStructure
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public FoxWatchManifestEmplacementLocation? EmplacementLocation { get; set; }
 
+    public List<FoxWatchManifestRailCoupler> RailCouplers { get; set; } = [];
+
     public string? BuildLocationType { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -577,6 +579,19 @@ public sealed class FoxWatchManifestEmplacementLocation
     public double? Y { get; set; }
 
     public double? Z { get; set; }
+}
+
+public sealed class FoxWatchManifestRailCoupler
+{
+    public string? Name { get; set; }
+
+    public double? X { get; set; }
+
+    public double? Y { get; set; }
+
+    public double? Z { get; set; }
+
+    public double? Rotation { get; set; }
 }
 
 public sealed class FoxWatchManifestSocketTag

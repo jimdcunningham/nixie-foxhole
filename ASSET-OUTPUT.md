@@ -286,6 +286,16 @@ Emplacement snap is **not** a build socket. Extract publishes:
 
 Do not invent `buildSockets` for these. Planner snaps guest origin to host pad XY only.
 
+### Rail coupler fields (structures)
+
+Train coupling is **not** a BuildSocketComponent. Extract publishes:
+
+| Field | Meaning |
+| --- | --- |
+| `railCouplers` | `FrontCoupler` / `RearCoupler` from `RailCouplerUseComponent` (`{ n, x, y, z, r }`) |
+
+Default yaw when unset: Front `0°` (+X), Rear `180°` (−X). Planner merges these into effective snap/attachment sockets; do not invent `buildSockets`.
+
 ## Subtype overlays (publish only)
 
 Applied via `composeSubtypeIcon` in:
