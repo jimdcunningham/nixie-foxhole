@@ -8820,7 +8820,6 @@ public class FoxWatchManifestAssetExtractor
         {
             var normalizedCodeName = NormalizeString(value);
             return string.Equals(normalizedCodeName, "None", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalizedCodeName, "Excavation", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalizedCodeName, "StrongMaterials", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalizedCodeName, "RFuel", StringComparison.OrdinalIgnoreCase)
                 ? string.Empty
