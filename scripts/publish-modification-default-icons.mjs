@@ -391,3 +391,84 @@ export async function removePublicIconsByKey(publicIconsDirectory, iconKeys, {
 
     return removed;
 }
+
+/**
+ * Delete public `/icons/<key>.webp` files that are no longer referenced by the published
+ * manifest. Shared-mod co-location leaves blueprint source glyphs here unless pruned.
+ */
+export async function removeUnreferencedPublicIcons(publicIconsDirectory, referencedIconKeys, {
+    pathExists,
+    unlink,
+    walkFiles,
+}) {
+    // An empty keep-set would delete the entire pool; only prune when we know what to keep.
+    if (!(referencedIconKeys instanceof Set) || referencedIconKeys.size === 0) {
+        return 0;
+    }
+
+    let directoryExists = false;
+    try {
+        directoryExists = await pathExists(publicIconsDirectory);
+    } catch {
+        directoryExists = false;
+    }
+    if (!directoryExists) {
+        return 0;
+    }
+
+    let removed = 0;
+    for await (const filePath of walkFiles(publicIconsDirectory)) {
+        const fileName = filePath.replace(/\\/g, '/').split('/').pop() ?? '';
+        const match = fileName.match(/^(.+)\.webp$/i);
+        if (!match) {
+            continue;
+        }
+
+        const iconKey = normalizeId(match[1]);
+        if (!iconKey || referencedIconKeys.has(iconKey)) {
+            continue;
+        }
+
+        await unlink(filePath);
+        removed += 1;
+        logPublishDetail(`removed unreferenced shared icon ${filePath}`);
+    }
+
+    return removed;
+}
+
+/**
+ * Collect `/icons/<key>` source glyphs used while co-locating shared modification defaults.
+ * These are publish inputs, not final publish outputs, once shared folders own the pixels.
+ */
+export function collectSharedModificationSourceIconKeys(manifest) {
+    const keys = new Set();
+
+    function addSourceUrl(value) {
+        const iconKey = extractPublishedIconKey(value);
+        if (iconKey) {
+            keys.add(iconKey);
+        }
+    }
+
+    const sharedModificationDefaultIconSourceById = manifest?.__sharedModificationDefaultIconSourceById instanceof Map
+        ? manifest.__sharedModificationDefaultIconSourceById
+        : null;
+    if (sharedModificationDefaultIconSourceById) {
+        for (const sourceUrl of sharedModificationDefaultIconSourceById.values()) {
+            addSourceUrl(sourceUrl);
+        }
+    }
+
+    const sharedModificationSourceById = manifest?.__sharedModificationSourceById instanceof Map
+        ? manifest.__sharedModificationSourceById
+        : null;
+    if (sharedModificationSourceById) {
+        for (const sources of sharedModificationSourceById.values()) {
+            addSourceUrl(sources?.defaultIconSourceUrl);
+            addSourceUrl(sources?.renderedIconSourceUrl);
+        }
+    }
+
+    return keys;
+}

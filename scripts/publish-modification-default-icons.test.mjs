@@ -7,9 +7,11 @@ import { test } from 'node:test';
 import sharp from 'sharp';
 
 import {
+    collectSharedModificationSourceIconKeys,
     collectSharedPublishedIconKeyReferenceCounts,
     coLocateSingleUseHostLocalModificationDefaultIcons,
     inheritParentStructureDefaultIconsForModifications,
+    removeUnreferencedPublicIcons,
     resolveHostLocalModificationDefaultIconUrl,
     shouldCoLocateSingleUseModificationDefaultIcon,
     shouldInheritParentStructureDefaultIconForModification,
@@ -372,4 +374,75 @@ test('inheritParentStructureDefaultIconsForModifications copies parent default i
         await readFile(written[0]),
         iconWebp,
     );
+});
+
+test('collectSharedModificationSourceIconKeys reads shared-mod blueprint source urls', () => {
+    const manifest = { assets: [] };
+    Object.defineProperty(manifest, '__sharedModificationDefaultIconSourceById', {
+        value: new Map([
+            ['bunkbed-47e016ce52d5', '/foxhole/assets/icons/fortimodbunkbedicon.webp'],
+        ]),
+        enumerable: false,
+    });
+    Object.defineProperty(manifest, '__sharedModificationSourceById', {
+        value: new Map([
+            ['bridge-4be359fc14a5', {
+                defaultIconSourceUrl: '/foxhole/assets/icons/trenchbridgeicon.webp',
+                renderedIconSourceUrl: '/foxhole/assets/shared/modifications/bridge-4be359fc14a5/bridge-4be359fc14a5.icon.rendered.webp',
+            }],
+        ]),
+        enumerable: false,
+    });
+
+    assert.deepEqual(
+        [...collectSharedModificationSourceIconKeys(manifest)].sort(),
+        ['fortimodbunkbedicon', 'trenchbridgeicon'],
+    );
+});
+
+test('removeUnreferencedPublicIcons deletes only icons outside the keep set', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-unreferenced-icons-'));
+    const iconsRoot = resolve(tempRoot, 'icons');
+    await mkdir(iconsRoot, { recursive: true });
+    await writeFile(resolve(iconsRoot, 'keepme.webp'), Buffer.from('keep'));
+    await writeFile(resolve(iconsRoot, 'fortimodbunkbedicon.webp'), Buffer.from('orphan'));
+    await writeFile(resolve(iconsRoot, 'readme.txt'), Buffer.from('ignore'));
+
+    const removed = [];
+    const count = await removeUnreferencedPublicIcons(
+        iconsRoot,
+        new Set(['keepme']),
+        {
+            pathExists: async () => true,
+            unlink: async (filePath) => {
+                removed.push(filePath.replace(/\\/g, '/').split('/').pop());
+            },
+            walkFiles: async function* walk(directory) {
+                yield resolve(directory, 'keepme.webp');
+                yield resolve(directory, 'fortimodbunkbedicon.webp');
+                yield resolve(directory, 'readme.txt');
+            },
+        },
+    );
+
+    assert.equal(count, 1);
+    assert.deepEqual(removed, ['fortimodbunkbedicon.webp']);
+});
+
+test('removeUnreferencedPublicIcons skips when keep set is empty', async () => {
+    const count = await removeUnreferencedPublicIcons(
+        '/tmp/unused',
+        new Set(),
+        {
+            pathExists: async () => true,
+            unlink: async () => {
+                throw new Error('should not unlink');
+            },
+            walkFiles: async function* () {
+                yield '/tmp/unused/fortimodbunkbedicon.webp';
+            },
+        },
+    );
+
+    assert.equal(count, 0);
 });

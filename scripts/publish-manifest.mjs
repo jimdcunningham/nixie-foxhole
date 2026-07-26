@@ -22,6 +22,7 @@ import {
     coLocateSingleUseHostLocalModificationDefaultIcons,
     inheritParentStructureDefaultIconsForModifications,
     removePublicIconsByKey,
+    removeUnreferencedPublicIcons,
 } from './publish-modification-default-icons.mjs';
 import {
     assertUniqueHostModificationVariantRenderIds,
@@ -3963,6 +3964,10 @@ function collectReferencedPublishedIconKeys(manifest) {
         keys.add(key);
     }
 
+    for (const category of manifest?.categories ?? []) {
+        addValue(category?.iconUrl);
+    }
+
     for (const structure of manifest?.assets ?? []) {
         addValue(structure?.icons?.default ?? structure?.iconUrl);
         addValue(structure?.icons?.rendered ?? structure?.previewIconUrl);
@@ -7728,6 +7733,22 @@ try {
     await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
     await syncCategoryIconAssets(prunedMergedManifest);
     await removeComposeTimeSubtypeIconsFromPublicDirectory(collectSubtypeOverlayIconKeys(prunedMergedManifest));
+
+    // Shared-mod co-location reads blueprint glyphs from /icons/ then rewrites pixels under
+    // shared/modifications/. Those source keys drop out of the compacted manifest, so prune
+    // any public icon that is no longer referenced (keeps category + multi-use pool icons).
+    const removedUnreferencedIcons = await removeUnreferencedPublicIcons(
+        publicIconsDirectory,
+        referencedSharedGeneratedIconKeys,
+        {
+            pathExists,
+            unlink,
+            walkFiles,
+        },
+    );
+    if (removedUnreferencedIcons > 0) {
+        logPublishSummary(`publish-manifest: removed ${removedUnreferencedIcons} unreferenced icons from public/icons`);
+    }
 
     if (!hasTargetFilters(targetFilter)) {
         await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
