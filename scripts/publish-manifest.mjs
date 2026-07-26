@@ -1746,6 +1746,7 @@ function compactStructure(value) {
         repairCost: null,
         structuralIntegrity: null,
         inventorySlots: null,
+        liquidCapacity: null,
         stockpile: null,
         holdProfile: null,
         markedCargoOverlay: null,

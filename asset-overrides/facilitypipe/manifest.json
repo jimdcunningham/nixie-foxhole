@@ -1,6 +1,7 @@
 {
   "clipFloorZ": -0.5,
   "previewDirection": "sw",
+  "liquidCapacity": 100,
   "connector": {
     "behavior": {
       "pipeCurveScale": true,

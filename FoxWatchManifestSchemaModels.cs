@@ -248,6 +248,9 @@ public sealed class FoxWatchManifestStructure
 
     public int? InventorySlots { get; set; }
 
+    /// <summary>Facility liquid volume from MaxLiquidAmount (liters).</summary>
+    public double? LiquidCapacity { get; set; }
+
     public FoxWatchManifestStockpile? Stockpile { get; set; }
 
     public FoxWatchManifestHoldProfile? HoldProfile { get; set; }

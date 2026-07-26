@@ -1,5 +1,6 @@
 {
   "clipFloorZ": -0.5,
+  "liquidCapacity": 100,
   "connector": {
     "behavior": {
       "pipeCurveScale": true,

@@ -874,6 +874,7 @@ public class FoxWatchManifestAssetExtractor
                 RepairCost = extractedRepairCost ?? constructionDynamicData?.RepairCost,
                 StructuralIntegrity = constructionDynamicData?.StructuralIntegrity,
                 InventorySlots = constructionDynamicData?.InventorySlots,
+                LiquidCapacity = ExtractDouble(inheritedProperty("MaxLiquidAmount")),
                 Stockpile = stockpile,
                 HoldProfile = BuildHoldProfile(stockpile, fuelTanks, constructionDynamicData, codeNameText),
                 MaxHealth = ExtractNullableInt(inheritedProperty("MaxHealth")),
@@ -2805,6 +2806,11 @@ public class FoxWatchManifestAssetExtractor
             if (preferredStructure.FuelTanks.Count == 0 && supplementalStructure.FuelTanks.Count > 0)
             {
                 preferredStructure.FuelTanks = [.. supplementalStructure.FuelTanks];
+            }
+
+            if (preferredStructure.LiquidCapacity is null && supplementalStructure.LiquidCapacity is not null)
+            {
+                preferredStructure.LiquidCapacity = supplementalStructure.LiquidCapacity;
             }
 
             if (preferredStructure.ConversionEntries.Count == 0 && supplementalStructure.ConversionEntries.Count > 0)

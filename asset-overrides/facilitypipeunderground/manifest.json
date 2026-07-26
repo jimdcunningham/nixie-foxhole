@@ -1,5 +1,6 @@
 {
   "clipFloorZ": -0.5,
+  "liquidCapacity": 50,
   "connector": {
     "pathStyle": "spline",
     "behavior": {
