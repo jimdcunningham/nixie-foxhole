@@ -1653,11 +1653,42 @@ function compactSharedManifest(value) {
     return compactNullableObject(value, {
         modifications: {},
         packaging: {},
+        bunkerDestruction: { weapons: {} },
     }, {
         modifications: entryValue => sortObjectEntries(Object.fromEntries(Object.entries(entryValue ?? {})
             .map(([modificationId, modification]) => [modificationId, compactSharedModificationVariant(modificationId, modification)]))),
         packaging: entryValue => sortObjectEntries(Object.fromEntries(Object.entries(entryValue ?? {})
             .map(([shippableType, pallet]) => [shippableType, compactSharedPackagedPallet(pallet)]))),
+        bunkerDestruction: entryValue => compactBunkerDestruction(entryValue),
+    });
+}
+
+function compactBunkerDestruction(value) {
+    return compactNullableObject(value, {
+        weapons: {},
+    }, {
+        weapons: entryValue => sortObjectEntries(Object.fromEntries(Object.entries(entryValue ?? {})
+            .map(([weaponId, weapon]) => [weaponId, compactBunkerDestructionWeapon(weapon)])
+            .filter(([, weapon]) => weapon != null))),
+    });
+}
+
+function compactBunkerDestructionWeapon(value) {
+    return compactNullableObject(value, {
+        name: null,
+        codeName: null,
+        damage: null,
+        damageType: null,
+    }, {
+        damageType: entryValue => compactNullableObject(entryValue, {
+            name: null,
+            description: null,
+            multipliers: {},
+            profiles: {},
+        }, {
+            multipliers: entryValueInner => sortObjectEntries(entryValueInner ?? {}),
+            profiles: entryValueInner => sortObjectEntries(entryValueInner ?? {}),
+        }),
     });
 }
 
@@ -1746,6 +1777,8 @@ function compactStructure(value) {
         repairCost: null,
         structuralIntegrity: null,
         inventorySlots: null,
+        decaySupplyDrain: null,
+        decays: null,
         liquidCapacity: null,
         stockpile: null,
         holdProfile: null,
@@ -1814,7 +1847,7 @@ function compactLocalizationIndex(value) {
 function compactPublishedFoxholeManifest(manifest) {
     const publishedManifest = normalizePublishedModificationPath(manifest);
     return compactObject(publishedManifest, {
-        shared: { modifications: {} },
+        shared: { modifications: {}, packaging: {}, bunkerDestruction: { weapons: {} } },
     }, {
         shared: compactSharedManifest,
         categories: entryValue => compactArray(entryValue, compactCategory),
@@ -2298,6 +2331,24 @@ function mergeSharedModificationEntries(baseManifest, partialManifest) {
         ...(baseManifest?.shared?.modifications ?? {}),
         ...(partialManifest?.shared?.modifications ?? {}),
     });
+}
+
+function mergeBunkerDestruction(baseValue, partialValue) {
+    const partialWeapons = partialValue?.weapons;
+    if (partialWeapons && typeof partialWeapons === 'object' && Object.keys(partialWeapons).length > 0) {
+        return {
+            weapons: sortObjectEntries(partialWeapons),
+        };
+    }
+
+    const baseWeapons = baseValue?.weapons;
+    if (baseWeapons && typeof baseWeapons === 'object') {
+        return {
+            weapons: sortObjectEntries(baseWeapons),
+        };
+    }
+
+    return { weapons: {} };
 }
 
 function collectReferencedSharedModificationIds(manifest) {
@@ -2784,6 +2835,10 @@ function mergeManifestSubset(baseManifest, partialManifest, removedStructureIds 
                 ...(baseManifest?.shared?.packaging ?? {}),
                 ...(partialManifest?.shared?.packaging ?? {}),
             },
+            bunkerDestruction: mergeBunkerDestruction(
+                baseManifest?.shared?.bunkerDestruction,
+                partialManifest?.shared?.bunkerDestruction,
+            ),
         },
         categories: categories.filter(category => referencedCategoryIds.has(normalizeId(category?.id))),
         assets: structures,

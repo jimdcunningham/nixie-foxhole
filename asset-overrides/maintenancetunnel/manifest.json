@@ -1,3 +1,9 @@
 {
-  "categoryId": "misc"
+  "categoryId": "misc",
+  "ranges": [
+    {
+      "type": "preventDecay",
+      "max": 100
+    }
+  ]
 }

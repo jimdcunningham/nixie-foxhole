@@ -1,0 +1,61 @@
+{
+  "weapons": {
+    "hegrenade": {
+      "name": "HE Grenade",
+      "multipliers": {
+        "t2": 0.95,
+        "t3": 0.95
+      }
+    },
+    "helaunchedgrenade": {
+      "name": "HE Launcher",
+      "multipliers": {
+        "t2": 0.95,
+        "t3": 0.95
+      }
+    },
+    "minitankammo": {
+      "multipliers": {
+        "t2": 0.99,
+        "t3": 0.99
+      }
+    },
+    "rpgammo": {
+      "multipliers": {
+        "t3": 0.99
+      }
+    },
+    "lighttankammo": {},
+    "battletankammo": {},
+    "atammo": {},
+    "atlargeammo": {},
+    "mortarammo": {
+      "name": "Mortar"
+    },
+    "lightartilleryammo": {},
+    "heavyartilleryammo": {},
+    "herocketammo": {
+      "name": "Rocket"
+    },
+    "firerocketammo": {
+      "name": "Fire Rocket"
+    },
+    "demolitionrocketammo": {},
+    "explosivelightc": {
+      "name": "Hydras"
+    },
+    "bomberammo": {
+      "name": "Raidbreaker"
+    },
+    "mortartankammo": {
+      "name": "250mm"
+    },
+    "lrartilleryammo": {},
+    "satchelchargew": {
+      "name": "Satchel"
+    },
+    "satchelcharget": {
+      "name": "Havoc"
+    }
+  }
+}

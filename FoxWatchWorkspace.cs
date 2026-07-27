@@ -11,6 +11,7 @@ public static class FoxWatchWorkspace
 
     public static readonly string OverrideRoot = Path.Combine(RepositoryRoot, "tools", "foxwatch", "asset-overrides");
     public static readonly string SharedModificationOverrideManifestPath = Path.Combine(OverrideRoot, "modifications.json");
+    public static readonly string BunkerDestructionOverrideManifestPath = Path.Combine(OverrideRoot, "bunker-destruction.json");
     public static readonly string LegacyAssetOverrideRoot = Path.Combine(RepositoryRoot, "tools", "foxwatch", "assets");
     public static readonly string LegacyPoseOverrideRoot = Path.Combine(RepositoryRoot, "tools", "foxwatch", "pose-overrides");
 

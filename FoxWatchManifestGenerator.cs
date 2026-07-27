@@ -156,6 +156,7 @@ public sealed class FoxWatchManifestGenerator
         {
             SchemaVersion = manifest.SchemaVersion,
             Source = manifest.Source,
+            Shared = manifest.Shared,
             Categories = filteredCategories,
             Assets = filteredAssets,
             Items = manifest.Items,

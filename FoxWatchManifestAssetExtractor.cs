@@ -35,9 +35,15 @@ public class FoxWatchManifestAssetExtractor
         private const string StructureDynamicDataPackagePath = "War/Content/Blueprints/Data/BPStructureDynamicData.uasset";
         private const string VehicleDynamicDataPackagePath = "War/Content/Blueprints/Data/BPVehicleDynamicData.uasset";
         private const string ItemDynamicDataPackagePath = "War/Content/Blueprints/Data/BPItemDynamicData.uasset";
+        private const string AmmoDynamicDataPackagePath = "War/Content/Blueprints/Data/BPAmmoDynamicData.uasset";
+        private const string DamageProfilesPackagePath = "War/Content/Blueprints/Data/DTDamageProfiles.uasset";
         private const string WreckedSubTypeIconObjectPath = "War/Content/Textures/UI/ItemIcons/SubtypeWreckedIcon.0";
         private const long FacilityLiquidPipeSocketMask = 2048;
         private const long FacilityLiquidPipeSocketCategory = 16384;
+        private static readonly HashSet<string> ForcedDecayStructureCodeNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "shippingcrate",
+        };
         private static readonly string[] InvalidAssetIconPackagePaths =
         [
             "War/Content/Textures/UI/StructureIcons/GarrisonStructureIcon.uasset",
@@ -274,6 +280,10 @@ public class FoxWatchManifestAssetExtractor
                 Source = new FoxWatchManifestSource
                 {
                     Kind = "foxwatch",
+                },
+                Shared = new FoxWatchManifestShared
+                {
+                    BunkerDestruction = ExtractBunkerDestructionSharedData(),
                 },
                 Categories = categoriesById.Values.OrderBy(category => category.Order).ThenBy(category => category.Name?.Fallback ?? category.Id).ToList(),
                 Assets = structuresById.Values.OrderBy(structure => structure.CategoryId).ThenBy(structure => structure.BuildOrder).ThenBy(structure => structure.Name?.Fallback ?? structure.Id).ToList(),
@@ -874,6 +884,8 @@ public class FoxWatchManifestAssetExtractor
                 RepairCost = extractedRepairCost ?? constructionDynamicData?.RepairCost,
                 StructuralIntegrity = constructionDynamicData?.StructuralIntegrity,
                 InventorySlots = constructionDynamicData?.InventorySlots,
+                DecaySupplyDrain = ResolveDecaySupplyDrain(inheritedProperty("DecaySupplyDrain"), constructionDynamicData),
+                Decays = ResolveDecays(codeNameText, constructionDynamicData),
                 LiquidCapacity = ExtractDouble(inheritedProperty("MaxLiquidAmount")),
                 Stockpile = stockpile,
                 HoldProfile = BuildHoldProfile(stockpile, fuelTanks, constructionDynamicData, codeNameText),
@@ -2811,6 +2823,16 @@ public class FoxWatchManifestAssetExtractor
             if (preferredStructure.LiquidCapacity is null && supplementalStructure.LiquidCapacity is not null)
             {
                 preferredStructure.LiquidCapacity = supplementalStructure.LiquidCapacity;
+            }
+
+            if (preferredStructure.DecaySupplyDrain is null && supplementalStructure.DecaySupplyDrain is not null)
+            {
+                preferredStructure.DecaySupplyDrain = supplementalStructure.DecaySupplyDrain;
+            }
+
+            if (preferredStructure.Decays is null && supplementalStructure.Decays is not null)
+            {
+                preferredStructure.Decays = supplementalStructure.Decays;
             }
 
             if (preferredStructure.ConversionEntries.Count == 0 && supplementalStructure.ConversionEntries.Count > 0)
@@ -5394,6 +5416,387 @@ public class FoxWatchManifestAssetExtractor
                 : null;
         }
 
+        private static double? ResolveDecaySupplyDrain(
+            object? blueprintDecaySupplyDrain,
+            FoxWatchConstructionDynamicDataEntry? constructionDynamicData)
+        {
+            var fromBlueprint = ExtractDouble(blueprintDecaySupplyDrain);
+            if (fromBlueprint is > 0)
+            {
+                return fromBlueprint;
+            }
+
+            return constructionDynamicData?.DecaySupplyDrain is > 0
+                ? constructionDynamicData.DecaySupplyDrain
+                : null;
+        }
+
+        private static bool? ResolveDecays(
+            string codeName,
+            FoxWatchConstructionDynamicDataEntry? constructionDynamicData)
+        {
+            if (ForcedDecayStructureCodeNames.Contains(NormalizeString(codeName)))
+            {
+                return true;
+            }
+
+            return constructionDynamicData?.DecayStartHours is > 0
+                ? true
+                : null;
+        }
+
+        private FoxWatchManifestBunkerDestruction ExtractBunkerDestructionSharedData()
+        {
+            var overrideWeapons = LoadBunkerDestructionWeaponOverrides();
+            var ammoRows = LoadAmmoDynamicDataRows();
+            var damageProfilesByType = LoadDamageProfilesByType();
+            var weapons = new Dictionary<string, FoxWatchManifestBunkerDestructionWeapon>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (weaponId, overrideWeapon) in overrideWeapons)
+            {
+                if (!ammoRows.TryGetValue(weaponId, out var ammoRow) || ammoRow.Damage is not > 0)
+                {
+                    continue;
+                }
+
+                var damageTypeKey = ammoRow.DamageTypeKey;
+                if (string.IsNullOrWhiteSpace(damageTypeKey)
+                    || !damageProfilesByType.TryGetValue(damageTypeKey, out var profile)
+                    || !HasUsableStructureDamageProfile(profile))
+                {
+                    continue;
+                }
+
+                var multipliers = overrideWeapon.Multipliers is { Count: > 0 }
+                    ? new Dictionary<string, double>(overrideWeapon.Multipliers, StringComparer.OrdinalIgnoreCase)
+                    : null;
+
+                weapons[weaponId] = new FoxWatchManifestBunkerDestructionWeapon
+                {
+                    Name = NullIfWhiteSpace(overrideWeapon.Name) ?? NullIfWhiteSpace(ammoRow.DisplayName),
+                    CodeName = ammoRow.CodeName,
+                    Damage = ammoRow.Damage,
+                    DamageType = new FoxWatchManifestBunkerDestructionDamageType
+                    {
+                        Name = NullIfWhiteSpace(ammoRow.DamageTypeName) ?? NullIfWhiteSpace(damageTypeKey),
+                        Description = NullIfWhiteSpace(ammoRow.DamageTypeDescription),
+                        Multipliers = multipliers,
+                        Profiles = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["t1"] = profile.T1,
+                            ["t2"] = profile.T2,
+                            ["t3"] = profile.T3,
+                        },
+                    },
+                };
+            }
+
+            return new FoxWatchManifestBunkerDestruction
+            {
+                Weapons = weapons
+                    .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase),
+            };
+        }
+
+        private static bool HasUsableStructureDamageProfile(FoxWatchDamageProfileValues profile)
+        {
+            return profile.T1 > 0 || profile.T2 > 0 || profile.T3 > 0;
+        }
+
+        private IReadOnlyDictionary<string, FoxWatchBunkerDestructionWeaponOverride> LoadBunkerDestructionWeaponOverrides()
+        {
+            var path = FoxWatchWorkspace.BunkerDestructionOverrideManifestPath;
+            if (!File.Exists(path))
+            {
+                return new Dictionary<string, FoxWatchBunkerDestructionWeaponOverride>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(path));
+                if (!document.RootElement.TryGetProperty("weapons", out var weaponsElement)
+                    || weaponsElement.ValueKind != JsonValueKind.Object)
+                {
+                    return new Dictionary<string, FoxWatchBunkerDestructionWeaponOverride>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                var overrides = new Dictionary<string, FoxWatchBunkerDestructionWeaponOverride>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in weaponsElement.EnumerateObject())
+                {
+                    var weaponId = NormalizeString(property.Name).ToLowerInvariant();
+                    if (string.IsNullOrWhiteSpace(weaponId))
+                    {
+                        continue;
+                    }
+
+                    string? name = null;
+                    Dictionary<string, double>? multipliers = null;
+                    if (property.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        if (property.Value.TryGetProperty("name", out var nameElement)
+                            && nameElement.ValueKind == JsonValueKind.String)
+                        {
+                            name = nameElement.GetString();
+                        }
+
+                        if (property.Value.TryGetProperty("multipliers", out var multipliersElement)
+                            && multipliersElement.ValueKind == JsonValueKind.Object)
+                        {
+                            multipliers = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var multiplierProperty in multipliersElement.EnumerateObject())
+                            {
+                                if (multiplierProperty.Value.TryGetDouble(out var multiplierValue))
+                                {
+                                    multipliers[NormalizeString(multiplierProperty.Name).ToLowerInvariant()] = multiplierValue;
+                                }
+                            }
+                        }
+                    }
+
+                    overrides[weaponId] = new FoxWatchBunkerDestructionWeaponOverride
+                    {
+                        Name = name,
+                        Multipliers = multipliers,
+                    };
+                }
+
+                return overrides;
+            }
+            catch
+            {
+                return new Dictionary<string, FoxWatchBunkerDestructionWeaponOverride>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        private IReadOnlyDictionary<string, FoxWatchAmmoDynamicDataRow> LoadAmmoDynamicDataRows()
+        {
+            var rows = new Dictionary<string, FoxWatchAmmoDynamicDataRow>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var package = _fileProvider.LoadPackage(AmmoDynamicDataPackagePath);
+                var exportTokens = JArray.Parse(JsonConvert.SerializeObject(package.GetExports().ToArray(), Formatting.None));
+                var tableRows = exportTokens
+                    .OfType<JObject>()
+                    .FirstOrDefault(token =>
+                        token.Value<string>("Type")?.Contains("DataTable", StringComparison.OrdinalIgnoreCase) == true ||
+                        string.Equals(token.Value<string>("Name"), "BPAmmoDynamicData", StringComparison.OrdinalIgnoreCase))?
+                    .Value<JObject>("Rows");
+                if (tableRows == null)
+                {
+                    return rows;
+                }
+
+                foreach (var row in tableRows.Properties())
+                {
+                    var codeName = NormalizeString(row.Name);
+                    var weaponId = codeName.ToLowerInvariant();
+                    var value = row.Value as JObject;
+                    if (string.IsNullOrWhiteSpace(weaponId) || value == null)
+                    {
+                        continue;
+                    }
+
+                    var damage = value.Value<double?>("Damage");
+                    if (damage is not > 0)
+                    {
+                        continue;
+                    }
+
+                    var damageTypeToken = value["DamageType"];
+                    var damageTypePackagePath = ResolveReferencedPackagePathFromJsonToken(damageTypeToken);
+                    var damageTypeMetadata = ResolveDamageTypeMetadata(damageTypePackagePath, damageTypeToken);
+                    rows[weaponId] = new FoxWatchAmmoDynamicDataRow
+                    {
+                        CodeName = codeName,
+                        Damage = damage,
+                        DisplayName = NullIfWhiteSpace(value.Value<string>("DisplayName")) ?? codeName,
+                        DamageTypeKey = damageTypeMetadata?.TypeKey,
+                        DamageTypeName = damageTypeMetadata?.DisplayName,
+                        DamageTypeDescription = damageTypeMetadata?.Description,
+                    };
+                }
+            }
+            catch
+            {
+                // Pak/table may be unavailable in scaffold mode.
+            }
+
+            return rows;
+        }
+
+        private IReadOnlyDictionary<string, FoxWatchDamageProfileValues> LoadDamageProfilesByType()
+        {
+            var profiles = new Dictionary<string, FoxWatchDamageProfileValues>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var package = _fileProvider.LoadPackage(DamageProfilesPackagePath);
+                var exportTokens = JArray.Parse(JsonConvert.SerializeObject(package.GetExports().ToArray(), Formatting.None));
+                var tableRows = exportTokens
+                    .OfType<JObject>()
+                    .FirstOrDefault(token =>
+                        token.Value<string>("Type")?.Contains("DataTable", StringComparison.OrdinalIgnoreCase) == true ||
+                        string.Equals(token.Value<string>("Name"), "DTDamageProfiles", StringComparison.OrdinalIgnoreCase))?
+                    .Value<JObject>("Rows");
+                if (tableRows == null)
+                {
+                    return profiles;
+                }
+
+                foreach (var row in tableRows.Properties())
+                {
+                    var typeKey = NormalizeDamageTypeKey(row.Name);
+                    var value = row.Value as JObject;
+                    if (string.IsNullOrWhiteSpace(typeKey) || value == null)
+                    {
+                        continue;
+                    }
+
+                    var tier1 = value.Value<double?>("Tier1Structure") ?? 1;
+                    var tier2 = value.Value<double?>("Tier2Structure") ?? 1;
+                    var tier3 = value.Value<double?>("Tier3Structure") ?? 1;
+                    profiles[typeKey] = new FoxWatchDamageProfileValues
+                    {
+                        T1 = Math.Max(0, 1 - tier1),
+                        T2 = Math.Max(0, 1 - tier2),
+                        T3 = Math.Max(0, 1 - tier3),
+                    };
+                }
+            }
+            catch
+            {
+                // Pak/table may be unavailable in scaffold mode.
+            }
+
+            return profiles;
+        }
+
+        private static string? ResolveReferencedPackagePathFromJsonToken(JToken? token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                return null;
+            }
+
+            if (token is JObject objectToken)
+            {
+                var objectPath = NormalizeString(objectToken.Value<string>("ObjectPath"));
+                var packagePath = ConvertObjectPathToPackagePath(objectPath);
+                if (!string.IsNullOrWhiteSpace(packagePath))
+                {
+                    return packagePath;
+                }
+            }
+
+            return ResolveReferencedPackagePath(token);
+        }
+
+        private FoxWatchDamageTypeMetadata? ResolveDamageTypeMetadata(string? packagePath, JToken? damageTypeToken)
+        {
+            var objectName = NormalizeString(damageTypeToken is JObject damageTypeObject
+                ? damageTypeObject.Value<string>("ObjectName")
+                : null);
+            var typeKeyFromPath = NormalizeDamageTypeKey(Path.GetFileNameWithoutExtension(packagePath ?? string.Empty))
+                ?? NormalizeDamageTypeKey(objectName.Replace("BlueprintGeneratedClass", string.Empty, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrWhiteSpace(packagePath))
+            {
+                return string.IsNullOrWhiteSpace(typeKeyFromPath)
+                    ? null
+                    : new FoxWatchDamageTypeMetadata { TypeKey = typeKeyFromPath };
+            }
+
+            try
+            {
+                var package = _fileProvider.LoadPackage(packagePath);
+                var exports = package.GetExports().Cast<object>().ToArray();
+                var defaultObject = exports
+                    .FirstOrDefault(export => NormalizeString(ExtractText(GetNamedValue(export, "Name"))).StartsWith("Default__", StringComparison.OrdinalIgnoreCase))
+                    ?? exports.FirstOrDefault();
+                if (defaultObject == null)
+                {
+                    return string.IsNullOrWhiteSpace(typeKeyFromPath)
+                        ? null
+                        : new FoxWatchDamageTypeMetadata { TypeKey = typeKeyFromPath };
+                }
+
+                var typeValue = NormalizeEnumValue(GetNamedValue(defaultObject, "Type"));
+                var typeKey = NormalizeDamageTypeKey(typeValue) ?? typeKeyFromPath;
+                var displayName = NormalizeString(ExtractText(GetNamedValue(defaultObject, "DisplayName")));
+                var descriptionDetails = GetNamedValue(defaultObject, "DescriptionDetails");
+                var description = NormalizeString(ExtractText(GetNamedValue(descriptionDetails, "Text")));
+                return string.IsNullOrWhiteSpace(typeKey)
+                    ? null
+                    : new FoxWatchDamageTypeMetadata
+                    {
+                        TypeKey = typeKey,
+                        DisplayName = NullIfWhiteSpace(displayName),
+                        Description = NullIfWhiteSpace(description),
+                    };
+            }
+            catch
+            {
+                return string.IsNullOrWhiteSpace(typeKeyFromPath)
+                    ? null
+                    : new FoxWatchDamageTypeMetadata { TypeKey = typeKeyFromPath };
+            }
+        }
+
+        private static string? NormalizeDamageTypeKey(string? value)
+        {
+            var normalized = NormalizeString(value);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return null;
+            }
+
+            normalized = normalized
+                .Replace("EDamageType::", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("DamageType", string.Empty, StringComparison.OrdinalIgnoreCase);
+            return string.IsNullOrWhiteSpace(normalized)
+                ? null
+                : normalized.Trim().ToLowerInvariant();
+        }
+
+        private sealed class FoxWatchBunkerDestructionWeaponOverride
+        {
+            public string? Name { get; set; }
+
+            public Dictionary<string, double>? Multipliers { get; set; }
+        }
+
+        private sealed class FoxWatchAmmoDynamicDataRow
+        {
+            public string CodeName { get; set; } = string.Empty;
+
+            public double? Damage { get; set; }
+
+            public string? DisplayName { get; set; }
+
+            public string? DamageTypeKey { get; set; }
+
+            public string? DamageTypeName { get; set; }
+
+            public string? DamageTypeDescription { get; set; }
+        }
+
+        private sealed class FoxWatchDamageProfileValues
+        {
+            public double T1 { get; set; }
+
+            public double T2 { get; set; }
+
+            public double T3 { get; set; }
+        }
+
+        private sealed class FoxWatchDamageTypeMetadata
+        {
+            public string TypeKey { get; set; } = string.Empty;
+
+            public string? DisplayName { get; set; }
+
+            public string? Description { get; set; }
+        }
+
         private IReadOnlyDictionary<string, FoxWatchMountDynamicDataEntry> LoadMountDynamicDataEntries()
         {
             if (_mountDynamicDataEntriesByKey != null)
@@ -5538,6 +5941,18 @@ public class FoxWatchManifestAssetExtractor
                     inventorySlots = null;
                 }
 
+                var decaySupplyDrain = value.Value<double?>("DecaySupplyDrain");
+                if (decaySupplyDrain is 0)
+                {
+                    decaySupplyDrain = null;
+                }
+
+                var decayStartHours = value.Value<double?>("DecayStartHours");
+                if (decayStartHours is 0)
+                {
+                    decayStartHours = null;
+                }
+
                 var itemSlotFilters = ExtractItemSlotFiltersFromJsonToken(value["ItemSlotFilters"]);
 
                 var crateQuantity = value.Value<double?>("QuantityPerCrate");
@@ -5580,6 +5995,8 @@ public class FoxWatchManifestAssetExtractor
                         RepairCost = repairCost,
                         StructuralIntegrity = structuralIntegrity,
                         InventorySlots = inventorySlots,
+                        DecaySupplyDrain = decaySupplyDrain,
+                        DecayStartHours = decayStartHours,
                         ItemSlotFilters = itemSlotFilters,
                     };
                     continue;
@@ -5638,6 +6055,16 @@ public class FoxWatchManifestAssetExtractor
                 if (existingEntry.InventorySlots == null && inventorySlots != null)
                 {
                     existingEntry.InventorySlots = inventorySlots;
+                }
+
+                if (existingEntry.DecaySupplyDrain == null && decaySupplyDrain != null)
+                {
+                    existingEntry.DecaySupplyDrain = decaySupplyDrain;
+                }
+
+                if (existingEntry.DecayStartHours == null && decayStartHours != null)
+                {
+                    existingEntry.DecayStartHours = decayStartHours;
                 }
 
                 if (existingEntry.ItemSlotFilters.Count == 0 && itemSlotFilters.Count > 0)
@@ -12297,6 +12724,10 @@ public class FoxWatchManifestAssetExtractor
             public double? StructuralIntegrity { get; set; }
 
             public int? InventorySlots { get; set; }
+
+            public double? DecaySupplyDrain { get; set; }
+
+            public double? DecayStartHours { get; set; }
 
             public List<FoxWatchConstructionDynamicDataItemSlotFilter> ItemSlotFilters { get; set; } = [];
         }

@@ -8,6 +8,8 @@ public sealed class FoxWatchManifest
 
     public FoxWatchManifestSource Source { get; set; } = new();
 
+    public FoxWatchManifestShared Shared { get; set; } = new();
+
     public List<FoxWatchManifestCategory> Categories { get; set; } = [];
 
     public List<FoxWatchManifestStructure> Assets { get; set; } = [];
@@ -15,6 +17,38 @@ public sealed class FoxWatchManifest
     public List<FoxWatchManifestItem> Items { get; set; } = [];
 
     public List<FoxWatchLocalizationBundle> Localizations { get; set; } = [];
+}
+
+public sealed class FoxWatchManifestShared
+{
+    public FoxWatchManifestBunkerDestruction? BunkerDestruction { get; set; }
+}
+
+public sealed class FoxWatchManifestBunkerDestruction
+{
+    public Dictionary<string, FoxWatchManifestBunkerDestructionWeapon> Weapons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class FoxWatchManifestBunkerDestructionWeapon
+{
+    public string? Name { get; set; }
+
+    public string? CodeName { get; set; }
+
+    public double? Damage { get; set; }
+
+    public FoxWatchManifestBunkerDestructionDamageType? DamageType { get; set; }
+}
+
+public sealed class FoxWatchManifestBunkerDestructionDamageType
+{
+    public string? Name { get; set; }
+
+    public string? Description { get; set; }
+
+    public Dictionary<string, double>? Multipliers { get; set; }
+
+    public Dictionary<string, double>? Profiles { get; set; }
 }
 
 public sealed class FoxWatchManifestSource
@@ -247,6 +281,12 @@ public sealed class FoxWatchManifestStructure
     public double? StructuralIntegrity { get; set; }
 
     public int? InventorySlots { get; set; }
+
+    /// <summary>Maintenance supply drain multiplier from DecaySupplyDrain.</summary>
+    public double? DecaySupplyDrain { get; set; }
+
+    /// <summary>True when the structure decays (DecayStartHours &gt; 0 or forced).</summary>
+    public bool? Decays { get; set; }
 
     /// <summary>Facility liquid volume from MaxLiquidAmount (liters).</summary>
     public double? LiquidCapacity { get; set; }
