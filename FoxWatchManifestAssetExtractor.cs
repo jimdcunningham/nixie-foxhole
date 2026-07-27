@@ -787,9 +787,12 @@ public class FoxWatchManifestAssetExtractor
                 ExtractCodeNames(inheritedProperty("ConversionCodeNames")),
                 fortUpgradeCodeNames);
             var destroyedStructureCodeName = ResolveReferencedStructureCodeName(inheritedProperty("BaseStructureClass"));
+            var breachedStructureCodeName = ResolveReferencedStructureCodeName(inheritedProperty("BreachedStructureClass"));
             var validBuildTools = ExtractDouble(inheritedProperty("ValidBuildTools"));
             var isDestroyed = ComputeIsDestroyedStructure(obj, blueprint, isVehicle, profileType, armourType);
             var isBreached = ComputeIsBreachedStructure(codeNameText, upgradeStructureCodeName);
+            var breachable = ResolveStructureBreachable(codeNameText, profileType, breachedStructureCodeName, isDestroyed, isBreached);
+            var structuralGarrison = ResolveStructureStructuralGarrison(codeNameText, inheritedProperty);
             var extractedCost = ExtractStructureCost(inheritedProperty);
             var extractedRepairCost = ExtractNullableIntFromCandidates(inheritedProperty, "RepairCost");
             var constructionDynamicData = ResolveConstructionDynamicDataEntry(codeNameText);
@@ -883,6 +886,8 @@ public class FoxWatchManifestAssetExtractor
                         : new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)),
                 RepairCost = extractedRepairCost ?? constructionDynamicData?.RepairCost,
                 StructuralIntegrity = constructionDynamicData?.StructuralIntegrity,
+                Breachable = breachable,
+                StructuralGarrison = structuralGarrison,
                 InventorySlots = constructionDynamicData?.InventorySlots,
                 DecaySupplyDrain = ResolveDecaySupplyDrain(inheritedProperty("DecaySupplyDrain"), constructionDynamicData),
                 Decays = ResolveDecays(codeNameText, constructionDynamicData),
@@ -1329,6 +1334,7 @@ public class FoxWatchManifestAssetExtractor
                         ComponentType = socket.ComponentType,
                         PipeType = socket.PipeType,
                         SocketTags = socketTags,
+                        IntegrityBonus = socket.IntegrityBonus,
                         X = socket.X,
                         Y = socket.Y,
                         Z = socket.Z,
@@ -2051,6 +2057,120 @@ public class FoxWatchManifestAssetExtractor
         {
             return codeName.EndsWith("Breached", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(upgradeStructureCodeName);
+        }
+
+        private static bool? ResolveStructureBreachable(
+            string codeName,
+            string? profileType,
+            string? breachedStructureCodeName,
+            bool isDestroyed,
+            bool isBreached)
+        {
+            if (isDestroyed || isBreached)
+            {
+                return null;
+            }
+
+            if (IsStandaloneDestroyedOrBreachedStructure(codeName, profileType))
+            {
+                return null;
+            }
+
+            // Legacy: breachable when BreachedStructureClass is assigned on the blueprint.
+            if (!string.IsNullOrWhiteSpace(breachedStructureCodeName))
+            {
+                return true;
+            }
+
+            // Fort pieces without an explicit class still participate when profile/code looks like a fort.
+            if (!string.IsNullOrWhiteSpace(profileType)
+                && profileType.StartsWith("Fort", StringComparison.OrdinalIgnoreCase)
+                && !profileType.Contains("Destroyed", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (codeName.StartsWith("Fort", StringComparison.OrdinalIgnoreCase)
+                && !codeName.Contains("Destroyed", StringComparison.OrdinalIgnoreCase)
+                && !codeName.Contains("Breached", StringComparison.OrdinalIgnoreCase)
+                && !codeName.Contains("BuildSite", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (IsStructuralGarrisonCodeName(codeName))
+            {
+                return true;
+            }
+
+            return null;
+        }
+
+        private static bool? ResolveStructureStructuralGarrison(
+            string codeName,
+            Func<string, object?> inheritedProperty)
+        {
+            var authored = ExtractBoolValue(inheritedProperty("bStructuralGarrison"))
+                ?? ExtractBoolValue(inheritedProperty("StructuralGarrison"));
+            if (authored == true)
+            {
+                return true;
+            }
+
+            if (IsStructuralGarrisonCodeName(codeName))
+            {
+                return true;
+            }
+
+            return null;
+        }
+
+        private static bool IsStructuralGarrisonCodeName(string codeName)
+        {
+            return codeName.Equals("RifleAIT1", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("RifleAIT2", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("RifleAIT3", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("MgAIT1", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("MgAIT2", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("MgAIT3", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ATGunAIT1", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ATGunAIT2", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ATGunAIT3", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ArtilleryAIT1", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ArtilleryAIT2", StringComparison.OrdinalIgnoreCase)
+                || codeName.Equals("ArtilleryAIT3", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool? ResolveBuildSocketIntegrityBonus(
+            string? socketName,
+            object? component)
+        {
+            if (component != null)
+            {
+                var ignoreIntegrityBonus = ExtractBoolValue(GetNamedValue(component, "bIgnoreIntegrityBonus"))
+                    ?? ExtractBoolValue(GetNamedValue(component, "IgnoreIntegrityBonus"));
+                if (ignoreIntegrityBonus == true)
+                {
+                    return false;
+                }
+
+                var integrityBonus = ExtractBoolValue(GetNamedValue(component, "bIntegrityBonus"))
+                    ?? ExtractBoolValue(GetNamedValue(component, "IntegrityBonus"))
+                    ?? ExtractBoolValue(GetNamedValue(component, "bProvidesIntegrityBonus"));
+                if (integrityBonus == false)
+                {
+                    return false;
+                }
+            }
+
+            // Internal fort sockets (corner internals) never contribute to SI socket bonus in legacy data.
+            if (!string.IsNullOrWhiteSpace(socketName)
+                && socketName.Contains("Internal", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return null;
         }
 
         private static FoxWatchTextureVariants CreateTextureVariants(string? textureUrl)
@@ -3309,6 +3429,7 @@ public class FoxWatchManifestAssetExtractor
                 ComponentType = value.ComponentType,
                 PipeType = value.PipeType,
                 SocketTags = value.SocketTags.Select(CloneSocketTag).ToList(),
+                IntegrityBonus = value.IntegrityBonus,
                 X = value.X,
                 Y = value.Y,
                 Z = value.Z,
@@ -6628,6 +6749,7 @@ public class FoxWatchManifestAssetExtractor
                         Tag = tag.Tag,
                     })
                 ],
+                IntegrityBonus = ResolveBuildSocketIntegrityBonus(componentName, component: null),
                 X = transform.X,
                 Y = transform.Y,
                 Z = transform.Z,
@@ -6671,6 +6793,7 @@ public class FoxWatchManifestAssetExtractor
                 ComponentType = componentType,
                 PipeType = pipeType,
                 SocketTags = socketTags,
+                IntegrityBonus = ResolveBuildSocketIntegrityBonus(componentName, component),
                 X = transform.X,
                 Y = transform.Y,
                 Z = transform.Z,

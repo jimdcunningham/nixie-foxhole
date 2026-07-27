@@ -280,6 +280,14 @@ public sealed class FoxWatchManifestStructure
 
     public double? StructuralIntegrity { get; set; }
 
+    /// <summary>True when the structure can participate in bunker breach / SI socket scoring.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Breachable { get; set; }
+
+    /// <summary>True for AI garrison fort pieces (same-garrison faces stay breachable).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? StructuralGarrison { get; set; }
+
     public int? InventorySlots { get; set; }
 
     /// <summary>Maintenance supply drain multiplier from DecaySupplyDrain.</summary>
@@ -513,6 +521,10 @@ public sealed class FoxWatchManifestBuildSocket
     public string? PipeType { get; set; }
 
     public List<FoxWatchManifestSocketTag> SocketTags { get; set; } = [];
+
+    /// <summary>When false, socket is excluded from bunker SI / breach indicators (legacy integrityBonus).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IntegrityBonus { get; set; }
 
     public double? X { get; set; }
 
