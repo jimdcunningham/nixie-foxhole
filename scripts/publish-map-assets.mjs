@@ -6,7 +6,7 @@ import sharp from 'sharp';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(currentDir, '..', '..', '..');
-const foxholePlannerRoot = resolve(repositoryRoot, 'apps', 'foxhole-planner');
+const foxholePlannerRoot = resolve(repositoryRoot, 'packages', 'extensions', 'foxhole');
 const foxholeDataDirectory = resolve(process.env.FOXHOLE_DATA_DIR ?? resolve(repositoryRoot, 'tools', 'foxwatch', 'tmp', 'pak-assets'));
 const rawFoxWatchMapDataPath = resolve(repositoryRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-map-data.v1.json');
 const mapIconsOverridePath = resolve(repositoryRoot, 'tools', 'foxwatch', 'asset-overrides', 'map-icons.json');

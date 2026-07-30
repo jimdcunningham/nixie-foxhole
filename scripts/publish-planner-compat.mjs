@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(currentDir, '..', '..', '..');
-const foxholePlannerRoot = resolve(repositoryRoot, 'apps', 'foxhole-planner');
+const foxholePlannerRoot = resolve(repositoryRoot, 'packages', 'extensions', 'foxhole');
 const assetsDirectory = resolve(foxholePlannerRoot, 'public', 'foxhole', 'assets');
 const plannerPackageJsonPath = resolve(foxholePlannerRoot, 'package.json');
 const publishedManifestPath = resolve(assetsDirectory, 'manifest.v1.json');
@@ -14,11 +14,11 @@ const plannerCompatPath = resolve(assetsDirectory, 'planner-compat.json');
 export async function publishPlannerCompat(options = {}) {
     const root = options.repositoryRoot ?? repositoryRoot;
     const plannerPackage = JSON.parse(await readFile(
-        options.plannerPackageJsonPath ?? resolve(root, 'apps', 'foxhole-planner', 'package.json'),
+        options.plannerPackageJsonPath ?? resolve(root, 'packages', 'extensions', 'foxhole', 'package.json'),
         'utf8',
     ));
     const manifestDocument = JSON.parse(await readFile(
-        options.publishedManifestPath ?? resolve(root, 'apps', 'foxhole-planner', 'public', 'foxhole', 'assets', 'manifest.v1.json'),
+        options.publishedManifestPath ?? resolve(root, 'packages', 'extensions', 'foxhole', 'public', 'foxhole', 'assets', 'manifest.v1.json'),
         'utf8',
     ));
 
@@ -29,14 +29,14 @@ export async function publishPlannerCompat(options = {}) {
     };
 
     if (!compatDocument.plannerVersion) {
-        throw new Error('publish-planner-compat requires apps/foxhole-planner/package.json version');
+        throw new Error('publish-planner-compat requires packages/extensions/foxhole/package.json version');
     }
 
     if (!compatDocument.manifestSchemaVersion) {
         throw new Error('publish-planner-compat requires manifest.v1.json schemaVersion');
     }
 
-    const resolvedMapDataPath = options.mapDataPath ?? resolve(root, 'apps', 'foxhole-planner', 'public', 'foxhole', 'assets', 'maps', 'map-data.v1.json');
+    const resolvedMapDataPath = options.mapDataPath ?? resolve(root, 'packages', 'extensions', 'foxhole', 'public', 'foxhole', 'assets', 'maps', 'map-data.v1.json');
     try {
         const mapDataDocument = JSON.parse(await readFile(resolvedMapDataPath, 'utf8'));
         const mapDataSchemaVersion = String(mapDataDocument.schemaVersion ?? '').trim();
@@ -47,7 +47,7 @@ export async function publishPlannerCompat(options = {}) {
     // map-data.v1.json is optional for compat metadata
     }
 
-    const outputPath = options.plannerCompatPath ?? resolve(root, 'apps', 'foxhole-planner', 'public', 'foxhole', 'assets', 'planner-compat.json');
+    const outputPath = options.plannerCompatPath ?? resolve(root, 'packages', 'extensions', 'foxhole', 'public', 'foxhole', 'assets', 'planner-compat.json');
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(compatDocument, null, 2)}\n`, 'utf8');
     return compatDocument;

@@ -57,7 +57,7 @@ internal static class FoxWatchPublishedSharedModificationCatalog
 
     private static void LoadSharedModificationIdsFromPublishedManifest(ISet<string> sharedModificationIds)
     {
-        var publishedManifestPath = FoxWatchWorkspace.ResolvePath("apps/foxhole-planner/public/foxhole/assets/manifest.v1.json");
+        var publishedManifestPath = FoxWatchWorkspace.ResolvePath("packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json");
         if (string.IsNullOrWhiteSpace(publishedManifestPath) || !File.Exists(publishedManifestPath))
         {
             return;

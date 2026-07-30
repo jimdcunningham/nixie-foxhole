@@ -28,7 +28,7 @@ Foxhole paks
 └─────────────────────────────────────────────────────────────┘
     │
     ▼
-apps/foxhole-planner/public/foxhole/assets/
+packages/extensions/foxhole/public/foxhole/assets/
 ```
 
 | Stage | Owns |
@@ -86,7 +86,7 @@ Raw Blender PNG/WebP masters stay unbadged. When publish converts masters into c
 ## Published output root
 
 ```
-apps/foxhole-planner/public/foxhole/assets/
+packages/extensions/foxhole/public/foxhole/assets/
 ├── manifest.v1.json
 ├── planner-compat.json
 ├── localizations/

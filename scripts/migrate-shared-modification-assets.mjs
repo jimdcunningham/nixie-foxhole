@@ -12,7 +12,7 @@ const repositoryRoot = resolve(currentDir, '..', '..', '..');
 const defaultManifestPath = resolve(repositoryRoot, 'tools/foxwatch/tmp/foxwatch-manifest.v1.json');
 const defaultSharedModificationsDirectory = resolve(
     repositoryRoot,
-    'apps/foxhole-planner/public/foxhole/assets/shared/modifications',
+    'packages/extensions/foxhole/public/foxhole/assets/shared/modifications',
 );
 
 function parseCliArgs(rawArgs) {

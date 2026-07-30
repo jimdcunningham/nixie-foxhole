@@ -22,7 +22,7 @@ public sealed class FoxWatchMapDataGenerator
     private const EGame EngineVersion = EGame.GAME_UE4_24;
     private const string WarApiStaticEndpoint = "https://war-service-live.foxholeservices.com/api/worldconquest/maps";
     private const string MapListPackagePath = "War/Content/Blueprints/Data/BPMapList.uasset";
-    private const string PublishedMapDataRelativePath = "apps/foxhole-planner/public/foxhole/assets/maps/map-data.v1.json";
+    private const string PublishedMapDataRelativePath = "packages/extensions/foxhole/public/foxhole/assets/maps/map-data.v1.json";
     private const string MasterMapPackagePrefix = "War/Content/Maps/Master/";
     private const double WorldMinX = -109199.999997d;
     private const double WorldMinY = -94499.99999580907d;

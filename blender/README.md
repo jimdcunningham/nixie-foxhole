@@ -173,7 +173,7 @@ Use one of these flows instead:
 ## Asset path resolution
 
 The importer looks for files in this order:
-1. `./apps/foxhole-planner/public`
+1. `./packages/extensions/foxhole/public`
 2. `./tools/foxwatch/tmp/assets`
 
 That lets it consume both existing bridge placeholder textures and future FoxWatch-exported assets.

@@ -5,10 +5,10 @@ import { fileURLToPath } from 'url';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, '..', '..', '..');
-const ROOT = path.resolve(repositoryRoot, 'apps', 'foxhole-planner', 'public', 'foxhole', 'assets');
+const ROOT = path.resolve(repositoryRoot, 'packages', 'extensions', 'foxhole', 'public', 'foxhole', 'assets');
 
 // ---- EXAMPLE ASSET STRUCTURE ----
-// apps/foxhole-planner/public/foxhole/assets/
+// packages/extensions/foxhole/public/foxhole/assets/
 // - localizations/
 // - shared/
 //     - <components|modifications>/

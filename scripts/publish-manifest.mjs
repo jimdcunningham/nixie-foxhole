@@ -60,11 +60,11 @@ import {
     foxholeManifestSchema,
     normalizeFoxholePackagedPalletKey,
     rebaseFoxholeManifestAssetUrls,
-} from '../../../apps/foxhole-planner/app/plugins/foxhole/nixie/manifest-schema.ts';
+} from '../../../packages/extensions/foxhole/app/plugins/foxhole/nixie/manifest-schema.ts';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(currentDir, '..', '..', '..');
-const foxholePlannerRoot = resolve(repositoryRoot, 'apps', 'foxhole-planner');
+const foxholePlannerRoot = resolve(repositoryRoot, 'packages', 'extensions', 'foxhole');
 const publicFoxholeAssetsDirectory = resolve(foxholePlannerRoot, 'public', 'foxhole', 'assets');
 const publishedManifestPath = resolve(publicFoxholeAssetsDirectory, 'manifest.v1.json');
 const rawFoxWatchManifestPath = resolve(repositoryRoot, 'tools/foxwatch/tmp/foxwatch-manifest.v1.json');

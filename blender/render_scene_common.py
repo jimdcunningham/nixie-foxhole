@@ -14,7 +14,7 @@ from mathutils import Matrix, Quaternion, Vector
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FOXWATCH_ROOT = os.path.dirname(SCRIPT_DIR)
 REPOSITORY_ROOT = os.path.dirname(FOXWATCH_ROOT)
-DEFAULT_PUBLIC_ROOT = os.path.normpath(os.path.join(REPOSITORY_ROOT, "apps", "foxhole-planner", "public"))
+DEFAULT_PUBLIC_ROOT = os.path.normpath(os.path.join(REPOSITORY_ROOT, "packages", "extensions", "foxhole", "public"))
 DEFAULT_FOXWATCH_OUTPUT_ROOT = os.path.normpath(os.path.join(FOXWATCH_ROOT, "tmp", "assets"))
 PIXELS_PER_METER = 64.0
 TOPDOWN_CAMERA_NAME = "FoxWatchTopdownCamera"

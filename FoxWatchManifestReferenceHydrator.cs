@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 
 public sealed class FoxWatchManifestReferenceHydrator
 {
-    private const string PublishedManifestRelativePath = "apps/foxhole-planner/public/foxhole/assets/manifest.v1.json";
+    private const string PublishedManifestRelativePath = "packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json";
     private static readonly IReadOnlySet<string> ReservedOverridePropertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "copyFromStructureId",
@@ -869,8 +869,9 @@ public sealed class FoxWatchManifestReferenceHydrator
         }
 
         var relativeIconPath = Path.Combine(
-            "apps",
-            "foxhole-planner",
+            "packages",
+            "extensions",
+            "foxhole",
             "public",
             "foxhole",
             "assets",

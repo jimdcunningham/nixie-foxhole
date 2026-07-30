@@ -17,7 +17,7 @@ if (!command) {
 }
 
 const repoRoot = process.cwd();
-const foxholePlannerRoot = path.join(repoRoot, 'apps', 'foxhole-planner');
+const foxholePlannerRoot = path.join(repoRoot, 'packages', 'extensions', 'foxhole');
 const dllPath = path.join(repoRoot, 'tools', 'foxwatch', 'bin', 'Debug', 'net8.0', 'FoxWatchService.dll');
 const renderScenesIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'renders', 'index.render-scenes.v1.json');
 const renderTemplatePath = path.join(repoRoot, 'tools', 'foxwatch', 'blender', 'render-template.blend');

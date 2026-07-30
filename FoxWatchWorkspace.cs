@@ -77,7 +77,7 @@ public static class FoxWatchWorkspace
 
     private static bool IsRepositoryRoot(string directoryPath)
     {
-        return Directory.Exists(Path.Combine(directoryPath, "apps", "foxhole-planner"))
+        return Directory.Exists(Path.Combine(directoryPath, "packages", "extensions", "foxhole"))
             && Directory.Exists(Path.Combine(directoryPath, "tools", "foxwatch", "asset-overrides"));
     }
 }

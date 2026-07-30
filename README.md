@@ -1,6 +1,6 @@
 # FoxWatch
 
-FoxWatch is the local asset pipeline for Foxhole Planner inside the nixie monorepo. It reads Foxhole game assets from a local Foxhole install, extracts structured data and meshes, renders planner images through Blender, and publishes the generated outputs into `apps/foxhole-planner/public/foxhole/assets`.
+FoxWatch is the local asset pipeline for Foxhole Planner inside the nixie monorepo. It reads Foxhole game assets from a local Foxhole install, extracts structured data and meshes, renders planner images through Blender, and publishes the generated outputs into `packages/extensions/foxhole/public/foxhole/assets`.
 
 Use this README as the main operator guide for setup, configuration, and common workflows. Blender-specific rendering details live in `tools/foxwatch/blender/README.md`.
 
@@ -8,9 +8,9 @@ Use this README as the main operator guide for setup, configuration, and common 
 
 FoxWatch primarily works with two output areas:
 - `tools/foxwatch/tmp/` for intermediate manifests, extracted assets, render scenes, diagnostics, and temporary outputs
-- `apps/foxhole-planner/public/foxhole/assets/` for published planner assets that the app serves locally
+- `packages/extensions/foxhole/public/foxhole/assets/` for published planner assets that the app serves locally
 
-The published assets directory is a separate private git repository. The nixie monorepo ignores it, so asset snapshots are tracked there instead of in the main codebase. See `apps/foxhole-planner/public/foxhole/README.md` for clone and setup instructions.
+The published assets directory is a separate private git repository. The nixie monorepo ignores it, so asset snapshots are tracked there instead of in the main codebase. See `packages/extensions/foxhole/public/foxhole/README.md` for clone and setup instructions.
 
 Common paths:
 - `tools/foxwatch/tmp/foxwatch-manifest.v1.json`: raw generated source manifest
@@ -18,8 +18,8 @@ Common paths:
 - `tools/foxwatch/tmp/renders/`: generated Blender render scene bundles
 - `tools/foxwatch/tmp/assets/`: extracted mesh and material packages used during rendering
 - `tools/foxwatch/tmp/rendered-assets/`: Blender image outputs (`types/`, `shared/`) before publish
-- `apps/foxhole-planner/public/foxhole/assets/manifest.v1.json`: published planner manifest
-- `apps/foxhole-planner/public/foxhole/assets/planner-compat.json`: CI metadata tying assets to planner version and schema versions
+- `packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json`: published planner manifest
+- `packages/extensions/foxhole/public/foxhole/assets/planner-compat.json`: CI metadata tying assets to planner version and schema versions
 
 ## Prerequisites
 
@@ -57,7 +57,7 @@ That workflow:
 - generates a full raw FoxWatch manifest
 - generates full render scene bundles
 - renders planner images through Blender
-- publishes outputs into `apps/foxhole-planner/public/foxhole/assets`
+- publishes outputs into `packages/extensions/foxhole/public/foxhole/assets`
 
 If Blender is not installed yet, start with non-render workflows such as `generate-manifest`, `generate-map-data`, or `extract-ui-assets`.
 
@@ -152,7 +152,7 @@ Use this after generating a full manifest:
 npm run foxwatch -- publish-manifest
 ```
 
-This writes the published manifest and related published asset metadata into `apps/foxhole-planner/public/foxhole/assets`, including `planner-compat.json` for the assets repo release workflow.
+This writes the published manifest and related published asset metadata into `packages/extensions/foxhole/public/foxhole/assets`, including `planner-compat.json` for the assets repo release workflow.
 
 ### 4. Targeted refresh during iteration
 
@@ -336,4 +336,4 @@ You do not need Blender for `generate-manifest`, `generate-map-data`, `find-asse
 
 - `tools/foxwatch/ASSET-OUTPUT.md` for the authoritative published file layout, image roles, formats, and manifest URL rules
 - `tools/foxwatch/blender/README.md` for Blender scene import and render bundle details
-- `apps/foxhole-planner/public/foxhole/assets/README.md` for the private assets repo release model
+- `packages/extensions/foxhole/public/foxhole/assets/README.md` for the private assets repo release model
