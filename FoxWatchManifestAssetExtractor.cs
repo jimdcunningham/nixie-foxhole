@@ -9034,25 +9034,23 @@ public class FoxWatchManifestAssetExtractor
                     : null,
             };
 
+            // Prefer the assembled product identity (CodeName). When CrateCodeName is set, keep
+            // crate-channel semantics for UI (badge / "(Crate)" label) but never key the output
+            // by a shared wrapper like AircraftCrate — that collapses every recipe into one crate.
+            var outputResource = new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)
+            {
+                [outputCodeName] = new FoxWatchManifestRecipeResource
+                {
+                    Quantity = 1,
+                },
+            };
             if (!string.IsNullOrWhiteSpace(crateCodeName))
             {
-                entry.CrateOutput = new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)
-                {
-                    [crateCodeName] = new FoxWatchManifestRecipeResource
-                    {
-                        Quantity = 1,
-                    },
-                };
+                entry.CrateOutput = outputResource;
             }
             else
             {
-                entry.ItemOutput = new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)
-                {
-                    [outputCodeName] = new FoxWatchManifestRecipeResource
-                    {
-                        Quantity = 1,
-                    },
-                };
+                entry.ItemOutput = outputResource;
             }
 
             return entry;
