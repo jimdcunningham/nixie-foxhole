@@ -54,6 +54,11 @@ import {
     shouldPublishVehicleDestroyedVisual,
 } from './publish-manifest-overrides.mjs';
 import { loadVehicleDestroyedPublishAllowlist } from './vehicle-destroyed-allowlist.mjs';
+import {
+    assignRecipeIdsToConversionEntries,
+    fingerprintManifestConversionEntry,
+    resolveNextRecipeId,
+} from './recipe-id-matching.mjs';
 
 import {
     createFoxholeAssetsBaseUrl,
@@ -1147,6 +1152,7 @@ function compactConversionEntry(value) {
     }
 
     return compactObject({
+        id: compactJsonValue(value.id),
         ii: compactRecipeResourceMap(value.itemInput),
         ci: compactRecipeResourceMap(value.crateInput),
         li: compactRecipeResourceMap(value.liquidInput),
@@ -1157,6 +1163,7 @@ function compactConversionEntry(value) {
         p: compactJsonValue(value.powerDelta),
         rn: compactJsonValue(value.bConsumeResourceNodes),
     }, {
+        id: null,
         ii: {},
         ci: {},
         li: {},
@@ -3139,6 +3146,150 @@ function getRemovedStructureIds(previousManifest, currentManifest) {
     return new Set((previousManifest?.assets ?? [])
         .map(structure => normalizeId(structure?.id))
         .filter(id => id && !currentStructureIds.has(id)));
+}
+
+function listModificationSlotCollections(structure) {
+    if (Array.isArray(structure?.modificationSlots) && structure.modificationSlots.length) {
+        return structure.modificationSlots;
+    }
+    if (Array.isArray(structure?.modifications) && structure.modifications.length) {
+        return structure.modifications;
+    }
+    return [];
+}
+
+function getConversionEntriesArray(owner) {
+    if (!owner || typeof owner !== 'object') {
+        return null;
+    }
+    if (!Array.isArray(owner.conversionEntries)) {
+        return null;
+    }
+    return owner.conversionEntries;
+}
+
+function indexPreviousConversionEntryOwners(previousManifest) {
+    /** @type {Map<string, any[]>} */
+    const byOwnerKey = new Map();
+    for (const structure of previousManifest?.assets ?? []) {
+        if (!structure || structure.isItem === true) {
+            continue;
+        }
+        const structureId = normalizeId(structure.id);
+        if (!structureId) {
+            continue;
+        }
+        const structureEntries = getConversionEntriesArray(structure);
+        if (structureEntries) {
+            byOwnerKey.set(`structure:${structureId}`, structureEntries);
+        }
+        for (const slot of listModificationSlotCollections(structure)) {
+            const slotId = normalizeId(slot?.name ?? slot?.componentType);
+            const variants = slot?.variants && typeof slot.variants === 'object' && !Array.isArray(slot.variants)
+                ? slot.variants
+                : null;
+            if (!variants) {
+                continue;
+            }
+            for (const [variantId, variant] of Object.entries(variants)) {
+                const normalizedVariantId = normalizeId(variantId);
+                if (!normalizedVariantId) {
+                    continue;
+                }
+                const variantEntries = getConversionEntriesArray(variant);
+                if (!variantEntries) {
+                    continue;
+                }
+                byOwnerKey.set(
+                    `modification:${structureId}:${slotId || '_'}:${normalizedVariantId}`,
+                    variantEntries,
+                );
+            }
+        }
+    }
+    return byOwnerKey;
+}
+
+function assignStableIdsToConversionEntryList(entries, previousEntries) {
+    if (!Array.isArray(entries) || entries.length === 0) {
+        return { exact: 0, output: 0, allocated: 0, preserved: 0 };
+    }
+    const previousFingerprints = (previousEntries ?? []).map(fingerprintManifestConversionEntry);
+    const nextIdStart = resolveNextRecipeId(
+        null,
+        previousFingerprints.map(entry => entry.id),
+    );
+    return assignRecipeIdsToConversionEntries(previousFingerprints, entries, nextIdStart);
+}
+
+/**
+ * Reuse stable conversion-entry recipe ids from the previously published manifest
+ * (exact I/O match, then output-only), allocating new ids only for unmatched recipes.
+ */
+function assignStableConversionRecipeIds(manifest, previousManifest) {
+    if (!manifest || typeof manifest !== 'object') {
+        return {
+            manifest,
+            stats: { exact: 0, output: 0, allocated: 0, preserved: 0, owners: 0 },
+        };
+    }
+
+    const previousByOwner = indexPreviousConversionEntryOwners(previousManifest);
+    const stats = { exact: 0, output: 0, allocated: 0, preserved: 0, owners: 0 };
+
+    for (const structure of manifest.assets ?? []) {
+        if (!structure || structure.isItem === true) {
+            continue;
+        }
+        const structureId = normalizeId(structure.id);
+        if (!structureId) {
+            continue;
+        }
+
+        const structureEntries = getConversionEntriesArray(structure);
+        if (structureEntries?.length) {
+            const ownerStats = assignStableIdsToConversionEntryList(
+                structureEntries,
+                previousByOwner.get(`structure:${structureId}`) ?? [],
+            );
+            stats.exact += ownerStats.exact;
+            stats.output += ownerStats.output;
+            stats.allocated += ownerStats.allocated;
+            stats.preserved += ownerStats.preserved;
+            stats.owners += 1;
+        }
+
+        for (const slot of listModificationSlotCollections(structure)) {
+            const slotId = normalizeId(slot?.name ?? slot?.componentType);
+            const variants = slot?.variants && typeof slot.variants === 'object' && !Array.isArray(slot.variants)
+                ? slot.variants
+                : null;
+            if (!variants) {
+                continue;
+            }
+            for (const [variantId, variant] of Object.entries(variants)) {
+                const normalizedVariantId = normalizeId(variantId);
+                if (!normalizedVariantId) {
+                    continue;
+                }
+                const variantEntries = getConversionEntriesArray(variant);
+                if (!variantEntries?.length) {
+                    continue;
+                }
+                const ownerStats = assignStableIdsToConversionEntryList(
+                    variantEntries,
+                    previousByOwner.get(`modification:${structureId}:${slotId || '_'}:${normalizedVariantId}`) ?? [],
+                );
+                stats.exact += ownerStats.exact;
+                stats.output += ownerStats.output;
+                stats.allocated += ownerStats.allocated;
+                stats.preserved += ownerStats.preserved;
+                stats.owners += 1;
+            }
+        }
+    }
+
+    return { manifest, stats };
 }
 
 function normalizePublishedIconAssetUrl(value) {
@@ -7820,12 +7971,24 @@ try {
     }
 
     const prunedMergedManifestWithCompactLocalizationIds = compactManifestLocalizationIds(prunedMergedManifest);
+    const {
+        manifest: manifestWithStableRecipeIds,
+        stats: recipeIdStats,
+    } = assignStableConversionRecipeIds(
+        prunedMergedManifestWithCompactLocalizationIds,
+        publishedManifestBeforeWrite,
+    );
+    if (recipeIdStats.owners > 0) {
+        logPublishSummary(
+            `publish-manifest: recipe ids exact=${recipeIdStats.exact} output=${recipeIdStats.output} allocated=${recipeIdStats.allocated} preserved=${recipeIdStats.preserved} owners=${recipeIdStats.owners}`,
+        );
+    }
 
-    await writeLocalizationFiles(publicLocalizationsDirectory, prunedMergedManifestWithCompactLocalizationIds);
-    await writeLocalizationFiles(fixtureLocalizationsDirectory, prunedMergedManifestWithCompactLocalizationIds);
+    await writeLocalizationFiles(publicLocalizationsDirectory, manifestWithStableRecipeIds);
+    await writeLocalizationFiles(fixtureLocalizationsDirectory, manifestWithStableRecipeIds);
 
     const manifest = compactPublishedFoxholeManifest(normalizeOptionalStructureProperties(splitManifestLocalizations(
-        applyPublishedCanBlueprintFlags(prunedMergedManifestWithCompactLocalizationIds, prunedMergedManifest),
+        applyPublishedCanBlueprintFlags(manifestWithStableRecipeIds, prunedMergedManifest),
     )));
     const serializedManifest = stringifyJsonAscii(manifest);
 

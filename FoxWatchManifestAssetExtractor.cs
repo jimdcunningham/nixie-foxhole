@@ -3549,6 +3549,7 @@ public class FoxWatchManifestAssetExtractor
         {
             return entries.Select(entry => new FoxWatchManifestConversionEntry
             {
+                Id = entry.Id,
                 ItemInput = CloneRecipeResources(entry.ItemInput),
                 CrateInput = CloneRecipeResources(entry.CrateInput),
                 LiquidInput = CloneRecipeResources(entry.LiquidInput),

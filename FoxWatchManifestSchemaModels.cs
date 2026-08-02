@@ -725,6 +725,12 @@ public sealed class FoxWatchManifestFuelTank
 
 public sealed class FoxWatchManifestConversionEntry
 {
+    /// <summary>
+    /// Stable recipe id for production queues / legacy plan import.
+    /// Assigned and reused at publish time (not extracted from game data).
+    /// </summary>
+    public int? Id { get; set; }
+
     public Dictionary<string, FoxWatchManifestRecipeResource> ItemInput { get; set; } = [];
 
     public Dictionary<string, FoxWatchManifestRecipeResource> CrateInput { get; set; } = [];
