@@ -754,6 +754,9 @@ public class FoxWatchManifestAssetExtractor
             var conversionEntries = ExtractConversionEntries(inheritedProperty("ConversionEntries"));
             conversionEntries.AddRange(ExtractRefinableConversionEntries(inheritedProperty("RefinableItems")));
             conversionEntries.AddRange(specializedFactoryMetadata.ConversionEntries);
+            // AssemblyStation blueprints (vehicle factories, shipyards, etc.) list recipes as
+            // AssemblyItems rather than ConversionEntries — expand those into the same shape.
+            conversionEntries.AddRange(ExtractAssemblyItemConversionEntries(inheritedProperty("AssemblyItems")));
             var fortUpgradeCodeNames = EnumerateFortUpgradeStructureCodeNames(inheritedProperty("FortUpgrades")).ToList();
             var modifications = ExtractModifications(
                 objects,
@@ -6038,9 +6041,10 @@ public class FoxWatchManifestAssetExtractor
                 }
 
                 var resourceAmounts = ExtractRecipeResourcesFromJsonToken(value["ResourceAmounts"]);
+                var altResourceAmounts = ExtractRecipeResourcesFromJsonToken(value["AltResourceAmounts"]);
                 var cost = resourceAmounts.Count > 0
                     ? resourceAmounts
-                    : ExtractRecipeResourcesFromJsonToken(value["AltResourceAmounts"]);
+                    : altResourceAmounts;
                 var crateCost = ExtractRecipeResourcesFromJsonToken(value["CostPerCrate"]);
                 var upgradeCost = ExtractRecipeResourcesFromJsonToken(value["UpgradeResourceAmounts"]);
                 var hasTierUpgrades = value.Value<bool?>("bHasTierUpgrades") == true;
@@ -6106,6 +6110,7 @@ public class FoxWatchManifestAssetExtractor
                     {
                         Key = key,
                         Cost = cost,
+                        AltCost = altResourceAmounts,
                         CrateCost = crateCost,
                         UpgradeCost = upgradeCost,
                         HasTierUpgrades = hasTierUpgrades,
@@ -6126,6 +6131,11 @@ public class FoxWatchManifestAssetExtractor
                 if (existingEntry.Cost.Count == 0 && cost.Count > 0)
                 {
                     existingEntry.Cost = cost;
+                }
+
+                if (existingEntry.AltCost.Count == 0 && altResourceAmounts.Count > 0)
+                {
+                    existingEntry.AltCost = altResourceAmounts;
                 }
 
                 if (existingEntry.CrateCost.Count == 0 && crateCost.Count > 0)
@@ -8951,6 +8961,125 @@ public class FoxWatchManifestAssetExtractor
             };
         }
 
+        private static List<FoxWatchManifestConversionEntry> MergeConversionEntries(
+            IEnumerable<FoxWatchManifestConversionEntry> left,
+            IEnumerable<FoxWatchManifestConversionEntry> right)
+        {
+            var merged = new List<FoxWatchManifestConversionEntry>();
+            merged.AddRange(left);
+            merged.AddRange(right);
+            return merged;
+        }
+
+        private List<FoxWatchManifestConversionEntry> ExtractAssemblyItemConversionEntries(object? value)
+        {
+            return AsEnumerable(value)
+                .Select(CreateAssemblyItemConversionEntry)
+                .Where(entry => entry != null)
+                .Cast<FoxWatchManifestConversionEntry>()
+                .ToList();
+        }
+
+        private FoxWatchManifestConversionEntry? CreateAssemblyItemConversionEntry(object? value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var outputCodeName = NormalizeString(ExtractText(GetNamedValue(value, "CodeName")));
+            if (string.IsNullOrWhiteSpace(outputCodeName) ||
+                string.Equals(outputCodeName, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var requiredCodeName = NormalizeString(ExtractText(GetNamedValue(value, "RequiredCodeName")));
+            if (string.Equals(requiredCodeName, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                requiredCodeName = string.Empty;
+            }
+
+            var crateCodeName = NormalizeString(ExtractText(GetNamedValue(value, "CrateCodeName")));
+            if (string.Equals(crateCodeName, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                crateCodeName = string.Empty;
+            }
+
+            var durationSeconds = ExtractDouble(GetNamedValue(value, "Duration"));
+            var dynamicDataEntry = ResolveConstructionDynamicDataEntry(outputCodeName);
+            var materialCost = ResolveAssemblyItemMaterialCost(dynamicDataEntry);
+            if (materialCost.Count == 0 &&
+                string.IsNullOrWhiteSpace(requiredCodeName) &&
+                durationSeconds is not > 0)
+            {
+                return null;
+            }
+
+            var itemInput = CloneRecipeResources(materialCost);
+            if (!string.IsNullOrWhiteSpace(requiredCodeName))
+            {
+                itemInput[requiredCodeName] = new FoxWatchManifestRecipeResource
+                {
+                    Quantity = 1,
+                };
+            }
+
+            var entry = new FoxWatchManifestConversionEntry
+            {
+                ItemInput = itemInput,
+                Duration = durationSeconds is > 0
+                    ? NormalizeRecipeQuantity(durationSeconds.Value)
+                    : null,
+            };
+
+            if (!string.IsNullOrWhiteSpace(crateCodeName))
+            {
+                entry.CrateOutput = new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)
+                {
+                    [crateCodeName] = new FoxWatchManifestRecipeResource
+                    {
+                        Quantity = 1,
+                    },
+                };
+            }
+            else
+            {
+                entry.ItemOutput = new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal)
+                {
+                    [outputCodeName] = new FoxWatchManifestRecipeResource
+                    {
+                        Quantity = 1,
+                    },
+                };
+            }
+
+            return entry;
+        }
+
+        private static Dictionary<string, FoxWatchManifestRecipeResource> ResolveAssemblyItemMaterialCost(
+            FoxWatchConstructionDynamicDataEntry? dynamicDataEntry)
+        {
+            if (dynamicDataEntry == null)
+            {
+                return new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal);
+            }
+
+            // Assembly stations use AltResourceAmounts (facility mats). ResourceAmounts is usually
+            // garage/world BMats cost and must not win when both are present.
+            if (dynamicDataEntry.AltCost.Count > 0)
+            {
+                return CloneRecipeResources(dynamicDataEntry.AltCost);
+            }
+
+            if (dynamicDataEntry.Cost.Count > 0)
+            {
+                return CloneRecipeResources(dynamicDataEntry.Cost);
+            }
+
+            return new Dictionary<string, FoxWatchManifestRecipeResource>(StringComparer.Ordinal);
+        }
+
         private FoxWatchReferencedAssetMetadata? ResolveReferencedAssetMetadata(object? value)
         {
             var packagePath = ResolvePackagePath(ResolveReferencedPackagePath(value))
@@ -9548,7 +9677,9 @@ public class FoxWatchManifestAssetExtractor
                     BuildSockets = ExtractNestedBuildSockets(modValue),
                     FootprintPolygons = BuildFootprintPolygons(ExtractNestedBuildFootprintBoxes(modValue)),
                     FuelTanks = ExtractFuelTanks(GetNamedValue(modValue, "FuelTanks")),
-                    ConversionEntries = ExtractConversionEntries(GetNamedValue(modValue, "ConversionEntries")),
+                    ConversionEntries = MergeConversionEntries(
+                        ExtractConversionEntries(GetNamedValue(modValue, "ConversionEntries")),
+                        ExtractAssemblyItemConversionEntries(GetNamedValue(modValue, "AssemblyItems"))),
                     Cost = cost,
                     IsUpgrade = false,
                     UpgradeName = displayName,
@@ -12827,6 +12958,12 @@ public class FoxWatchManifestAssetExtractor
             public string Key { get; set; } = string.Empty;
 
             public Dictionary<string, FoxWatchManifestRecipeResource> Cost { get; set; } = new(StringComparer.Ordinal);
+
+            /// <summary>
+            /// Facility/assembly alternate cost (<c>AltResourceAmounts</c>). Prefer this over
+            /// <see cref="Cost"/> when building AssemblyStation recipes; garage BMats live in Cost.
+            /// </summary>
+            public Dictionary<string, FoxWatchManifestRecipeResource> AltCost { get; set; } = new(StringComparer.Ordinal);
 
             public Dictionary<string, FoxWatchManifestRecipeResource> CrateCost { get; set; } = new(StringComparer.Ordinal);
 
