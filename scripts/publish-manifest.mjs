@@ -2000,8 +2000,8 @@ function seedAuthoredSharedModificationIds(rawManifest, manifest) {
                                     ]);
                                 } catch (error) {
                                     throw new Error(
-                                        `Missing renderId for ${structure?.id}/${slotName}/${variantId} in raw manifest` +
-                                            (error instanceof Error ? `: ${error.message}` : ''),
+                                        `Missing renderId for ${structure?.id}/${slotName}/${variantId} in raw manifest${
+                                            error instanceof Error ? `: ${error.message}` : ''}`,
                                     );
                                 }
                             }
@@ -3957,8 +3957,8 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
                 if (renderedIcon && await writeFileIfChanged(renderedIconPath, renderedIcon)) {
                     stats.derivedIcons += 1;
                     logPublishDetail(
-                        `derived icon.rendered ${derivedFrom} -> ${renderedIconPath}`
-                        + (subTypeIconUrl ? ' (with subtype)' : ''),
+                        `derived icon.rendered ${derivedFrom} -> ${renderedIconPath}${
+                            subTypeIconUrl ? ' (with subtype)' : ''}`,
                     );
                 } else if (renderedIcon) {
                     stats.reused += 1;
@@ -4002,8 +4002,8 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
                 if (await writeFileIfChanged(defaultWebpPath, defaultWebp)) {
                     stats.pencilDefaults += 1;
                     logPublishDetail(
-                        `synced pencil default ${filePath} -> ${defaultWebpPath}`
-                        + (subTypeIconUrl ? ' (with subtype)' : ''),
+                        `synced pencil default ${filePath} -> ${defaultWebpPath}${
+                            subTypeIconUrl ? ' (with subtype)' : ''}`,
                     );
                 } else {
                     stats.reused += 1;
@@ -4070,8 +4070,8 @@ async function syncRawRenderedAssetsToPublicDirectory(scopedTargets = null, mani
     logPublishSummary(
         `publish-manifest: synced ${syncStats.rawSynced + syncStats.previewSynced + syncStats.derivedIcons + syncStats.pencilDefaults} rendered assets`
         + ` (${syncStats.candidates} candidates, ${syncStats.reused} reused, ${syncStats.locked} locked,`
-        + ` concurrency ${publishConcurrency}, ${elapsedSeconds}s)`
-        + (isPublishVerbose() ? '' : '; pass --verbose for per-file logs'),
+        + ` concurrency ${publishConcurrency}, ${elapsedSeconds}s)${
+            isPublishVerbose() ? '' : '; pass --verbose for per-file logs'}`,
     );
 }
 
@@ -6720,7 +6720,7 @@ async function buildStructureSceneMetadata(renderScenesIndexDocument = null) {
         : null;
 
     if (scenePaths) {
-        await Promise.all(scenePaths.map(async (filePath) => {
+        await Promise.all(scenePaths.map(async filePath => {
             if (!await pathExists(filePath)) {
                 return;
             }

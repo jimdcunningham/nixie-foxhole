@@ -272,7 +272,7 @@ describe('host-local modification publish path helpers', () => {
         };
         const entry = resolveAssetScopedModificationRenderEntry(
             {
-                heavyammo: plain,
+                'heavyammo': plain,
                 'heavyammo-f9ffd44230dc': hashed,
             },
             {},

@@ -180,7 +180,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
 
     const written = [];
     const result = await coLocateSingleUseHostLocalModificationDefaultIcons(manifest, {
-        readIconSource: async (sourceUrl) => {
+        readIconSource: async sourceUrl => {
             const key = sourceUrl.split('/').pop();
             return {
                 sourceFilePath: resolve(iconsRoot, key),
@@ -193,7 +193,7 @@ test('coLocateSingleUseHostLocalModificationDefaultIcons rewrites single-use def
             written.push(outputPath);
             return true;
         },
-        resolvePublicAssetFilePath: (publicUrl) => resolve(
+        resolvePublicAssetFilePath: publicUrl => resolve(
             publicAssetsRoot,
             String(publicUrl).replace(/^\/?foxhole\/assets\//i, ''),
         ),
@@ -341,7 +341,7 @@ test('inheritParentStructureDefaultIconsForModifications copies parent default i
 
     const written = [];
     const result = await inheritParentStructureDefaultIconsForModifications(manifest, {
-        readIconSource: async (sourceUrl) => {
+        readIconSource: async sourceUrl => {
             const relative = String(sourceUrl).replace(/^\/?foxhole\/assets\//i, '');
             return {
                 sourceFilePath: resolve(publicAssetsRoot, relative),
@@ -354,7 +354,7 @@ test('inheritParentStructureDefaultIconsForModifications copies parent default i
             written.push(outputPath);
             return true;
         },
-        resolvePublicAssetFilePath: (publicUrl) => resolve(
+        resolvePublicAssetFilePath: publicUrl => resolve(
             publicAssetsRoot,
             String(publicUrl).replace(/^\/?foxhole\/assets\//i, ''),
         ),
@@ -414,7 +414,7 @@ test('removeUnreferencedPublicIcons deletes only icons outside the keep set', as
         new Set(['keepme']),
         {
             pathExists: async () => true,
-            unlink: async (filePath) => {
+            unlink: async filePath => {
                 removed.push(filePath.replace(/\\/g, '/').split('/').pop());
             },
             walkFiles: async function* walk(directory) {

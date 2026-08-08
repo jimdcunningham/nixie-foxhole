@@ -310,7 +310,7 @@ export function sanitizeVehicleDestroyedVisuals(manifest, structuresWithDestroye
 
     if (strippedNotAllowlisted > 0 || strippedUntrustworthy > 0) {
         logPublishSummary(
-            `publish-manifest: stripped vehicle destroyed visuals`
+            'publish-manifest: stripped vehicle destroyed visuals'
             + ` (${strippedNotAllowlisted} not allowlisted, ${strippedUntrustworthy} missing destroyed.scene.json)`,
         );
     }
@@ -377,7 +377,7 @@ export function resolveSubtypeOverlayUrl({
         sourceStructure,
         structure?.id ?? sourceStructure?.id ?? null,
     )
-        || isPublishableDestroyedIconAssetKind(assetKind);
+    || isPublishableDestroyedIconAssetKind(assetKind);
     if (needsWrecked) {
         return defaultWreckedSubtypeUrl;
     }
@@ -807,7 +807,7 @@ export async function writeCoLocatedCopy({
 
     if (assetKind && rawSource.fellBackToIconDefault && subtypeOverlayUrl
         && generatedIconsDirectory && publicAssetsDirectory) {
-        let iconContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
+        const iconContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
         const subtypeOverlay = await readSubtypeOverlaySource(
             subtypeOverlayUrl,
             generatedIconsDirectory,

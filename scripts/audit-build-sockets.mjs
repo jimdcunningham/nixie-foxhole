@@ -121,7 +121,7 @@ console.log('BuildSockets audit');
 console.log(`- baseline: ${baselineManifestPath}`);
 console.log(`- current:  ${currentManifestPath}`);
 console.log('');
-console.log(`Summary:`);
+console.log('Summary:');
 console.log(`- baseline assets with buildSockets: ${baselineHasSockets}`);
 console.log(`- current assets with buildSockets:  ${currentHasSockets}`);
 console.log(`- baseline missing but current has:  ${baselineMissingButCurrentHas}`);
@@ -143,4 +143,3 @@ if (purgedList.length > 0) {
     }
     console.log('');
 }
-
