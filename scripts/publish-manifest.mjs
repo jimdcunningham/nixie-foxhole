@@ -1535,6 +1535,7 @@ function compactModificationVariant(value) {
         footprintPolygons: [],
         fuelTanks: [],
         conversionEntries: [],
+        nextRecipeId: null,
         cost: {},
         icons: undefined,
         previewUrl: null,
@@ -1779,6 +1780,7 @@ function compactStructure(value) {
         spotlights: [],
         fuelTanks: [],
         conversionEntries: [],
+        nextRecipeId: null,
         ranges: [],
         modifications: [],
         modificationSlots: [],
@@ -3181,7 +3183,7 @@ function indexPreviousConversionEntryOwners(previousManifest) {
         }
         const structureEntries = getConversionEntriesArray(structure);
         if (structureEntries) {
-            byOwnerKey.set(`structure:${structureId}`, structureEntries);
+            byOwnerKey.set(`structure:${structureId}`, { entries: structureEntries, nextRecipeId: structure.nextRecipeId });
         }
         for (const slot of listModificationSlotCollections(structure)) {
             const slotId = normalizeId(slot?.name ?? slot?.componentType);
@@ -3202,7 +3204,7 @@ function indexPreviousConversionEntryOwners(previousManifest) {
                 }
                 byOwnerKey.set(
                     `modification:${structureId}:${slotId || '_'}:${normalizedVariantId}`,
-                    variantEntries,
+                    { entries: variantEntries, nextRecipeId: variant.nextRecipeId },
                 );
             }
         }
@@ -3210,16 +3212,19 @@ function indexPreviousConversionEntryOwners(previousManifest) {
     return byOwnerKey;
 }
 
-function assignStableIdsToConversionEntryList(entries, previousEntries) {
+function assignStableIdsToConversionEntryList(entries, previousOwner) {
     if (!Array.isArray(entries) || entries.length === 0) {
         return { exact: 0, output: 0, allocated: 0, preserved: 0 };
     }
-    const previousFingerprints = (previousEntries ?? []).map(fingerprintManifestConversionEntry);
+    const previousEntries = previousOwner?.entries ?? [];
+    const previousFingerprints = previousEntries.map(fingerprintManifestConversionEntry);
     const nextIdStart = resolveNextRecipeId(
         null,
         previousFingerprints.map(entry => entry.id),
+        previousOwner?.nextRecipeId,
     );
-    return assignRecipeIdsToConversionEntries(previousFingerprints, entries, nextIdStart);
+    const stats = assignRecipeIdsToConversionEntries(previousFingerprints, entries, nextIdStart);
+    return { ...stats, nextRecipeId: stats.nextId };
 }
 
 /**
@@ -3247,16 +3252,21 @@ function assignStableConversionRecipeIds(manifest, previousManifest) {
         }
 
         const structureEntries = getConversionEntriesArray(structure);
+        const previousStructureOwner = previousByOwner.get(`structure:${structureId}`);
+        if (previousStructureOwner?.nextRecipeId != null && structure.nextRecipeId == null) {
+            structure.nextRecipeId = previousStructureOwner.nextRecipeId;
+        }
         if (structureEntries?.length) {
             const ownerStats = assignStableIdsToConversionEntryList(
                 structureEntries,
-                previousByOwner.get(`structure:${structureId}`) ?? [],
+                previousStructureOwner,
             );
             stats.exact += ownerStats.exact;
             stats.output += ownerStats.output;
             stats.allocated += ownerStats.allocated;
             stats.preserved += ownerStats.preserved;
             stats.owners += 1;
+            structure.nextRecipeId = ownerStats.nextRecipeId;
         }
 
         for (const slot of listModificationSlotCollections(structure)) {
@@ -3273,18 +3283,23 @@ function assignStableConversionRecipeIds(manifest, previousManifest) {
                     continue;
                 }
                 const variantEntries = getConversionEntriesArray(variant);
+                const previousVariantOwner = previousByOwner.get(`modification:${structureId}:${slotId || '_'}:${normalizedVariantId}`);
+                if (previousVariantOwner?.nextRecipeId != null && variant.nextRecipeId == null) {
+                    variant.nextRecipeId = previousVariantOwner.nextRecipeId;
+                }
                 if (!variantEntries?.length) {
                     continue;
                 }
                 const ownerStats = assignStableIdsToConversionEntryList(
                     variantEntries,
-                    previousByOwner.get(`modification:${structureId}:${slotId || '_'}:${normalizedVariantId}`) ?? [],
+                    previousVariantOwner,
                 );
                 stats.exact += ownerStats.exact;
                 stats.output += ownerStats.output;
                 stats.allocated += ownerStats.allocated;
                 stats.preserved += ownerStats.preserved;
                 stats.owners += 1;
+                variant.nextRecipeId = ownerStats.nextRecipeId;
             }
         }
     }

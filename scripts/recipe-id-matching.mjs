@@ -315,10 +315,13 @@ export function assignRecipeIdsToConversionEntries(previousFingerprints, newEntr
  * @param {number | null | undefined} productionLength
  * @param {Iterable<number | null | undefined>} ids
  */
-export function resolveNextRecipeId(productionLength, ids) {
+export function resolveNextRecipeId(productionLength, ids, persistedNextId = null) {
     let nextId = typeof productionLength === 'number' && Number.isFinite(productionLength)
         ? Math.max(0, Math.floor(productionLength))
         : 0;
+    if (typeof persistedNextId === 'number' && Number.isFinite(persistedNextId)) {
+        nextId = Math.max(nextId, Math.floor(persistedNextId));
+    }
     for (const id of ids) {
         if (typeof id === 'number' && Number.isFinite(id)) {
             nextId = Math.max(nextId, Math.floor(id) + 1);
