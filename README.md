@@ -24,7 +24,7 @@ Common paths:
 ## Prerequisites
 
 Required:
-- Node.js 22 or newer
+- Node.js 24 LTS
 - npm
 - .NET SDK 8
 - A local Foxhole install with access to `War/Content/Paks`
