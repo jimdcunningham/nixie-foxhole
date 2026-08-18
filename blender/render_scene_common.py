@@ -1474,7 +1474,7 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
     albedo_node = None
     base_color_output = None
     albedo_path = resolve_exported_texture_path(
-        first_texture_reference(textures, "Albedo", "PM_Diffuse", "A-Base", "A-2", "A-3"),
+        first_texture_reference(textures, "Albedo", "PM_Diffuse", "A", "A-Base", "A-2", "A-3"),
         search_roots,
     )
     if albedo_path:

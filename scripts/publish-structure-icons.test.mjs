@@ -233,6 +233,41 @@ test('resolveRawVisualCopySource falls back to icon.default for blank preview', 
     assert.equal(metadata.height, 128);
 });
 
+test('resolveRawVisualCopySource keeps a visible Blender PNG preview over the default icon', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-png-preview-master-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    const outputPath = resolve(tempRoot, 'public/assets/types/structures/playerc/playerc.preview.webp');
+    await mkdir(resolve(rawRenderedRoot, 'structures', 'playerc'), { recursive: true });
+    await mkdir(generatedIconsRoot, { recursive: true });
+    await writeFile(
+        resolve(rawRenderedRoot, 'structures', 'playerc', 'playerc.preview.png'),
+        await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+    );
+    await writeFile(
+        resolve(generatedIconsRoot, 'soldieruniformc.png'),
+        await readFile(resolve(fixtureRoot, 'blank-render-256.webp')),
+    );
+
+    const structure = { id: 'playerc', iconUrl: '/foxhole/assets/icons/soldieruniformc.webp' };
+    const source = await resolveRawVisualCopySource({
+        structureId: 'playerc',
+        assetKind: 'preview',
+        structure,
+        sourceStructure: structure,
+        rawRenderedAssetTypesDirectory: rawRenderedRoot,
+        generatedIconsDirectory: generatedIconsRoot,
+        publicAssetsDirectory: publicAssetsRoot,
+        resolveAssetTypeName: () => 'structures',
+    });
+
+    assert.match(source.sourceFilePath, /playerc\.preview\.png$/);
+    assert.equal(source.fellBackToIconDefault, undefined);
+    await writeCoLocatedCopy({ outputPath, rawSource: source, assetKind: 'preview' });
+    assert.equal((await sharp(outputPath).metadata()).format, 'webp');
+});
+
 test('resolveRawIconSource invisible render falls back to blueprint', async () => {
     const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-publish-'));
     const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');

@@ -1,3 +1,15 @@
 {
-  "categoryId": "world"
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Environment/Foliage/FirBunch01.uasset"
+  ],
+  "codeName": "FirBunch01",
+  "legacyKey": "tree",
+  "name": {
+    "fallback": "Tree"
+  },
+  "description": {
+    "fallback": "A tree featured throughout the world of Foxhole."
+  },
+  "categoryId": "world",
+  "buildOrder": 18
 }

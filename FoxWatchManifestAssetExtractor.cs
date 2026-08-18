@@ -357,6 +357,13 @@ public class FoxWatchManifestAssetExtractor
                     unresolvedTargetIds = remainingUnresolvedTargetIds;
                 }
 
+                if (resolvedPackagePaths.Count == 0 && targetIds.All(HasStandaloneMeshOverride))
+                {
+                    // Authored standalone mesh assets have no blueprint package to discover.
+                    // Leave direct extraction empty so the hydrator can inject the scoped assets.
+                    return [];
+                }
+
                 if (resolvedPackagePaths.Count == 0)
                 {
                     return blueprintPackagePaths;
@@ -372,6 +379,27 @@ public class FoxWatchManifestAssetExtractor
             }
 
             return candidatePackagePaths.OrderBy(path => path, StringComparer.Ordinal).ToArray();
+        }
+
+        private static bool HasStandaloneMeshOverride(string structureId)
+        {
+            var overridePath = Path.Combine(FoxWatchWorkspace.OverrideRoot, structureId, "manifest.json");
+            if (!File.Exists(overridePath))
+            {
+                return false;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(overridePath));
+                return document.RootElement.TryGetProperty("standaloneMeshPackagePaths", out var paths)
+                    && paths.ValueKind == JsonValueKind.Array
+                    && paths.GetArrayLength() > 0;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return false;
+            }
         }
 
         private static string ResolveBlueprintPackageTargetToken(string packagePath)

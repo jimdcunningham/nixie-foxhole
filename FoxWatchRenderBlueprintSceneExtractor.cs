@@ -42,6 +42,15 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
     public async Task<FoxWatchBlueprintSceneExtraction?> TryExtractAsync(FoxWatchManifestStructure structure, CancellationToken cancellationToken = default)
     {
+        if (structure.StandaloneMeshPackagePaths.Count > 0)
+        {
+            return CreateStandaloneMeshExtraction(
+                structure.Id,
+                structure.CodeName,
+                structure.StandaloneMeshPackagePaths,
+                structure.StandaloneMeshColorOverrides);
+        }
+
         var blueprintPackagePath = ResolveBlueprintPackagePath(structure);
         if (string.IsNullOrWhiteSpace(blueprintPackagePath))
         {
@@ -240,7 +249,8 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     private static FoxWatchBlueprintSceneExtraction? CreateStandaloneMeshExtraction(
         string nodeIdPrefix,
         string rootNodeName,
-        IReadOnlyList<string> meshPackagePaths)
+        IReadOnlyList<string> meshPackagePaths,
+        IReadOnlyDictionary<string, List<double>>? meshColorOverrides = null)
     {
         var normalizedMeshPackagePaths = meshPackagePaths
             .Where(meshPackagePath => !string.IsNullOrWhiteSpace(meshPackagePath))
@@ -268,6 +278,11 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 Id = $"{nodeIdPrefix}:mesh-{index + 1}",
                 Name = Path.GetFileNameWithoutExtension(meshPackagePath),
                 MeshId = GetOrAddMeshId(meshIdBySourcePath, meshSourcePath),
+                DebugColor = meshColorOverrides != null &&
+                    meshColorOverrides.TryGetValue(meshPackagePath, out var meshColorOverride) &&
+                    meshColorOverride.Count >= 3
+                    ? [.. meshColorOverride]
+                    : null,
             });
         }
 

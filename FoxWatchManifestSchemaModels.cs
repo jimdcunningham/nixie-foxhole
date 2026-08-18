@@ -258,6 +258,21 @@ public sealed class FoxWatchManifestStructure
     [JsonIgnore]
     public string? BlueprintPackagePath { get; set; }
 
+    /// <summary>
+    /// Authored standalone meshes that should render as a catalog asset without
+    /// requiring a game blueprint. This is authoring-only and never published.
+    /// </summary>
+    [JsonIgnore]
+    public List<string> StandaloneMeshPackagePaths { get; set; } = [];
+
+    /// <summary>
+    /// Optional authored RGBA material overrides for individual standalone meshes,
+    /// keyed by their source package path. This is useful for texture-less meshes
+    /// such as character skin.
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<string, List<double>> StandaloneMeshColorOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     [JsonIgnore]
     public string? ReferencedBuildSiteCodeName { get; set; }
 

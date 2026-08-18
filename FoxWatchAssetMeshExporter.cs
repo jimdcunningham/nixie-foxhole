@@ -16,6 +16,7 @@ using CUE4Parse.UE4.Assets.Exports.Component;
 using CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
 using CUE4Parse.UE4.Assets.Exports.Component.SkeletalMesh;
 using CUE4Parse.UE4.Assets.Exports.Engine;
+using CUE4Parse.UE4.Assets.Exports.Nanite;
 using CUE4Parse.UE4.Objects.Core.Misc;
 using CUE4Parse.UE4.Objects.Core.Math;
 using CUE4Parse.UE4.Objects.UObject;
@@ -853,6 +854,7 @@ public sealed class FoxWatchAssetMeshExporter
             LodFormat = ELodFormat.FirstLod,
             MaterialFormat = EMaterialFormat.AllLayers,
             MeshFormat = meshFormat,
+            NaniteMeshFormat = ENaniteMeshFormat.OnlyNormalLODs,
             Platform = ETexturePlatform.DesktopMobile,
             SocketFormat = meshFormat == EMeshFormat.ActorX ? ESocketFormat.Bone : ESocketFormat.None,
             TextureFormat = ETextureFormat.Png,

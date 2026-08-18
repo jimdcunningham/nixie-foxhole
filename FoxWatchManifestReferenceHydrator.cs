@@ -1399,20 +1399,30 @@ public sealed class FoxWatchManifestReferenceHydrator
             }
 
             var copyFromStructureId = ReadStringOverrideProperty(overrideElement, "copyFromStructureId");
-            if (string.IsNullOrWhiteSpace(copyFromStructureId) ||
-                !structuresById.TryGetValue(copyFromStructureId, out var localizedTextSourceStructure))
+            FoxWatchManifestStructure? localizedTextSourceStructure = null;
+            FoxWatchManifestStructure syntheticStructure;
+            if (!string.IsNullOrWhiteSpace(copyFromStructureId) &&
+                structuresById.TryGetValue(copyFromStructureId, out localizedTextSourceStructure))
+            {
+                syntheticStructure = CreateSyntheticStructure(localizedTextSourceStructure, structureId);
+            }
+            else if (TryGetOverrideProperty(overrideElement, "standaloneMeshPackagePaths", out _))
+            {
+                syntheticStructure = CreateAuthoredStandaloneMeshStructure(structureId);
+            }
+            else
             {
                 continue;
             }
-
-            var syntheticStructure = CreateSyntheticStructure(localizedTextSourceStructure, structureId);
-            syntheticStructure.Id = structureId;
 
             manifest.Assets.Add(syntheticStructure);
             injectedStructures.Add(syntheticStructure);
             existingStructureIds.Add(structureId);
             structuresById[structureId] = syntheticStructure;
-            localizedTextSourceByStructureId[structureId] = localizedTextSourceStructure;
+            if (localizedTextSourceStructure != null)
+            {
+                localizedTextSourceByStructureId[structureId] = localizedTextSourceStructure;
+            }
         }
 
         if (injectedStructures.Count > 0)
@@ -1430,6 +1440,31 @@ public sealed class FoxWatchManifestReferenceHydrator
         var syntheticStructure = CloneStructure(sourceStructure);
         syntheticStructure.Id = structureId;
         return syntheticStructure;
+    }
+
+    private static FoxWatchManifestStructure CreateAuthoredStandaloneMeshStructure(string structureId)
+    {
+        return new FoxWatchManifestStructure
+        {
+            Id = structureId,
+            CodeName = structureId,
+            Name = new FoxWatchLocalizedText
+            {
+                Id = $"asset:{structureId}:name",
+            },
+            Description = new FoxWatchLocalizedText
+            {
+                Id = $"asset:{structureId}:desc",
+            },
+            CategoryId = "world",
+            IsItem = false,
+            IsVehicle = false,
+            IsBunker = false,
+            IsFacility = false,
+            IsWorldStructure = true,
+            GenerateDefaultIcon = true,
+            ClipFloor = true,
+        };
     }
 
     private static FoxWatchManifestStructure CloneStructure(FoxWatchManifestStructure source)
@@ -1908,7 +1943,14 @@ public sealed class FoxWatchManifestReferenceHydrator
         foreach (var structure in structures)
         {
             structure.IconUrl ??= structure.PreviewUrl;
-            structure.PreviewUrl ??= structure.IconUrl;
+            // An authored default icon can intentionally differ from the rendered
+            // preview (for example, a standard-uniform icon for a player mesh).
+            // Do not turn that icon into a hover preview when pencil generation is
+            // explicitly disabled; the render pipeline will supply the preview.
+            if (structure.GenerateDefaultIcon != false)
+            {
+                structure.PreviewUrl ??= structure.IconUrl;
+            }
 
             if (structure.Variants.Default == null && !string.IsNullOrWhiteSpace(structure.PreviewUrl))
             {

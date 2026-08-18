@@ -432,6 +432,22 @@ function getRawRenderedAssetPath(structureId, assetKind, assetTypeName, rawRende
     );
 }
 
+function getRawRenderedAssetCandidatePaths(structureId, assetKind, assetTypeName, rawRenderedAssetTypesDirectory) {
+    const publishedPath = getRawRenderedAssetPath(
+        structureId,
+        assetKind,
+        assetTypeName,
+        rawRenderedAssetTypesDirectory,
+    );
+    if (assetKind !== 'preview' && assetKind !== 'destroyed.preview') {
+        return [publishedPath];
+    }
+
+    // Blender writes preview masters as PNG; publishing converts them to WebP.
+    // Check that master before falling back to a default icon.
+    return [publishedPath, publishedPath.replace(/\.webp$/i, '.png')];
+}
+
 async function pathExists(filePath) {
     try {
         await access(filePath);
@@ -642,20 +658,23 @@ export async function resolveRawCopySource({
     resolveAssetTypeName,
 }) {
     const assetTypeName = resolveAssetTypeName(structureId);
-    const rawRenderedPath = getRawRenderedAssetPath(
+    for (const rawRenderedPath of getRawRenderedAssetCandidatePaths(
         structureId,
         assetKind,
         assetTypeName,
         rawRenderedAssetTypesDirectory,
-    );
-    if (!await pathExists(rawRenderedPath)) {
-        return null;
+    )) {
+        if (!await pathExists(rawRenderedPath)) {
+            continue;
+        }
+
+        return {
+            sourceFilePath: rawRenderedPath,
+            content: await readFile(rawRenderedPath),
+        };
     }
 
-    return {
-        sourceFilePath: rawRenderedPath,
-        content: await readFile(rawRenderedPath),
-    };
+    return null;
 }
 
 export async function resolveRawVisualCopySource({
@@ -823,7 +842,8 @@ export async function writeCoLocatedCopy({
         } else {
             outputContent = iconContent;
         }
-    } else if (assetKind && isCopyOnlyAssetKind(assetKind) && rawSource.fellBackToIconDefault && webpOptions) {
+    } else if (assetKind && isCopyOnlyAssetKind(assetKind) && webpOptions
+        && (rawSource.fellBackToIconDefault || extname(rawSource.sourceFilePath).toLowerCase() !== '.webp')) {
         outputContent = await sharp(rawSource.content).webp(webpOptions).toBuffer();
     }
 

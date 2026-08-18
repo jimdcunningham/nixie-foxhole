@@ -1,3 +1,22 @@
 {
-  "categoryId": "world"
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Character/Heads/HeadM.uasset",
+    "War/Content/Meshes/Character/Hands/HandsM.uasset",
+    "War/Content/Meshes/Character/Back/SoldierBagMC.uasset",
+    "War/Content/Meshes/Character/Helmets/SoldierHelmetMC.uasset",
+    "War/Content/Meshes/Character/Torso/SoldierJacketMC.uasset",
+    "War/Content/Meshes/Character/Legs/SoldierLegsMC.uasset"
+  ],
+  "standaloneMeshColorOverrides": {
+    "War/Content/Meshes/Character/Heads/HeadM.uasset": [0.68, 0.40, 0.25, 1.0],
+    "War/Content/Meshes/Character/Hands/HandsM.uasset": [0.68, 0.40, 0.25, 1.0]
+  },
+  "codeName": "PlayerC",
+  "legacyKey": "playerc",
+  "iconUrl": "/foxhole/assets/icons/soldieruniformc.webp",
+  "generateDefaultIcon": false,
+  "name": { "fallback": "Player (Colonial)" },
+  "description": { "fallback": "A Colonial soldier in the standard uniform." },
+  "categoryId": "world",
+  "buildOrder": 50
 }

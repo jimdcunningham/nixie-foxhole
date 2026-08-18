@@ -1,3 +1,22 @@
 {
-  "categoryId": "world"
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Character/Heads/HeadM.uasset",
+    "War/Content/Meshes/Character/Hands/HandsM.uasset",
+    "War/Content/Meshes/Character/Back/SoldierBagMW.uasset",
+    "War/Content/Meshes/Character/Helmets/SoldierHelmetMW.uasset",
+    "War/Content/Meshes/Character/Torso/SoldierJacketMW.uasset",
+    "War/Content/Meshes/Character/Legs/SoldierLegsMW.uasset"
+  ],
+  "standaloneMeshColorOverrides": {
+    "War/Content/Meshes/Character/Heads/HeadM.uasset": [0.68, 0.40, 0.25, 1.0],
+    "War/Content/Meshes/Character/Hands/HandsM.uasset": [0.68, 0.40, 0.25, 1.0]
+  },
+  "codeName": "PlayerW",
+  "legacyKey": "playerw",
+  "iconUrl": "/foxhole/assets/icons/soldieruniformw.webp",
+  "generateDefaultIcon": false,
+  "name": { "fallback": "Player (Warden)" },
+  "description": { "fallback": "A Warden soldier in the standard uniform." },
+  "categoryId": "world",
+  "buildOrder": 51
 }
