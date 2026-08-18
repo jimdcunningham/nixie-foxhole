@@ -1113,9 +1113,11 @@ public sealed class FoxWatchManifestReferenceHydrator
                 Fallback = importedCategory.Name,
             };
             structure.CategoryIconUrl ??= importedCategory.IconUrl;
-            structure.IsBunker = importedCategory.IsBunker ? true : null;
-            structure.IsFacility = importedCategory.IsFacility ? true : null;
-            structure.IsWorldStructure = importedCategory.IsWorldStructure ? true : null;
+            // Category defaults must not overwrite explicit extraction or authored
+            // override values (notably false for placeable scenery such as mines).
+            structure.IsBunker ??= importedCategory.IsBunker ? true : null;
+            structure.IsFacility ??= importedCategory.IsFacility ? true : null;
+            structure.IsWorldStructure ??= importedCategory.IsWorldStructure ? true : null;
         }
 
         var canonicalCategoryIds = new HashSet<string>(

@@ -1,3 +1,7 @@
 {
-  "buildOrder": 10
+  "categoryId": "defense",
+  "buildOrder": 10,
+  "isItem": false,
+  "isBunker": false,
+  "isFacility": false
 }
