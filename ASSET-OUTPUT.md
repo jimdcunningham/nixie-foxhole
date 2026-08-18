@@ -270,6 +270,7 @@ The manifest is authoritative. The planner should not need runtime guesswork to 
 | `icons.default` | Blueprint or pencil default (lossless WebP, subtype applied) |
 | `icons.rendered` | Angled thumbnail for UI lists (derived from preview, or alias of default) |
 | `previewUrl` | Larger angled inspector image (lossy WebP, no subtype) |
+| `previewIsIconFallback` | `true` only when `previewUrl` was published by falling back to the default icon; inspector UIs should inset it without loading the image first |
 | `previewIconUrl` | Legacy alias; prefer `icons.rendered` |
 | `variants.default.textureUrl` | Board placement texture |
 | `sprite.*` | Anchor metadata; `sprite.source` typically matches texture URL |

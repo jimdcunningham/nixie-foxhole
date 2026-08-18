@@ -875,7 +875,10 @@ export async function publishStructureIconAsset({
         if (!rawSource?.fellBackToIconDefault
             && await pathExists(outputPath)
             && await imageFileHasVisiblePixelsFromPath(outputPath)) {
-            return toPublicAssetUrl(outputPath);
+            return {
+                url: toPublicAssetUrl(outputPath),
+                fellBackToIconDefault: false,
+            };
         }
 
         const fallbackSubtypeOverlayUrl = resolveSubtypeOverlayUrlForIconFallback({
@@ -898,7 +901,10 @@ export async function publishStructureIconAsset({
             logPublishDetail(`published icon-fallback ${result.sourceFilePath} -> ${outputPath} (with subtype)`);
         }
         return result.wrote || await pathExists(outputPath)
-            ? toPublicAssetUrl(outputPath)
+            ? {
+                url: toPublicAssetUrl(outputPath),
+                fellBackToIconDefault: rawSource?.fellBackToIconDefault === true,
+            }
             : null;
     }
 
@@ -928,7 +934,10 @@ export async function publishStructureIconAsset({
     }
 
     return result.wrote || await pathExists(outputPath)
-        ? toPublicAssetUrl(outputPath)
+        ? {
+            url: toPublicAssetUrl(outputPath),
+            fellBackToIconDefault: rawSource?.fellBackToIconDefault === true,
+        }
         : null;
 }
 
@@ -962,7 +971,7 @@ export async function publishStructureIconsForAsset({
         : [...LIVING_ICON_KINDS];
 
     const publishedEntries = await Promise.all(assetKinds.map(async assetKind => {
-        const publishedUrl = await publishStructureIconAsset({
+        const publishedAsset = await publishStructureIconAsset({
             structureId,
             assetKind,
             structure,
@@ -977,12 +986,15 @@ export async function publishStructureIconsForAsset({
             defaultWreckedSubtypeUrl,
         });
 
-        return publishedUrl ? [assetKind, publishedUrl] : null;
+        return publishedAsset ? [assetKind, publishedAsset] : null;
     }));
 
     for (const entry of publishedEntries) {
         if (entry) {
-            publishedUrls[entry[0]] = entry[1];
+            publishedUrls[entry[0]] = entry[1].url;
+            if (entry[0] === 'preview' && entry[1].fellBackToIconDefault) {
+                publishedUrls.previewIsIconFallback = true;
+            }
         }
     }
 
@@ -1038,6 +1050,7 @@ async function publishStructureManifestAsset({
         ...structureWithoutLegacyIcons,
         ...(Object.keys(nextIcons).length > 0 ? { icons: nextIcons } : {}),
         ...(publishedUrls.preview ? { previewUrl: publishedUrls.preview } : {}),
+        ...(publishedUrls.previewIsIconFallback ? { previewIsIconFallback: true } : {}),
         ...(publishedUrls.texture && structure?.variants?.default
             ? {
                 variants: {

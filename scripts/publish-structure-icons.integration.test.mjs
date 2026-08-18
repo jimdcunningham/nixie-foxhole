@@ -180,6 +180,8 @@ test('integration: six regression structures publish with expected icon behavior
     const soldierRenderedPath = resolve(tempRoot, 'public/assets/types/structures/soldieruniformc/soldieruniformc.icon.rendered.webp');
     const soldierPixel = await readTopLeftPixel(soldierRenderedPath);
     assert.ok(Math.abs(soldierPixel[0] - 40) <= 2);
+    const soldier = published.assets.find(entry => entry.id === 'soldieruniformc');
+    assert.equal(soldier.previewIsIconFallback, true);
 
     const rpgRenderedPath = resolve(tempRoot, 'public/assets/types/structures/rpgammo/rpgammo.icon.rendered.webp');
     const rpgMetadata = await sharp(rpgRenderedPath).metadata();
