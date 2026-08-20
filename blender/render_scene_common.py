@@ -1603,7 +1603,17 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
                 opacity_mask_output = albedo_node.outputs["Alpha"]
 
         if opacity_mask_output is not None:
-            links.new(opacity_mask_output, shader.inputs["Alpha"])
+            # Unreal masked materials use a hard opacity cutoff. Linking their
+            # sampled mask straight into Principled Alpha makes perforated bunker
+            # roofs look like a translucent solid sheet in Blender/Eevee instead.
+            opacity_mask_clip = nodes.new(type="ShaderNodeMath")
+            opacity_mask_clip.operation = "GREATER_THAN"
+            opacity_mask_clip.location = (440, -470)
+            opacity_mask_clip.inputs[1].default_value = float(
+                property_overrides.get("OpacityMaskClipValue", 0.3333) or 0.3333
+            )
+            links.new(opacity_mask_output, opacity_mask_clip.inputs[0])
+            links.new(opacity_mask_clip.outputs[0], shader.inputs["Alpha"])
             material.blend_method = "CLIP"
             material.alpha_threshold = float(property_overrides.get("OpacityMaskClipValue", 0.3333) or 0.3333)
             if hasattr(material, "shadow_method"):
@@ -1793,7 +1803,15 @@ def fit_ortho_camera_to_bounds(camera_object, min_corner: Vector, max_corner: Ve
     camera.clip_end = max(depth * 4.0, 100.0)
 
 
-def fit_topdown_camera_to_bounds(camera_object, min_corner: Vector, max_corner: Vector, resolution_x: int, resolution_y: int, padding: float):
+def fit_topdown_camera_to_bounds(
+    camera_object,
+    min_corner: Vector,
+    max_corner: Vector,
+    resolution_x: int,
+    resolution_y: int,
+    padding: float,
+    pixels_per_meter: float,
+):
     width = max((max_corner.x - min_corner.x) + padding * 2.0, 0.01)
     height = max((max_corner.y - min_corner.y) + padding * 2.0, 0.01)
 
@@ -1806,7 +1824,12 @@ def fit_topdown_camera_to_bounds(camera_object, min_corner: Vector, max_corner: 
 
     camera = camera_object.data
     camera.type = "ORTHO"
-    camera.ortho_scale = max(width, height)
+    # The render resolution is rounded to whole pixels, while the source bounds
+    # are not. Fitting the camera to the unrounded bounds made every cropped
+    # component render at a slightly different pixels-per-meter value. The board
+    # consumes each sidecar as a fixed 64 px/m texture, so preserve that scale
+    # here and let the ceiling operation become symmetric sub-pixel padding.
+    camera.ortho_scale = max(float(resolution_x), float(resolution_y)) / max(float(pixels_per_meter), 0.01)
     camera.clip_start = 0.01
     camera.clip_end = max(far_distance * 1.5, 100.0)
 
@@ -1958,7 +1981,15 @@ def apply_render_mode(
         configure_scene_render(resolution_x, resolution_y, transparent_background, file_format="WEBP")
         camera_position = Vector((center.x, center.y, max_corner.z + max(max_dimension * 2.0, 8.0)))
         camera_object = configure_topdown_camera_object(TOPDOWN_CAMERA_NAME, camera_position)
-        fit_topdown_camera_to_bounds(camera_object, min_corner, max_corner, resolution_x, resolution_y, padding)
+        fit_topdown_camera_to_bounds(
+            camera_object,
+            min_corner,
+            max_corner,
+            resolution_x,
+            resolution_y,
+            padding,
+            pixels_per_meter,
+        )
     elif mode == "preview":
         resolved_preview_variant = resolve_preview_direction(scene_document, preview_variant)
         configure_sun(mode, resolved_preview_variant)

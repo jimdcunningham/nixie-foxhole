@@ -1181,8 +1181,7 @@ public class FoxWatchManifestAssetExtractor
             layerId = string.Empty;
             componentTags = [];
 
-            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
-                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
             {
                 return false;
             }
@@ -1525,6 +1524,7 @@ public class FoxWatchManifestAssetExtractor
                     });
                 }
 
+                EnsureFortSupplementalVisualRenderLayers(renderLayers, componentReferences);
                 EnsureFortModSlotWallRenderLayers(renderLayers, buildSockets, componentReferences);
                 EnsureFortEntrenchmentRoofRenderLayer(renderLayers, componentReferences);
 
@@ -1552,8 +1552,7 @@ public class FoxWatchManifestAssetExtractor
 
         private static bool IsFortEntrenchmentVisibilityComponentReference(FoxWatchBlueprintComponentReference componentReference)
         {
-            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
-                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
             {
                 return false;
             }
@@ -1580,6 +1579,7 @@ public class FoxWatchManifestAssetExtractor
             {
                 return normalizedComponentName.Contains("corner", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("wall", StringComparison.OrdinalIgnoreCase)
+                    || normalizedComponentName.Contains("dirt", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("trim", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("pillar", StringComparison.OrdinalIgnoreCase)
@@ -1590,6 +1590,11 @@ public class FoxWatchManifestAssetExtractor
             if (ContainsDirectionalComponentNameToken(normalizedComponentName))
             {
                 return normalizedComponentName.Contains("wall", StringComparison.OrdinalIgnoreCase)
+                    // Fort T2's sandbag apron and Fort T3's exterior surround are named
+                    // Dirt*, but are directional exterior geometry rather than floor fill.
+                    // Preserve them as component layers so they stay aligned with, and hide
+                    // alongside, the corresponding connected wall.
+                    || normalizedComponentName.Contains("dirt", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("corner", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("border", StringComparison.OrdinalIgnoreCase)
                     || normalizedComponentName.Contains("trim", StringComparison.OrdinalIgnoreCase)
@@ -1617,6 +1622,88 @@ public class FoxWatchManifestAssetExtractor
             var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
             return meshFileName.Contains("roof", StringComparison.OrdinalIgnoreCase)
                 && !meshFileName.Contains("dirt", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureFortSupplementalVisualRenderLayers(
+            List<FoxWatchManifestStructureRenderLayer> renderLayers,
+            IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+        {
+            foreach (var componentReference in componentReferences)
+            {
+                if (!IsFortSupplementalVisualRenderComponent(componentReference))
+                {
+                    continue;
+                }
+
+                var layerId = NormalizeFortEntrenchmentRenderLayerId(componentReference.ComponentName);
+                if (string.IsNullOrWhiteSpace(layerId) ||
+                    renderLayers.Any(layer => string.Equals(layer.Id, layerId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                {
+                    Id = layerId,
+                    ComponentName = componentReference.ComponentName,
+                    ComponentTags = ResolveFortSupplementalVisualRenderLayerComponentTags(componentReference),
+                });
+            }
+        }
+
+        private static List<string> ResolveFortSupplementalVisualRenderLayerComponentTags(
+            FoxWatchBlueprintComponentReference componentReference)
+        {
+            var tags = ResolveFortEntrenchmentRenderLayerComponentTags(
+                componentReference.ComponentName,
+                componentReference.ComponentTags);
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
+
+            // These are exterior turret meshes, even when the blueprint calls the
+            // component simply "Mesh" or "SkelMesh". Treat them as roof visuals so
+            // the hide-roofs view opens the bunker interior without leaving a gun behind.
+            if (normalizedComponentName.Contains("gunai", StringComparison.OrdinalIgnoreCase) ||
+                meshFileName.Contains("gunai", StringComparison.OrdinalIgnoreCase) ||
+                meshFileName.Contains("atgun", StringComparison.OrdinalIgnoreCase) ||
+                meshFileName.Contains("mgun", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Roof");
+            }
+
+            // Observation decks sit on top of the bunker roof and must stay above it
+            // in the planner render stack.
+            if (normalizedComponentName.Contains("observationbunker", StringComparison.OrdinalIgnoreCase))
+            {
+                tags.Add("Top");
+            }
+
+            return tags.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static bool IsFortSupplementalVisualRenderComponent(FoxWatchBlueprintComponentReference componentReference)
+        {
+            if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
+                componentReference.IsVisible == false ||
+                componentReference.IsHiddenInGame ||
+                IsFortEntrenchmentDirtFillMesh(componentReference.MeshPath))
+            {
+                return false;
+            }
+
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            if (string.IsNullOrWhiteSpace(normalizedComponentName) ||
+                IsFortEntrenchmentFloorComponentReference(componentReference) ||
+                IsFortEntrenchmentRoofRenderComponent(componentReference) ||
+                IsFortEntrenchmentBreachedWallComponentReference(componentReference) ||
+                TryResolveFortModSlotWallRenderLayer(componentReference, out _, out _) ||
+                IsFortEntrenchmentVisibilityComponentReference(componentReference))
+            {
+                return false;
+            }
+
+            return string.Equals(componentReference.MeshType, "static", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(componentReference.MeshType, "skeletal", StringComparison.OrdinalIgnoreCase);
         }
 
         private static void EnsureFortEntrenchmentRoofRenderLayer(

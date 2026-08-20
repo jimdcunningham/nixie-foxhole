@@ -74,7 +74,23 @@ FLAT_FILL_SATURATION = 1.34
 FLAT_FILL_VIBRANCE = 0.32
 FLAT_FILL_CONTRAST = 1.18
 FLAT_FILL_GAMMA = 0.90
-
+FORTT3_MITERED_WALL_COMPONENT_KEYS = {
+    "components/backwall",
+    "components/frontwall",
+    "components/leftwall",
+    "components/rightwall",
+}
+FORTT3_MITER_HIGH_SHORT_EDGE_BY_COMPONENT = {
+    # Mesh-local UV orientation is not consistent across the four exported wall
+    # components. These values are the component-local equivalents of the
+    # verified FrontWall cut, rather than an unreliable world-axis inference.
+    "frontwall": False,
+    "backwall": True,
+    # Blender's image pixel rows run bottom-up, so the horizontal wall renders
+    # use the opposite short-edge selector from their top-down file appearance.
+    "leftwall": False,
+    "rightwall": True,
+}
 
 def collection_root_anchor_point(collection):
     root_objects = [obj for obj in collection.objects if obj.parent is None]
@@ -305,6 +321,152 @@ def apply_readability_grade(output_path: str, profile):
         image.filepath_raw = output_path
         image.file_format = "WEBP"
         image.save()
+    finally:
+        bpy.data.images.remove(image)
+
+
+def read_render_texture_sidecar(texture_path: str):
+    sidecar_path = os.path.splitext(texture_path)[0] + ".json"
+    if not os.path.exists(sidecar_path):
+        return None
+
+    try:
+        with open(sidecar_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+def render_layer_bounds(sidecar: dict):
+    width = float(sidecar.get("width") or 0)
+    height = float(sidecar.get("height") or 0)
+    offset_x = float(sidecar.get("offsetX") or 0)
+    offset_y = float(sidecar.get("offsetY") or 0)
+    if width <= 0 or height <= 0:
+        return None
+    return {
+        "minX": offset_x - (width * 0.5),
+        "maxX": offset_x + (width * 0.5),
+        "minY": offset_y - (height * 0.5),
+        "maxY": offset_y + (height * 0.5),
+        "width": width,
+        "height": height,
+        "vertical": height >= width,
+    }
+
+
+def resolve_fortt3_wall_miter_depth(output_path: str):
+    own_sidecar = read_render_texture_sidecar(output_path)
+    own_bounds = render_layer_bounds(own_sidecar or {})
+    if own_bounds is None:
+        return None, 0
+
+    component_id = os.path.basename(os.path.dirname(output_path)).lower()
+    components_directory = os.path.dirname(os.path.dirname(output_path))
+    overlap_depth = 0.0
+    for neighbor_id in os.listdir(components_directory):
+        normalized_neighbor_id = neighbor_id.lower()
+        if normalized_neighbor_id == component_id or not normalized_neighbor_id.endswith("wall"):
+            continue
+        sidecar_path = os.path.join(components_directory, neighbor_id, f"{neighbor_id}.texture.webp")
+        neighbor_sidecar = read_render_texture_sidecar(sidecar_path)
+        neighbor_bounds = render_layer_bounds(neighbor_sidecar or {})
+        if neighbor_bounds is None or own_bounds["vertical"] == neighbor_bounds["vertical"]:
+            continue
+
+        min_x = max(own_bounds["minX"], neighbor_bounds["minX"])
+        max_x = min(own_bounds["maxX"], neighbor_bounds["maxX"])
+        min_y = max(own_bounds["minY"], neighbor_bounds["minY"])
+        max_y = min(own_bounds["maxY"], neighbor_bounds["maxY"])
+        if max_x <= min_x or max_y <= min_y:
+            continue
+
+        overlap_depth = max(overlap_depth, min(max_x - min_x, max_y - min_y))
+
+    # Leave a one-pixel overlap at the seam so filtering cannot expose a hairline
+    # gap between neighboring component textures.
+    return own_bounds, max(0, math.ceil(overlap_depth) - 1)
+
+
+def apply_component_wall_miter_mask(output_path: str, structure_id: str, output_key: str, mode: str):
+    """Trim fortt3 component-wall ends so adjacent walls meet on a 45-degree seam.
+
+    This only changes alpha inside an already-rendered component texture. It keeps
+    the render canvas and anchor sidecar intact, so board placement remains based
+    on the component's real source transform.
+    """
+    normalized_output_key = str(output_key or "").replace("\\", "/").strip().lower()
+    if (
+        str(structure_id or "").strip().lower() != "fortt3"
+        or normalized_output_key not in FORTT3_MITERED_WALL_COMPONENT_KEYS
+        or mode != "topdown"
+        or not os.path.exists(output_path)
+    ):
+        return
+
+    image = bpy.data.images.load(output_path, check_existing=False)
+    try:
+        width, height = image.size
+        if width < 2 or height < 2:
+            return
+
+        own_bounds, miter_depth = resolve_fortt3_wall_miter_depth(output_path)
+        if own_bounds is None or miter_depth <= 0:
+            return
+
+        pixels = list(image.pixels[:])
+        is_vertical_wall = own_bounds["vertical"]
+        short_span = width if is_vertical_wall else height
+        long_span = height if is_vertical_wall else width
+        miter_depth = min(miter_depth, short_span, long_span)
+        component_id = os.path.basename(os.path.dirname(output_path)).lower()
+        cut_from_high_short_edge = FORTT3_MITER_HIGH_SHORT_EDGE_BY_COMPONENT.get(
+            component_id,
+            False,
+        )
+        for y in range(height):
+            for x in range(width):
+                short_index = x if is_vertical_wall else y
+                long_index = y if is_vertical_wall else x
+                short_distance = (
+                    (short_span - 1 - short_index)
+                    if cut_from_high_short_edge
+                    else short_index
+                )
+                trim_start = long_index < (miter_depth - short_distance)
+                trim_end = long_index >= (long_span - miter_depth + short_distance)
+                if not trim_start and not trim_end:
+                    continue
+                pixel_offset = ((y * width) + x) * 4
+                pixels[pixel_offset] = 0.0
+                pixels[pixel_offset + 1] = 0.0
+                pixels[pixel_offset + 2] = 0.0
+                pixels[pixel_offset + 3] = 0.0
+
+        # Keep the FILE-backed image and its color-space metadata. Copying these
+        # linear pixels into a generated float image makes Blender apply a second
+        # display transform and washes out the component RGB during save.
+        image.pixels[:] = pixels
+        image.update()
+        previous_view_state = set_neutral_view_transform(bpy.context.scene)
+        image_settings = bpy.context.scene.render.image_settings
+        previous_file_format = getattr(image_settings, "file_format", None)
+        previous_color_mode = getattr(image_settings, "color_mode", None)
+        previous_quality = getattr(image_settings, "quality", None)
+        previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
+        set_image_output_format(image_settings, output_path)
+        try:
+            image.save_render(output_path, scene=bpy.context.scene)
+        finally:
+            restore_view_transform(bpy.context.scene, previous_view_state)
+            if previous_file_format is not None:
+                image_settings.file_format = previous_file_format
+            if previous_color_mode is not None:
+                image_settings.color_mode = previous_color_mode
+            if previous_quality is not None:
+                image_settings.quality = previous_quality
+            if previous_webp_lossless is not None and hasattr(image_settings, "webp_lossless"):
+                image_settings.webp_lossless = previous_webp_lossless
     finally:
         bpy.data.images.remove(image)
 
@@ -1028,6 +1190,7 @@ def main():
 
     modes = args.mode or ["topdown", "preview"]
     rendered = 0
+    pending_component_wall_miters = []
     for entry in index_document.get("scenes", []):
         structure_id = entry["structureId"]
         if not should_render(entry, {normalize_allowed_id(value) for value in args.only}):
@@ -1148,6 +1311,12 @@ def main():
                             args.pixels_per_meter,
                             anchor_projection,
                         )
+                    pending_component_wall_miters.append((
+                        output_path,
+                        structure_id,
+                        output_key,
+                        render_state["mode"],
+                    ))
                     if args.verbose:
                         print(
                             f"Rendered {structure_id}"
@@ -1163,7 +1332,6 @@ def main():
                             )
                             + ")"
                         )
-
             remove_collection(collection.name)
 
         if not rendered_scene_variant:
@@ -1172,6 +1340,12 @@ def main():
         rendered += 1
         if args.limit > 0 and rendered >= args.limit:
             break
+
+    # Wall cuts rely on the full set of sibling render sidecars. Applying them
+    # inline made the result depend on scene iteration order: early components
+    # could not yet see their perpendicular wall partners.
+    for output_path, structure_id, output_key, mode in pending_component_wall_miters:
+        apply_component_wall_miter_mask(output_path, structure_id, output_key, mode)
 
     print(f"render_render_scenes: rendered {rendered} structure(s) to {args.output_dir}")
 

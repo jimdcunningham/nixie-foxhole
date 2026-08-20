@@ -2576,6 +2576,14 @@ public sealed class FoxWatchRenderSceneGenerator
     private static FoxWatchBounds3D? TryDeriveEntrenchmentFloorClipBoundsFromFootprint(
         FoxWatchManifestStructure structure)
     {
+        if (IsFortEntrenchmentStructure(structure))
+        {
+            // Bunker floor meshes need to extend beneath the removable wall pieces.
+            // The smaller nested footprint describes the walkable interior, not the
+            // floor's rendered extent; using it left seams when neighboring walls hid.
+            return CreateEntrenchmentFloorClipBounds(-2.5, -2.5, 2.5, 2.5);
+        }
+
         if (TryGetSmallestFootprintAxisAlignedBounds(structure.FootprintPolygons, out var minX, out var minY, out var maxX, out var maxY))
         {
             return CreateEntrenchmentFloorClipBounds(minX, minY, maxX, maxY);
@@ -2585,12 +2593,6 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             // Trench interior pit is roughly 11m x 4m (long axis x short axis).
             return CreateEntrenchmentFloorClipBounds(-5.5, -2.0, 5.5, 2.0);
-        }
-
-        if (IsFortEntrenchmentStructure(structure))
-        {
-            // Fort interior pit is roughly 4.5m x 4.5m inside the 5m x 5m shell.
-            return CreateEntrenchmentFloorClipBounds(-2.25, -2.25, 2.25, 2.25);
         }
 
         return null;

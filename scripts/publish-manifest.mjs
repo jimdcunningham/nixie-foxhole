@@ -7038,10 +7038,6 @@ function applyStructureRenderUrls(
                         .map(layer => [normalizeId(layer?.id), layer])
                         .filter(([layerId]) => layerId),
                 );
-                const downgradeStructureId = downgradeStructureIdByUpgradeId.get(normalizeId(structure.id)) ?? null;
-                const downgradeLayerEntries = downgradeStructureId
-                    ? structureLayerEntriesByStructureId?.[downgradeStructureId] ?? {}
-                    : {};
                 const renderLayers = shouldPublishStructureComponentRenderLayers(structure)
                     ? filterLegacyEntrenchmentAggregateRenderLayerEntries(
                         Object.values(structureLayerEntries).filter(entry => entry?.textureUrl),
@@ -7139,14 +7135,11 @@ function applyStructureRenderUrls(
                                 resolveStructureRenderLayerComponentTags(manifestLayer, downgradeLayer),
                             );
                             const componentName = manifestLayer?.componentName ?? manifestLayer?.cn ?? null;
-                            const downgradeEntry = downgradeLayerEntries[normalizeId(entry.id)];
-                            const preferDowngradeOffsets = Number(structure?.tier) === 3 && downgradeEntry;
-                            const offsetX = preferDowngradeOffsets && typeof downgradeEntry?.offsetX === 'number'
-                                ? downgradeEntry.offsetX
-                                : entry?.offsetX;
-                            const offsetY = preferDowngradeOffsets && typeof downgradeEntry?.offsetY === 'number'
-                                ? downgradeEntry.offsetY
-                                : entry?.offsetY;
+                            // Each component render is framed around its own source transform.
+                            // Reusing a lower-tier component offset moves tier-three exterior
+                            // walls and corners away from their rendered footprint.
+                            const offsetX = entry?.offsetX;
+                            const offsetY = entry?.offsetY;
                             return {
                                 id: entry.id,
                                 textureUrl: entry.textureUrl,
