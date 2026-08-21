@@ -1494,6 +1494,7 @@ function compactModificationVariant(value) {
                 useTemplateActor: false,
                 buildSockets: [],
                 footprintPolygons: [],
+                lineOfSightPolygons: [],
                 fuelTanks: [],
                 conversionEntries: [],
                 icons: undefined,
@@ -1510,6 +1511,7 @@ function compactModificationVariant(value) {
                 powerGridInfo: compactPowerGridInfo,
                 buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
                 footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+                lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
                 fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
                 conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
                 icons: compactIcons,
@@ -1533,6 +1535,7 @@ function compactModificationVariant(value) {
         useTemplateActor: false,
         buildSockets: [],
         footprintPolygons: [],
+        lineOfSightPolygons: [],
         fuelTanks: [],
         conversionEntries: [],
         nextRecipeId: null,
@@ -1552,6 +1555,7 @@ function compactModificationVariant(value) {
         powerGridInfo: compactPowerGridInfo,
         buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+        lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
         conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
         cost: compactRecipeResourceMap,
@@ -1775,6 +1779,7 @@ function compactStructure(value) {
         techId: null,
         buildSockets: [],
         footprintPolygons: [],
+        lineOfSightPolygons: [],
         structureVolumes: [],
         vehicleSeats: [],
         spotlights: [],
@@ -1831,6 +1836,7 @@ function compactStructure(value) {
         colors: entryValue => compactArray(entryValue, compactJsonValue),
         buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+        lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         structureVolumes: entryValue => compactArray(entryValue, compactStructureVolume),
         emplacementLocation: compactEmplacementLocation,
         railCouplers: entryValue => compactArray(entryValue, compactRailCoupler),
@@ -7270,6 +7276,9 @@ function applyStructureRenderUrls(
                                 : [];
                             const nextVariant = {
                                 ...variant,
+                                ...(sourceModification?.lineOfSightPolygons?.length > 0
+                                    ? { lineOfSightPolygons: sourceModification.lineOfSightPolygons }
+                                    : {}),
                                 ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
                                 ...(!variant?.iconUrl && renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),
                                 ...(renderEntry?.previewUrl ? { previewUrl: renderEntry.previewUrl } : {}),

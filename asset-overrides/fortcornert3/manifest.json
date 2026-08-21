@@ -1,4 +1,20 @@
 {
   "buildOrder": 5,
-  "previewDirection": "nw"
+  "previewDirection": "nw",
+  "lineOfSightPolygons": [
+    {
+      "shape": [
+        -0.966,
+        3.049,
+        -2.689,
+        3.049,
+        -2.689,
+        -2.67,
+        3.049,
+        -2.67,
+        3.03,
+        -0.985
+      ]
+    }
+  ]
 }

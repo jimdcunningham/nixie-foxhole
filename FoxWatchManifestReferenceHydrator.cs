@@ -1634,6 +1634,24 @@ public sealed class FoxWatchManifestReferenceHydrator
         var appliedCount = 0;
         foreach (var structure in structures)
         {
+            foreach (var (modificationId, modification) in structure.Modifications)
+            {
+                if (!TryResolveModificationOverride(
+                    overridesByVariantId,
+                    structure.Id,
+                    modificationId,
+                    modification,
+                    out var modificationOverride))
+                {
+                    continue;
+                }
+
+                if (ApplyModificationOverrideProperties(modification, modificationOverride, overridePath, $"{structure.Id}/{modificationId}"))
+                {
+                    appliedCount += 1;
+                }
+            }
+
             if (structure.ModificationSlots == null || structure.ModificationSlots.Count == 0)
             {
                 continue;
@@ -1671,6 +1689,29 @@ public sealed class FoxWatchManifestReferenceHydrator
         }
 
         return appliedCount;
+    }
+
+    private static bool TryResolveModificationOverride(
+        IReadOnlyDictionary<string, JsonElement> overridesByVariantId,
+        string structureId,
+        string modificationId,
+        FoxWatchManifestModification modification,
+        out JsonElement modificationOverride)
+    {
+        foreach (var lookupKey in new[] {
+            $"{NormalizeModificationVariantLookupKey(structureId)}/{NormalizeModificationVariantLookupKey(modificationId)}",
+            NormalizeModificationVariantLookupKey(modificationId),
+            NormalizeModificationVariantLookupKey(modification.CodeName),
+        })
+        {
+            if (TryGetModificationVariantOverride(overridesByVariantId, lookupKey, out modificationOverride))
+            {
+                return true;
+            }
+        }
+
+        modificationOverride = default;
+        return false;
     }
 
     private static bool TryGetModificationVariantOverride(
@@ -1748,6 +1789,21 @@ public sealed class FoxWatchManifestReferenceHydrator
     {
         var applied = false;
 
+        if (TryGetOverrideProperty(variantOverride, "lineOfSightPolygons", out var lineOfSightPolygonsElement))
+        {
+            try
+            {
+                variant.LineOfSightPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
+                    lineOfSightPolygonsElement.GetRawText(),
+                    DeserializeOptions) ?? [];
+                applied = true;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Skipping lineOfSightPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
+            }
+        }
+
         if (TryGetOverrideProperty(variantOverride, "previewDirection", out var previewDirectionElement) &&
             previewDirectionElement.ValueKind == JsonValueKind.String)
         {
@@ -1767,6 +1823,31 @@ public sealed class FoxWatchManifestReferenceHydrator
         }
 
         return applied;
+    }
+
+    private bool ApplyModificationOverrideProperties(
+        FoxWatchManifestModification modification,
+        JsonElement modificationOverride,
+        string overridePath,
+        string targetPath)
+    {
+        if (!TryGetOverrideProperty(modificationOverride, "lineOfSightPolygons", out var lineOfSightPolygonsElement))
+        {
+            return false;
+        }
+
+        try
+        {
+            modification.LineOfSightPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
+                lineOfSightPolygonsElement.GetRawText(),
+                DeserializeOptions) ?? [];
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Skipping lineOfSightPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
+            return false;
+        }
     }
 
     private static string NormalizeModificationVariantLookupKey(string? value)

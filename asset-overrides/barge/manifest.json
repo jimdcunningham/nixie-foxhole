@@ -1,5 +1,29 @@
 {
   "previewDirection": "sw",
   "categoryId": "naval",
-  "buildOrder": 20
+  "buildOrder": 20,
+  "lineOfSightPolygons": [
+    {
+      "shape": [
+        -5.701,
+        -3.049,
+        5.814,
+        -3.068,
+        5.833,
+        2.993,
+        -5.663,
+        3.068
+      ]
+    },
+    {
+      "shape": [
+        -5.701,
+        -3.049,
+        -5.701,
+        -1.174,
+        -5.985,
+        -2.159
+      ]
+    }
+  ]
 }

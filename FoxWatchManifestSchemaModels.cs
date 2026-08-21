@@ -331,6 +331,9 @@ public sealed class FoxWatchManifestStructure
 
     public List<FoxWatchManifestHitPolygon> FootprintPolygons { get; set; } = [];
 
+    /// <summary>Authored top-down occlusion polygons for planner line-of-sight.</summary>
+    public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
+
     public List<FoxWatchManifestStructureVolume> StructureVolumes { get; set; } = [];
 
     public List<FoxWatchManifestVehicleSeat> VehicleSeats { get; set; } = [];
@@ -788,6 +791,9 @@ public sealed class FoxWatchManifestModification
 
     public List<FoxWatchManifestHitPolygon> FootprintPolygons { get; set; } = [];
 
+    /// <summary>Authored top-down occlusion polygons for this modification.</summary>
+    public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
+
     public List<FoxWatchManifestFuelTank> FuelTanks { get; set; } = [];
 
     public List<FoxWatchManifestConversionEntry> ConversionEntries { get; set; } = [];
@@ -851,6 +857,9 @@ public sealed class FoxWatchManifestModificationSlotVariant
     public string? BuildFootprintTemplatePath { get; set; }
 
     public Dictionary<string, FoxWatchManifestRecipeResource> Cost { get; set; } = [];
+
+    /// <summary>Authored top-down occlusion polygons for this modification variant.</summary>
+    public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
 
     public bool UseTemplateActor { get; set; }
 
