@@ -544,6 +544,10 @@ public sealed class FoxWatchManifestBuildSocket
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IntegrityBonus { get; set; }
 
+    /// <summary>True when this build socket corresponds to a physical bunker wall breach face.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? BreachFace { get; set; }
+
     public double? X { get; set; }
 
     public double? Y { get; set; }

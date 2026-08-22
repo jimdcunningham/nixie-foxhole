@@ -843,6 +843,8 @@ public class FoxWatchManifestAssetExtractor
             buildSockets = EnsureConnectorEndpointBuildSockets(buildSockets, connector);
             buildSockets = CollapseLogicalBuildSocketDuplicates(buildSockets, connector);
             buildSockets = ApplyEntrenchmentSocketVisibilityTags(buildSockets);
+            buildSockets = ApplyBunkerBreachFaceMetadata(buildSockets, blueprintPackagePath, breachable == true);
+            var renderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets);
 
             var structure = new FoxWatchManifestStructure
             {
@@ -941,7 +943,7 @@ public class FoxWatchManifestAssetExtractor
                 HideInList = false,
                 IsUpgrade = false,
                 UpgradeName = null,
-                RenderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets),
+                RenderLayers = renderLayers,
             };
 
             ApplyModificationUpgradeClassification(structure);
@@ -1365,6 +1367,7 @@ public class FoxWatchManifestAssetExtractor
                         PipeType = socket.PipeType,
                         SocketTags = socketTags,
                         IntegrityBonus = socket.IntegrityBonus,
+                        BreachFace = socket.BreachFace,
                         X = socket.X,
                         Y = socket.Y,
                         Z = socket.Z,
@@ -1372,6 +1375,114 @@ public class FoxWatchManifestAssetExtractor
                     };
                 }),
             ];
+        }
+
+        private List<FoxWatchManifestBuildSocket> ApplyBunkerBreachFaceMetadata(
+            IReadOnlyList<FoxWatchManifestBuildSocket> buildSockets,
+            string? blueprintPackagePath,
+            bool breachable)
+        {
+            if (!breachable || buildSockets.Count == 0)
+            {
+                return [.. buildSockets];
+            }
+
+            var physicalWallDirections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var hasAngleWall = false;
+
+            if (_meshAssetExporter != null && !string.IsNullOrWhiteSpace(blueprintPackagePath))
+            {
+                try
+                {
+                    var componentReferences = _meshAssetExporter
+                        .InspectBlueprintComponentsAsync(blueprintPackagePath)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    foreach (var componentReference in componentReferences)
+                    {
+                        if (IsFortEntrenchmentBreachedWallComponentReference(componentReference))
+                        {
+                            continue;
+                        }
+
+                        var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+                        if (normalizedComponentName.Contains("wallangle", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasAngleWall = true;
+                        }
+
+                        var modSlotDirection = ResolveFortModSlotDirection(
+                            componentReference.ComponentName,
+                            componentReference.AttachParentName);
+                        if (!string.IsNullOrWhiteSpace(modSlotDirection))
+                        {
+                            physicalWallDirections.Add(modSlotDirection);
+                        }
+
+                        if (!normalizedComponentName.Contains("wall", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        foreach (var direction in DeriveDirectionalTagsFromComponentName(normalizedComponentName))
+                        {
+                            physicalWallDirections.Add(direction);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Missing blueprint component metadata leaves breach faces unmarked.
+                    // Consumers intentionally require an explicit FoxWatch-authored true.
+                }
+            }
+
+            return
+            [
+                .. buildSockets.Select(socket =>
+                {
+                    var normalizedSocketName = NormalizeBuildSocketName(socket.Name);
+                    var isWallSocket = normalizedSocketName.Contains("WallSocket", StringComparison.OrdinalIgnoreCase);
+                    var isAngleWallSocket = normalizedSocketName.Contains("AngleFortSocket", StringComparison.OrdinalIgnoreCase)
+                        && hasAngleWall;
+                    var direction = ResolveFortBreachSocketDirection(normalizedSocketName);
+                    var isDirectionalWallSocket = !string.IsNullOrWhiteSpace(direction)
+                        && physicalWallDirections.Contains(direction);
+
+                    var clone = CloneBuildSocket(socket);
+                    clone.BreachFace = isWallSocket || isAngleWallSocket || isDirectionalWallSocket
+                        ? true
+                        : null;
+                    return clone;
+                }),
+            ];
+        }
+
+        private static string? ResolveFortBreachSocketDirection(string? socketName)
+        {
+            var normalizedSocketName = NormalizeBuildSocketName(socketName);
+            if (normalizedSocketName.Contains("BackFortSocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Back";
+            }
+
+            if (normalizedSocketName.Contains("FrontFortSocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Front";
+            }
+
+            if (normalizedSocketName.Contains("LeftFortSocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Left";
+            }
+
+            if (normalizedSocketName.Contains("RightFortSocket", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Right";
+            }
+
+            return null;
         }
 
         private static FoxWatchManifestSocketTag CloneSocketTag(FoxWatchManifestSocketTag tag)
@@ -2265,6 +2376,14 @@ public class FoxWatchManifestAssetExtractor
         {
             if (component != null)
             {
+                var contributesToIslandIntegrityBonus =
+                    ExtractBoolValue(GetNamedValue(component, "bContributeToIslandIntegrityBonus"))
+                    ?? ExtractBoolValue(GetNamedValue(component, "ContributeToIslandIntegrityBonus"));
+                if (contributesToIslandIntegrityBonus == false)
+                {
+                    return false;
+                }
+
                 var ignoreIntegrityBonus = ExtractBoolValue(GetNamedValue(component, "bIgnoreIntegrityBonus"))
                     ?? ExtractBoolValue(GetNamedValue(component, "IgnoreIntegrityBonus"));
                 if (ignoreIntegrityBonus == true)
@@ -3548,6 +3667,7 @@ public class FoxWatchManifestAssetExtractor
                 PipeType = value.PipeType,
                 SocketTags = value.SocketTags.Select(CloneSocketTag).ToList(),
                 IntegrityBonus = value.IntegrityBonus,
+                BreachFace = value.BreachFace,
                 X = value.X,
                 Y = value.Y,
                 Z = value.Z,
@@ -6875,7 +6995,9 @@ public class FoxWatchManifestAssetExtractor
                         Tag = tag.Tag,
                     })
                 ],
-                IntegrityBonus = ResolveBuildSocketIntegrityBonus(componentName, component: null),
+                IntegrityBonus = componentReference.ContributesToIslandIntegrityBonus == false
+                    ? false
+                    : ResolveBuildSocketIntegrityBonus(componentName, component: null),
                 X = transform.X,
                 Y = transform.Y,
                 Z = transform.Z,
@@ -7686,6 +7808,12 @@ public class FoxWatchManifestAssetExtractor
                 normalized = normalized[..^"_GEN_VARIABLE".Length];
             }
 
+            var namespaceSeparatorIndex = normalized.LastIndexOf(':');
+            if (namespaceSeparatorIndex >= 0 && namespaceSeparatorIndex < normalized.Length - 1)
+            {
+                normalized = normalized[(namespaceSeparatorIndex + 1)..].Trim();
+            }
+
             return normalized;
         }
 
@@ -7723,6 +7851,11 @@ public class FoxWatchManifestAssetExtractor
             var score = 0;
             var name = NormalizeString(socket.Name);
             if (!name.EndsWith("_GEN_VARIABLE", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 8;
+            }
+
+            if (!name.Contains(':'))
             {
                 score += 8;
             }
@@ -7828,9 +7961,10 @@ public class FoxWatchManifestAssetExtractor
                 var newScore = ScoreBuildSocketCandidate(socket);
                 var existingScore = ScoreBuildSocketCandidate(existing);
 
+                var preferred = existing;
                 if (newScore > existingScore)
                 {
-                    collapsed[duplicateIndex] = socket;
+                    preferred = socket;
                 }
                 else if (newScore == existingScore)
                 {
@@ -7840,9 +7974,18 @@ public class FoxWatchManifestAssetExtractor
 
                     if (existingNearOrigin && !newNearOrigin)
                     {
-                        collapsed[duplicateIndex] = socket;
+                        preferred = socket;
                     }
                 }
+
+                var merged = CloneBuildSocket(preferred);
+                merged.IntegrityBonus = existing.IntegrityBonus == false || socket.IntegrityBonus == false
+                    ? false
+                    : preferred.IntegrityBonus;
+                merged.BreachFace = existing.BreachFace == true || socket.BreachFace == true
+                    ? true
+                    : preferred.BreachFace;
+                collapsed[duplicateIndex] = merged;
             }
 
             return collapsed;
@@ -11038,6 +11181,8 @@ public class FoxWatchManifestAssetExtractor
                         Category = tag.Category,
                     })
                     .ToList(),
+                IntegrityBonus = socket.IntegrityBonus,
+                BreachFace = socket.BreachFace,
                 X = composedTransform.X,
                 Y = composedTransform.Y,
                 Z = composedTransform.Z,

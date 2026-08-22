@@ -1688,6 +1688,9 @@ public sealed class FoxWatchAssetMeshExporter
 
     private static void ApplyBuildSocketMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
     {
+        targetReference.ContributesToIslandIntegrityBonus ??=
+            export.GetOrDefault<bool?>("bContributeToIslandIntegrityBonus");
+
         var socketTags = export.GetOrDefault<FStructFallback[]>("SocketTags", []);
         if (socketTags.Length == 0)
         {
@@ -2573,6 +2576,7 @@ public sealed class FoxWatchAssetMeshExporter
             AbsoluteLocation = reference.AbsoluteLocation,
             AbsoluteRotation = reference.AbsoluteRotation,
             AbsoluteScale = reference.AbsoluteScale,
+            ContributesToIslandIntegrityBonus = reference.ContributesToIslandIntegrityBonus,
             SocketTags = [.. reference.SocketTags.Select(tag => new FoxWatchBlueprintSocketTagReference
             {
                 Mask = tag.Mask,
@@ -2721,6 +2725,9 @@ public sealed class FoxWatchAssetMeshExporter
                 })
             ];
         }
+
+        targetReference.ContributesToIslandIntegrityBonus ??=
+            fallbackReference.ContributesToIslandIntegrityBonus;
 
         if (targetReference.SplineDefaultTargetUnrealLocationCentimeters == null &&
             fallbackReference.SplineDefaultTargetUnrealLocationCentimeters != null)
@@ -3340,6 +3347,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public string AbsoluteLocation { get; set; } = string.Empty;
     public string AbsoluteRotation { get; set; } = string.Empty;
     public string AbsoluteScale { get; set; } = string.Empty;
+    public bool? ContributesToIslandIntegrityBonus { get; set; }
     public List<FoxWatchBlueprintSocketTagReference> SocketTags { get; set; } = [];
     public List<string> ComponentTags { get; set; } = [];
     public List<double>? SplineDefaultTargetUnrealLocationCentimeters { get; set; }

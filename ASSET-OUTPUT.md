@@ -287,6 +287,14 @@ Emplacement snap is **not** a build socket. Extract publishes:
 
 Do not invent `buildSockets` for these. Planner snaps guest origin to host pad XY only.
 
+### Bunker integrity and breach-face fields (build sockets)
+
+`buildSockets[].integrityBonus` reflects the blueprint component's `bContributeToIslandIntegrityBonus` opt-out. Extract publishes `false` when the game explicitly excludes a socket, including internal corner sockets. Eligible directional fort sockets otherwise represent structural-integrity edges even when that side has no compatible connection or breachable wall, such as a ramp entrance or the closed side of a fire-suppression room.
+
+`buildSockets[].breachFace` is the authoritative visual breach-wall signal. Extract sets it to `true` only when the socket maps to physical wall geometry in the owning blueprint (including directional wall modification slots and angled corner walls). Connection-only sockets and open or non-breachable edges remain unmarked.
+
+The planner may still use every compatible build socket for snapping and bunker-network connectivity. Breach indicators count only `breachFace: true`; compactness counts physical breach faces plus contributing directional fort edges. Publish compacts `breachFace` to `bf` and `integrityBonus` to `ib`.
+
 ### Rail coupler fields (structures)
 
 Train coupling is **not** a BuildSocketComponent. Extract publishes:
