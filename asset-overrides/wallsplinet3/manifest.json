@@ -1,10 +1,19 @@
 {
+  "componentRenderOverrides": {
+    "barbedwire": {
+      "repeatCropPixels": {
+        "start": 2,
+        "end": 2
+      }
+    }
+  },
   "connector": {
     "pathStyle": "straight-telescoping",
     "frontSocketName": "WallSplineCommon:FrontSocket",
     "backSocketName": "WallSplineCommon:BackSocket",
     "behavior": {
-      "trimSpan": true
+      "trimSpan": true,
+      "socketSnapping": true
     }
   }
 }

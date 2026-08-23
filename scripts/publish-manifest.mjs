@@ -81,6 +81,7 @@ const rawRenderedAssetsRootDirectory = resolve(repositoryRoot, 'tools/foxwatch/t
 const rawRenderedAssetTypesDirectory = resolve(rawRenderedAssetsRootDirectory, 'types');
 const rawRenderedSharedAssetsDirectory = resolve(rawRenderedAssetsRootDirectory, 'shared');
 const generatedIconsDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/foxhole-icons');
+const rawMapIconsDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/pak-assets/War/Content/Textures/UI/MapIcons');
 const sourceGameAssetsDirectory = resolve(publicFoxholeAssetsDirectory, 'game');
 const renderScenesDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/renders');
 const renderScenesIndexPath = resolve(renderScenesDirectory, 'index.render-scenes.v1.json');
@@ -4405,6 +4406,33 @@ async function generateSyntheticOilfieldAssets(manifest) {
     }
 }
 
+function restoreSyntheticOilfieldManifestVisuals(manifest) {
+    return {
+        ...manifest,
+        assets: (manifest?.assets ?? []).map(structure => {
+            if (normalizeId(structure?.id) !== 'oilfield') {
+                return structure;
+            }
+
+            const outputDirectory = resolve(assetTypesDirectory, 'structures', 'oilfield');
+            return {
+                ...structure,
+                icons: {
+                    ...(structure.icons ?? {}),
+                    rendered: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.icon.rendered.webp')),
+                },
+                previewUrl: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.preview.webp')),
+                previewIsIconFallback: false,
+                variants: {
+                    default: {
+                        textureUrl: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.texture.webp')),
+                    },
+                },
+            };
+        }),
+    };
+}
+
 function getManifestAssetTypeName(asset) {
     if (asset?.isVehicle === true) {
         return 'vehicles';
@@ -5082,6 +5110,19 @@ function getStructureColorRenderEntry(entriesByKey, key, colorHex) {
     return entriesByKey[normalizedKey].colors[normalizedColorHex];
 }
 
+function getStructureFactionRenderEntry(entriesByKey, key, faction) {
+    const normalizedKey = normalizeId(key);
+    const normalizedFaction = normalizeId(faction);
+    if (!normalizedKey || !['c', 'w'].includes(normalizedFaction)) {
+        return null;
+    }
+
+    entriesByKey[normalizedKey] ??= {};
+    entriesByKey[normalizedKey].factions ??= {};
+    entriesByKey[normalizedKey].factions[normalizedFaction] ??= {};
+    return entriesByKey[normalizedKey].factions[normalizedFaction];
+}
+
 async function collectAssetRenderEntries(
     entriesByKey,
     modificationEntriesByKey,
@@ -5297,6 +5338,37 @@ async function collectAssetRenderEntries(
         return;
     }
 
+    const factionVariantMatch = normalized.match(/^(.*)\.(texture|preview|icon\.rendered)\.(c|w)\.webp$/);
+    if (factionVariantMatch) {
+        const key = normalizeId(factionVariantMatch[1]);
+        const role = factionVariantMatch[2];
+        const faction = factionVariantMatch[3];
+        const factionEntry = getStructureFactionRenderEntry(entriesByKey, key, faction);
+        if (!factionEntry) {
+            return;
+        }
+
+        if (role === 'preview') {
+            if (!await imageFileHasVisiblePixels(filePath)) {
+                return;
+            }
+            assignRenderUrl(factionEntry, 'previewUrl', publicPath);
+            return;
+        }
+
+        if (role === 'icon.rendered') {
+            if (!await imageFileHasVisiblePixels(filePath)) {
+                return;
+            }
+            assignIconRenderUrl(factionEntry, publicPath, 'rendered');
+            return;
+        }
+
+        assignRenderUrl(factionEntry, 'textureUrl', publicPath);
+        await applyTextureMetadata(factionEntry, filePath);
+        return;
+    }
+
     const directionalPreviewMatch = normalized.match(/^(.*)\.preview\.(ne|nw|se|sw)\.webp$/);
     if (directionalPreviewMatch) {
         if (!await imageFileHasVisiblePixels(filePath)) {
@@ -5428,6 +5500,36 @@ function resolveStructureRenderEntry(entriesByKey, structure) {
         })
         .filter(color => color && (color.textureUrl || color.previewUrl || color.renderedIconUrl));
     const defaultColor = colors[0] ?? null;
+    const factionEntriesById = new Map();
+    for (const entry of entries) {
+        for (const faction of ['c', 'w']) {
+            if (!entry?.factions?.[faction]) {
+                continue;
+            }
+            const variants = factionEntriesById.get(faction) ?? [];
+            variants.push(entry.factions[faction]);
+            factionEntriesById.set(faction, variants);
+        }
+    }
+    const factions = Object.fromEntries(['c', 'w'].map(faction => {
+        const factionEntries = factionEntriesById.get(faction) ?? [];
+        const textureUrl = pickValueFromEntries(factionEntries, 'textureUrl');
+        if (!textureUrl) {
+            return [faction, null];
+        }
+        return [faction, {
+            textureUrl,
+            previewUrl: pickDirectionalPreviewValueFromEntries(factionEntries, 'previewUrl'),
+            renderedIconUrl: pickValueFromEntries(factionEntries, 'renderedIconUrl') ?? pickValueFromEntries(factionEntries, 'iconUrl'),
+            textureWidth: Number(factionEntries[0]?.textureWidth ?? 0) || null,
+            textureHeight: Number(factionEntries[0]?.textureHeight ?? 0) || null,
+            anchorX: Number.isFinite(Number(factionEntries[0]?.anchorX ?? NaN)) ? Number(factionEntries[0].anchorX) : null,
+            anchorY: Number.isFinite(Number(factionEntries[0]?.anchorY ?? NaN)) ? Number(factionEntries[0].anchorY) : null,
+            offsetX: Number.isFinite(Number(factionEntries[0]?.offsetX ?? NaN)) ? Number(factionEntries[0].offsetX) : null,
+            offsetY: Number.isFinite(Number(factionEntries[0]?.offsetY ?? NaN)) ? Number(factionEntries[0].offsetY) : null,
+        }];
+    }).filter(([, entry]) => entry));
+    const defaultFaction = factions.c ?? null;
     const destroyedEntries = entries
         .map(entry => entry?.destroyed)
         .filter(Boolean);
@@ -5461,28 +5563,29 @@ function resolveStructureRenderEntry(entriesByKey, structure) {
         return candidates.reduce((best, value) => selectPreferredRenderUrl(best, value), null);
     };
     return {
-        textureUrl: defaultColor?.textureUrl ?? pickValue('textureUrl'),
-        previewUrl: defaultColor?.previewUrl ?? pickDirectionalPreviewValue('previewUrl'),
+        textureUrl: defaultColor?.textureUrl ?? defaultFaction?.textureUrl ?? pickValue('textureUrl'),
+        previewUrl: defaultColor?.previewUrl ?? defaultFaction?.previewUrl ?? pickDirectionalPreviewValue('previewUrl'),
         iconUrl: pickValue('iconUrl'),
         defaultIconUrl: pickValue('defaultIconUrl') ?? pickValue('iconUrl'),
-        renderedIconUrl: defaultColor?.renderedIconUrl ?? pickValue('renderedIconUrl') ?? pickValue('iconUrl'),
-        previewDirection: resolvePreviewDirectionFromUrl(defaultColor?.previewUrl ?? pickDirectionalPreviewValue('previewUrl')),
-        textureWidth: defaultColor?.textureWidth ?? entries
+        renderedIconUrl: defaultColor?.renderedIconUrl ?? defaultFaction?.renderedIconUrl ?? pickValue('renderedIconUrl') ?? pickValue('iconUrl'),
+        previewDirection: resolvePreviewDirectionFromUrl(defaultColor?.previewUrl ?? defaultFaction?.previewUrl ?? pickDirectionalPreviewValue('previewUrl')),
+        factions,
+        textureWidth: defaultColor?.textureWidth ?? defaultFaction?.textureWidth ?? entries
             .map(entry => Number(entry.textureWidth ?? 0))
             .find(value => Number.isFinite(value) && value > 0) ?? null,
-        textureHeight: defaultColor?.textureHeight ?? entries
+        textureHeight: defaultColor?.textureHeight ?? defaultFaction?.textureHeight ?? entries
             .map(entry => Number(entry.textureHeight ?? 0))
             .find(value => Number.isFinite(value) && value > 0) ?? null,
-        anchorX: defaultColor?.anchorX ?? entries
+        anchorX: defaultColor?.anchorX ?? defaultFaction?.anchorX ?? entries
             .map(entry => Number(entry.anchorX ?? NaN))
             .find(value => Number.isFinite(value)) ?? null,
-        anchorY: defaultColor?.anchorY ?? entries
+        anchorY: defaultColor?.anchorY ?? defaultFaction?.anchorY ?? entries
             .map(entry => Number(entry.anchorY ?? NaN))
             .find(value => Number.isFinite(value)) ?? null,
-        offsetX: defaultColor?.offsetX ?? entries
+        offsetX: defaultColor?.offsetX ?? defaultFaction?.offsetX ?? entries
             .map(entry => Number(entry.offsetX ?? NaN))
             .find(value => Number.isFinite(value)) ?? null,
-        offsetY: defaultColor?.offsetY ?? entries
+        offsetY: defaultColor?.offsetY ?? defaultFaction?.offsetY ?? entries
             .map(entry => Number(entry.offsetY ?? NaN))
             .find(value => Number.isFinite(value)) ?? null,
         colors,
@@ -5782,6 +5885,10 @@ function isAllowedRootStructureArtifact(structureId, fileName, hasDestroyedVaria
         || normalizedFileName === `${normalizedStructureId}.texture.${colorHex}.json`
         || normalizedFileName === `${normalizedStructureId}.preview.${colorHex}.webp`
         || normalizedFileName === `${normalizedStructureId}.icon.rendered.${colorHex}.webp`);
+    const isAllowedFactionArtifact = ['c', 'w'].some(faction => normalizedFileName === `${normalizedStructureId}.texture.${faction}.webp`
+        || normalizedFileName === `${normalizedStructureId}.texture.${faction}.json`
+        || normalizedFileName === `${normalizedStructureId}.preview.${faction}.webp`
+        || normalizedFileName === `${normalizedStructureId}.icon.rendered.${faction}.webp`);
 
     return normalizedFileName === `${normalizedStructureId}.texture.webp`
         || normalizedFileName === `${normalizedStructureId}.icon.default.webp`
@@ -5790,6 +5897,7 @@ function isAllowedRootStructureArtifact(structureId, fileName, hasDestroyedVaria
         || normalizedFileName.startsWith(`${normalizedStructureId}.preview.`)
         || normalizedFileName === `${normalizedStructureId}.texture.json`
         || isAllowedColorArtifact
+        || isAllowedFactionArtifact
         || (hasDestroyedVariant && (
             normalizedFileName === `${normalizedStructureId}.destroyed.texture.webp`
             || normalizedFileName === `${normalizedStructureId}.destroyed.texture.json`
@@ -6727,6 +6835,8 @@ function compareStructureRenderLayers(left, right) {
         ['backtrim', 10],
         ['backramp', 10.25],
         ['span', 11],
+        ['middlepillars', 11.25],
+        ['barbedwire', 11.5],
         ['frontramp', 11.75],
         ['fronttrim', 12],
         ['backswitch', 10],
@@ -6983,7 +7093,8 @@ function applyStructureRenderUrls(
                 } = structure;
                 const sceneMetadata = resolveStructureSceneMetadata(structureSceneMetadata, structure);
                 const isMeshlessScene = sceneMetadata?.hasMeshNodes === false;
-                const renderEntry = isMeshlessScene
+                const usesSyntheticRender = normalizeId(structure.id) === 'oilfield';
+                const renderEntry = isMeshlessScene && !usesSyntheticRender
                     ? null
                     : resolveStructureRenderEntry(entriesByKey, structure);
                 const structureColors = (Array.isArray(structure.colors) ? structure.colors : [])
@@ -7016,11 +7127,11 @@ function applyStructureRenderUrls(
                 const structureRenderedIconUrl = defaultStructureColor?.renderedIconUrl
                     ?? coLocatedRenderedIconUrl
                     ?? resolvedStructureDefaultIconUrl;
-                const meshlessFallbackUrl = isMeshlessScene ? structureDefaultIconUrl : null;
+                const meshlessFallbackUrl = isMeshlessScene && !usesSyntheticRender ? structureDefaultIconUrl : null;
                 const textureUrl = defaultStructureColor?.textureUrl ?? renderEntry?.textureUrl ?? meshlessFallbackUrl;
-                const defaultTextureUrl = textureUrl ?? structure.variants.default?.textureUrl;
-                const colonialTextureUrl = textureUrl ?? structure.variants.c?.textureUrl;
-                const wardenTextureUrl = textureUrl ?? structure.variants.w?.textureUrl;
+                const defaultTextureUrl = renderEntry?.factions?.c?.textureUrl ?? textureUrl ?? structure.variants.default?.textureUrl;
+                const colonialTextureUrl = renderEntry?.factions?.c?.textureUrl ?? structure.variants.c?.textureUrl ?? defaultTextureUrl;
+                const wardenTextureUrl = renderEntry?.factions?.w?.textureUrl ?? structure.variants.w?.textureUrl ?? defaultTextureUrl;
                 const previewUrl = defaultStructureColor?.previewUrl ?? renderEntry?.previewUrl ?? meshlessFallbackUrl ?? structure.previewUrl;
                 const previewDirection = renderEntry?.previewDirection
                     ?? sceneMetadata?.previewDirection
@@ -7196,10 +7307,10 @@ function applyStructureRenderUrls(
                         ...(!hasPublishedColorVariants && defaultTextureUrl
                             ? { default: { textureUrl: defaultTextureUrl } }
                             : {}),
-                        ...(colonialTextureUrl && colonialTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl)
+                        ...(colonialTextureUrl && (renderEntry?.factions?.c || colonialTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl))
                             ? { c: { textureUrl: colonialTextureUrl } }
                             : {}),
-                        ...(wardenTextureUrl && wardenTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl)
+                        ...(wardenTextureUrl && (renderEntry?.factions?.w || wardenTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl))
                             ? { w: { textureUrl: wardenTextureUrl } }
                             : {}),
                     },
@@ -7677,6 +7788,7 @@ async function coLocateFallbackStructureAssets(
         toPublicAssetUrl: toPublicFoxholeAssetUrl,
         rawRenderedAssetTypesDirectory,
         generatedIconsDirectory: generatedDirectory,
+        rawMapIconsDirectory,
         publicAssetsDirectory: publicFoxholeAssetsDirectory,
         resolveAssetTypeName: resolvePublishedAssetTypeName,
         skipExistingAssets,
@@ -7837,11 +7949,13 @@ try {
     await removeStructureArtifactsByIds(explicitlyRemovedStructureIds);
     await removeLegacyTypedLayoutArtifacts(manifestWithSeededSharedModificationIds);
 
-    await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
     await syncRawRenderedAssetsToPublicDirectory(
         scopedRawRenderedAssetTargets,
         manifestWithSeededSharedModificationIds,
     );
+    // OilField has no renderable game mesh. Replace its transparent Blender
+    // artifacts only after raw sync so the synthetic visual remains canonical.
+    await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
 
     const structuresWithVisibleRawDestroyedRenders = await collectStructureIdsWithVisibleRawDestroyedRenders();
     const structuresWithRawDestroyedRenders = new Set();
@@ -7881,8 +7995,15 @@ try {
         subtypeOverlayIconKeys,
         structuresWithDestroyedRenderScenes,
     );
-    const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
+    // Fallback co-location may legitimately replace blank Blender outputs with
+    // the default icon. OilField is the exception: its authored synthetic
+    // texture and rendered preview must remain distinct from that icon.
+    await generateSyntheticOilfieldAssets(manifestWithCoLocatedFallbackAssets);
+    const manifestWithRestoredSyntheticOilfieldVisuals = restoreSyntheticOilfieldManifestVisuals(
         manifestWithCoLocatedFallbackAssets,
+    );
+    const manifestWithStrippedSlotNoise = stripPublishedModificationSlotNoise(
+        manifestWithRestoredSyntheticOilfieldVisuals,
         structureRenderEntries.modificationEntriesByKey,
         structureRenderEntries.modificationEntriesByAssetId,
         structureRenderEntries.modificationLayerEntriesByAssetId,

@@ -1,1 +1,56 @@
-{"standaloneMeshPackagePaths":["War/Content/Meshes/Environment/Roads/RoadGreatMarch01.uasset"],"codeName":"GreatMarchRoad","legacyKey":"worldroad","name":{"fallback":"Great March Cobble Road"},"description":{"fallback":"A broad cobbled road section from Great March."},"categoryId":"world","buildOrder":100}
+{
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Environment/Roads/RoadGreatMarch01.uasset"
+  ],
+  "codeName": "GreatMarchRoad",
+  "legacyKey": "worldroad",
+  "name": { "fallback": "Great March Cobble Road" },
+  "description": { "fallback": "A broad cobbled road section from Great March." },
+  "categoryId": "world",
+  "buildOrder": 100,
+  "connector": {
+    "kind": "manual",
+    "isConnector": true,
+    "isManualConnector": true,
+    "splineComponentName": "SplineConnector",
+    "frontSocketName": "FrontSocket",
+    "backSocketName": "BackSocket",
+    "minLengthCm": 500,
+    "maxLengthCm": 4800,
+    "minRadiusCm": 500,
+    "maxBufferCm": 200,
+    "minBufferCm": 200,
+    "maxSlopeAngleDeg": 10,
+    "pathStyle": "spline",
+    "behavior": { "socketSnapping": true, "renderEndCaps": false },
+    "meshConfigs": [
+      {
+        "mode": "spline",
+        "meshPaths": ["War/Content/Meshes/Environment/Roads/RoadGreatMarch01.uasset"],
+        "splineMeshAxis": "z",
+        "nativeMeshLengthCm": 800,
+        "interval": 800
+      }
+    ]
+  },
+  "buildSockets": [
+    {
+      "name": "BackSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "mask": 536870912, "category": 536870912, "tag": "Back" },
+        { "mask": 1073741824, "category": 536870912 }
+      ],
+      "rotation": -180
+    },
+    {
+      "name": "FrontSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "mask": 536870912, "category": 536870912, "tag": "Front" },
+        { "mask": 1073741824, "category": 536870912 }
+      ],
+      "x": 800
+    }
+  ]
+}

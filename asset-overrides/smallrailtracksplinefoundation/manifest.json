@@ -1,6 +1,14 @@
 {
   "previewDirection": "ne",
   "clipFloorZ": -0.5,
+  "componentRenderOverrides": {
+    "span": {
+      "repeatCropPixels": {
+        "start": 6,
+        "end": 6
+      }
+    }
+  },
   "connector": {
     "behavior": {
       "railTrack": true,

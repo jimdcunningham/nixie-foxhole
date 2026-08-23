@@ -189,6 +189,8 @@ public sealed class FoxWatchManifestStructure
 
     public List<double>? RenderRotationDegrees { get; set; }
 
+    public List<string>? RenderExcludedMeshIds { get; set; }
+
     public bool? GenerateDefaultIcon { get; set; }
 
     public bool? ClipFloor { get; set; }
@@ -246,6 +248,12 @@ public sealed class FoxWatchManifestStructure
     public FoxWatchManifestEmplacementLocation? EmplacementLocation { get; set; }
 
     public List<FoxWatchManifestRailCoupler> RailCouplers { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? WheelBase { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TrackGauge { get; set; }
 
     public string? BuildLocationType { get; set; }
 
@@ -331,6 +339,9 @@ public sealed class FoxWatchManifestStructure
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<FoxWatchManifestStructureRenderLayer>? RenderLayers { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, FoxWatchManifestComponentRenderOverride>? ComponentRenderOverrides { get; set; }
 
     public List<FoxWatchManifestCraneSpawn> CraneSpawns { get; set; } = [];
 
@@ -729,6 +740,20 @@ public sealed class FoxWatchManifestStructureRenderLayer
     public string? ComponentName { get; set; }
 
     public List<string> ComponentTags { get; set; } = [];
+}
+
+public sealed class FoxWatchManifestComponentRenderOverride
+{
+    public FoxWatchManifestRepeatCropPixels? RepeatCropPixels { get; set; }
+
+    public string? CalibrationBackgroundColor { get; set; }
+}
+
+public sealed class FoxWatchManifestRepeatCropPixels
+{
+    public double Start { get; set; }
+
+    public double End { get; set; }
 }
 
 public sealed class FoxWatchManifestBuildFootprintBox

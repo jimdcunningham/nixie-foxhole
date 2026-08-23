@@ -428,6 +428,24 @@ public sealed class FoxWatchAssetMeshExporter
         throw new InvalidOperationException($"Package '{packagePath}' did not contain a UStaticMesh or USkeletalMesh export. Exports: {exportSummary}");
     }
 
+    public Task ExportMaterialAsync(string assetPath, string outputDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureMounted();
+
+        var packagePath = ResolvePackagePath(assetPath)
+            ?? throw new FileNotFoundException($"Could not resolve material package '{assetPath}' from mounted Foxhole pak files.");
+        var package = FileProvider.LoadPackage(packagePath);
+        var materials = package.GetExports().OfType<UMaterialInterface>().ToArray();
+        if (materials.Length == 0)
+        {
+            throw new InvalidOperationException($"Package '{packagePath}' does not contain a material export.");
+        }
+
+        ExportMaterials(materials, outputDirectory, EMeshFormat.Gltf2.ToString());
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<string>> DumpPackageFilesAsync(string assetPath, string outputDirectory, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -863,6 +881,14 @@ public sealed class FoxWatchAssetMeshExporter
 
     private (int ExportedCount, int CachedCount, int ExistingCount) ExportReferencedMaterials(IEnumerable<ResolvedObject?> materials, string outputDirectory, string meshFormatName)
     {
+        return ExportMaterials(
+            materials.Select(materialReference => materialReference?.Load<UMaterialInterface>()).OfType<UMaterialInterface>(),
+            outputDirectory,
+            meshFormatName);
+    }
+
+    private (int ExportedCount, int CachedCount, int ExistingCount) ExportMaterials(IEnumerable<UMaterialInterface> materials, string outputDirectory, string meshFormatName)
+    {
         var exportOptions = CreateExporterOptions(ParseMeshFormat(meshFormatName));
         var outputDirectoryInfo = new DirectoryInfo(outputDirectory);
         outputDirectoryInfo.Create();
@@ -871,13 +897,8 @@ public sealed class FoxWatchAssetMeshExporter
         var cachedCount = 0;
         var existingCount = 0;
 
-        foreach (var materialReference in materials)
+        foreach (var material in materials)
         {
-            if (materialReference?.Load<UMaterialInterface>() is not { } material)
-            {
-                continue;
-            }
-
             var materialName = material.Name;
             if (string.IsNullOrWhiteSpace(materialName) || !exportedMaterialNames.Add(materialName))
             {
@@ -1646,15 +1667,61 @@ public sealed class FoxWatchAssetMeshExporter
         return export.ExportType.Contains("SplineConnectorComponent", StringComparison.OrdinalIgnoreCase) ||
             export.Class?.Name.Text.Contains("SplineConnectorComponent", StringComparison.OrdinalIgnoreCase) == true ||
             export.ExportType.Contains("StaticMeshOverrideComponent", StringComparison.OrdinalIgnoreCase) ||
-            export.Class?.Name.Text.Contains("StaticMeshOverrideComponent", StringComparison.OrdinalIgnoreCase) == true;
+            export.Class?.Name.Text.Contains("StaticMeshOverrideComponent", StringComparison.OrdinalIgnoreCase) == true ||
+            export.ExportType.Contains("MultiplexedStaticMeshComponent", StringComparison.OrdinalIgnoreCase) ||
+            export.Class?.Name.Text.Contains("MultiplexedStaticMeshComponent", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private void ApplyComponentMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
     {
         ApplyBuildSocketMetadata(targetReference, export);
         ApplyComponentTagsMetadata(targetReference, export);
+        ApplyFactionMaterialOverrideMetadata(targetReference, export);
         ApplySplineConnectorMetadata(targetReference, export);
         ApplyStaticMeshOverrideMetadata(targetReference, export);
+    }
+
+    private static void ApplyFactionMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
+    {
+        foreach (var (variantId, propertyName) in new[]
+                 {
+                     ("c", "MaterialOverridesC"),
+                     ("w", "MaterialOverridesW"),
+                 })
+        {
+            var overrides = export.GetOrDefault<FStructFallback[]>(propertyName, [])
+                .Select(fallback =>
+                {
+                    var materialPath = ReadResolvedObjectPackagePath(fallback, "Material") ?? string.Empty;
+                    return new FoxWatchMaterialOverrideReference
+                    {
+                        Index = fallback.GetOrDefault<int>("Index"),
+                        MaterialPath = materialPath,
+                        MaterialSidecarName = Path.GetFileNameWithoutExtension(materialPath),
+                    };
+                })
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.MaterialPath) && !string.IsNullOrWhiteSpace(entry.MaterialSidecarName))
+                .OrderBy(entry => entry.Index)
+                .ToList();
+
+            if (overrides.Count > 0)
+            {
+                targetReference.MaterialOverridesByVariant[variantId] = overrides;
+            }
+        }
+
+        if (targetReference.MaterialOverridesByVariant.Count == 0)
+        {
+            return;
+        }
+
+        var meshStops = export.GetOrDefault<FStructFallback[]>("MeshStops", []);
+        var selectedMeshIndex = export.GetOrDefault<int?>("SelectedMeshIndex") ?? (meshStops.Length - 1);
+        if (selectedMeshIndex >= 0 && selectedMeshIndex < meshStops.Length)
+        {
+            targetReference.MaterialOverrideTargetMeshPath =
+                ReadResolvedObjectPackagePath(meshStops[selectedMeshIndex], "StaticMesh") ?? string.Empty;
+        }
     }
 
     private static void ApplyComponentTagsMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
@@ -3364,8 +3431,19 @@ public sealed class FoxWatchBlueprintComponentReference
     public List<FoxWatchSplineConnectorMeshConfigReference> SplineConnectorMeshConfigs { get; set; } = [];
     public List<FoxWatchSplineConnectorComponentConfigReference> SplineComponentConfigs { get; set; } = [];
     public string MaterialSidecarNameOverride { get; set; } = string.Empty;
+    public Dictionary<string, List<FoxWatchMaterialOverrideReference>> MaterialOverridesByVariant { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public string MaterialOverrideTargetMeshPath { get; set; } = string.Empty;
     public bool IsVisible { get; set; } = true;
     public bool IsHiddenInGame { get; set; }
+}
+
+public sealed class FoxWatchMaterialOverrideReference
+{
+    public int Index { get; set; }
+
+    public string MaterialPath { get; set; } = string.Empty;
+
+    public string MaterialSidecarName { get; set; } = string.Empty;
 }
 
 public sealed class FoxWatchBlueprintSocketTagReference

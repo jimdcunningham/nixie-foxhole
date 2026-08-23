@@ -2,5 +2,7 @@
   "categoryId": "logistics",
   "buildOrder": 21,
   "clipFloor": false,
+  "iconUrl": "/foxhole/assets/maps/MapIcons/MapIconFuel.webp",
+  "generateDefaultIcon": false,
   "subTypeIconUrl": "/foxhole/assets/icons/oil.png"
 }

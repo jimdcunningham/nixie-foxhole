@@ -14,6 +14,7 @@ import {
     isComposableIconAssetKind,
     isCopyOnlyAssetKind,
     normalizeIconContentDimensions,
+    publishStructureIconAsset,
     resolveRawIconSource,
     resolveSubtypeOverlayUrl,
     resolveSubtypeOverlayUrlForIconFallback,
@@ -242,6 +243,10 @@ test('resolveRawVisualCopySource keeps a visible Blender PNG preview over the de
     await mkdir(resolve(rawRenderedRoot, 'structures', 'playerc'), { recursive: true });
     await mkdir(generatedIconsRoot, { recursive: true });
     await writeFile(
+        resolve(rawRenderedRoot, 'structures', 'playerc', 'playerc.preview.webp'),
+        await readFile(resolve(fixtureRoot, 'visible-render-256.webp')),
+    );
+    await writeFile(
         resolve(rawRenderedRoot, 'structures', 'playerc', 'playerc.preview.png'),
         await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
     );
@@ -266,6 +271,48 @@ test('resolveRawVisualCopySource keeps a visible Blender PNG preview over the de
     assert.equal(source.fellBackToIconDefault, undefined);
     await writeCoLocatedCopy({ outputPath, rawSource: source, assetKind: 'preview' });
     assert.equal((await sharp(outputPath).metadata()).format, 'webp');
+});
+
+test('publishStructureIconAsset replaces a stale visible preview with the PNG master', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-refresh-png-preview-master-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    const outputDirectory = resolve(publicAssetsRoot, 'types/structures/runway');
+    const outputPath = resolve(outputDirectory, 'runway.preview.webp');
+
+    try {
+        await mkdir(resolve(rawRenderedRoot, 'structures', 'runway'), { recursive: true });
+        await mkdir(generatedIconsRoot, { recursive: true });
+        await mkdir(outputDirectory, { recursive: true });
+        await writeFile(
+            resolve(rawRenderedRoot, 'structures', 'runway', 'runway.preview.webp'),
+            await readFile(resolve(fixtureRoot, 'visible-render-256.webp')),
+        );
+        await writeFile(
+            resolve(rawRenderedRoot, 'structures', 'runway', 'runway.preview.png'),
+            await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+        );
+        await writeFile(outputPath, await readFile(resolve(fixtureRoot, 'visible-render-256.webp')));
+
+        const structure = { id: 'runway' };
+        await publishStructureIconAsset({
+            structureId: 'runway',
+            assetKind: 'preview',
+            structure,
+            sourceStructure: structure,
+            outputDirectory,
+            toPublicAssetUrl: value => value,
+            rawRenderedAssetTypesDirectory: rawRenderedRoot,
+            generatedIconsDirectory: generatedIconsRoot,
+            publicAssetsDirectory: publicAssetsRoot,
+            resolveAssetTypeName: () => 'structures',
+        });
+
+        assert.equal((await sharp(await readFile(outputPath)).metadata()).width, 128);
+    } finally {
+        await rm(tempRoot, { recursive: true, force: true });
+    }
 });
 
 test('resolveRawIconSource invisible render falls back to blueprint', async () => {
@@ -335,6 +382,103 @@ test('resolveRawIconSource prefers a rendered preview master over a cached rende
     const metadata = await sharp(source.content).metadata();
     assert.equal(metadata.width, 256);
     assert.equal(metadata.height, 256);
+});
+
+test('resolveRawIconSource prefers a pencil PNG master over a cached default icon', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-default-icon-pencil-master-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    const assetDirectory = resolve(rawRenderedRoot, 'structures', 'runway');
+
+    try {
+        await mkdir(assetDirectory, { recursive: true });
+        await mkdir(generatedIconsRoot, { recursive: true });
+        await sharp({
+            create: {
+                width: 16,
+                height: 16,
+                channels: 4,
+                background: { r: 255, g: 0, b: 0, alpha: 1 },
+            },
+        }).webp().toFile(resolve(assetDirectory, 'runway.icon.default.webp'));
+        await sharp({
+            create: {
+                width: 32,
+                height: 16,
+                channels: 4,
+                background: { r: 255, g: 255, b: 255, alpha: 1 },
+            },
+        }).png().toFile(resolve(assetDirectory, 'runway.icon.default.png'));
+
+        const structure = { id: 'runway', generateDefaultIcon: true };
+        const source = await resolveRawIconSource({
+            structureId: 'runway',
+            assetKind: 'icon.default',
+            structure,
+            sourceStructure: structure,
+            rawRenderedAssetTypesDirectory: rawRenderedRoot,
+            generatedIconsDirectory: generatedIconsRoot,
+            publicAssetsDirectory: publicAssetsRoot,
+            resolveAssetTypeName: () => 'structures',
+        });
+
+        assert.ok(source);
+        assert.match(source.sourceFilePath, /runway\.icon\.default\.png$/);
+        const metadata = await sharp(source.content).metadata();
+        assert.equal(metadata.width, 32);
+        assert.equal(metadata.height, 16);
+    } finally {
+        await rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('resolveRawIconSource prefers an explicit map icon over a stale pencil default', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-map-icon-default-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const rawMapIconsRoot = resolve(tempRoot, 'pak-assets/War/Content/Textures/UI/MapIcons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    const assetDirectory = resolve(rawRenderedRoot, 'structures', 'oilfield');
+
+    try {
+        await mkdir(assetDirectory, { recursive: true });
+        await mkdir(generatedIconsRoot, { recursive: true });
+        await mkdir(rawMapIconsRoot, { recursive: true });
+        await writeFile(
+            resolve(assetDirectory, 'oilfield.icon.default.png'),
+            await readFile(resolve(fixtureRoot, 'visible-render-256.png')),
+        );
+        await writeFile(
+            resolve(rawMapIconsRoot, 'MapIconFuel.png'),
+            await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+        );
+
+        const structure = {
+            id: 'oilfield',
+            iconUrl: '/foxhole/assets/maps/MapIcons/MapIconFuel.webp',
+            generateDefaultIcon: false,
+        };
+        const source = await resolveRawIconSource({
+            structureId: 'oilfield',
+            assetKind: 'icon.default',
+            structure,
+            sourceStructure: structure,
+            rawRenderedAssetTypesDirectory: rawRenderedRoot,
+            generatedIconsDirectory: generatedIconsRoot,
+            rawMapIconsDirectory: rawMapIconsRoot,
+            publicAssetsDirectory: publicAssetsRoot,
+            resolveAssetTypeName: () => 'structures',
+        });
+
+        assert.ok(source);
+        assert.match(source.sourceFilePath, /MapIconFuel\.png$/);
+        const metadata = await sharp(source.content).metadata();
+        assert.equal(metadata.width, 128);
+        assert.equal(metadata.height, 128);
+    } finally {
+        await rm(tempRoot, { recursive: true, force: true });
+    }
 });
 
 test('resolveRawIconSource falls back to generated icon by asset id when urls are colocated', async () => {

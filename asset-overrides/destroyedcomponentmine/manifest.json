@@ -1,6 +1,4 @@
 {
-  "clipFloor": true,
-  "categoryId": "logistics",
   "renderExcludedMeshIds": [
     "mesh-bulwarkdressing_stoneslab_1"
   ]

@@ -1,1 +1,11 @@
-{"standaloneMeshPackagePaths":["War/Content/Meshes/Environment/Roads/RoadGreatMarchEnd01.uasset"],"codeName":"GreatMarchRoadEnd","name":{"fallback":"Great March Cobble Road End"},"description":{"fallback":"A rounded end section for the Great March cobble road."},"categoryId":"world","buildOrder":102}
+{
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Environment/Roads/RoadGreatMarchEnd01.uasset"
+  ],
+  "codeName": "GreatMarchRoadEnd",
+  "name": { "fallback": "Great March Cobble Road End" },
+  "description": { "fallback": "A rounded end section for the Great March cobble road." },
+  "categoryId": "world",
+  "buildOrder": 102,
+  "exclude": true
+}

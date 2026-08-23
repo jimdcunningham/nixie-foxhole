@@ -1,1 +1,55 @@
-{"standaloneMeshPackagePaths":["War/Content/Meshes/Environment/Roads/RoadT2PackedDirt01.uasset"],"codeName":"PackedDirtRoad","name":{"fallback":"Packed Dirt Road"},"description":{"fallback":"A compacted dirt road section."},"categoryId":"world","buildOrder":105}
+{
+  "standaloneMeshPackagePaths": [
+    "War/Content/Meshes/Environment/Roads/RoadT2PackedDirt01.uasset"
+  ],
+  "codeName": "PackedDirtRoad",
+  "name": { "fallback": "Packed Dirt Road" },
+  "description": { "fallback": "A compacted dirt road section." },
+  "categoryId": "world",
+  "buildOrder": 105,
+  "connector": {
+    "kind": "manual",
+    "isConnector": true,
+    "isManualConnector": true,
+    "splineComponentName": "SplineConnector",
+    "frontSocketName": "FrontSocket",
+    "backSocketName": "BackSocket",
+    "minLengthCm": 500,
+    "maxLengthCm": 4800,
+    "minRadiusCm": 500,
+    "maxBufferCm": 200,
+    "minBufferCm": 200,
+    "maxSlopeAngleDeg": 10,
+    "pathStyle": "spline",
+    "behavior": { "socketSnapping": true, "renderEndCaps": false },
+    "meshConfigs": [
+      {
+        "mode": "spline",
+        "meshPaths": ["War/Content/Meshes/Environment/Roads/RoadT2PackedDirt01.uasset"],
+        "splineMeshAxis": "z",
+        "nativeMeshLengthCm": 1000,
+        "interval": 1000
+      }
+    ]
+  },
+  "buildSockets": [
+    {
+      "name": "BackSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "mask": 536870912, "category": 536870912, "tag": "Back" },
+        { "mask": 1073741824, "category": 536870912 }
+      ],
+      "rotation": -180
+    },
+    {
+      "name": "FrontSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "mask": 536870912, "category": 536870912, "tag": "Front" },
+        { "mask": 1073741824, "category": 536870912 }
+      ],
+      "x": 1000
+    }
+  ]
+}

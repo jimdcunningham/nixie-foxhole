@@ -55,7 +55,20 @@ public sealed class FoxWatchRenderSceneRenderSettings
 
     public double? TopdownPaddingMeters { get; set; }
 
+    public string? RepeatAxis { get; set; }
+
+    public FoxWatchRenderSceneRepeatCrop? RepeatCrop { get; set; }
+
+    public string? CalibrationBackgroundColor { get; set; }
+
     public string? MaterialMode { get; set; }
+}
+
+public sealed class FoxWatchRenderSceneRepeatCrop
+{
+    public double StartInsetPixels { get; set; }
+
+    public double EndInsetPixels { get; set; }
 }
 
 public sealed class FoxWatchRenderSceneGraph
@@ -185,6 +198,11 @@ public sealed class FoxWatchRenderSceneMeshAsset
     public List<string>? PoseAnimationPackagePaths { get; set; }
 
     public string? MaterialSidecarNameOverride { get; set; }
+
+    public Dictionary<string, Dictionary<int, string>>? MaterialSidecarNameOverridesByVariant { get; set; }
+
+    [JsonIgnore]
+    public Dictionary<string, List<string>>? MaterialPackagePathsByVariant { get; set; }
 }
 
 public sealed class FoxWatchRenderSceneMaterialAsset

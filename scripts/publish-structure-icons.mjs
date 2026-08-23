@@ -131,11 +131,21 @@ export function extractPublishedIconKey(value) {
     return match ? normalizeId(match[1]) : null;
 }
 
+export function extractPublishedMapIconFileName(value) {
+    const match = String(value ?? '').match(/\/foxhole\/assets\/maps\/MapIcons\/([^/]+\.(?:png|jpe?g|webp))$/i);
+    return match ? match[1] : null;
+}
+
 export function isSharedPublishedIconUrl(value) {
     return /^\/foxhole\/assets\/icons\/[^/]+\.webp$/i.test(String(value ?? ''));
 }
 
-export function isAllowedRawSourcePath(filePath, { rawRenderedRoot, generatedIconsRoot, publicAssetsRoot }) {
+export function isAllowedRawSourcePath(filePath, {
+    rawRenderedRoot,
+    generatedIconsRoot,
+    rawMapIconsRoot,
+    publicAssetsRoot,
+}) {
     const normalizedPath = normalizeFileSystemPath(filePath);
     const normalizedRawRoot = normalizeFileSystemPath(rawRenderedRoot);
     const normalizedGeneratedRoot = normalizeFileSystemPath(generatedIconsRoot);
@@ -146,7 +156,9 @@ export function isAllowedRawSourcePath(filePath, { rawRenderedRoot, generatedIco
     }
 
     return normalizedPath.startsWith(`${normalizedRawRoot}/`)
-        || normalizedPath.startsWith(`${normalizedGeneratedRoot}/`);
+        || normalizedPath.startsWith(`${normalizedGeneratedRoot}/`)
+        || (rawMapIconsRoot
+            && normalizedPath.startsWith(`${normalizeFileSystemPath(rawMapIconsRoot)}/`));
 }
 
 export function structureHasNestedDestroyed(structure) {
@@ -445,7 +457,7 @@ function getRawRenderedAssetCandidatePaths(structureId, assetKind, assetTypeName
 
     // Blender writes preview masters as PNG; publishing converts them to WebP.
     // Check that master before falling back to a default icon.
-    return [publishedPath, publishedPath.replace(/\.webp$/i, '.png')];
+    return [publishedPath.replace(/\.webp$/i, '.png'), publishedPath];
 }
 
 async function pathExists(filePath) {
@@ -542,6 +554,29 @@ async function resolveGeneratedIconFilePath(iconUrl, generatedIconsDirectory) {
     return resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory);
 }
 
+async function resolveRawMapIconFilePath(iconUrl, rawMapIconsDirectory) {
+    const fileName = extractPublishedMapIconFileName(iconUrl);
+    if (!fileName || !rawMapIconsDirectory) {
+        return null;
+    }
+
+    const requestedExtension = extname(fileName).toLowerCase();
+    const baseName = basename(fileName, requestedExtension);
+    for (const extension of [requestedExtension, ...ICON_SOURCE_EXTENSIONS]) {
+        const candidatePath = resolve(rawMapIconsDirectory, `${baseName}${extension}`);
+        if (await pathExists(candidatePath)) {
+            return candidatePath;
+        }
+    }
+
+    return null;
+}
+
+async function resolveReferencedIconFilePath(iconUrl, generatedIconsDirectory, rawMapIconsDirectory) {
+    return await resolveGeneratedIconFilePath(iconUrl, generatedIconsDirectory)
+        ?? await resolveRawMapIconFilePath(iconUrl, rawMapIconsDirectory);
+}
+
 export function getGeneratedIconLookupKeysForAssetId(assetId) {
     const normalizedAssetId = normalizeId(assetId);
     if (!normalizedAssetId) {
@@ -566,8 +601,8 @@ export async function resolveGeneratedIconFilePathForAssetId(assetId, generatedI
     return null;
 }
 
-async function readRawSourceFile(filePath, { rawRenderedRoot, generatedIconsRoot, publicAssetsRoot }) {
-    if (!isAllowedRawSourcePath(filePath, { rawRenderedRoot, generatedIconsRoot, publicAssetsRoot })) {
+async function readRawSourceFile(filePath, roots) {
+    if (!isAllowedRawSourcePath(filePath, roots)) {
         throw new Error(`refusing to read non-raw icon source: ${filePath}`);
     }
 
@@ -584,6 +619,7 @@ export async function resolveRawIconSource({
     sourceStructure,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
 }) {
@@ -592,6 +628,7 @@ export async function resolveRawIconSource({
     const roots = {
         rawRenderedRoot,
         generatedIconsRoot: generatedIconsDirectory,
+        rawMapIconsRoot: rawMapIconsDirectory,
         publicAssetsRoot: publicAssetsDirectory,
     };
     const preferGeneratedDefaultIcon = assetKind === 'icon.default'
@@ -603,12 +640,33 @@ export async function resolveRawIconSource({
         assetTypeName,
         rawRenderedAssetTypesDirectory,
     );
+    if (assetKind === 'icon.default' && !preferGeneratedDefaultIcon) {
+        for (const blueprintUrl of getBlueprintIconUrlCandidates(structure, sourceStructure, assetKind)) {
+            const referencedIconPath = await resolveReferencedIconFilePath(
+                blueprintUrl,
+                generatedIconsDirectory,
+                rawMapIconsDirectory,
+            );
+            if (referencedIconPath) {
+                return readRawSourceFile(referencedIconPath, roots);
+            }
+        }
+    }
     if (assetKind === 'icon.rendered' || assetKind === 'destroyed.icon.rendered') {
         const previewMasterPath = rawRenderedPath.replace(/\.icon\.rendered\.webp$/i, '.preview.png');
         if (await pathExists(previewMasterPath)
             && isAllowedRawSourcePath(previewMasterPath, roots)
             && await imageFileHasVisiblePixelsFromPath(previewMasterPath)) {
             return readRawSourceFile(previewMasterPath, roots);
+        }
+    }
+
+    if (assetKind === 'icon.default') {
+        const pencilMasterPath = rawRenderedPath.replace(/\.icon\.default\.webp$/i, '.icon.default.png');
+        if (await pathExists(pencilMasterPath)
+            && isAllowedRawSourcePath(pencilMasterPath, roots)
+            && await imageFileHasVisiblePixelsFromPath(pencilMasterPath)) {
+            return readRawSourceFile(pencilMasterPath, roots);
         }
     }
 
@@ -635,7 +693,11 @@ export async function resolveRawIconSource({
     }
 
     for (const blueprintUrl of getBlueprintIconUrlCandidates(structure, sourceStructure, assetKind)) {
-        const generatedIconPath = await resolveGeneratedIconFilePath(blueprintUrl, generatedIconsDirectory);
+        const generatedIconPath = await resolveReferencedIconFilePath(
+            blueprintUrl,
+            generatedIconsDirectory,
+            rawMapIconsDirectory,
+        );
         if (!generatedIconPath) {
             continue;
         }
@@ -693,6 +755,7 @@ export async function resolveRawVisualCopySource({
     sourceStructure,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
 }) {
@@ -718,6 +781,7 @@ export async function resolveRawVisualCopySource({
         sourceStructure,
         rawRenderedAssetTypesDirectory,
         generatedIconsDirectory,
+        rawMapIconsDirectory,
         publicAssetsDirectory,
         resolveAssetTypeName,
     });
@@ -874,6 +938,7 @@ export async function publishStructureIconAsset({
     toPublicAssetUrl,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
     skipExistingAssets = false,
@@ -898,18 +963,10 @@ export async function publishStructureIconAsset({
             sourceStructure,
             rawRenderedAssetTypesDirectory,
             generatedIconsDirectory,
+            rawMapIconsDirectory,
             publicAssetsDirectory,
             resolveAssetTypeName,
         });
-        if (!rawSource?.fellBackToIconDefault
-            && await pathExists(outputPath)
-            && await imageFileHasVisiblePixelsFromPath(outputPath)) {
-            return {
-                url: toPublicAssetUrl(outputPath),
-                fellBackToIconDefault: false,
-            };
-        }
-
         const fallbackSubtypeOverlayUrl = resolveSubtypeOverlayUrlForIconFallback({
             structure,
             sourceStructure,
@@ -944,6 +1001,7 @@ export async function publishStructureIconAsset({
         sourceStructure,
         rawRenderedAssetTypesDirectory,
         generatedIconsDirectory,
+        rawMapIconsDirectory,
         publicAssetsDirectory,
         resolveAssetTypeName,
     });
@@ -977,6 +1035,7 @@ export async function publishStructureIconsForAsset({
     toPublicAssetUrl,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
     skipExistingAssets = false,
@@ -1009,6 +1068,7 @@ export async function publishStructureIconsForAsset({
             toPublicAssetUrl,
             rawRenderedAssetTypesDirectory,
             generatedIconsDirectory,
+            rawMapIconsDirectory,
             publicAssetsDirectory,
             resolveAssetTypeName,
             skipExistingAssets,
@@ -1037,6 +1097,7 @@ async function publishStructureManifestAsset({
     toPublicAssetUrl,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
     skipExistingAssets,
@@ -1056,6 +1117,7 @@ async function publishStructureManifestAsset({
         toPublicAssetUrl,
         rawRenderedAssetTypesDirectory,
         generatedIconsDirectory,
+        rawMapIconsDirectory,
         publicAssetsDirectory,
         resolveAssetTypeName,
         skipExistingAssets,
@@ -1140,6 +1202,7 @@ export async function publishStructureIconsForManifest({
     toPublicAssetUrl,
     rawRenderedAssetTypesDirectory,
     generatedIconsDirectory,
+    rawMapIconsDirectory,
     publicAssetsDirectory,
     resolveAssetTypeName,
     skipExistingAssets = false,
@@ -1168,6 +1231,7 @@ export async function publishStructureIconsForManifest({
             toPublicAssetUrl,
             rawRenderedAssetTypesDirectory,
             generatedIconsDirectory,
+            rawMapIconsDirectory,
             publicAssetsDirectory,
             resolveAssetTypeName,
             skipExistingAssets,

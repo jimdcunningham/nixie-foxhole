@@ -363,6 +363,11 @@ def is_track_like_material(material_name: str) -> bool:
     return any(token in normalized for token in ("tread", "treads", "track", "tracks", "threads"))
 
 
+def is_solid_facility_catwalk_material(material_name: str) -> bool:
+    normalized = normalize_material_name(material_name).lower()
+    return normalized.startswith("facilitycatwalk")
+
+
 def uses_implicit_packed_opacity(material_name: str, parameters: dict) -> bool:
     switches = parameters.get("Switches", {})
     if switches.get("Blend OverlapOpacity with Opacity Mask", False):
@@ -1364,9 +1369,8 @@ def prepare_imported_mesh_objects(
     material_mode: Optional[str] = None,
     debug_color: Optional[list[float]] = None,
     scene_variant_color_hex: Optional[str] = None,
-    clip_floor: bool = False,
-    floor_z: float = 0.0,
     material_sidecar_name_override: Optional[str] = None,
+    material_sidecar_name_overrides: Optional[dict] = None,
 ):
     imported_armatures = [obj for obj in imported_objects if obj.type == "ARMATURE"]
     clay_material = ensure_clay_material() if material_mode == "clay" else None
@@ -1392,7 +1396,10 @@ def prepare_imported_mesh_objects(
         elif material_mode == "sidecar" and obj.type == "MESH":
             for index, slot in enumerate(obj.material_slots):
                 material_name = slot.material.name if slot.material is not None else None
-                if material_sidecar_name_override:
+                indexed_override = (material_sidecar_name_overrides or {}).get(str(index))
+                if indexed_override:
+                    material_name = indexed_override
+                elif material_sidecar_name_override:
                     material_name = material_sidecar_name_override
                 if not material_name:
                     continue
@@ -1405,9 +1412,6 @@ def prepare_imported_mesh_objects(
                     search_roots,
                     color_hex=scene_variant_color_hex,
                 )
-
-        if clip_floor and obj.type == "MESH":
-            clip_mesh_object_to_world_floor(obj, floor_z=floor_z)
 
         prepared_objects.append(obj)
 
@@ -1588,6 +1592,11 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
                 opacity_mask_output = opacity_mask_node.outputs["Alpha"]
         elif explicit_opacity_mask_reference is None and is_track_like_material(name):
             opacity_mask_output = None
+        elif explicit_opacity_mask_reference is None and is_solid_facility_catwalk_material(name):
+            # These solid platform/rail materials inherit BLEND_Masked, but do not author an
+            # opacity mask. Their roughness texture alpha is uniformly zero, so treating it as
+            # an implicit mask erases the entire component render.
+            opacity_mask_output = None
         elif (
             explicit_opacity_mask_reference is None
             and roughness_texture_key == "Materiality"
@@ -1625,9 +1634,10 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
     return material
 
 
-def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], parent_object=None, material_mode: Optional[str] = None, debug_color: Optional[list[float]] = None, scene_variant_color_hex: Optional[str] = None, clip_floor: bool = False, floor_z: float = 0.0, material_sidecar_name_override: Optional[str] = None):
+def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], parent_object=None, material_mode: Optional[str] = None, debug_color: Optional[list[float]] = None, scene_variant_color_hex: Optional[str] = None, clip_floor: bool = False, floor_z: float = 0.0, material_sidecar_name_override: Optional[str] = None, material_sidecar_name_overrides: Optional[dict] = None):
     debug_color_key = tuple(float(component) for component in debug_color) if debug_color is not None else None
-    cache_key = (mesh_path, material_mode, debug_color_key, normalize_color_hex(scene_variant_color_hex), bool(clip_floor), float(floor_z), material_sidecar_name_override)
+    indexed_overrides_key = tuple(sorted((str(index), str(name)) for index, name in (material_sidecar_name_overrides or {}).items()))
+    cache_key = (mesh_path, material_mode, debug_color_key, normalize_color_hex(scene_variant_color_hex), material_sidecar_name_override, indexed_overrides_key)
     cached_objects = _IMPORTED_MESH_OBJECT_CACHE.get(cache_key)
     if cached_objects is None:
         template_collection = ensure_private_collection("FoxWatch:AssetTemplates")
@@ -1640,9 +1650,8 @@ def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], p
             material_mode=material_mode,
             debug_color=debug_color,
             scene_variant_color_hex=scene_variant_color_hex,
-            clip_floor=clip_floor,
-            floor_z=floor_z,
             material_sidecar_name_override=material_sidecar_name_override,
+            material_sidecar_name_overrides=material_sidecar_name_overrides,
         )
         for obj in prepared_objects:
             for user_collection in list(obj.users_collection):
@@ -1686,6 +1695,18 @@ def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], p
                     modifier.object = duplicate_map[modifier.object]
 
     attach_root_objects_to_parent(root_duplicates, parent_object)
+
+    if clip_floor:
+        # The floor plane is defined in assembled scene/world space. Clip only after the
+        # imported hierarchy is attached to its scene node so node offsets and rotations
+        # participate in matrix_world. Each clipped instance needs private mesh data;
+        # cached templates and unclipped instances must remain untouched.
+        bpy.context.view_layer.update()
+        for duplicate in duplicated_objects:
+            if duplicate.type != "MESH":
+                continue
+            duplicate.data = duplicate.data.copy()
+            clip_mesh_object_to_world_floor(duplicate, floor_z=floor_z)
 
     return duplicated_objects
 
@@ -1751,10 +1772,69 @@ def collection_world_bounds(collection):
     return min_corner, max_corner
 
 
-def topdown_resolution_from_bounds(min_corner: Vector, max_corner: Vector, padding: float, pixels_per_meter: float):
+def topdown_axis_resolution(extent: float, pixels_per_meter: float, repeat_aligned: bool = False):
+    pixel_extent = max(extent, 0.01) * pixels_per_meter
+    if repeat_aligned:
+        nearest_pixel = max(1, round(pixel_extent))
+        # Native repeat spans are authored at exact metric lengths, but evaluated
+        # mesh bounds can drift a few thousandths of a pixel above that length.
+        # Ceil would add a transparent edge column and make linear filtering expose
+        # a hairline at every repeat. Only snap values that are already effectively
+        # pixel-aligned so real fractional bounds remain safely rounded outward.
+        if abs(pixel_extent - nearest_pixel) <= 0.01:
+            return nearest_pixel
+
+    return math.ceil(pixel_extent)
+
+
+def repeat_crop_bounds(
+    min_corner: Vector,
+    max_corner: Vector,
+    repeat_axis: Optional[str],
+    repeat_crop: Optional[dict],
+    pixels_per_meter: float,
+):
+    normalized_repeat_axis = str(repeat_axis or "").strip().lower()
+    if normalized_repeat_axis not in {"x", "y"} or not isinstance(repeat_crop, dict):
+        return min_corner, max_corner
+
+    start_inset_pixels = max(0.0, float(repeat_crop.get("startInsetPixels") or 0.0))
+    end_inset_pixels = max(0.0, float(repeat_crop.get("endInsetPixels") or 0.0))
+    if start_inset_pixels <= 0.0 and end_inset_pixels <= 0.0:
+        return min_corner, max_corner
+
+    resolved_min = min_corner.copy()
+    resolved_max = max_corner.copy()
+    start_inset = start_inset_pixels / max(float(pixels_per_meter), 0.01)
+    end_inset = end_inset_pixels / max(float(pixels_per_meter), 0.01)
+    if normalized_repeat_axis == "x":
+        if resolved_max.x - resolved_min.x <= start_inset + end_inset + 0.01:
+            raise ValueError("repeatCrop removes the complete x-axis render extent")
+        resolved_min.x += start_inset
+        resolved_max.x -= end_inset
+    else:
+        if resolved_max.y - resolved_min.y <= start_inset + end_inset + 0.01:
+            raise ValueError("repeatCrop removes the complete y-axis render extent")
+        resolved_min.y += start_inset
+        resolved_max.y -= end_inset
+
+    return resolved_min, resolved_max
+
+
+def topdown_resolution_from_bounds(
+    min_corner: Vector,
+    max_corner: Vector,
+    padding: float,
+    pixels_per_meter: float,
+    repeat_axis: Optional[str] = None,
+):
     width = max((max_corner.x - min_corner.x) + padding * 2.0, 0.01)
     height = max((max_corner.y - min_corner.y) + padding * 2.0, 0.01)
-    return math.ceil(width * pixels_per_meter), math.ceil(height * pixels_per_meter)
+    normalized_repeat_axis = str(repeat_axis or "").strip().lower()
+    return (
+        topdown_axis_resolution(width, pixels_per_meter, normalized_repeat_axis == "x"),
+        topdown_axis_resolution(height, pixels_per_meter, normalized_repeat_axis == "y"),
+    )
 
 
 def projected_bounds_for_camera(camera_object, min_corner: Vector, max_corner: Vector):
@@ -1966,10 +2046,18 @@ def apply_render_mode(
     bounds: Optional[tuple[Vector, Vector]] = None,
 ):
     min_corner, max_corner = bounds or collection_world_bounds(collection)
+    render_settings = scene_document.get("render", {})
+    if mode in {"topdown", "flat"}:
+        min_corner, max_corner = repeat_crop_bounds(
+            min_corner,
+            max_corner,
+            render_settings.get("repeatAxis"),
+            render_settings.get("repeatCrop"),
+            pixels_per_meter,
+        )
     center = (min_corner + max_corner) / 2.0
     span = max_corner - min_corner
     max_dimension = max(span.x, span.y, span.z, 0.5)
-    render_settings = scene_document.get("render", {})
     transparent_background = render_settings.get("transparentBackground", True)
 
     if mode in {"topdown", "flat"}:
@@ -1977,7 +2065,13 @@ def apply_render_mode(
         # Board-placement renders need an exact footprint. Keep top-down framing tight
         # to the evaluated structure bounds and emit the true origin anchor separately.
         padding = 0.0
-        resolution_x, resolution_y = topdown_resolution_from_bounds(min_corner, max_corner, padding, pixels_per_meter)
+        resolution_x, resolution_y = topdown_resolution_from_bounds(
+            min_corner,
+            max_corner,
+            padding,
+            pixels_per_meter,
+            render_settings.get("repeatAxis"),
+        )
         configure_scene_render(resolution_x, resolution_y, transparent_background, file_format="WEBP")
         camera_position = Vector((center.x, center.y, max_corner.z + max(max_dimension * 2.0, 8.0)))
         camera_object = configure_topdown_camera_object(TOPDOWN_CAMERA_NAME, camera_position)

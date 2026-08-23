@@ -769,6 +769,12 @@ public class FoxWatchManifestAssetExtractor
             var emplacementLocation = ExtractEmplacementLocation(objects, blueprint, obj);
             var isEmplacedWeapon = IsEmplacedWeaponBlueprint(blueprint);
             var railCouplers = ExtractRailCouplers(objects, blueprint, obj);
+            var wheelBase = ExtractDouble(inheritedProperty("WheelBase"));
+            if (wheelBase is not > 0)
+            {
+                wheelBase = null;
+            }
+            var trackGauge = ResolveRailTrackGauge(inheritedProperty("TrackGauge"), wheelBase);
             var buildFootprintBoxes = ExtractBuildFootprintBoxes(objects, blueprint, obj);
             var structureVolumes = MergeStructureVolumes(
                 ExtractStructureVolumes(objects, blueprint, obj),
@@ -900,6 +906,8 @@ public class FoxWatchManifestAssetExtractor
                 IsEmplacedWeapon = isEmplacedWeapon,
                 EmplacementLocation = emplacementLocation,
                 RailCouplers = railCouplers,
+                WheelBase = wheelBase,
+                TrackGauge = trackGauge,
                 BuildLocationType = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("BuildLocationType"))),
                 UpgradeStructureCodeName = upgradeStructureCodeName,
                 ConversionCodeNames = conversionCodeNames,
@@ -1001,6 +1009,52 @@ public class FoxWatchManifestAssetExtractor
                 return null;
             }
 
+            if (IsFacilityCatwalkPlatformStructure(structureId))
+            {
+                // Catwalk sockets use the same Front/Back/Left/Right naming convention as
+                // entrenchments, but their visuals are a purpose-built square deck. Treating
+                // them as fort pieces selects the bridge span mesh and misplaces every rail.
+                return
+                [
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "deck",
+                        ComponentName = "FacilityCatwalkRamp",
+                        ComponentTags = [],
+                    },
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "fronttrim",
+                        ComponentName = "FrontRailing",
+                        ComponentTags = ["Front"],
+                    },
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "backtrim",
+                        ComponentName = "BackRailing",
+                        ComponentTags = ["Back"],
+                    },
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "lefttrim",
+                        ComponentName = "LeftRailing",
+                        ComponentTags = ["Left"],
+                    },
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "righttrim",
+                        ComponentName = "RightRailing",
+                        ComponentTags = ["Right"],
+                    },
+                    new FoxWatchManifestStructureRenderLayer
+                    {
+                        Id = "corners",
+                        ComponentName = "Corner",
+                        ComponentTags = [],
+                    },
+                ];
+            }
+
             var foundationRenderLayers = ExtractFoundationStructureRenderLayers(structureId, blueprintPackagePath);
             if (foundationRenderLayers != null)
             {
@@ -1018,6 +1072,11 @@ public class FoxWatchManifestAssetExtractor
             }
 
             return ExtractFortEntrenchmentStructureRenderLayers(structureId, blueprintPackagePath, buildSockets);
+        }
+
+        private static bool IsFacilityCatwalkPlatformStructure(string? structureId)
+        {
+            return string.Equals(structureId, "facilitycatwalkplatform", StringComparison.OrdinalIgnoreCase);
         }
 
         private List<FoxWatchManifestStructureRenderLayer>? ExtractTrenchStructureRenderLayers(string? blueprintPackagePath)
@@ -11793,6 +11852,19 @@ public class FoxWatchManifestAssetExtractor
 
             var parts = text.Split("::", StringSplitOptions.RemoveEmptyEntries);
             return parts.Length == 0 ? text : NormalizeString(parts[^1]);
+        }
+
+        private static string? ResolveRailTrackGauge(object? value, double? wheelBase)
+        {
+            if (wheelBase is not > 0)
+            {
+                return null;
+            }
+
+            var normalized = NormalizeEnumValue(value);
+            return normalized.Equals("Small", StringComparison.OrdinalIgnoreCase)
+                ? "small"
+                : "standard";
         }
 
         private static string NormalizeModificationVariantId(string? rawKey)

@@ -1,0 +1,7 @@
+{
+  "connector": {
+    "behavior": {
+      "mineSpline": true
+    }
+  }
+}

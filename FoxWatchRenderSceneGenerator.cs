@@ -41,6 +41,9 @@ public sealed class FoxWatchRenderSceneGenerator
     private const string WindsockMeshId = "mesh-sk_windsock";
     private const string WindsockMeshSourcePath = "War/Content/Meshes/Weapons/SK_Windsock.glb";
     private const string WindsockPoleMeshId = "mesh-windsock";
+    private const int ResourceFieldTargetNodeCount = 25;
+    private const double ResourceFieldNodeMinimumRadiusCentimeters = 450.0;
+    private const double ResourceFieldNodeMaximumRadiusCentimeters = 1750.0;
     private const string FacilityPipeOverheadSpanMeshSourcePath =
         "War/Content/Meshes/Structures/Facilities/PipelineoverheadConnect.glb";
     private const string FacilityPipeOverheadSpanMeshId = "mesh-pipelineoverheadconnect";
@@ -53,6 +56,36 @@ public sealed class FoxWatchRenderSceneGenerator
     private const string BargeClosedNeutralPoseAnimationPackagePath = "War/Content/Animation/WaterVehicles/Barge/Anim_Barge_POSE_closedNeutral.uasset";
     private const string WindsockPoseAnimationPackagePath = "War/Content/Animation/Weapons/DeployableTripod/ANIM_Windsock_level0.uasset";
     private static readonly IReadOnlyList<string> SharedPackagedPalletShippableTypes = ["normal", "large", "extralarge"];
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> ResourceFieldNodeMeshSourcePaths =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["coalfield"] =
+            [
+                "War/Content/Meshes/Resources/CoalPile.glb",
+            ],
+            ["componentsfield"] =
+            [
+                "War/Content/Meshes/Resources/ComponentNode01.glb",
+            ],
+            ["salvagefield"] =
+            [
+                "War/Content/Meshes/Resources/ScrapNode01.glb",
+            ],
+            ["sulfurfield"] =
+            [
+                "War/Content/Meshes/Resources/SulfurResource.glb",
+            ],
+        };
+    private static readonly IReadOnlySet<string> WorldRoadSplineStructureIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "dirtroad",
+        "gravelroad",
+        "greatmarchroad",
+        "packeddirtroad",
+        "snowdirtroad",
+        "snowgravelroad",
+        "snowpackeddirtroad",
+    };
 
     private readonly FoxWatchManifestGenerator _manifestGenerator;
     private readonly FoxWatchRenderBlueprintSceneExtractor _blueprintSceneExtractor;
@@ -231,6 +264,7 @@ public sealed class FoxWatchRenderSceneGenerator
     {
         var blueprintScene = await _blueprintSceneExtractor.TryExtractAsync(structure, cancellationToken);
         blueprintScene = await AppendCraneSpawnVisualsAsync(structure, blueprintScene, cancellationToken);
+        blueprintScene = AppendResourceFieldNodeVisuals(structure, blueprintScene);
         if (blueprintScene?.Meshes.Count > 0)
         {
             await PopulateMeshExportsAsync(blueprintScene.Meshes, renderAssetOutputDirectory, cancellationToken);
@@ -266,6 +300,25 @@ public sealed class FoxWatchRenderSceneGenerator
         }
         else if (IsRailTrackSplineStructure(structure))
         {
+            collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
+            baseSceneModes = ["topdown"];
+        }
+        else if (IsWorldRoadSplineStructure(structure))
+        {
+            collapsedStructureScene = PrepareWorldRoadBaseScene(structure, collapsedBlueprint);
+            componentStructureScene = CloneBlueprintSceneExtraction(collapsedBlueprint);
+        }
+        else if (IsTrenchEmplacementStructure(structure))
+        {
+            // The top-down texture needs its below-ground floor clipped away, while the
+            // preview/icon need the complete assembled mesh so the emplacement keeps its depth.
+            collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
+            baseSceneModes = ["topdown"];
+        }
+        else if (IsResourceFieldStructure(structure))
+        {
+            // Generated resource nodes belong to the planner texture only. Keeping them out
+            // of preview framing preserves a useful view of the field's center landmark.
             collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
             baseSceneModes = ["topdown"];
         }
@@ -326,6 +379,54 @@ public sealed class FoxWatchRenderSceneGenerator
         else if (IsRailTrackSplineStructure(structure))
         {
             var previewScene = PrepareRailTrackSplineSceneForPreview(structure, collapsedBlueprint);
+            documents.Add(new FoxWatchGeneratedRenderSceneDocument
+            {
+                StructureId = structure.Id,
+                AllowedStructureIds = GetAllowedStructureIds(structure),
+                CodeName = structure.CodeName,
+                Name = structure.Name.Fallback,
+                CategoryId = structure.CategoryId,
+                PreviewUrl = structure.PreviewUrl,
+                IconUrl = structure.IconUrl,
+                RelativeScenePath = Path.Combine(structure.Id, "preview.scene.json"),
+                Document = await CreateDocumentAsync(
+                    structure,
+                    previewScene,
+                    structure.Id,
+                    ["preview", "icon"],
+                    includePoseVariants,
+                    clipFloorOverride: null,
+                    cancellationToken),
+            });
+        }
+        else if (IsTrenchEmplacementStructure(structure))
+        {
+            documents.Add(new FoxWatchGeneratedRenderSceneDocument
+            {
+                StructureId = structure.Id,
+                AllowedStructureIds = GetAllowedStructureIds(structure),
+                CodeName = structure.CodeName,
+                Name = structure.Name.Fallback,
+                CategoryId = structure.CategoryId,
+                PreviewUrl = structure.PreviewUrl,
+                IconUrl = structure.IconUrl,
+                RelativeScenePath = Path.Combine(structure.Id, "preview.scene.json"),
+                Document = await CreateDocumentAsync(
+                    structure,
+                    PrepareBlueprintSceneForBaseRender(
+                        structure,
+                        CloneBlueprintSceneExtraction(collapsedBlueprint)),
+                    structure.Id,
+                    ["preview", "icon"],
+                    includePoseVariants,
+                    clipFloorOverride: false,
+                    cancellationToken),
+            });
+        }
+        else if (IsResourceFieldStructure(structure))
+        {
+            var previewScene = CloneBlueprintSceneExtraction(collapsedStructureScene);
+            RemoveGeneratedResourceFieldNodes(previewScene, structure.Id);
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
                 StructureId = structure.Id,
@@ -1078,7 +1179,7 @@ public sealed class FoxWatchRenderSceneGenerator
     {
 
         var roots = blueprintScene?.Roots.Count > 0
-            ? blueprintScene.Roots
+            ? FilterNodesExcludingMeshIds(blueprintScene.Roots, structure.RenderExcludedMeshIds)
             : [
                 new FoxWatchRenderSceneNode
                 {
@@ -1114,6 +1215,8 @@ public sealed class FoxWatchRenderSceneGenerator
                 ? poseVariants
                 : blueprintScene?.Variants?.Count > 0
                 ? blueprintScene.Variants
+                : blueprintScene?.FactionVariants?.Count > 0
+                ? blueprintScene.FactionVariants
                 : colorVariants?.Count > 0
                 ? colorVariants
                 : null,
@@ -1128,6 +1231,11 @@ public sealed class FoxWatchRenderSceneGenerator
                 ClipBounds = GetClipBoundsForRenderLayer(structure, componentLayerId),
                 TopdownPaddingFactor = GetTopdownPaddingFactor(structure),
                 TopdownPaddingMeters = GetTopdownPaddingMeters(structure),
+                RepeatAxis = UsesHorizontalRepeatAxis(structure, componentLayerId)
+                    ? "x"
+                    : null,
+                RepeatCrop = GetRepeatCropForRenderLayer(structure, componentLayerId),
+                CalibrationBackgroundColor = GetCalibrationBackgroundColorForRenderLayer(structure, componentLayerId),
                 MaterialMode = blueprintScene?.Meshes.Count > 0 ? "sidecar" : null,
             },
             Scene = new FoxWatchRenderSceneGraph
@@ -1139,6 +1247,63 @@ public sealed class FoxWatchRenderSceneGenerator
                 Meshes = prunedMeshAssets,
             },
         };
+    }
+
+    private static FoxWatchManifestComponentRenderOverride? GetComponentRenderOverride(
+        FoxWatchManifestStructure structure,
+        string? componentLayerId)
+    {
+        if (string.IsNullOrWhiteSpace(componentLayerId) || structure.ComponentRenderOverrides == null)
+        {
+            return null;
+        }
+
+        return structure.ComponentRenderOverrides
+            .FirstOrDefault(entry => string.Equals(entry.Key, componentLayerId, StringComparison.OrdinalIgnoreCase))
+            .Value;
+    }
+
+    private static bool UsesHorizontalRepeatAxis(
+        FoxWatchManifestStructure structure,
+        string? componentLayerId)
+    {
+        return string.Equals(componentLayerId, "span", StringComparison.OrdinalIgnoreCase)
+            || (IsLandWallSplineStructure(structure)
+                && string.Equals(componentLayerId, "barbedwire", StringComparison.OrdinalIgnoreCase))
+            || (IsRailTrackSplineStructure(structure)
+                && string.Equals(componentLayerId, "underlay", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static FoxWatchRenderSceneRepeatCrop? GetRepeatCropForRenderLayer(
+        FoxWatchManifestStructure structure,
+        string? componentLayerId)
+    {
+        var crop = GetComponentRenderOverride(structure, componentLayerId)?.RepeatCropPixels;
+        if (crop == null)
+        {
+            return null;
+        }
+
+        var startInsetPixels = double.IsFinite(crop.Start) ? Math.Max(0, crop.Start) : 0;
+        var endInsetPixels = double.IsFinite(crop.End) ? Math.Max(0, crop.End) : 0;
+        if (startInsetPixels <= double.Epsilon && endInsetPixels <= double.Epsilon)
+        {
+            return null;
+        }
+
+        return new FoxWatchRenderSceneRepeatCrop
+        {
+            StartInsetPixels = startInsetPixels,
+            EndInsetPixels = endInsetPixels,
+        };
+    }
+
+    private static string? GetCalibrationBackgroundColorForRenderLayer(
+        FoxWatchManifestStructure structure,
+        string? componentLayerId)
+    {
+        var value = GetComponentRenderOverride(structure, componentLayerId)?.CalibrationBackgroundColor?.Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static List<FoxWatchRenderSceneNode> ApplyRenderRotation(
@@ -1163,6 +1328,41 @@ public sealed class FoxWatchRenderSceneGenerator
                 Children = roots,
             },
         ];
+    }
+
+    private static List<FoxWatchRenderSceneNode> FilterNodesExcludingMeshIds(
+        List<FoxWatchRenderSceneNode> nodes,
+        IReadOnlyList<string>? excludedMeshIds)
+    {
+        var excludedIds = (excludedMeshIds ?? [])
+            .Where(meshId => !string.IsNullOrWhiteSpace(meshId))
+            .Select(meshId => meshId.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (excludedIds.Count == 0)
+        {
+            return nodes;
+        }
+
+        var filteredNodes = CloneNodes(nodes);
+        RemoveNodesWithExcludedMeshIds(filteredNodes, excludedIds);
+        return filteredNodes;
+    }
+
+    private static void RemoveNodesWithExcludedMeshIds(
+        List<FoxWatchRenderSceneNode> nodes,
+        ISet<string> excludedMeshIds)
+    {
+        for (var index = nodes.Count - 1; index >= 0; index -= 1)
+        {
+            var node = nodes[index];
+            if (!string.IsNullOrWhiteSpace(node.MeshId) && excludedMeshIds.Contains(node.MeshId))
+            {
+                nodes.RemoveAt(index);
+                continue;
+            }
+
+            RemoveNodesWithExcludedMeshIds(node.Children, excludedMeshIds);
+        }
     }
 
     private static HashSet<string> CollectReferencedMeshIds(IEnumerable<FoxWatchRenderSceneNode> roots)
@@ -1211,6 +1411,9 @@ public sealed class FoxWatchRenderSceneGenerator
             Roots = FilterNodesForVariant(blueprintScene.Roots, resolvedVariantIds),
             Meshes = CloneMeshAssets(blueprintScene.Meshes),
             Variants = null,
+            FactionVariants = blueprintScene.FactionVariants == null
+                ? null
+                : [.. blueprintScene.FactionVariants.Select(CloneVariant)],
         };
     }
 
@@ -2111,6 +2314,9 @@ public sealed class FoxWatchRenderSceneGenerator
             Roots = FilterNodesForVariant(blueprintScene.Roots, resolvedVariantIds),
             Meshes = CloneMeshAssets(blueprintScene.Meshes),
             Variants = null,
+            FactionVariants = blueprintScene.FactionVariants == null
+                ? null
+                : [.. blueprintScene.FactionVariants.Select(CloneVariant)],
         };
     }
 
@@ -2467,6 +2673,13 @@ public sealed class FoxWatchRenderSceneGenerator
                 : [];
         }
 
+        if (IsFacilityCatwalkPlatformStructure(structure))
+        {
+            return structure.RenderLayers?.Count > 0
+                ? [.. structure.RenderLayers.Select(layer => layer.Id)]
+                : ["deck", "fronttrim", "backtrim", "lefttrim", "righttrim", "corners"];
+        }
+
         if (IsFortEntrenchmentStructure(structure))
         {
             return structure.RenderLayers?.Count > 0
@@ -2504,6 +2717,11 @@ public sealed class FoxWatchRenderSceneGenerator
             return ["span", "spanalt"];
         }
 
+        if (IsLandWallSplineStructure(structure))
+        {
+            return ["backtrim", "span", "middlepillars", "barbedwire", "fronttrim"];
+        }
+
         if (IsTrimSpanConnectorStructure(structure))
         {
             return ["backtrim", "span", "fronttrim"];
@@ -2526,21 +2744,38 @@ public sealed class FoxWatchRenderSceneGenerator
                 : ["backswitch", "underlay", "span", "frontswitch"];
         }
 
+        if (IsWorldRoadSplineStructure(structure))
+        {
+            return ["span"];
+        }
+
         return [];
     }
 
     private static bool? GetClipFloorOverrideForRenderLayer(FoxWatchManifestStructure structure, string layerId)
     {
+        if (IsFacilityCatwalkPlatformStructure(structure))
+        {
+            // The deck and rails sit directly on the authored floor plane. Ground clipping
+            // erases these isolated component renders completely.
+            return false;
+        }
+
         if (string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
             || string.Equals(layerId, "underlay", StringComparison.OrdinalIgnoreCase))
         {
-            return IsEntrenchmentStructureForFloorClipping(structure)
-                ? null
-                : false;
+            // Floor/underlay layers are the extracted surface itself. Inheriting the host's
+            // ground-plane clipping can erase the entire component before it is composited.
+            return false;
         }
 
         if (IsCraneRailTrackSplineStructure(structure)
             && string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (IsWorldRoadSplineStructure(structure))
         {
             return false;
         }
@@ -2556,6 +2791,13 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return IsTrenchStructureWithComponentLayers(structure) || IsFortEntrenchmentStructure(structure);
+    }
+
+    private static bool IsTrenchEmplacementStructure(FoxWatchManifestStructure structure)
+    {
+        return string.Equals(structure.CodeName, "TrenchEmpT1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure.CodeName, "TrenchEmpT2", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure.CodeName, "TrenchEmpT3", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsStandaloneDestroyedOrBreachedStructure(FoxWatchManifestStructure structure)
@@ -2764,6 +3006,23 @@ public sealed class FoxWatchRenderSceneGenerator
         return string.Equals(structure.Id, "facilityroad", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsWorldRoadSplineStructure(FoxWatchManifestStructure structure)
+    {
+        return WorldRoadSplineStructureIds.Contains(structure.Id ?? string.Empty);
+    }
+
+    private static bool IsLandWallSplineStructure(FoxWatchManifestStructure structure)
+    {
+        var id = structure.Id ?? string.Empty;
+        return id.StartsWith("wallspline", StringComparison.OrdinalIgnoreCase)
+            && !id.StartsWith("waterwallspline", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFacilityCatwalkPlatformStructure(FoxWatchManifestStructure structure)
+    {
+        return string.Equals(structure.Id, "facilitycatwalkplatform", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsFieldBridgeOrPierStructure(FoxWatchManifestStructure structure)
     {
         var id = structure.Id ?? string.Empty;
@@ -2786,6 +3045,7 @@ public sealed class FoxWatchRenderSceneGenerator
         var id = structure.Id ?? string.Empty;
         return string.Equals(id, "minespline", StringComparison.OrdinalIgnoreCase)
             || string.Equals(id, "infantryminespline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(id, "tankminespline", StringComparison.OrdinalIgnoreCase)
             || string.Equals(id, "waterminespline", StringComparison.OrdinalIgnoreCase)
             || string.Equals(id, "surfacewaterminespline", StringComparison.OrdinalIgnoreCase);
     }
@@ -2892,12 +3152,125 @@ public sealed class FoxWatchRenderSceneGenerator
             return null;
         }
 
-        return new FoxWatchBlueprintSceneExtraction
+        var componentScene = new FoxWatchBlueprintSceneExtraction
         {
             Roots = filteredRoots,
             Meshes = CloneMeshAssets(blueprintScene.Meshes),
             Variants = null,
         };
+
+        if (IsWorldRoadSplineStructure(structure))
+        {
+            RotateWorldRoadComponentScene(componentScene, layerId);
+        }
+
+        if (IsLandWallSplineStructure(structure)
+            && (string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(layerId, "middlepillars", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(layerId, "barbedwire", StringComparison.OrdinalIgnoreCase)))
+        {
+            PrepareLandWallRepeatingComponentScene(componentScene);
+        }
+
+        if (IsMineSplineStructure(structure))
+        {
+            PrepareLandWallRepeatingComponentScene(componentScene);
+        }
+
+        return componentScene;
+    }
+
+    private static void PrepareLandWallRepeatingComponentScene(FoxWatchBlueprintSceneExtraction scene)
+    {
+        var meshNodes = new List<FoxWatchRenderSceneNode>();
+        CollectMeshNodes(scene.Roots, meshNodes);
+        if (meshNodes.Count == 0)
+        {
+            return;
+        }
+
+        var selectedNode = meshNodes
+            .OrderBy(node => node.UnrealLocationCentimeters is { Count: > 0 } location ? location[0] : 0.0)
+            .ElementAt(meshNodes.Count / 2);
+
+        scene.Roots = [.. scene.Roots.Where(root => RetainRenderSceneNodePath(root, selectedNode.Id))];
+
+        var z = selectedNode.UnrealLocationCentimeters is { Count: > 2 } location
+            ? location[2]
+            : 0.0;
+        selectedNode.UnrealLocationCentimeters = [0.0, 0.0, z];
+    }
+
+    private static void CollectMeshNodes(
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        List<FoxWatchRenderSceneNode> meshNodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (!string.IsNullOrWhiteSpace(node.MeshId))
+            {
+                meshNodes.Add(node);
+            }
+
+            CollectMeshNodes(node.Children, meshNodes);
+        }
+    }
+
+    private static bool RetainRenderSceneNodePath(FoxWatchRenderSceneNode node, string selectedNodeId)
+    {
+        node.Children = [.. node.Children.Where(child => RetainRenderSceneNodePath(child, selectedNodeId))];
+        return string.Equals(node.Id, selectedNodeId, StringComparison.OrdinalIgnoreCase)
+            || node.Children.Count > 0;
+    }
+
+    private static FoxWatchBlueprintSceneExtraction? PrepareWorldRoadBaseScene(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? blueprintScene)
+    {
+        if (blueprintScene == null)
+        {
+            return null;
+        }
+
+        var spanRoots = FilterNodesForTopdownStructureComponentLayer(
+            structure,
+            blueprintScene.Roots,
+            "span",
+            ancestorMatched: false);
+        if (spanRoots.Count == 0)
+        {
+            return PrepareBlueprintSceneForBaseRender(structure, blueprintScene);
+        }
+
+        return PrepareBlueprintSceneForBaseRender(
+            structure,
+            new FoxWatchBlueprintSceneExtraction
+            {
+                Roots = spanRoots,
+                Meshes = CloneMeshAssets(blueprintScene.Meshes),
+                Variants = null,
+            });
+    }
+
+    private static void RotateWorldRoadComponentScene(
+        FoxWatchBlueprintSceneExtraction scene,
+        string layerId)
+    {
+        var yawOffsetDegrees = layerId.ToLowerInvariant() switch
+        {
+            "span" => 90.0,
+            _ => 0.0,
+        };
+        if (yawOffsetDegrees == 0.0)
+        {
+            return;
+        }
+
+        foreach (var root in scene.Roots)
+        {
+            root.UnrealRotationDegrees ??= [0.0, 0.0, 0.0];
+            root.UnrealRotationDegrees[1] += yawOffsetDegrees;
+        }
     }
 
     private static FoxWatchBlueprintSceneExtraction? CloneBlueprintSceneExtraction(FoxWatchBlueprintSceneExtraction? blueprintScene)
@@ -2913,6 +3286,9 @@ public sealed class FoxWatchRenderSceneGenerator
             Variants = blueprintScene.Variants == null
                 ? null
                 : [.. blueprintScene.Variants.Select(CloneVariant)],
+            FactionVariants = blueprintScene.FactionVariants == null
+                ? null
+                : [.. blueprintScene.FactionVariants.Select(CloneVariant)],
         };
     }
 
@@ -3011,6 +3387,14 @@ public sealed class FoxWatchRenderSceneGenerator
             DefaultPoseAnimationPackagePath = mesh.DefaultPoseAnimationPackagePath,
             PoseAnimationPackagePaths = mesh.PoseAnimationPackagePaths == null ? null : [.. mesh.PoseAnimationPackagePaths],
             MaterialSidecarNameOverride = mesh.MaterialSidecarNameOverride,
+            MaterialSidecarNameOverridesByVariant = mesh.MaterialSidecarNameOverridesByVariant?.ToDictionary(
+                entry => entry.Key,
+                entry => new Dictionary<int, string>(entry.Value),
+                StringComparer.OrdinalIgnoreCase),
+            MaterialPackagePathsByVariant = mesh.MaterialPackagePathsByVariant?.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.ToList(),
+                StringComparer.OrdinalIgnoreCase),
         })];
     }
 
@@ -3441,7 +3825,7 @@ public sealed class FoxWatchRenderSceneGenerator
         var filteredNodes = new List<FoxWatchRenderSceneNode>();
         foreach (var node in nodes)
         {
-            var matchesLayer = MatchesTopdownStructureComponentLayer(structure, node.Name, layerId);
+            var matchesLayer = MatchesTopdownStructureComponentLayer(structure, node.Name, layerId, node.MeshId);
             var includeFullSubtree = ancestorMatched || matchesLayer;
             var childNodes = FilterNodesForTopdownStructureComponentLayer(structure, node.Children, layerId, includeFullSubtree);
             if (!includeFullSubtree && childNodes.Count == 0)
@@ -3561,7 +3945,11 @@ public sealed class FoxWatchRenderSceneGenerator
             || string.Equals(normalizedNodeName, roofComponentName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MatchesTopdownStructureComponentLayer(FoxWatchManifestStructure structure, string? nodeName, string layerId)
+    private static bool MatchesTopdownStructureComponentLayer(
+        FoxWatchManifestStructure structure,
+        string? nodeName,
+        string layerId,
+        string? meshId)
     {
         if (string.IsNullOrWhiteSpace(nodeName) || string.IsNullOrWhiteSpace(layerId))
         {
@@ -3608,9 +3996,23 @@ public sealed class FoxWatchRenderSceneGenerator
             };
         }
 
+        if (IsFacilityCatwalkPlatformStructure(structure))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "deck" => string.Equals(normalizedNodeName, "FacilityCatwalkRamp", StringComparison.OrdinalIgnoreCase),
+                "fronttrim" => string.Equals(normalizedNodeName, "FrontRailing", StringComparison.OrdinalIgnoreCase),
+                "backtrim" => string.Equals(normalizedNodeName, "BackRailing", StringComparison.OrdinalIgnoreCase),
+                "lefttrim" => string.Equals(normalizedNodeName, "LeftRailing", StringComparison.OrdinalIgnoreCase),
+                "righttrim" => string.Equals(normalizedNodeName, "RightRailing", StringComparison.OrdinalIgnoreCase),
+                "corners" => normalizedNodeName.EndsWith("Corner", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
         if (IsTrimSpanConnectorStructure(structure))
         {
-            return MatchesTrimSpanConnectorLayer(structure, normalizedNodeName, layerId);
+            return MatchesTrimSpanConnectorLayer(structure, normalizedNodeName, layerId, meshId);
         }
 
         if (IsTankStopSplineStructure(structure) || IsMineSplineStructure(structure) || IsIntervalMarkerSplineStructure(structure))
@@ -3623,6 +4025,15 @@ public sealed class FoxWatchRenderSceneGenerator
             return layerId.ToLowerInvariant() switch
             {
                 "span" => normalizedNodeName.StartsWith("FacilityRoad", StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            };
+        }
+
+        if (IsWorldRoadSplineStructure(structure))
+        {
+            return layerId.ToLowerInvariant() switch
+            {
+                "span" => !string.IsNullOrWhiteSpace(meshId),
                 _ => false,
             };
         }
@@ -3725,7 +4136,8 @@ public sealed class FoxWatchRenderSceneGenerator
     private static bool MatchesTrimSpanConnectorLayer(
         FoxWatchManifestStructure structure,
         string normalizedNodeName,
-        string layerId)
+        string layerId,
+        string? meshId)
     {
         var structureId = structure.Id ?? string.Empty;
         if (string.Equals(structureId, "fieldbridge", StringComparison.OrdinalIgnoreCase))
@@ -3749,7 +4161,10 @@ public sealed class FoxWatchRenderSceneGenerator
                 "backramp" => string.Equals(normalizedNodeName, "BackRamp", StringComparison.OrdinalIgnoreCase),
                 "fronttrim" => string.Equals(normalizedNodeName, "PillarFront", StringComparison.OrdinalIgnoreCase),
                 "frontramp" => string.Equals(normalizedNodeName, "FrontRamp", StringComparison.OrdinalIgnoreCase),
-                "span" => string.Equals(normalizedNodeName, "FieldPier", StringComparison.OrdinalIgnoreCase),
+                // The structure root is also named FieldPier. Requiring the mesh prevents
+                // the root match from pulling both ramps and pillars into the span layer.
+                "span" => !string.IsNullOrWhiteSpace(meshId)
+                    && string.Equals(normalizedNodeName, "FieldPier", StringComparison.OrdinalIgnoreCase),
                 _ => false,
             };
         }
@@ -3796,6 +4211,8 @@ public sealed class FoxWatchRenderSceneGenerator
                     || string.Equals(normalizedNodeName, "BackPIllar", StringComparison.OrdinalIgnoreCase),
                 "fronttrim" => string.Equals(normalizedNodeName, "FrontPillar", StringComparison.OrdinalIgnoreCase),
                 "span" => IsWallSplineSpanNode(normalizedNodeName),
+                "middlepillars" => normalizedNodeName.Contains("Support", StringComparison.OrdinalIgnoreCase),
+                "barbedwire" => normalizedNodeName.Contains("BarbedWire", StringComparison.OrdinalIgnoreCase),
                 _ => false,
             };
         }
@@ -3831,14 +4248,46 @@ public sealed class FoxWatchRenderSceneGenerator
     {
         if (IsMineSplineStructure(structure))
         {
+            var structureId = structure.Id ?? string.Empty;
+            if (string.Equals(structureId, "minespline", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(normalizedNodeName, "CraterS", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.Equals(structureId, "infantryminespline", StringComparison.OrdinalIgnoreCase))
+            {
+                return layerId.ToLowerInvariant() switch
+                {
+                    "span" => string.Equals(normalizedNodeName, "InfantryMinePickup", StringComparison.OrdinalIgnoreCase),
+                    "spanalt" => string.Equals(normalizedNodeName, "CraterS", StringComparison.OrdinalIgnoreCase),
+                    _ => false,
+                };
+            }
+
+            if (string.Equals(structureId, "tankminespline", StringComparison.OrdinalIgnoreCase))
+            {
+                return layerId.ToLowerInvariant() switch
+                {
+                    "span" => string.Equals(normalizedNodeName, "AntiTankMinePickup", StringComparison.OrdinalIgnoreCase),
+                    "spanalt" => string.Equals(normalizedNodeName, "CraterS", StringComparison.OrdinalIgnoreCase),
+                    _ => false,
+                };
+            }
+
+            if (string.Equals(structureId, "waterminespline", StringComparison.OrdinalIgnoreCase))
+            {
+                return layerId.ToLowerInvariant() switch
+                {
+                    "span" => string.Equals(normalizedNodeName, "Seamines", StringComparison.OrdinalIgnoreCase),
+                    "spanalt" => string.Equals(normalizedNodeName, "Bouy01", StringComparison.OrdinalIgnoreCase),
+                    _ => false,
+                };
+            }
+
             return layerId.ToLowerInvariant() switch
             {
-                "span" => string.Equals(normalizedNodeName, "CraterS", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(normalizedNodeName, "InfantryMinePickup", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(normalizedNodeName, "Seamines", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(normalizedNodeName, "SmallSeaMine", StringComparison.OrdinalIgnoreCase),
-                "spanalt" => string.Equals(normalizedNodeName, "Bouy01", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(normalizedNodeName, "InfantryMinePickup", StringComparison.OrdinalIgnoreCase),
+                "span" => string.Equals(normalizedNodeName, "SmallSeaMine", StringComparison.OrdinalIgnoreCase),
                 _ => false,
             };
         }
@@ -4333,6 +4782,122 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return scene;
+    }
+
+    private static FoxWatchBlueprintSceneExtraction? AppendResourceFieldNodeVisuals(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? blueprintScene)
+    {
+        if (!ResourceFieldNodeMeshSourcePaths.TryGetValue(structure.Id, out var nodeMeshSourcePaths) ||
+            nodeMeshSourcePaths.Count == 0)
+        {
+            return blueprintScene;
+        }
+
+        var scene = blueprintScene ?? new FoxWatchBlueprintSceneExtraction();
+        if (scene.Roots.Count == 0)
+        {
+            scene.Roots.Add(new FoxWatchRenderSceneNode
+            {
+                Id = $"{structure.Id}:root",
+                Name = structure.CodeName,
+            });
+        }
+
+        var nodeMeshIds = nodeMeshSourcePaths
+            .Select(sourcePath => GetOrAddMeshAsset(
+                scene,
+                sourcePath,
+                $"mesh-{Path.GetFileNameWithoutExtension(sourcePath).ToLowerInvariant()}"))
+            .ToList();
+        RemoveMeshNodes(scene.Roots, nodeMeshIds);
+        var isCoalField = string.Equals(structure.Id, "coalfield", StringComparison.OrdinalIgnoreCase);
+        var random = new StableResourceFieldRandom(isCoalField ? $"{structure.Id}:layout-v3" : structure.Id);
+        var root = scene.Roots[0];
+        for (var nodeIndex = 0; nodeIndex < ResourceFieldTargetNodeCount; nodeIndex++)
+        {
+            var sectorFraction = (nodeIndex + random.NextUnit()) / ResourceFieldTargetNodeCount;
+            var angleRadians = (-Math.PI / 2.0) + (sectorFraction * Math.PI * 2.0);
+            var radiusUnit = random.NextUnit();
+            var radiusFactor = isCoalField
+                ? ((nodeIndex % 2) + radiusUnit) / 2.0
+                : Math.Sqrt(radiusUnit);
+            var radiusCentimeters = ResourceFieldNodeMinimumRadiusCentimeters
+                + ((ResourceFieldNodeMaximumRadiusCentimeters - ResourceFieldNodeMinimumRadiusCentimeters) * radiusFactor);
+            var x = Math.Cos(angleRadians) * radiusCentimeters;
+            var y = Math.Sin(angleRadians) * radiusCentimeters;
+            var meshIndex = Math.Min(nodeMeshIds.Count - 1, (int)Math.Floor(random.NextUnit() * nodeMeshIds.Count));
+            var sourcePath = nodeMeshSourcePaths[meshIndex];
+            var scale = 0.82 + (random.NextUnit() * 0.28);
+            root.Children.Add(new FoxWatchRenderSceneNode
+            {
+                Id = $"{structure.Id}:resource-node:{nodeIndex + 1}",
+                Name = $"ResourceNode{nodeIndex + 1}:{Path.GetFileNameWithoutExtension(sourcePath)}",
+                MeshId = nodeMeshIds[meshIndex],
+                UnrealLocationCentimeters = [x, y, 0],
+                UnrealRotationDegrees = [0, random.NextUnit() * 360.0, 0],
+                Scale = [scale, scale, scale],
+            });
+        }
+
+        return scene;
+    }
+
+    private static bool IsResourceFieldStructure(FoxWatchManifestStructure structure)
+    {
+        return ResourceFieldNodeMeshSourcePaths.ContainsKey(structure.Id);
+    }
+
+    private static void RemoveGeneratedResourceFieldNodes(
+        FoxWatchBlueprintSceneExtraction? scene,
+        string structureId)
+    {
+        if (scene == null)
+        {
+            return;
+        }
+
+        RemoveNodesWithIdPrefix(scene.Roots, $"{structureId}:resource-node:");
+    }
+
+    private static void RemoveNodesWithIdPrefix(
+        List<FoxWatchRenderSceneNode> nodes,
+        string nodeIdPrefix)
+    {
+        for (var index = nodes.Count - 1; index >= 0; index--)
+        {
+            var node = nodes[index];
+            if (node.Id.StartsWith(nodeIdPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                nodes.RemoveAt(index);
+                continue;
+            }
+
+            RemoveNodesWithIdPrefix(node.Children, nodeIdPrefix);
+        }
+    }
+
+    private static void RemoveMeshNodes(
+        IEnumerable<FoxWatchRenderSceneNode> roots,
+        IReadOnlyCollection<string> meshIds)
+    {
+        var stack = new Stack<FoxWatchRenderSceneNode>(roots.Reverse());
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            for (var index = node.Children.Count - 1; index >= 0; index--)
+            {
+                var child = node.Children[index];
+                if (!string.IsNullOrWhiteSpace(child.MeshId) &&
+                    meshIds.Contains(child.MeshId, StringComparer.OrdinalIgnoreCase))
+                {
+                    node.Children.RemoveAt(index);
+                    continue;
+                }
+
+                stack.Push(child);
+            }
+        }
     }
 
     private static string GetOrAddMeshAsset(FoxWatchBlueprintSceneExtraction scene, string meshSourcePath, string preferredMeshId)
@@ -5613,6 +6178,17 @@ public sealed class FoxWatchRenderSceneGenerator
             await _meshAssetExporter.ExportMeshAsync(referenceMeshPackagePath, renderAssetOutputDirectory, cancellationToken);
             _exportUrlByPackagePath[referenceMeshPackagePath] = BuildExportUrl(referenceMeshPackagePath) ?? referenceMeshPackagePath;
         }
+
+        foreach (var materialPackagePath in meshAssetList
+                     .Where(meshAsset => meshAsset.MaterialPackagePathsByVariant != null)
+                     .SelectMany(meshAsset => meshAsset.MaterialPackagePathsByVariant!.Values)
+                     .SelectMany(paths => paths)
+                     .Where(path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _meshAssetExporter.ExportMaterialAsync(materialPackagePath, renderAssetOutputDirectory, cancellationToken);
+        }
     }
 
     private static string? ConvertMeshSourcePathToPackagePath(string? sourcePath)
@@ -5942,5 +6518,30 @@ public sealed class FoxWatchRenderSceneGenerator
         public List<double>? LocalRotationDegrees { get; set; }
 
         public FoxWatchRenderScenePose? Pose { get; set; }
+    }
+
+    private sealed class StableResourceFieldRandom
+    {
+        private uint _state;
+
+        public StableResourceFieldRandom(string structureId)
+        {
+            var seedBytes = SHA256.HashData(Encoding.UTF8.GetBytes($"foxwatch-resource-field-v1:{structureId}"));
+            _state = BitConverter.ToUInt32(seedBytes, 0);
+            if (_state == 0)
+            {
+                _state = 0x9E3779B9;
+            }
+        }
+
+        public double NextUnit()
+        {
+            var value = _state;
+            value ^= value << 13;
+            value ^= value >> 17;
+            value ^= value << 5;
+            _state = value;
+            return (value & 0x00FFFFFF) / 16777216.0;
+        }
     }
 }

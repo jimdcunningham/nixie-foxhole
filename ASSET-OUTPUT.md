@@ -66,12 +66,28 @@ Each renderable asset has a bundle folder containing:
 
 Blueprint default icon sources for the asset (when extracted) travel with the mesh/material export and are referenced from manifest `iconUrl` / slot variant icons until publish co-locates them.
 
+Resource-field node populations are texture-only scene content. Their base `scene.json`
+renders the top-down board texture, while `preview.scene.json` excludes the generated
+nodes so preview framing and the derived rendered icon remain focused on the center island.
+
+Authored reference roads use connector component layers instead of stretching their
+standalone board texture. Road `span` component scenes rotate 90 degrees to align their
+repeating texture with the runtime spline UV axis without changing their previews. They are
+published without endpoint caps; the standalone Great March endpoint mesh is excluded because
+its alignment and material do not match the repeating road span.
+
 Authored item overrides may set `renderRotationDegrees: [x, y, z]` in
 `tools/foxwatch/asset-overrides/<id>/manifest.json`. The generator wraps the complete
 scene in that Euler rotation before every render mode, so preview, rendered icon, and
 top-down texture remain consistent. Keep this visual-only override limited to items;
 interactive structures also require their sockets, ranges, hit areas, and other local
 metadata to be transformed.
+
+Authored structure overrides may set `renderExcludedMeshIds: ["mesh-id"]` to remove
+every scene node referencing those extracted mesh IDs before any render mode runs.
+Unused mesh assets are pruned from the resulting render bundle. Use this for decorative
+or environmental geometry that should never appear in the board texture, preview, or
+generated icons.
 
 ### Blender image output (`tmp/rendered-assets/types/...`)
 
@@ -143,6 +159,8 @@ packages/extensions/foxhole/public/foxhole/assets/
 
 Color variants (when present) use a hex suffix: `<codename>.texture.<rrggbb>.webp`, `<codename>.preview.<rrggbb>.webp`, etc.
 
+Faction material variants use a faction suffix: `<codename>.texture.c.webp` and `<codename>.texture.w.webp`. Raw previews use the same `c` / `w` suffix; publish keeps the Colonial preview as the canonical asset preview while both board textures remain available through `variants.c` and `variants.w`.
+
 Packaged variants use a `packaged.` infix: `<codename>.packaged.texture.webp`, etc.
 
 ## Image roles
@@ -158,6 +176,9 @@ Packaged variants use a `packaged.` infix: `<codename>.packaged.texture.webp`, e
 
 1. **Blueprint extraction** — UI icon from game assets (`extract-ui-assets` → `tmp/foxhole-icons/`).
 2. **Blender pencil** — Freestyle lineart fallback when no blueprint icon exists and the asset is configured to generate one (`generateDefaultIcon`).
+
+If dense crease linework makes the pencil result nearly transparent, Blender uses the
+rendered alpha silhouette so the default icon remains legible.
 
 Publish always materializes a co-located `<codename>.icon.default.webp` (or modification equivalent). The manifest `icons.default` URL points at that file.
 
@@ -312,6 +333,20 @@ Train coupling is **not** a BuildSocketComponent. Extract publishes:
 
 Default yaw when unset: Front `0°` (+X), Rear `180°` (−X). Planner merges these into effective snap/attachment sockets; do not invent `buildSockets`.
 
+### Rail vehicle alignment fields (structures)
+
+Rail vehicles publish the movement values authored by the game blueprint:
+
+| Field | Meaning |
+| --- | --- |
+| `wheelBase` | Distance in centimeters between the two rail-contact anchors used to align the rigid vehicle body on a curved track |
+| `trackGauge` | Normalized `small` or `standard` rail gauge |
+
+The planner derives symmetric front/rear contact anchors from `wheelBase`. These are
+separate from `railCouplers`, which align adjacent rolling stock rather than the vehicle
+to the track. When Unreal omits the default standard-gauge enum value, FoxWatch publishes
+`standard`; an explicit `ETrackGauge::Small` publishes `small`.
+
 ## Subtype overlays (publish only)
 
 Applied via `composeSubtypeIcon` in:
@@ -339,6 +374,21 @@ types/structures/<codename>/modifications/<variantId>/components/<layerId>/<laye
 ```
 
 Component layers are **texture-only** in the published tree unless a separate preview/icon spec is added later.
+
+Spline component layers named `span` are emitted with `render.repeatAxis: "x"`. Blender keeps that
+horizontal repeat axis at the fixed top-down pixel density and snaps near-integer floating-point bounds
+to the intended whole-pixel width. After rendering, FoxWatch mirrors the better-covered boundary sample
+onto both repeat edges so their RGBA values match under linear filtering. Together these prevent an
+accidental transparent edge column from becoming a hairline seam when Pixi repeats the texture. The
+publisher must preserve the render dimensions; it should not alpha-crop span masters because irregular
+transparent edges can be intentional.
+
+Assets that require a visually selected repeat boundary may author per-component
+`repeatCropPixels.start` / `repeatCropPixels.end` in their manifest override. FoxWatch converts those
+fixed-density pixel insets into camera bounds before rendering, so the final image is encoded once and
+its width is the authoritative runtime repeat period. A temporary `calibrationBackgroundColor` may be
+authored on the same component override to composite transparent pixels over a high-contrast background
+while measuring the crop. Remove the calibration color before publishing production assets.
 
 ## Compression summary
 

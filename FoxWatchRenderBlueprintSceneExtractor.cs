@@ -492,6 +492,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences,
         bool allowDestroyedComponents = false)
     {
+        ApplyMaterialVariantControllerOverrides(componentReferences);
         PopulateFallbackSplineConnectorMeshPaths(blueprintPackagePath, componentReferences);
         PopulateFallbackSplineConnectorTargets(componentReferences);
         NormalizeTrackedVehicleBodyHierarchy(componentReferences);
@@ -508,6 +509,8 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
         var meshIdBySourcePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var materialSidecarOverrideByMeshId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var materialSidecarOverridesByVariantByMeshId = new Dictionary<string, Dictionary<string, Dictionary<int, string>>>(StringComparer.OrdinalIgnoreCase);
+        var materialPackagePathsByVariantByMeshId = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.OrdinalIgnoreCase);
         var poseAnimationPackagePathsBySourcePath = BuildPoseAnimationPackagePathsBySourcePath(deduplicatedComponentReferences);
         var nodesByComponentName = new Dictionary<string, FoxWatchRenderSceneNode>(StringComparer.OrdinalIgnoreCase);
         var rootNode = new FoxWatchRenderSceneNode
@@ -518,6 +521,12 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
         foreach (var componentReference in deduplicatedComponentReferences)
         {
+            if (!string.IsNullOrWhiteSpace(componentReference.MaterialOverrideTargetMeshPath) &&
+                string.IsNullOrWhiteSpace(componentReference.MeshPath))
+            {
+                continue;
+            }
+
             if (hiddenSubtreeComponentNames.Contains(componentReference.ComponentName) ||
                 ShouldSkipComponentInDefaultScene(nodeIdPrefix, componentReference, allowDestroyedComponents))
             {
@@ -529,6 +538,20 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                 !string.IsNullOrWhiteSpace(node.MeshId))
             {
                 materialSidecarOverrideByMeshId[node.MeshId] = componentReference.MaterialSidecarNameOverride;
+            }
+
+            if (!string.IsNullOrWhiteSpace(node.MeshId) && componentReference.MaterialOverridesByVariant.Count > 0)
+            {
+                materialSidecarOverridesByVariantByMeshId[node.MeshId] = componentReference.MaterialOverridesByVariant
+                    .ToDictionary(
+                        entry => entry.Key,
+                        entry => entry.Value.ToDictionary(materialOverride => materialOverride.Index, materialOverride => materialOverride.MaterialSidecarName),
+                        StringComparer.OrdinalIgnoreCase);
+                materialPackagePathsByVariantByMeshId[node.MeshId] = componentReference.MaterialOverridesByVariant
+                    .ToDictionary(
+                        entry => entry.Key,
+                        entry => entry.Value.Select(materialOverride => materialOverride.MaterialPath).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                        StringComparer.OrdinalIgnoreCase);
             }
 
             nodesByComponentName[componentReference.ComponentName] = node;
@@ -571,6 +594,12 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                     MaterialSidecarNameOverride = materialSidecarOverrideByMeshId.TryGetValue(entry.Value, out var materialSidecarNameOverride)
                         ? materialSidecarNameOverride
                         : null,
+                    MaterialSidecarNameOverridesByVariant = materialSidecarOverridesByVariantByMeshId.TryGetValue(entry.Value, out var variantOverrides)
+                        ? variantOverrides
+                        : null,
+                    MaterialPackagePathsByVariant = materialPackagePathsByVariantByMeshId.TryGetValue(entry.Value, out var variantMaterialPaths)
+                        ? variantMaterialPaths
+                        : null,
                 };
             })
             .ToList();
@@ -586,7 +615,38 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         {
             Roots = [rootNode],
             Meshes = meshAssets,
+            FactionVariants = materialSidecarOverridesByVariantByMeshId.Count > 0
+                ?
+                [
+                    new FoxWatchRenderSceneVariant { Id = "c", Name = "Colonials", IsDefault = true, PlaceVariantAfterMode = true },
+                    new FoxWatchRenderSceneVariant { Id = "w", Name = "Wardens", PlaceVariantAfterMode = true },
+                ]
+                : null,
         };
+    }
+
+    private static void ApplyMaterialVariantControllerOverrides(IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
+    {
+        foreach (var controller in componentReferences.Where(reference =>
+                     !string.IsNullOrWhiteSpace(reference.MaterialOverrideTargetMeshPath) &&
+                     reference.MaterialOverridesByVariant.Count > 0))
+        {
+            foreach (var target in componentReferences.Where(reference =>
+                         string.Equals(reference.MeshPath, controller.MaterialOverrideTargetMeshPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var (variantId, materialOverrides) in controller.MaterialOverridesByVariant)
+                {
+                    target.MaterialOverridesByVariant[variantId] = materialOverrides
+                        .Select(entry => new FoxWatchMaterialOverrideReference
+                        {
+                            Index = entry.Index,
+                            MaterialPath = entry.MaterialPath,
+                            MaterialSidecarName = entry.MaterialSidecarName,
+                        })
+                        .ToList();
+                }
+            }
+        }
     }
 
     private static void RepairKnownHospitalCurtainHierarchy(
@@ -2328,7 +2388,27 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             DefaultPoseAnimationPackagePath = asset.DefaultPoseAnimationPackagePath,
             PoseAnimationPackagePaths = asset.PoseAnimationPackagePaths == null ? null : [.. asset.PoseAnimationPackagePaths],
             MaterialSidecarNameOverride = asset.MaterialSidecarNameOverride,
+            MaterialSidecarNameOverridesByVariant = CloneMaterialSidecarNameOverridesByVariant(asset.MaterialSidecarNameOverridesByVariant),
+            MaterialPackagePathsByVariant = CloneMaterialPackagePathsByVariant(asset.MaterialPackagePathsByVariant),
         };
+    }
+
+    private static Dictionary<string, Dictionary<int, string>>? CloneMaterialSidecarNameOverridesByVariant(
+        Dictionary<string, Dictionary<int, string>>? source)
+    {
+        return source?.ToDictionary(
+            entry => entry.Key,
+            entry => new Dictionary<int, string>(entry.Value),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, List<string>>? CloneMaterialPackagePathsByVariant(
+        Dictionary<string, List<string>>? source)
+    {
+        return source?.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value.ToList(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     private static void MergeMeshAssets(FoxWatchBlueprintSceneExtraction target, FoxWatchBlueprintSceneExtraction source)
@@ -2372,6 +2452,9 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                     PoseAnimationPackagePaths = meshAsset.PoseAnimationPackagePaths == null
                         ? null
                         : [.. meshAsset.PoseAnimationPackagePaths],
+                    MaterialSidecarNameOverride = meshAsset.MaterialSidecarNameOverride,
+                    MaterialSidecarNameOverridesByVariant = CloneMaterialSidecarNameOverridesByVariant(meshAsset.MaterialSidecarNameOverridesByVariant),
+                    MaterialPackagePathsByVariant = CloneMaterialPackagePathsByVariant(meshAsset.MaterialPackagePathsByVariant),
                 };
                 target.Meshes.Add(mergedMeshAsset);
                 meshAssetsById[targetMeshId] = mergedMeshAsset;
@@ -3693,4 +3776,6 @@ public sealed class FoxWatchBlueprintSceneExtraction
     public List<FoxWatchRenderSceneMeshAsset> Meshes { get; set; } = [];
 
     public List<FoxWatchRenderSceneVariant>? Variants { get; set; }
+
+    public List<FoxWatchRenderSceneVariant>? FactionVariants { get; set; }
 }

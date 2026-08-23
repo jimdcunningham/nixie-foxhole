@@ -74,6 +74,7 @@ FLAT_FILL_SATURATION = 1.34
 FLAT_FILL_VIBRANCE = 0.32
 FLAT_FILL_CONTRAST = 1.18
 FLAT_FILL_GAMMA = 0.90
+PENCIL_FALLBACK_MIN_VISIBLE_SOURCE_RATIO = 0.08
 FORTT3_MITERED_WALL_COMPONENT_KEYS = {
     "components/backwall",
     "components/frontwall",
@@ -325,6 +326,122 @@ def apply_readability_grade(output_path: str, profile):
         bpy.data.images.remove(image)
 
 
+def apply_repeat_axis_edge_wrap(output_path: str, repeat_axis: str, mode: str):
+    normalized_axis = str(repeat_axis or "").strip().lower()
+    if mode != "topdown" or normalized_axis not in {"x", "y"} or not os.path.exists(output_path):
+        return
+
+    image = bpy.data.images.load(output_path, check_existing=False)
+    try:
+        width, height = image.size
+        if width < 2 or height < 2:
+            return
+
+        pixels = list(image.pixels[:])
+        pair_count = height if normalized_axis == "x" else width
+        for pair_index in range(pair_count):
+            if normalized_axis == "x":
+                first_offset = (pair_index * width) * 4
+                last_offset = ((pair_index * width) + width - 1) * 4
+            else:
+                first_offset = pair_index * 4
+                last_offset = (((height - 1) * width) + pair_index) * 4
+
+            # Rasterization treats the far edge as half-open, so its last column
+            # can retain antialiased alpha even when the native mesh fills the
+            # repeat exactly. Use whichever boundary sample has better coverage
+            # and mirror it onto both sides. Matching RGBA makes linear filtering
+            # continuous when the texture wraps from 1 back to 0.
+            source_offset = (
+                first_offset
+                if pixels[first_offset + 3] >= pixels[last_offset + 3]
+                else last_offset
+            )
+            boundary_pixel = pixels[source_offset:source_offset + 4]
+            pixels[first_offset:first_offset + 4] = boundary_pixel
+            pixels[last_offset:last_offset + 4] = boundary_pixel
+
+        image.pixels[:] = pixels
+        image.update()
+        previous_view_state = set_neutral_view_transform(bpy.context.scene)
+        image_settings = bpy.context.scene.render.image_settings
+        previous_file_format = getattr(image_settings, "file_format", None)
+        previous_color_mode = getattr(image_settings, "color_mode", None)
+        previous_quality = getattr(image_settings, "quality", None)
+        previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
+        set_image_output_format(image_settings, output_path)
+        try:
+            image.save_render(output_path, scene=bpy.context.scene)
+        finally:
+            restore_view_transform(bpy.context.scene, previous_view_state)
+            if previous_file_format is not None:
+                image_settings.file_format = previous_file_format
+            if previous_color_mode is not None:
+                image_settings.color_mode = previous_color_mode
+            if previous_quality is not None:
+                image_settings.quality = previous_quality
+            if previous_webp_lossless is not None and hasattr(image_settings, "webp_lossless"):
+                image_settings.webp_lossless = previous_webp_lossless
+    finally:
+        bpy.data.images.remove(image)
+
+
+def parse_calibration_background_color(value):
+    normalized = str(value or "").strip().lstrip("#")
+    if len(normalized) not in {6, 8}:
+        return None
+
+    try:
+        components = [int(normalized[index:index + 2], 16) / 255.0 for index in range(0, len(normalized), 2)]
+    except ValueError:
+        return None
+
+    if len(components) == 3:
+        components.append(1.0)
+    return components
+
+
+def apply_calibration_background(output_path: str, color_value, mode: str):
+    color = parse_calibration_background_color(color_value)
+    if mode != "topdown" or color is None or not os.path.exists(output_path):
+        return
+
+    image = bpy.data.images.load(output_path, check_existing=False)
+    try:
+        pixels = list(image.pixels[:])
+        for index in range(0, len(pixels), 4):
+            alpha = max(0.0, min(1.0, pixels[index + 3]))
+            inverse_alpha = 1.0 - alpha
+            pixels[index] = (pixels[index] * alpha) + (color[0] * inverse_alpha)
+            pixels[index + 1] = (pixels[index + 1] * alpha) + (color[1] * inverse_alpha)
+            pixels[index + 2] = (pixels[index + 2] * alpha) + (color[2] * inverse_alpha)
+            pixels[index + 3] = 1.0
+
+        image.pixels[:] = pixels
+        image.update()
+        previous_view_state = set_neutral_view_transform(bpy.context.scene)
+        image_settings = bpy.context.scene.render.image_settings
+        previous_file_format = getattr(image_settings, "file_format", None)
+        previous_color_mode = getattr(image_settings, "color_mode", None)
+        previous_quality = getattr(image_settings, "quality", None)
+        previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
+        set_image_output_format(image_settings, output_path)
+        try:
+            image.save_render(output_path, scene=bpy.context.scene)
+        finally:
+            restore_view_transform(bpy.context.scene, previous_view_state)
+            if previous_file_format is not None:
+                image_settings.file_format = previous_file_format
+            if previous_color_mode is not None:
+                image_settings.color_mode = previous_color_mode
+            if previous_quality is not None:
+                image_settings.quality = previous_quality
+            if previous_webp_lossless is not None and hasattr(image_settings, "webp_lossless"):
+                image_settings.webp_lossless = previous_webp_lossless
+    finally:
+        bpy.data.images.remove(image)
+
+
 def read_render_texture_sidecar(texture_path: str):
     sidecar_path = os.path.splitext(texture_path)[0] + ".json"
     if not os.path.exists(sidecar_path):
@@ -478,21 +595,18 @@ def clamp01(value: float) -> float:
 def ensure_fallback_source_material():
     material_name = "FoxWatchFallbackSourceMaterial"
     existing_material = bpy.data.materials.get(material_name)
-    if existing_material is not None:
-        return existing_material
-
-    material = bpy.data.materials.new(name=material_name)
+    material = existing_material or bpy.data.materials.new(name=material_name)
     material.use_nodes = True
     node_tree = material.node_tree
     node_tree.nodes.clear()
 
     output_node = node_tree.nodes.new(type="ShaderNodeOutputMaterial")
     output_node.location = (240, 0)
-    diffuse_node = node_tree.nodes.new(type="ShaderNodeBsdfDiffuse")
-    diffuse_node.location = (0, 0)
-    diffuse_node.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
-    diffuse_node.inputs[1].default_value = 1.0
-    node_tree.links.new(diffuse_node.outputs[0], output_node.inputs[0])
+    emission_node = node_tree.nodes.new(type="ShaderNodeEmission")
+    emission_node.location = (0, 0)
+    emission_node.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+    emission_node.inputs["Strength"].default_value = 1.0
+    node_tree.links.new(emission_node.outputs["Emission"], output_node.inputs[0])
     return material
 
 
@@ -926,9 +1040,9 @@ def generate_flat_topdown_from_source(
             bpy.data.images.remove(outline_lineart_image)
 
 
-def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str):
+def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str) -> bool:
     if not os.path.exists(icon_path):
-        return
+        return False
 
     if os.path.exists(fallback_path):
         os.remove(fallback_path)
@@ -937,10 +1051,12 @@ def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str):
     try:
         width, height = image.size
         if width <= 0 or height <= 0:
-            return
+            return False
 
         pixels = list(image.pixels)
         output_pixels = [0.0] * len(pixels)
+        visible_source_pixels = 0
+        visible_output_pixels = 0
         for index in range(width * height):
             pixel_index = index * 4
             red = pixels[pixel_index]
@@ -950,16 +1066,36 @@ def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str):
             if alpha <= 0.001:
                 continue
 
+            visible_source_pixels += 1
+
             luminance = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
             line_cut = clamp01((0.82 - luminance) / 0.6)
             output_alpha = clamp01(alpha * (1.0 - line_cut))
             if output_alpha <= 0.01:
                 continue
 
+            visible_output_pixels += 1
+
             output_pixels[pixel_index] = 1.0
             output_pixels[pixel_index + 1] = 1.0
             output_pixels[pixel_index + 2] = 1.0
             output_pixels[pixel_index + 3] = output_alpha
+
+        result_is_readable = (
+            visible_source_pixels > 0
+            and (visible_output_pixels / visible_source_pixels) >= PENCIL_FALLBACK_MIN_VISIBLE_SOURCE_RATIO
+        )
+        if visible_source_pixels > 0 and not result_is_readable:
+            for index in range(width * height):
+                pixel_index = index * 4
+                alpha = pixels[pixel_index + 3]
+                if alpha <= 0.001:
+                    continue
+
+                output_pixels[pixel_index] = 1.0
+                output_pixels[pixel_index + 1] = 1.0
+                output_pixels[pixel_index + 2] = 1.0
+                output_pixels[pixel_index + 3] = alpha
 
         fallback_image = bpy.data.images.new(
             name=f"FoxWatchPencilFallback:{os.path.basename(fallback_path)}",
@@ -990,6 +1126,11 @@ def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str):
                     image_settings.webp_lossless = previous_webp_lossless
         finally:
             bpy.data.images.remove(fallback_image)
+
+        if visible_source_pixels <= 0:
+            return False
+
+        return result_is_readable
     finally:
         bpy.data.images.remove(image)
 
@@ -1279,16 +1420,30 @@ def main():
                         output_path,
                         trench_readability_profile(structure_id, output_key, render_state["mode"]),
                     )
+                    apply_repeat_axis_edge_wrap(
+                        output_path,
+                        (scene_document.get("render") or {}).get("repeatAxis"),
+                        render_state["mode"],
+                    )
+                    apply_calibration_background(
+                        output_path,
+                        (scene_document.get("render") or {}).get("calibrationBackgroundColor"),
+                        render_state["mode"],
+                    )
                     if mode == "preview" and scene_variant is None and should_generate_default_icon(scene_document):
                         lineart_source_file = tempfile.NamedTemporaryFile(suffix=".icon.default.source.png", delete=False)
                         lineart_source_path = lineart_source_file.name
                         lineart_source_file.close()
                         try:
                             render_fallback_source(lineart_source_path)
-                            generate_pencil_fallback_from_icon(
+                            fallback_is_readable = generate_pencil_fallback_from_icon(
                                 lineart_source_path,
                                 resolve_default_icon_output_path(output_path),
                             )
+                            if not fallback_is_readable:
+                                print(
+                                    f"Pencil fallback for {structure_id} was too sparse; using its alpha silhouette"
+                                )
                         finally:
                             if os.path.exists(lineart_source_path):
                                 os.remove(lineart_source_path)

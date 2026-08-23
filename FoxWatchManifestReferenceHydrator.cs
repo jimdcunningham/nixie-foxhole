@@ -2042,14 +2042,18 @@ public sealed class FoxWatchManifestReferenceHydrator
             {
                 structure.Variants.C = structure.Variants.Default != null
                     ? new FoxWatchTextureVariant { TextureUrl = structure.Variants.Default.TextureUrl }
-                    : (!string.IsNullOrWhiteSpace(structure.IconUrl) ? new FoxWatchTextureVariant { TextureUrl = structure.IconUrl } : null);
+                    : (structure.GenerateDefaultIcon != false && !string.IsNullOrWhiteSpace(structure.IconUrl)
+                        ? new FoxWatchTextureVariant { TextureUrl = structure.IconUrl }
+                        : null);
             }
 
             if (structure.Variants.W == null)
             {
                 structure.Variants.W = structure.Variants.Default != null
                     ? new FoxWatchTextureVariant { TextureUrl = structure.Variants.Default.TextureUrl }
-                    : (!string.IsNullOrWhiteSpace(structure.IconUrl) ? new FoxWatchTextureVariant { TextureUrl = structure.IconUrl } : null);
+                    : (structure.GenerateDefaultIcon != false && !string.IsNullOrWhiteSpace(structure.IconUrl)
+                        ? new FoxWatchTextureVariant { TextureUrl = structure.IconUrl }
+                        : null);
             }
         }
     }

@@ -288,6 +288,13 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
     imported_armature = None
     if mesh_id and mesh_id in mesh_assets_by_id:
         mesh_asset = mesh_assets_by_id[mesh_id]
+        material_sidecar_name_overrides = None
+        overrides_by_variant = mesh_asset.get("materialSidecarNameOverridesByVariant") or {}
+        if scene_variant:
+            material_sidecar_name_overrides = next(
+                (value for key, value in overrides_by_variant.items() if (key or "").lower() == scene_variant.lower()),
+                None,
+            )
         mesh_path = resolve_asset_path(mesh_asset.get("exportUrl") or mesh_asset.get("sourcePath"), search_roots)
         if mesh_path and os.path.exists(mesh_path):
             debug_color = node_document.get("debugColor")
@@ -304,6 +311,7 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
                 clip_floor=bool(render_settings["clip_floor"]),
                 floor_z=float(render_settings["floor_z"]),
                 material_sidecar_name_override=mesh_asset.get("materialSidecarNameOverride"),
+                material_sidecar_name_overrides=material_sidecar_name_overrides,
             )
             apply_pose_to_imported_objects(imported_objects, resolve_node_pose_document(node_document, scene_variant))
             imported_armature = next((obj for obj in imported_objects if obj.type == "ARMATURE"), None)

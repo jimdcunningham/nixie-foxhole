@@ -12,7 +12,8 @@
     ],
     "behavior": {
       "trimSpan": true,
-      "fieldConnectorSpan": true
+      "fieldConnectorSpan": true,
+      "socketSnapping": true
     }
   }
 }

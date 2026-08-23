@@ -1,4 +1,7 @@
 {
   "categoryId": "logistics",
-  "previewDirection": "ne"
+  "previewDirection": "ne",
+  "renderExcludedMeshIds": [
+    "mesh-bulwarkdressing_stoneslab_1"
+  ]
 }
