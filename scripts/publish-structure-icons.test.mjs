@@ -302,6 +302,41 @@ test('resolveRawIconSource invisible render falls back to blueprint', async () =
     assert.equal(metadata.height, 128);
 });
 
+test('resolveRawIconSource prefers a rendered preview master over a cached rendered icon', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-rendered-icon-preview-master-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    await mkdir(resolve(rawRenderedRoot, 'items', 'firstaidkit'), { recursive: true });
+    await mkdir(generatedIconsRoot, { recursive: true });
+    await writeFile(
+        resolve(rawRenderedRoot, 'items', 'firstaidkit', 'firstaidkit.icon.rendered.webp'),
+        await readFile(resolve(fixtureRoot, 'blueprint-128.png')),
+    );
+    await writeFile(
+        resolve(rawRenderedRoot, 'items', 'firstaidkit', 'firstaidkit.preview.png'),
+        await readFile(resolve(fixtureRoot, 'visible-render-256.png')),
+    );
+
+    const structure = { id: 'firstaidkit', iconUrl: '/foxhole/assets/icons/firstaidkit.png' };
+    const source = await resolveRawIconSource({
+        structureId: 'firstaidkit',
+        assetKind: 'icon.rendered',
+        structure,
+        sourceStructure: structure,
+        rawRenderedAssetTypesDirectory: rawRenderedRoot,
+        generatedIconsDirectory: generatedIconsRoot,
+        publicAssetsDirectory: publicAssetsRoot,
+        resolveAssetTypeName: () => 'items',
+    });
+
+    assert.ok(source);
+    assert.match(source.sourceFilePath, /firstaidkit\.preview\.png$/);
+    const metadata = await sharp(source.content).metadata();
+    assert.equal(metadata.width, 256);
+    assert.equal(metadata.height, 256);
+});
+
 test('resolveRawIconSource falls back to generated icon by asset id when urls are colocated', async () => {
     const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-assetid-fallback-'));
     const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');

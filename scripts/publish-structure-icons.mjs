@@ -603,6 +603,15 @@ export async function resolveRawIconSource({
         assetTypeName,
         rawRenderedAssetTypesDirectory,
     );
+    if (assetKind === 'icon.rendered' || assetKind === 'destroyed.icon.rendered') {
+        const previewMasterPath = rawRenderedPath.replace(/\.icon\.rendered\.webp$/i, '.preview.png');
+        if (await pathExists(previewMasterPath)
+            && isAllowedRawSourcePath(previewMasterPath, roots)
+            && await imageFileHasVisiblePixelsFromPath(previewMasterPath)) {
+            return readRawSourceFile(previewMasterPath, roots);
+        }
+    }
+
     if (await pathExists(rawRenderedPath) && isAllowedRawSourcePath(rawRenderedPath, roots)) {
         if (preferGeneratedDefaultIcon || await imageFileHasVisiblePixelsFromPath(rawRenderedPath)) {
             return readRawSourceFile(rawRenderedPath, roots);

@@ -21,6 +21,7 @@ public sealed class FoxWatchRenderSceneGenerator
     private const string FacilityCraneStructureId = "facilitycrane";
     private const string StaticCraneStructureId = "staticcrane";
     private const string LargeCraneStructureId = "largecrane";
+    private const string TripodStructureId = "tripod";
     private const string DeployedTripodStructureId = "deployedtripod";
     private const string BargeMeshId = "mesh-sk_barge_03";
     private const string BargeMeshSourcePath = "War/Content/Meshes/Vehicles/SK_Barge_03.glb";
@@ -36,8 +37,10 @@ public sealed class FoxWatchRenderSceneGenerator
     private const string LargeCraneHorizontalRotationFrontAnimationPackagePath = "War/Content/Animation/LargeCrane/Anim_LargeCrane_Pose_HorizontalRotation_front.uasset";
     private const string DeployableTripodMeshId = "mesh-sk_deployabletripod";
     private const string DeployableTripodMeshSourcePath = "War/Content/Meshes/Weapons/SK_DeployableTripod.glb";
+    private const string BannerSandbagsMeshId = "mesh-bannersandbags";
     private const string WindsockMeshId = "mesh-sk_windsock";
     private const string WindsockMeshSourcePath = "War/Content/Meshes/Weapons/SK_Windsock.glb";
+    private const string WindsockPoleMeshId = "mesh-windsock";
     private const string FacilityPipeOverheadSpanMeshSourcePath =
         "War/Content/Meshes/Structures/Facilities/PipelineoverheadConnect.glb";
     private const string FacilityPipeOverheadSpanMeshId = "mesh-pipelineoverheadconnect";
@@ -1090,7 +1093,8 @@ public sealed class FoxWatchRenderSceneGenerator
             ? await TryApplyPoseVariantsAsync(structure, roots, meshAssetsById, cancellationToken)
             : null;
         var colorVariants = CreateColorVariants(structure);
-        var referencedMeshIds = CollectReferencedMeshIds(roots);
+        var orientedRoots = ApplyRenderRotation(structure, roots);
+        var referencedMeshIds = CollectReferencedMeshIds(orientedRoots);
         var prunedMeshAssets = (blueprintScene?.Meshes ?? [])
             .Where(mesh => referencedMeshIds.Contains(mesh.Id))
             .ToList();
@@ -1128,13 +1132,37 @@ public sealed class FoxWatchRenderSceneGenerator
             },
             Scene = new FoxWatchRenderSceneGraph
             {
-                Roots = roots,
+                Roots = orientedRoots,
             },
             Assets = new FoxWatchRenderSceneAssets
             {
                 Meshes = prunedMeshAssets,
             },
         };
+    }
+
+    private static List<FoxWatchRenderSceneNode> ApplyRenderRotation(
+        FoxWatchManifestStructure structure,
+        List<FoxWatchRenderSceneNode> roots)
+    {
+        var rotation = structure.RenderRotationDegrees;
+        if (rotation is not { Count: 3 }
+            || rotation.Any(value => !double.IsFinite(value))
+            || rotation.All(value => Math.Abs(value) <= double.Epsilon))
+        {
+            return roots;
+        }
+
+        return
+        [
+            new FoxWatchRenderSceneNode
+            {
+                Id = $"{structure.Id}:render-orientation",
+                Name = "RenderOrientation",
+                RotationEulerDegrees = [.. rotation],
+                Children = roots,
+            },
+        ];
     }
 
     private static HashSet<string> CollectReferencedMeshIds(IEnumerable<FoxWatchRenderSceneNode> roots)
@@ -3950,16 +3978,27 @@ public sealed class FoxWatchRenderSceneGenerator
             return false;
         }
 
-        if (!string.Equals(structure.Id, DeployedTripodStructureId, StringComparison.OrdinalIgnoreCase) &&
+        if (!string.Equals(structure.Id, TripodStructureId, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(structure.Id, DeployedTripodStructureId, StringComparison.OrdinalIgnoreCase) &&
             ContainsMeshId(roots, DeployableTripodMeshId))
         {
-            var tripodPose = await TryCreateDeployableTripodNeutralPoseAsync(cancellationToken);
+            // Grounded banner/windsock classes use the deployed-tripod pose so their base meets
+            // the root-relative sandbags while mounted children remain attached to the tripod bone.
+            var tripodPose = ContainsMeshId(roots, BannerSandbagsMeshId)
+                ? await _poseOverrideLoader.TryLoadDefaultPoseAsync(DeployedTripodStructureId, cancellationToken)
+                : await TryCreateDeployableTripodNeutralPoseAsync(cancellationToken);
             if (tripodPose == null)
             {
                 return false;
             }
 
             var appliedCount = ApplyPoseToMatchingNodes(roots, DeployableTripodMeshId, tripodPose);
+            if (ContainsMeshId(roots, BannerSandbagsMeshId))
+            {
+                // Pole is authored root-relative, but becomes bone-local when mounted to the posed tripod.
+                // Reset its inherited height so the pole begins at the tripod mount instead of above it.
+                ResetUnrealLocationForMatchingNodes(roots, WindsockPoleMeshId);
+            }
             AttachChildMeshesToBoneForMatchingNodes(roots, DeployableTripodMeshId, DeployableTripodMountedAttachmentBoneName);
             if (appliedCount > 0)
             {
@@ -5477,6 +5516,25 @@ public sealed class FoxWatchRenderSceneGenerator
         }
 
         return attachedCount;
+    }
+
+    private static int ResetUnrealLocationForMatchingNodes(
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        string meshId)
+    {
+        var resetCount = 0;
+        foreach (var node in nodes)
+        {
+            if (string.Equals(node.MeshId, meshId, StringComparison.OrdinalIgnoreCase))
+            {
+                node.UnrealLocationCentimeters = [0.0, 0.0, 0.0];
+                resetCount += 1;
+            }
+
+            resetCount += ResetUnrealLocationForMatchingNodes(node.Children, meshId);
+        }
+
+        return resetCount;
     }
 
     private readonly record struct PoseWorldTransform(Vector3 Location, Quaternion Rotation, Vector3 Scale);

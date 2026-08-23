@@ -187,6 +187,8 @@ public sealed class FoxWatchManifestStructure
 
     public string? PreviewDirection { get; set; }
 
+    public List<double>? RenderRotationDegrees { get; set; }
+
     public bool? GenerateDefaultIcon { get; set; }
 
     public bool? ClipFloor { get; set; }

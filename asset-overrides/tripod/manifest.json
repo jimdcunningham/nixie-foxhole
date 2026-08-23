@@ -1,4 +1,5 @@
 {
   "categoryId": "deployable",
-  "buildOrder": 1
+  "buildOrder": 1,
+  "previewDirection": "ne"
 }

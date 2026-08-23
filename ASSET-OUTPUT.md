@@ -66,6 +66,13 @@ Each renderable asset has a bundle folder containing:
 
 Blueprint default icon sources for the asset (when extracted) travel with the mesh/material export and are referenced from manifest `iconUrl` / slot variant icons until publish co-locates them.
 
+Authored item overrides may set `renderRotationDegrees: [x, y, z]` in
+`tools/foxwatch/asset-overrides/<id>/manifest.json`. The generator wraps the complete
+scene in that Euler rotation before every render mode, so preview, rendered icon, and
+top-down texture remain consistent. Keep this visual-only override limited to items;
+interactive structures also require their sockets, ranges, hit areas, and other local
+metadata to be transformed.
+
 ### Blender image output (`tmp/rendered-assets/types/...`)
 
 Blender writes **intermediate** images here before publish transforms them.
