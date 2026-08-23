@@ -318,6 +318,9 @@ public sealed class FoxWatchManifestStructure
 
     public FoxWatchManifestHoldProfile? HoldProfile { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FoxWatchManifestMarkedCargoOverlay? MarkedCargoOverlay { get; set; }
+
     public int? MaxHealth { get; set; }
 
     public int? MaxOrders { get; set; }
@@ -421,9 +424,46 @@ public sealed class FoxWatchManifestConnector
 
     public string? PathStyle { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FoxWatchManifestConnectorBehavior? Behavior { get; set; }
+
     public List<FoxWatchManifestConnectorMeshConfig> MeshConfigs { get; set; } = [];
 
     public List<FoxWatchManifestSplineComponentConfig> ComponentConfigs { get; set; } = [];
+}
+
+public sealed class FoxWatchManifestConnectorBehavior
+{
+    public bool? TrimSpan { get; set; }
+
+    public bool? FieldConnectorSpan { get; set; }
+
+    public bool? MineSpline { get; set; }
+
+    public bool? RailTrack { get; set; }
+
+    public bool? RailForkEndCaps { get; set; }
+
+    public bool? Powerline { get; set; }
+
+    public bool? PipeCurveScale { get; set; }
+
+    public bool? PipeExtension { get; set; }
+
+    public bool? UndergroundPipe { get; set; }
+
+    public bool? SocketSnapping { get; set; }
+
+    public bool? TankStop { get; set; }
+
+    public bool? RenderEndCaps { get; set; }
+}
+
+public sealed class FoxWatchManifestMarkedCargoOverlay
+{
+    public double? OffsetX { get; set; }
+
+    public double? OffsetY { get; set; }
 }
 
 public sealed class FoxWatchManifestSplineComponentConfig

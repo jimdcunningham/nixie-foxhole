@@ -1265,6 +1265,23 @@ function compactSplineComponentConfig(value) {
     });
 }
 
+function compactConnectorBehavior(value) {
+    return compactNullableObject(value, {
+        trimSpan: null,
+        fieldConnectorSpan: null,
+        mineSpline: null,
+        railTrack: null,
+        railForkEndCaps: null,
+        powerline: null,
+        pipeCurveScale: null,
+        pipeExtension: null,
+        undergroundPipe: null,
+        socketSnapping: null,
+        tankStop: null,
+        renderEndCaps: null,
+    });
+}
+
 function compactConnector(value) {
     if (!isPlainObject(value)) {
         return undefined;
@@ -1291,6 +1308,7 @@ function compactConnector(value) {
         maxTargetAngle: value.maxTargetAngleDeg,
         maxSlope: value.maxSlopeAngleDeg,
         pathStyle: value.pathStyle,
+        behavior: compactConnectorBehavior(value.behavior),
         meshConfigs: Array.isArray(value.meshConfigs)
             ? value.meshConfigs.map(compactConnectorMeshConfig)
             : [],
@@ -1318,6 +1336,7 @@ function compactConnector(value) {
         maxTargetAngle: null,
         maxSlope: null,
         pathStyle: null,
+        behavior: null,
         meshConfigs: [],
         configs: [],
     });

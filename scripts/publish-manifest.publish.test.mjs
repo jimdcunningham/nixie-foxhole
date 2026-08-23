@@ -150,3 +150,22 @@ test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch man
     );
     assert.ok(parsedManifest.assets.some(asset => asset.holdProfile));
 });
+
+test('raw FoxWatch manifest preserves authored connector behavior and marked cargo overlays', () => {
+    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+    const tankStop = rawManifest.assets.find(asset => asset.id === 'tankstopsplinet3');
+    const transferStation = rawManifest.assets.find(asset => asset.id === 'facilitytransferresource');
+
+    assert.deepEqual(tankStop?.connector?.behavior, { tankStop: true });
+    assert.deepEqual(transferStation?.markedCargoOverlay, { offsetX: 52 });
+
+    const parsedManifest = foxholeManifestSchema.parse(rawManifest);
+    assert.deepEqual(
+        parsedManifest.assets.find(asset => asset.id === 'tankstopsplinet3')?.connector?.behavior,
+        { tankStop: true },
+    );
+    assert.deepEqual(
+        parsedManifest.assets.find(asset => asset.id === 'facilitytransferresource')?.markedCargoOverlay,
+        { offsetX: 52 },
+    );
+});
