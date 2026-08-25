@@ -369,7 +369,7 @@ def apply_repeat_axis_edge_wrap(output_path: str, repeat_axis: str, mode: str):
         previous_color_mode = getattr(image_settings, "color_mode", None)
         previous_quality = getattr(image_settings, "quality", None)
         previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
-        set_image_output_format(image_settings, output_path)
+        set_image_output_format(image_settings, output_path, lossless_webp=False)
         try:
             image.save_render(output_path, scene=bpy.context.scene)
         finally:
@@ -425,7 +425,7 @@ def apply_calibration_background(output_path: str, color_value, mode: str):
         previous_color_mode = getattr(image_settings, "color_mode", None)
         previous_quality = getattr(image_settings, "quality", None)
         previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
-        set_image_output_format(image_settings, output_path)
+        set_image_output_format(image_settings, output_path, lossless_webp=False)
         try:
             image.save_render(output_path, scene=bpy.context.scene)
         finally:
@@ -595,18 +595,21 @@ def clamp01(value: float) -> float:
 def ensure_fallback_source_material():
     material_name = "FoxWatchFallbackSourceMaterial"
     existing_material = bpy.data.materials.get(material_name)
-    material = existing_material or bpy.data.materials.new(name=material_name)
+    if existing_material is not None:
+        return existing_material
+
+    material = bpy.data.materials.new(name=material_name)
     material.use_nodes = True
     node_tree = material.node_tree
     node_tree.nodes.clear()
 
     output_node = node_tree.nodes.new(type="ShaderNodeOutputMaterial")
     output_node.location = (240, 0)
-    emission_node = node_tree.nodes.new(type="ShaderNodeEmission")
-    emission_node.location = (0, 0)
-    emission_node.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
-    emission_node.inputs["Strength"].default_value = 1.0
-    node_tree.links.new(emission_node.outputs["Emission"], output_node.inputs[0])
+    diffuse_node = node_tree.nodes.new(type="ShaderNodeBsdfDiffuse")
+    diffuse_node.location = (0, 0)
+    diffuse_node.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    diffuse_node.inputs[1].default_value = 1.0
+    node_tree.links.new(diffuse_node.outputs[0], output_node.inputs[0])
     return material
 
 
@@ -642,7 +645,21 @@ def set_webp_lossless(image_settings):
         image_settings.webp_lossless = True
 
 
-def set_image_output_format(image_settings, output_path: str):
+def set_webp_lossy(image_settings, quality: int = 90):
+    image_settings.file_format = "WEBP"
+    if hasattr(image_settings, "color_mode"):
+        image_settings.color_mode = "RGBA"
+    if hasattr(image_settings, "quality"):
+        image_settings.quality = quality
+    if hasattr(image_settings, "webp_lossless"):
+        image_settings.webp_lossless = False
+    if hasattr(image_settings, "use_webp_lossless"):
+        image_settings.use_webp_lossless = False
+    if hasattr(image_settings, "use_lossless"):
+        image_settings.use_lossless = False
+
+
+def set_image_output_format(image_settings, output_path: str, lossless_webp: bool = True):
     extension = os.path.splitext(str(output_path or ""))[1].lower()
     if extension == ".png":
         image_settings.file_format = "PNG"
@@ -654,7 +671,10 @@ def set_image_output_format(image_settings, output_path: str):
             image_settings.compression = 15
         return
 
-    set_webp_lossless(image_settings)
+    if lossless_webp:
+        set_webp_lossless(image_settings)
+    else:
+        set_webp_lossy(image_settings)
 
 
 def set_neutral_view_transform(scene):

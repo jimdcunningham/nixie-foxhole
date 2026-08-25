@@ -11,6 +11,9 @@ import {
     collectStructureIdsWithDestroyedRenderScenesFromDirectory,
     getCoLocatedStructureAssetFileName,
     hasRawDestroyedRenderAssets,
+    LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS,
+    LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS,
+    LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS,
     publishStructureIconsForManifest,
     resolveGeneratedIconFilePathForAssetId,
     resolveSubtypeOverlayUrl,
@@ -95,9 +98,9 @@ const sharedModificationHashDiagnosticsDirectory = resolve(repositoryRoot, 'tool
 const iconSourceExtensions = new Set(['.png', '.jpg', '.jpeg']);
 const publishedImageSourceExtensions = ['.png', '.jpg', '.jpeg', '.webp'];
 const rawRenderedImageSourceExtensions = ['.webp', ...iconSourceExtensions];
-const losslessPublishedWebpOptions = { lossless: true, quality: 100, effort: 6 };
-const lossyPreviewWebpOptions = { quality: 90, alphaQuality: 100, effort: 6 };
-const lossyRenderedIconWebpOptions = { quality: 90, effort: 6 };
+const losslessPublishedWebpOptions = LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS;
+const lossyPreviewWebpOptions = LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS;
+const lossyRenderedIconWebpOptions = LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS;
 const maxRenderedIconEdgePx = 256;
 const fileSystemRetryDelayMs = [50, 100, 250, 500, 1000, 2000, 4000];
 const retryableFileSystemErrorCodes = new Set(['EBUSY', 'EMFILE', 'ENFILE', 'EPERM', 'UNKNOWN']);

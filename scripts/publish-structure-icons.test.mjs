@@ -15,6 +15,7 @@ import {
     isCopyOnlyAssetKind,
     normalizeIconContentDimensions,
     publishStructureIconAsset,
+    publishStructureIconsForManifest,
     resolveRawIconSource,
     resolveSubtypeOverlayUrl,
     resolveSubtypeOverlayUrlForIconFallback,
@@ -195,9 +196,9 @@ test('structureHasResolvableDestroyedRenderScene requires destroyed scene for ve
 });
 
 test('resolvePublishedIconWebpOptions uses lossy settings for rendered icons', () => {
-    assert.deepEqual(resolvePublishedIconWebpOptions('icon.rendered'), { quality: 90 });
+    assert.deepEqual(resolvePublishedIconWebpOptions('icon.rendered'), { quality: 90, effort: 6 });
     assert.equal(resolvePublishedIconWebpOptions('icon.default').lossless, true);
-    assert.deepEqual(resolvePublishedIconWebpOptions('preview'), { quality: 90, alphaQuality: 100 });
+    assert.deepEqual(resolvePublishedIconWebpOptions('preview'), { quality: 90, alphaQuality: 100, effort: 6 });
 });
 
 test('resolveRawVisualCopySource falls back to icon.default for blank preview', async () => {
@@ -430,6 +431,61 @@ test('resolveRawIconSource prefers a pencil PNG master over a cached default ico
         assert.equal(metadata.height, 16);
     } finally {
         await rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('publishStructureIconsForManifest preserves generated-default metadata from the raw manifest', async () => {
+    const tempRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-generated-default-metadata-'));
+    const rawRenderedRoot = resolve(tempRoot, 'rendered-assets/types');
+    const generatedIconsRoot = resolve(tempRoot, 'foxhole-icons');
+    const publicAssetsRoot = resolve(tempRoot, 'public/assets');
+    const outputDirectory = resolve(publicAssetsRoot, 'types/structures/keep');
+    const assetDirectory = resolve(rawRenderedRoot, 'structures', 'keep');
+
+    try {
+        await mkdir(assetDirectory, { recursive: true });
+        await mkdir(generatedIconsRoot, { recursive: true });
+        await sharp({
+            create: {
+                width: 32,
+                height: 16,
+                channels: 4,
+                background: { r: 255, g: 255, b: 255, alpha: 1 },
+            },
+        }).png().toFile(resolve(assetDirectory, 'keep.icon.default.png'));
+        await sharp({
+            create: {
+                width: 16,
+                height: 16,
+                channels: 4,
+                background: { r: 0, g: 255, b: 0, alpha: 1 },
+            },
+        }).png().toFile(resolve(generatedIconsRoot, 'keep.png'));
+
+        const sourceManifest = {
+            assets: [{ id: 'keep', iconUrl: '/foxhole/assets/icons/keep.png' }],
+        };
+        Object.defineProperty(sourceManifest, '__sourceStructureMetadataById', {
+            value: new Map([['keep', { generateDefaultIcon: true }]]),
+        });
+
+        await publishStructureIconsForManifest({
+            manifest: { assets: [{ id: 'keep' }] },
+            sourceManifest,
+            getOutputDirectory: () => outputDirectory,
+            toPublicAssetUrl: filePath => filePath,
+            rawRenderedAssetTypesDirectory: rawRenderedRoot,
+            generatedIconsDirectory: generatedIconsRoot,
+            publicAssetsDirectory: publicAssetsRoot,
+            resolveAssetTypeName: () => 'structures',
+            publishConcurrency: 1,
+        });
+
+        const metadata = await sharp(await readFile(resolve(outputDirectory, 'keep.icon.default.webp'))).metadata();
+        assert.equal(metadata.width, 32);
+        assert.equal(metadata.height, 16);
+    } finally {
+        await rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
 });
 

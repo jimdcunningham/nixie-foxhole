@@ -2754,33 +2754,10 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool? GetClipFloorOverrideForRenderLayer(FoxWatchManifestStructure structure, string layerId)
     {
-        if (IsFacilityCatwalkPlatformStructure(structure))
-        {
-            // The deck and rails sit directly on the authored floor plane. Ground clipping
-            // erases these isolated component renders completely.
-            return false;
-        }
-
-        if (string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(layerId, "underlay", StringComparison.OrdinalIgnoreCase))
-        {
-            // Floor/underlay layers are the extracted surface itself. Inheriting the host's
-            // ground-plane clipping can erase the entire component before it is composited.
-            return false;
-        }
-
-        if (IsCraneRailTrackSplineStructure(structure)
-            && string.Equals(layerId, "span", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (IsWorldRoadSplineStructure(structure))
-        {
-            return false;
-        }
-
-        return null;
+        // Component layers are composited back into the parent at runtime. Their extracted
+        // meshes often sit partly or wholly below the parent's world-space floor, so clipping
+        // an isolated layer erases valid ramps, weapons, flags, and floor surfaces.
+        return false;
     }
 
     private static bool IsEntrenchmentStructureForFloorClipping(FoxWatchManifestStructure structure)
@@ -2834,13 +2811,10 @@ public sealed class FoxWatchRenderSceneGenerator
             return authoredClipBounds;
         }
 
-        if (!string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
-            || !IsEntrenchmentStructureForFloorClipping(structure))
-        {
-            return null;
-        }
-
-        return TryDeriveEntrenchmentFloorClipBoundsFromFootprint(structure);
+        // Do not synthesize a crop box for isolated floor layers. The extracted floor mesh is
+        // already the authoritative component extent; shader-cropping that single thin plane
+        // can collapse an otherwise valid render to Blender's 4x4 empty-image fallback.
+        return null;
     }
 
     private static FoxWatchBounds3D? TryDeriveEntrenchmentFloorClipBoundsFromFootprint(
@@ -6266,6 +6240,13 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool GetClipFloor(FoxWatchManifestStructure structure)
     {
+        if (IsStandaloneDestroyedOrBreachedStructure(structure))
+        {
+            // Wreck meshes deliberately extend below the living structure's ground plane.
+            // Clipping them leaves only scattered above-ground fragments.
+            return false;
+        }
+
         return structure.ClipFloor ?? (structure.IsVehicle != true && structure.IsItem != true);
     }
 

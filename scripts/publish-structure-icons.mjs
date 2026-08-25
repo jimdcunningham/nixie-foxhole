@@ -12,8 +12,8 @@ export const MAX_PUBLISHED_ICON_DIMENSION = 256;
 
 const ICON_SOURCE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
 export const LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS = { lossless: true, quality: 100, effort: 6 };
-export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90 };
-export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100 };
+export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90, effort: 6 };
+export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100, effort: 6 };
 
 const OUTPUT_FILE_RETRY_DELAYS_MS = [50, 100, 250, 500, 1000, 2000, 4000];
 
@@ -505,7 +505,11 @@ export async function imageFileHasVisiblePixelsFromPath(filePath) {
     }
 }
 
-export async function normalizeIconContentDimensions(content, webpOptions = LOSSLESS_WEBP_OPTIONS) {
+export async function normalizeIconContentDimensions(
+    content,
+    webpOptions = LOSSLESS_WEBP_OPTIONS,
+    resizeOptions = {},
+) {
     const metadata = await sharp(content).metadata();
     const width = Number(metadata.width ?? 0);
     const height = Number(metadata.height ?? 0);
@@ -524,6 +528,7 @@ export async function normalizeIconContentDimensions(content, webpOptions = LOSS
             height: MAX_PUBLISHED_ICON_DIMENSION,
             fit: 'inside',
             withoutEnlargement: true,
+            ...resizeOptions,
         })
         .webp(webpOptions)
         .toBuffer();
@@ -608,7 +613,7 @@ async function readRawSourceFile(filePath, roots) {
 
     return {
         sourceFilePath: filePath,
-        content: await readImageFileAsWebp(filePath),
+        content: await readFile(filePath),
     };
 }
 
@@ -841,7 +846,13 @@ export async function writeCoLocatedIcon({
     await mkdir(dirname(outputPath), { recursive: true });
 
     const webpOptions = resolvePublishedIconWebpOptions(assetKind);
-    let outputContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
+    const isPencilDefaultMaster = assetKind === 'icon.default'
+        && String(rawSource.sourceFilePath ?? '').toLowerCase().endsWith('.icon.default.png');
+    let outputContent = await normalizeIconContentDimensions(
+        rawSource.content,
+        webpOptions,
+        isPencilDefaultMaster ? { kernel: 'nearest' } : {},
+    );
     let composed = false;
 
     const subtypeOverlay = isComposableIconAssetKind(assetKind) && subtypeOverlayUrl
@@ -1216,28 +1227,39 @@ export async function publishStructureIconsForManifest({
             return structureId ? [structureId, entry] : null;
         })
         .filter(Boolean));
+    const sourceStructureMetadataById = sourceManifest?.__sourceStructureMetadataById instanceof Map
+        ? sourceManifest.__sourceStructureMetadataById
+        : new Map();
 
     const assets = manifest?.assets ?? [];
     const startedAt = Date.now();
     const nextAssets = await mapWithConcurrency(
         assets,
         publishConcurrency,
-        structure => publishStructureManifestAsset({
-            structure,
-            sourceStructure: normalizeId(structure?.id)
-                ? sourceStructuresById.get(normalizeId(structure.id)) ?? null
-                : null,
-            getOutputDirectory,
-            toPublicAssetUrl,
-            rawRenderedAssetTypesDirectory,
-            generatedIconsDirectory,
-            rawMapIconsDirectory,
-            publicAssetsDirectory,
-            resolveAssetTypeName,
-            skipExistingAssets,
-            defaultWreckedSubtypeUrl,
-            structuresWithDestroyedRenderScenes,
-        }),
+        structure => {
+            const structureId = normalizeId(structure?.id);
+            const sourceStructure = structureId ? sourceStructuresById.get(structureId) ?? null : null;
+            const sourceStructureMetadata = structureId
+                ? sourceStructureMetadataById.get(structureId) ?? null
+                : null;
+
+            return publishStructureManifestAsset({
+                structure,
+                sourceStructure: sourceStructure || sourceStructureMetadata
+                    ? { ...(sourceStructure ?? {}), ...(sourceStructureMetadata ?? {}) }
+                    : null,
+                getOutputDirectory,
+                toPublicAssetUrl,
+                rawRenderedAssetTypesDirectory,
+                generatedIconsDirectory,
+                rawMapIconsDirectory,
+                publicAssetsDirectory,
+                resolveAssetTypeName,
+                skipExistingAssets,
+                defaultWreckedSubtypeUrl,
+                structuresWithDestroyedRenderScenes,
+            });
+        },
     );
     const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 
