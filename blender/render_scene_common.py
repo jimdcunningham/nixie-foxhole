@@ -3,6 +3,7 @@ import hashlib
 import math
 import os
 import re
+from collections import OrderedDict
 from typing import Iterable, Optional
 
 import bmesh
@@ -35,7 +36,10 @@ DEFAULT_EXPOSURE = 0.30
 DEFAULT_GAMMA = 0.97
 _ASSET_PATH_CACHE: dict[tuple[str, str], Optional[str]] = {}
 _MATERIAL_SIDECAR_CACHE: dict[tuple[str, str], Optional[str]] = {}
-_IMPORTED_MESH_OBJECT_CACHE: dict[tuple[str, Optional[str], Optional[tuple[float, ...]], Optional[str], bool, float], list[object]] = {}
+_IMPORTED_MESH_OBJECT_CACHE = OrderedDict()
+_IMPORTED_MESH_CACHE_SOURCE_BYTES = 0
+IMPORTED_MESH_CACHE_MAX_KEYS = 64
+IMPORTED_MESH_CACHE_MAX_SOURCE_BYTES = 1024 * 1024 * 1024
 _ROOT_FILE_NAME_INDEX: dict[str, dict[str, list[str]]] = {}
 _LAST_RENDER_CONFIGURATION: Optional[tuple[int, int, bool]] = None
 PREVIEW_ANGLE_DIRECTIONS: dict[str, tuple[float, float, float]] = {
@@ -443,6 +447,37 @@ def remove_collections_with_prefix(prefix: str) -> None:
     for collection in list(bpy.data.collections):
         if collection.name.startswith(prefix):
             remove_collection(collection.name)
+
+
+def dispose_cached_template_objects(objects: list[object]) -> None:
+    data_blocks = []
+    for obj in objects:
+        data_block = getattr(obj, "data", None)
+        if data_block is not None:
+            data_blocks.append(data_block)
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    for data_block in data_blocks:
+        if getattr(data_block, "users", 1) != 0:
+            continue
+        if isinstance(data_block, bpy.types.Mesh):
+            bpy.data.meshes.remove(data_block)
+        elif isinstance(data_block, bpy.types.Curve):
+            bpy.data.curves.remove(data_block)
+        elif isinstance(data_block, bpy.types.Armature):
+            bpy.data.armatures.remove(data_block)
+
+
+def trim_imported_mesh_cache() -> None:
+    global _IMPORTED_MESH_CACHE_SOURCE_BYTES
+    while len(_IMPORTED_MESH_OBJECT_CACHE) > 1 and (
+        len(_IMPORTED_MESH_OBJECT_CACHE) > IMPORTED_MESH_CACHE_MAX_KEYS
+        or _IMPORTED_MESH_CACHE_SOURCE_BYTES > IMPORTED_MESH_CACHE_MAX_SOURCE_BYTES
+    ):
+        _, cache_entry = _IMPORTED_MESH_OBJECT_CACHE.popitem(last=False)
+        _IMPORTED_MESH_CACHE_SOURCE_BYTES -= cache_entry["sourceBytes"]
+        dispose_cached_template_objects(cache_entry["objects"])
 
 
 def remove_default_startup_scene_objects() -> None:
@@ -1635,15 +1670,16 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
 
 
 def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], parent_object=None, material_mode: Optional[str] = None, debug_color: Optional[list[float]] = None, scene_variant_color_hex: Optional[str] = None, clip_floor: bool = False, floor_z: float = 0.0, material_sidecar_name_override: Optional[str] = None, material_sidecar_name_overrides: Optional[dict] = None):
+    global _IMPORTED_MESH_CACHE_SOURCE_BYTES
     debug_color_key = tuple(float(component) for component in debug_color) if debug_color is not None else None
     indexed_overrides_key = tuple(sorted((str(index), str(name)) for index, name in (material_sidecar_name_overrides or {}).items()))
     cache_key = (mesh_path, material_mode, debug_color_key, normalize_color_hex(scene_variant_color_hex), material_sidecar_name_override, indexed_overrides_key)
-    cached_objects = _IMPORTED_MESH_OBJECT_CACHE.get(cache_key)
-    if cached_objects is None:
+    cache_entry = _IMPORTED_MESH_OBJECT_CACHE.get(cache_key)
+    if cache_entry is None:
         template_collection = ensure_private_collection("FoxWatch:AssetTemplates")
-        existing_names = {obj.name for obj in bpy.data.objects}
+        bpy.ops.object.select_all(action="DESELECT")
         bpy.ops.import_scene.gltf(filepath=mesh_path)
-        imported_objects = [obj for obj in bpy.data.objects if obj.name not in existing_names]
+        imported_objects = list(bpy.context.selected_objects)
         prepared_objects = prepare_imported_mesh_objects(
             imported_objects,
             search_roots,
@@ -1659,8 +1695,15 @@ def import_mesh_asset(mesh_path: str, collection, search_roots: Iterable[str], p
             template_collection.objects.link(obj)
             obj.hide_render = True
             obj.hide_viewport = True
-        cached_objects = prepared_objects
-        _IMPORTED_MESH_OBJECT_CACHE[cache_key] = cached_objects
+        source_bytes = os.path.getsize(mesh_path) if os.path.exists(mesh_path) else 0
+        cache_entry = {"objects": prepared_objects, "sourceBytes": source_bytes}
+        _IMPORTED_MESH_OBJECT_CACHE[cache_key] = cache_entry
+        _IMPORTED_MESH_CACHE_SOURCE_BYTES += source_bytes
+        trim_imported_mesh_cache()
+    else:
+        _IMPORTED_MESH_OBJECT_CACHE.move_to_end(cache_key)
+
+    cached_objects = cache_entry["objects"]
 
     duplicated_objects = []
     duplicate_map = {}

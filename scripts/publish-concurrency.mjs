@@ -1,7 +1,7 @@
 import { availableParallelism, cpus } from 'node:os';
 
 export function getDefaultPublishConcurrency() {
-    return Math.min(16, Math.max(4, availableParallelism?.() ?? cpus().length));
+    return Math.min(4, Math.max(2, availableParallelism?.() ?? cpus().length));
 }
 
 export async function mapWithConcurrency(items, concurrency, mapper) {

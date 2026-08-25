@@ -135,9 +135,12 @@ const targetFilter = {
     category: new Set(getNormalizedValues(cliArgs, 'category').map(normalizeId)),
 };
 const skipExistingAssets = hasCliFlag(cliArgs, 'skip-existing-assets');
+const isRegenPublish = Boolean((cliArgs['regen-plan'] ?? []).at(-1));
+const metadataOnlyPublish = isRegenPublish && hasCliFlag(cliArgs, 'metadata-only');
 configurePublishLogging({ verbose: hasCliFlag(cliArgs, 'verbose') });
 const defaultPublishConcurrency = getDefaultPublishConcurrency();
 const publishConcurrency = getPositiveIntegerCliValue(cliArgs, 'publish-concurrency', defaultPublishConcurrency);
+sharp.concurrency(Number(process.env.FOXWATCH_SHARP_CONCURRENCY ?? 2));
 const assetOverridesDirectory = resolve(repositoryRoot, 'tools/foxwatch/asset-overrides');
 const sharedModificationHashDiagnostics = {
     source: 'publish-manifest',
@@ -1101,6 +1104,7 @@ function compactStockpile(value) {
     return compactNullableObject(value, {
         totalItemCapacity: null,
         totalCrateCapacity: null,
+        itemCategoryFilter: null,
         itemQuantityLimits: null,
         validItems: null,
     }, {
@@ -4095,7 +4099,10 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
 }
 
 async function syncRawRenderedAssetsToPublicDirectory(scopedTargets = null, manifest = null) {
-    const candidates = await collectRawRenderedAssetSyncCandidates(scopedTargets);
+    let candidates = await collectRawRenderedAssetSyncCandidates(scopedTargets);
+    if (isRegenPublish) {
+        candidates = candidates.filter(candidate => !isCoLocatedStructureOutput(candidate.outputPath));
+    }
     if (candidates.length === 0) {
         return;
     }
@@ -4119,6 +4126,16 @@ async function syncRawRenderedAssetsToPublicDirectory(scopedTargets = null, mani
         + ` concurrency ${publishConcurrency}, ${elapsedSeconds}s)${
             isPublishVerbose() ? '' : '; pass --verbose for per-file logs'}`,
     );
+}
+
+function isCoLocatedStructureOutput(outputPath) {
+    const assetId = normalizeId(basename(dirname(outputPath)));
+    const fileName = basename(outputPath).toLowerCase();
+    if (!assetId || !fileName.startsWith(`${assetId}.`)) {
+        return false;
+    }
+
+    return /(?:^|\.)(?:destroyed\.)?(?:preview|texture|icon\.default|icon\.rendered)\.(?:png|webp)$/i.test(fileName);
 }
 
 async function readPublishedAssetUrlAsWebp(directory, sourceUrl) {
@@ -7793,6 +7810,7 @@ async function coLocateFallbackStructureAssets(
         generatedIconsDirectory: generatedDirectory,
         rawMapIconsDirectory,
         publicAssetsDirectory: publicFoxholeAssetsDirectory,
+        authoredOverridesDirectory: assetOverridesDirectory,
         resolveAssetTypeName: resolvePublishedAssetTypeName,
         skipExistingAssets,
         defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
@@ -7947,18 +7965,20 @@ try {
         modificationRenderIndexDocument,
     );
 
-    await removeStaleRootStructureArtifacts(manifestWithSeededSharedModificationIds);
-    await removeStaleStructureArtifactDirectories(manifestWithSeededSharedModificationIds);
-    await removeStructureArtifactsByIds(explicitlyRemovedStructureIds);
-    await removeLegacyTypedLayoutArtifacts(manifestWithSeededSharedModificationIds);
+    if (!metadataOnlyPublish) {
+        await removeStaleRootStructureArtifacts(manifestWithSeededSharedModificationIds);
+        await removeStaleStructureArtifactDirectories(manifestWithSeededSharedModificationIds);
+        await removeStructureArtifactsByIds(explicitlyRemovedStructureIds);
+        await removeLegacyTypedLayoutArtifacts(manifestWithSeededSharedModificationIds);
 
-    await syncRawRenderedAssetsToPublicDirectory(
-        scopedRawRenderedAssetTargets,
-        manifestWithSeededSharedModificationIds,
-    );
-    // OilField has no renderable game mesh. Replace its transparent Blender
-    // artifacts only after raw sync so the synthetic visual remains canonical.
-    await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
+        await syncRawRenderedAssetsToPublicDirectory(
+            scopedRawRenderedAssetTargets,
+            manifestWithSeededSharedModificationIds,
+        );
+        // OilField has no renderable game mesh. Replace its transparent Blender
+        // artifacts only after raw sync so the synthetic visual remains canonical.
+        await generateSyntheticOilfieldAssets(manifestWithSeededSharedModificationIds);
+    }
 
     const structuresWithVisibleRawDestroyedRenders = await collectStructureIdsWithVisibleRawDestroyedRenders();
     const structuresWithRawDestroyedRenders = new Set();
@@ -7991,17 +8011,21 @@ try {
     );
     const manifestWithNormalizedIconUrls = foxholeManifestSchema.parse(normalizePublishedIconAssetUrls(manifestWithRenderUrls));
     const subtypeOverlayIconKeys = collectSubtypeOverlayIconKeys(manifestWithNormalizedIconUrls);
-    const manifestWithCoLocatedFallbackAssets = await coLocateFallbackStructureAssets(
-        manifestWithNormalizedIconUrls,
-        generatedIconsDirectory,
-        attachSourceStructureMetadata(manifestForPublish, sourceManifest.__sourceStructureMetadataById),
-        subtypeOverlayIconKeys,
-        structuresWithDestroyedRenderScenes,
-    );
+    const manifestWithCoLocatedFallbackAssets = metadataOnlyPublish
+        ? manifestWithNormalizedIconUrls
+        : await coLocateFallbackStructureAssets(
+            manifestWithNormalizedIconUrls,
+            generatedIconsDirectory,
+            attachSourceStructureMetadata(manifestForPublish, sourceManifest.__sourceStructureMetadataById),
+            subtypeOverlayIconKeys,
+            structuresWithDestroyedRenderScenes,
+        );
     // Fallback co-location may legitimately replace blank Blender outputs with
     // the default icon. OilField is the exception: its authored synthetic
     // texture and rendered preview must remain distinct from that icon.
-    await generateSyntheticOilfieldAssets(manifestWithCoLocatedFallbackAssets);
+    if (!metadataOnlyPublish) {
+        await generateSyntheticOilfieldAssets(manifestWithCoLocatedFallbackAssets);
+    }
     const manifestWithRestoredSyntheticOilfieldVisuals = restoreSyntheticOilfieldManifestVisuals(
         manifestWithCoLocatedFallbackAssets,
     );
@@ -8011,21 +8035,23 @@ try {
         structureRenderEntries.modificationEntriesByAssetId,
         structureRenderEntries.modificationLayerEntriesByAssetId,
     );
-    const {
-        manifest: manifestAfterHostLocalModDefaultIcons,
-        coLocatedIconKeys: coLocatedSingleUseModDefaultIconKeys,
-    } = await coLocateSingleUseHostLocalModificationDefaultIcons(manifestWithStrippedSlotNoise, {
-        readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
-        writeIconFile: writeFileIfChanged,
-        resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
-    });
-    const {
-        manifest: manifestAfterInheritedModDefaultIcons,
-    } = await inheritParentStructureDefaultIconsForModifications(manifestAfterHostLocalModDefaultIcons, {
-        readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
-        writeIconFile: writeFileIfChanged,
-        resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
-    });
+    const hostLocalModDefaultIconResult = metadataOnlyPublish
+        ? { manifest: manifestWithStrippedSlotNoise, coLocatedIconKeys: new Set() }
+        : await coLocateSingleUseHostLocalModificationDefaultIcons(manifestWithStrippedSlotNoise, {
+            readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
+            writeIconFile: writeFileIfChanged,
+            resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
+        });
+    const manifestAfterHostLocalModDefaultIcons = hostLocalModDefaultIconResult.manifest;
+    const coLocatedSingleUseModDefaultIconKeys = hostLocalModDefaultIconResult.coLocatedIconKeys;
+    const inheritedModDefaultIconResult = metadataOnlyPublish
+        ? { manifest: manifestAfterHostLocalModDefaultIcons }
+        : await inheritParentStructureDefaultIconsForModifications(manifestAfterHostLocalModDefaultIcons, {
+            readIconSource: sourceUrl => readPublishedAssetUrlAsWebp(generatedIconsDirectory, sourceUrl),
+            writeIconFile: writeFileIfChanged,
+            resolvePublicAssetFilePath: getPublicFoxholeAssetFilePath,
+        });
+    const manifestAfterInheritedModDefaultIcons = inheritedModDefaultIconResult.manifest;
     // coLocate/inherit rebuild the manifest via object spread, which drops non-enumerable
     // __sharedModification* source metadata. Reattach before shared default icon sync.
     const manifestWithCoLocatedModDefaultIcons = attachSharedModificationSourceMetadata(
@@ -8035,7 +8061,9 @@ try {
         ),
         manifestWithStrippedSlotNoise.__sharedModificationSourceById,
     );
-    await syncSharedModificationDefaultIconAssets(manifestWithCoLocatedModDefaultIcons);
+    if (!metadataOnlyPublish) {
+        await syncSharedModificationDefaultIconAssets(manifestWithCoLocatedModDefaultIcons);
+    }
     const authoredModificationOverrides = await loadAuthoredSharedModificationOverrides();
     const authoredStructurePreviewDirections = await loadAuthoredStructurePreviewDirections(assetOverridesDirectory);
     const authoredStructureMarkedCargoOverlays = await loadAuthoredStructureMarkedCargoOverlays(assetOverridesDirectory);
@@ -8069,8 +8097,10 @@ try {
         structuresWithVisibleRawDestroyedRenders,
         vehicleDestroyedPublishAllowlist,
     );
-    await removeDestroyedArtifactsWithoutManifestEntry(mergedManifestWithoutUnavailableDestroyedVisuals);
-    await removeStaleRootStructureArtifacts(mergedManifestWithoutUnavailableDestroyedVisuals);
+    if (!metadataOnlyPublish) {
+        await removeDestroyedArtifactsWithoutManifestEntry(mergedManifestWithoutUnavailableDestroyedVisuals);
+        await removeStaleRootStructureArtifacts(mergedManifestWithoutUnavailableDestroyedVisuals);
+    }
     const removedUpgradeStructureIds = getRemovedUpgradeStructureIds(publishedManifestBeforeWrite, mergedManifestWithoutUnavailableDestroyedVisuals);
     const removedPublishedStructureIds = getRemovedStructureIds(publishedManifestBeforeWrite, mergedManifestWithoutUnavailableDestroyedVisuals);
     const removedStructureIds = new Set([
@@ -8083,14 +8113,16 @@ try {
     )));
     await removeStructureArtifactsByIds(removedPublishedStructureIds);
     await removeStructureArtifactsByIds(removedUpgradeStructureIds);
-    await removeOrphanPublishedAssetDirectories(prunedMergedManifest);
+    if (!metadataOnlyPublish) {
+        await removeOrphanPublishedAssetDirectories(prunedMergedManifest);
+    }
     const referencedSharedGeneratedIconKeys = collectReferencedPublishedIconKeys(prunedMergedManifest);
 
-    if (referencedSharedGeneratedIconKeys.size > 0) {
+    if (!metadataOnlyPublish && referencedSharedGeneratedIconKeys.size > 0) {
         await syncPublishedIconsToPublicDirectoryByKey(generatedIconsDirectory, publicIconsDirectory, referencedSharedGeneratedIconKeys);
     }
 
-    const removedCoLocatedAwayIcons = await removePublicIconsByKey(
+    const removedCoLocatedAwayIcons = metadataOnlyPublish ? 0 : await removePublicIconsByKey(
         publicIconsDirectory,
         new Set([...coLocatedSingleUseModDefaultIconKeys].filter(key => !referencedSharedGeneratedIconKeys.has(key))),
         {
@@ -8103,14 +8135,16 @@ try {
         logPublishSummary(`publish-manifest: removed ${removedCoLocatedAwayIcons} icons after co-locating single-use mod defaults`);
     }
 
-    await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
-    await syncCategoryIconAssets(prunedMergedManifest);
-    await removeComposeTimeSubtypeIconsFromPublicDirectory(collectSubtypeOverlayIconKeys(prunedMergedManifest));
+    if (!metadataOnlyPublish) {
+        await removeStaleSharedIconsForCoLocatedStructures(prunedMergedManifest);
+        await syncCategoryIconAssets(prunedMergedManifest);
+        await removeComposeTimeSubtypeIconsFromPublicDirectory(collectSubtypeOverlayIconKeys(prunedMergedManifest));
+    }
 
     // Shared-mod co-location reads blueprint glyphs from /icons/ then rewrites pixels under
     // shared/modifications/. Those source keys drop out of the compacted manifest, so prune
     // any public icon that is no longer referenced (keeps category + multi-use pool icons).
-    const removedUnreferencedIcons = await removeUnreferencedPublicIcons(
+    const removedUnreferencedIcons = metadataOnlyPublish ? 0 : await removeUnreferencedPublicIcons(
         publicIconsDirectory,
         referencedSharedGeneratedIconKeys,
         {
@@ -8123,7 +8157,9 @@ try {
         logPublishSummary(`publish-manifest: removed ${removedUnreferencedIcons} unreferenced icons from public/icons`);
     }
 
-    if (!hasTargetFilters(targetFilter)) {
+    if (metadataOnlyPublish) {
+        // Metadata-only regen never performs a global prune.
+    } else if (!hasTargetFilters(targetFilter)) {
         await removeUnreferencedGeneratedModificationArtifactDirectories(prunedMergedManifest);
     } else {
         await removeUnreferencedGeneratedModificationArtifactDirectories(

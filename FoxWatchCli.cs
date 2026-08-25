@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 public static class FoxWatchCli
 {
@@ -135,6 +137,174 @@ public static class FoxWatchCli
             targetFilter,
             includePoseVariants: parsedArguments.ContainsKey("pose-variants"));
         return 0;
+    }
+
+    public static async Task<int> RunPrepareRegenAsync(string[] args)
+    {
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var verbose = parsedArguments.ContainsKey("verbose");
+        var configuration = FoxWatchCliSupport.BuildConfiguration();
+        using var provider = FoxWatchCliSupport.BuildProvider(
+            configuration,
+            builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
+
+        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("prepare-regen");
+        var configuredOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FoxWatchOptions>>().Value;
+        var manifestGenerator = provider.GetRequiredService<FoxWatchManifestGenerator>();
+        var renderSceneGenerator = provider.GetRequiredService<FoxWatchRenderSceneGenerator>();
+        var targetFilter = FoxWatchTargetFilter.FromArguments(parsedArguments);
+
+        var outputPath = FoxWatchCliSupport.ResolveRequiredPath(
+            logger,
+            parsedArguments.GetValueOrDefault("output") ?? configuredOptions.ManifestOutputPath,
+            "output",
+            "FoxWatch:ManifestOutputPath",
+            "manifest output path");
+        var outputDirectory = FoxWatchCliSupport.ResolveRequiredPath(
+            logger,
+            parsedArguments.GetValueOrDefault("output-dir") ?? configuredOptions.RenderSceneOutputDirectory,
+            "output-dir",
+            "FoxWatch:RenderSceneOutputDirectory",
+            "render bundle output directory");
+        if (outputPath == null || outputDirectory == null)
+        {
+            return 1;
+        }
+
+        var renderAssetOutputDirectory = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("render-asset-output-dir") ?? configuredOptions.RenderAssetOutputDirectory);
+        var baseAssetsUrl = parsedArguments.GetValueOrDefault("base-assets-url") ?? configuredOptions.BaseAssetsUrl ?? FoxWatchWorkspace.DefaultBaseAssetsUrl;
+        var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: true);
+        if (string.IsNullOrWhiteSpace(pakDirectoryPath) || !Directory.Exists(pakDirectoryPath))
+        {
+            return 1;
+        }
+
+        var manifest = manifestGenerator.BuildManifest(
+            baseAssetsUrl,
+            pakDirectoryPath,
+            targetFilter,
+            strictExtraction: parsedArguments.ContainsKey("strict"),
+            rawCacheKey: parsedArguments.GetValueOrDefault("raw-cache-key"));
+        if (manifest.Assets.Count == 0)
+        {
+            logger.LogError("Strict regen extraction produced no requested assets; refusing to write or render outputs.");
+            return 1;
+        }
+
+        var requestedAssetIds = parsedArguments.GetListValues("only")
+            .Select(value => value.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var extractedAssetIds = manifest.Assets
+            .Select(asset => asset.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missingAssetIds = requestedAssetIds
+            .Where(assetId => !extractedAssetIds.Contains(assetId))
+            .OrderBy(assetId => assetId, StringComparer.Ordinal)
+            .ToArray();
+        if (missingAssetIds.Length > 0)
+        {
+            logger.LogError("Strict regen extraction did not resolve requested assets: {MissingAssetIds}", string.Join(", ", missingAssetIds));
+            return 1;
+        }
+
+        await manifestGenerator.WriteAsync(manifest, outputPath, targetFilter);
+        await renderSceneGenerator.GenerateAsync(
+            manifest,
+            outputDirectory,
+            renderAssetOutputDirectory,
+            baseAssetsUrl,
+            pakDirectoryPath,
+            targetFilter,
+            includePoseVariants: parsedArguments.ContainsKey("pose-variants"));
+        var regenPlanPath = parsedArguments.GetValueOrDefault("regen-plan");
+        if (!string.IsNullOrWhiteSpace(regenPlanPath))
+        {
+            await EnrichRegenPlanAsync(
+                FoxWatchWorkspace.ResolvePath(regenPlanPath)!,
+                Path.Combine(outputDirectory, "index.render-scenes.v1.json"),
+                manifest);
+        }
+        logger.LogInformation("Prepared regen manifest and scenes from one hydrated extraction pass for {AssetCount} asset(s)", manifest.Assets.Count);
+        return 0;
+    }
+
+    private static async Task EnrichRegenPlanAsync(string planPath, string sceneIndexPath, FoxWatchManifest manifest)
+    {
+        var plan = JsonNode.Parse(await File.ReadAllTextAsync(planPath))?.AsObject()
+            ?? throw new InvalidDataException($"Invalid regen plan: {planPath}");
+        var sceneIndex = JsonNode.Parse(await File.ReadAllTextAsync(sceneIndexPath))?.AsObject()
+            ?? throw new InvalidDataException($"Invalid render scene index: {sceneIndexPath}");
+        var modesByAsset = plan["modesByAsset"]?.AsObject();
+        var jobs = new JsonArray();
+        var seenJobs = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var sceneNode in sceneIndex["scenes"]?.AsArray() ?? [])
+        {
+            if (sceneNode is not JsonObject scene)
+            {
+                continue;
+            }
+
+            var sceneEntry = scene["outputPath"]?.GetValue<string>();
+            var structureIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (scene["structureId"]?.GetValue<string>() is { Length: > 0 } structureId)
+            {
+                structureIds.Add(structureId);
+            }
+            foreach (var allowedId in scene["allowedStructureIds"]?.AsArray() ?? [])
+            {
+                if (allowedId?.GetValue<string>() is { Length: > 0 } value)
+                {
+                    structureIds.Add(value);
+                }
+            }
+
+            var requestedModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var assetId in structureIds)
+            {
+                if (modesByAsset?[assetId] is not JsonArray assetModes)
+                {
+                    continue;
+                }
+                foreach (var modeNode in assetModes)
+                {
+                    var mode = modeNode?.GetValue<string>();
+                    if (mode is "preview" or "rendered-icon") requestedModes.Add("preview");
+                    if (mode is "component") requestedModes.Add("topdown");
+                }
+            }
+
+            foreach (var renderMode in requestedModes.OrderBy(value => value, StringComparer.Ordinal))
+            {
+                var jobKey = $"{sceneEntry}|default|{renderMode}";
+                if (!seenJobs.Add(jobKey))
+                {
+                    continue;
+                }
+                jobs.Add(new JsonObject
+                {
+                    ["jobKey"] = jobKey,
+                    ["sceneEntry"] = sceneEntry,
+                    ["sceneVariant"] = null,
+                    ["renderMode"] = renderMode,
+                    ["structureIds"] = new JsonArray(structureIds
+                        .OrderBy(value => value, StringComparer.Ordinal)
+                        .Select(value => (JsonNode?)JsonValue.Create(value))
+                        .ToArray()),
+                });
+            }
+        }
+
+        plan["preparedAt"] = DateTimeOffset.UtcNow.ToString("O");
+        plan["preparedManifestAssetCount"] = manifest.Assets.Count;
+        plan["manifestChanges"] = new JsonArray(manifest.Assets
+            .Select(asset => (JsonNode?)new JsonObject { ["assetId"] = asset.Id, ["status"] = "prepared" })
+            .ToArray());
+        plan["jobs"] = jobs;
+
+        var temporaryPath = $"{planPath}.{Environment.ProcessId}.tmp";
+        await File.WriteAllTextAsync(temporaryPath, $"{plan.ToJsonString(new JsonSerializerOptions { WriteIndented = true })}{Environment.NewLine}");
+        File.Move(temporaryPath, planPath, overwrite: true);
     }
 
     public static async Task<int> RunProbeMeshExportAsync(string[] args)

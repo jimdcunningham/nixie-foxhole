@@ -26,6 +26,12 @@ try
 		return;
 	}
 
+	if (args.Length > 0 && string.Equals(args[0], "prepare-regen", StringComparison.OrdinalIgnoreCase))
+	{
+		Environment.ExitCode = await FoxWatchCli.RunPrepareRegenAsync(args[1..]);
+		return;
+	}
+
 	if (args.Length > 0 && string.Equals(args[0], "probe-mesh-export", StringComparison.OrdinalIgnoreCase))
 	{
 		Environment.ExitCode = await FoxWatchCli.RunProbeMeshExportAsync(args[1..]);

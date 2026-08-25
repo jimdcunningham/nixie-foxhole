@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, resolve } from 'node:path';
 import sharp from 'sharp';
 
@@ -11,9 +11,9 @@ export const DEFAULT_WRECKED_SUBTYPE_ICON_URL = '/foxhole/assets/icons/subtypewr
 export const MAX_PUBLISHED_ICON_DIMENSION = 256;
 
 const ICON_SOURCE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
-export const LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS = { lossless: true, quality: 100, effort: 6 };
-export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90, effort: 6 };
-export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100, effort: 6 };
+export const LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS = { lossless: true, quality: 100, effort: 3 };
+export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90, effort: 3 };
+export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100, effort: 3 };
 
 const OUTPUT_FILE_RETRY_DELAYS_MS = [50, 100, 250, 500, 1000, 2000, 4000];
 
@@ -30,17 +30,24 @@ function isRetryableOutputFileError(error) {
 }
 
 async function writeOutputFile(filePath, content) {
+    try {
+        if (Buffer.compare(await readFile(filePath), content) === 0) {
+            return false;
+        }
+    } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+    }
+
+    const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     for (let attempt = 0; ; attempt += 1) {
         try {
-            await writeFile(filePath, content);
-            return;
+            await writeFile(temporaryPath, content);
+            await rename(temporaryPath, filePath);
+            return true;
         } catch (error) {
             if (!isRetryableOutputFileError(error) || attempt >= OUTPUT_FILE_RETRY_DELAYS_MS.length) {
+                await rm(temporaryPath, { force: true }).catch(() => {});
                 throw error;
-            }
-
-            if (attempt >= 2) {
-                await unlink(filePath).catch(() => {});
             }
 
             await new Promise(resolve => setTimeout(resolve, OUTPUT_FILE_RETRY_DELAYS_MS[attempt]));
@@ -145,6 +152,7 @@ export function isAllowedRawSourcePath(filePath, {
     generatedIconsRoot,
     rawMapIconsRoot,
     publicAssetsRoot,
+    authoredOverridesRoot,
 }) {
     const normalizedPath = normalizeFileSystemPath(filePath);
     const normalizedRawRoot = normalizeFileSystemPath(rawRenderedRoot);
@@ -157,6 +165,8 @@ export function isAllowedRawSourcePath(filePath, {
 
     return normalizedPath.startsWith(`${normalizedRawRoot}/`)
         || normalizedPath.startsWith(`${normalizedGeneratedRoot}/`)
+        || (authoredOverridesRoot
+            && normalizedPath.startsWith(`${normalizeFileSystemPath(authoredOverridesRoot)}/`))
         || (rawMapIconsRoot
             && normalizedPath.startsWith(`${normalizeFileSystemPath(rawMapIconsRoot)}/`));
 }
@@ -626,6 +636,7 @@ export async function resolveRawIconSource({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory,
     resolveAssetTypeName,
 }) {
     const assetTypeName = resolveAssetTypeName(structureId);
@@ -635,6 +646,7 @@ export async function resolveRawIconSource({
         generatedIconsRoot: generatedIconsDirectory,
         rawMapIconsRoot: rawMapIconsDirectory,
         publicAssetsRoot: publicAssetsDirectory,
+        authoredOverridesRoot: authoredOverridesDirectory,
     };
     const preferGeneratedDefaultIcon = assetKind === 'icon.default'
         && structurePrefersGeneratedDefaultIcon(structure, sourceStructure);
@@ -645,6 +657,14 @@ export async function resolveRawIconSource({
         assetTypeName,
         rawRenderedAssetTypesDirectory,
     );
+    if (assetKind === 'icon.default' && authoredOverridesDirectory) {
+        for (const extension of ICON_SOURCE_EXTENSIONS) {
+            const overridePath = resolve(authoredOverridesDirectory, structureId, `icon.default${extension}`);
+            if (await pathExists(overridePath)) {
+                return readRawSourceFile(overridePath, roots);
+            }
+        }
+    }
     if (assetKind === 'icon.default' && !preferGeneratedDefaultIcon) {
         for (const blueprintUrl of getBlueprintIconUrlCandidates(structure, sourceStructure, assetKind)) {
             const referencedIconPath = await resolveReferencedIconFilePath(
@@ -762,6 +782,7 @@ export async function resolveRawVisualCopySource({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory,
     resolveAssetTypeName,
 }) {
     const rawCopy = await resolveRawCopySource({
@@ -788,6 +809,7 @@ export async function resolveRawVisualCopySource({
         generatedIconsDirectory,
         rawMapIconsDirectory,
         publicAssetsDirectory,
+        authoredOverridesDirectory,
         resolveAssetTypeName,
     });
     if (!iconDefaultSource?.content) {
@@ -868,10 +890,10 @@ export async function writeCoLocatedIcon({
         composed = true;
     }
 
-    await writeOutputFile(outputPath, outputContent);
+    const wrote = await writeOutputFile(outputPath, outputContent);
     return {
         outputPath,
-        wrote: true,
+        wrote,
         composed,
         sourceFilePath: rawSource.sourceFilePath,
     };
@@ -931,10 +953,10 @@ export async function writeCoLocatedCopy({
         outputContent = await sharp(rawSource.content).webp(webpOptions).toBuffer();
     }
 
-    await writeOutputFile(outputPath, outputContent);
+    const wrote = await writeOutputFile(outputPath, outputContent);
     return {
         outputPath,
-        wrote: true,
+        wrote,
         composed,
         sourceFilePath: rawSource.sourceFilePath,
     };
@@ -951,6 +973,7 @@ export async function publishStructureIconAsset({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory,
     resolveAssetTypeName,
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
@@ -976,6 +999,7 @@ export async function publishStructureIconAsset({
             generatedIconsDirectory,
             rawMapIconsDirectory,
             publicAssetsDirectory,
+            authoredOverridesDirectory,
             resolveAssetTypeName,
         });
         const fallbackSubtypeOverlayUrl = resolveSubtypeOverlayUrlForIconFallback({
@@ -1014,6 +1038,7 @@ export async function publishStructureIconAsset({
         generatedIconsDirectory,
         rawMapIconsDirectory,
         publicAssetsDirectory,
+        authoredOverridesDirectory,
         resolveAssetTypeName,
     });
 
@@ -1048,6 +1073,7 @@ export async function publishStructureIconsForAsset({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory,
     resolveAssetTypeName,
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
@@ -1069,7 +1095,8 @@ export async function publishStructureIconsForAsset({
         ? [...LIVING_ICON_KINDS, ...DESTROYED_ICON_KINDS]
         : [...LIVING_ICON_KINDS];
 
-    const publishedEntries = await Promise.all(assetKinds.map(async assetKind => {
+    const publishedEntries = [];
+    for (const assetKind of assetKinds) {
         const publishedAsset = await publishStructureIconAsset({
             structureId,
             assetKind,
@@ -1081,13 +1108,13 @@ export async function publishStructureIconsForAsset({
             generatedIconsDirectory,
             rawMapIconsDirectory,
             publicAssetsDirectory,
+            authoredOverridesDirectory,
             resolveAssetTypeName,
             skipExistingAssets,
             defaultWreckedSubtypeUrl,
         });
-
-        return publishedAsset ? [assetKind, publishedAsset] : null;
-    }));
+        publishedEntries.push(publishedAsset ? [assetKind, publishedAsset] : null);
+    }
 
     for (const entry of publishedEntries) {
         if (entry) {
@@ -1110,6 +1137,7 @@ async function publishStructureManifestAsset({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory,
     resolveAssetTypeName,
     skipExistingAssets,
     defaultWreckedSubtypeUrl,
@@ -1130,6 +1158,7 @@ async function publishStructureManifestAsset({
         generatedIconsDirectory,
         rawMapIconsDirectory,
         publicAssetsDirectory,
+        authoredOverridesDirectory,
         resolveAssetTypeName,
         skipExistingAssets,
         defaultWreckedSubtypeUrl,
@@ -1215,6 +1244,7 @@ export async function publishStructureIconsForManifest({
     generatedIconsDirectory,
     rawMapIconsDirectory,
     publicAssetsDirectory,
+    authoredOverridesDirectory = null,
     resolveAssetTypeName,
     skipExistingAssets = false,
     defaultWreckedSubtypeUrl = DEFAULT_WRECKED_SUBTYPE_ICON_URL,
@@ -1254,6 +1284,7 @@ export async function publishStructureIconsForManifest({
                 generatedIconsDirectory,
                 rawMapIconsDirectory,
                 publicAssetsDirectory,
+                authoredOverridesDirectory,
                 resolveAssetTypeName,
                 skipExistingAssets,
                 defaultWreckedSubtypeUrl,

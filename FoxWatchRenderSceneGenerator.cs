@@ -123,6 +123,20 @@ public sealed class FoxWatchRenderSceneGenerator
 
     public async Task GenerateAsync(string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default)
     {
+        var manifest = _manifestGenerator.BuildManifest(baseAssetsUrl, pakDirectoryPath, targetFilter);
+        await GenerateAsync(
+            manifest,
+            outputDirectory,
+            renderAssetOutputDirectory,
+            baseAssetsUrl,
+            pakDirectoryPath,
+            targetFilter,
+            includePoseVariants,
+            cancellationToken);
+    }
+
+    public async Task GenerateAsync(FoxWatchManifest manifest, string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default)
+    {
         targetFilter ??= FoxWatchTargetFilter.Empty;
         _sharedModificationHashDiagnostics.Clear();
         var diagnosticsRunId = CreateSharedModificationHashDiagnosticsRunId();
@@ -131,12 +145,11 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = true,
+            WriteIndented = false,
         };
 
         try
         {
-            var manifest = _manifestGenerator.BuildManifest(baseAssetsUrl, pakDirectoryPath, targetFilter);
             Directory.CreateDirectory(outputDirectory);
             if (!string.IsNullOrWhiteSpace(renderAssetOutputDirectory))
             {
@@ -197,8 +210,11 @@ public sealed class FoxWatchRenderSceneGenerator
                     Directory.CreateDirectory(fileDirectory);
                 }
 
-                var json = JsonSerializer.Serialize(sceneDocument.Document, serializerOptions);
-                await File.WriteAllTextAsync(filePath, $"{json}{Environment.NewLine}", cancellationToken);
+                var json = $"{JsonSerializer.Serialize(sceneDocument.Document, serializerOptions)}{Environment.NewLine}";
+                if (!File.Exists(filePath) || !string.Equals(await File.ReadAllTextAsync(filePath, cancellationToken), json, StringComparison.Ordinal))
+                {
+                    await File.WriteAllTextAsync(filePath, json, cancellationToken);
+                }
 
                 var outputPath = sceneDocument.RelativeScenePath.Replace(Path.DirectorySeparatorChar, '/');
                 if (indexEntriesByOutputPath.TryGetValue(outputPath, out var existingEntry))

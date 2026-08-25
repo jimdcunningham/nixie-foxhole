@@ -6,7 +6,21 @@ import path from 'node:path';
 import process from 'node:process';
 import sharp from 'sharp';
 
+import {
+    createBlenderSceneBatches,
+    resolveBlenderBatchSceneLimit,
+} from './scripts/blender-batches.mjs';
 import { configurePublishLogging, logPublishDetail } from './scripts/publish-log.mjs';
+import {
+    acquireRegenLock,
+    buildInputSnapshot,
+    computeBuildProvenance,
+    createRegenPaths,
+    createRegenPlan,
+    readJson,
+    shouldBuildFoxWatch,
+    writeJsonAtomic,
+} from './scripts/regen-core.mjs';
 
 const [, , command, ...commandArgs] = process.argv;
 const rawArgs = commandArgs.filter(arg => arg !== '--');
@@ -30,12 +44,18 @@ const publicRoot = path.join(foxholePlannerRoot, 'public');
 const publishedManifestPath = path.join(foxholePlannerRoot, 'public', 'foxhole', 'assets', 'manifest.v1.json');
 const rawFoxWatchManifestPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-manifest.v1.json');
 const blueprintTargetIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-blueprint-target-index.v1.json');
+const modificationRenderIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'modification-render-index.v1.json');
 const blenderExecutable = process.env.BLENDER_PATH || 'blender';
 const publishManifestScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'scripts', 'publish-manifest.mjs');
 const publishPlannerCompatScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'scripts', 'publish-planner-compat.mjs');
 const runnerScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'run-foxwatch.mjs');
 const inheritNpmConfigArguments = Boolean(process.env.npm_lifecycle_event);
 const defaultIconOverrideExtensions = ['.webp', '.png', '.jpg', '.jpeg'];
+const regenStageMapPath = path.join(repoRoot, 'tools', 'foxwatch', 'regen-stages.v1.json');
+const defaultPakDirectoryCandidates = [
+    'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
+    'C:\\Program Files\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
+];
 
 const args = [...rawArgs];
 appendNpmConfigArgument(args, 'category');
@@ -53,6 +73,11 @@ appendNpmConfigArgument(args, 'mod');
 
 const parsedFoxwatchArgs = parseCliArgs(args);
 configurePublishLogging({ verbose: hasCliFlag(parsedFoxwatchArgs, 'verbose') });
+
+if (command === 'regen') {
+    await runRegen(parsedFoxwatchArgs);
+    process.exit(0);
+}
 
 if (command === 'publish-manifest') {
     const parsedArgs = parseCliArgs(args);
@@ -109,12 +134,16 @@ if (command === 'refresh') {
     await runNpm(['run', 'build:foxwatch']);
     await run('dotnet', [dllPath, 'generate-manifest', ...refreshExecution.foxwatchArgs]);
     await run('dotnet', [dllPath, 'generate-render-scenes', ...refreshExecution.foxwatchArgs]);
-    await run(blenderExecutable, buildBlenderArgs(args, {
-        purgeExistingByDefault: true,
-        onlyIds: refreshExecution.onlyIds
-            ? [...new Set([...refreshExecution.onlyIds, 'packaged-pallets'])]
-            : refreshExecution.onlyIds,
-    }));
+    if (refreshExecution.onlyIds === null && !hasCliFlag(parsedArgs, 'limit')) {
+        await runDeepRefreshBlenderBatches(args);
+    } else {
+        await run(blenderExecutable, buildBlenderArgs(args, {
+            purgeExistingByDefault: true,
+            onlyIds: refreshExecution.onlyIds
+                ? [...new Set([...refreshExecution.onlyIds, 'packaged-pallets'])]
+                : refreshExecution.onlyIds,
+        }));
+    }
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...refreshExecution.publishArgs]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
@@ -205,6 +234,13 @@ function run(executable, commandArgs) {
             cwd: repoRoot,
             stdio: 'inherit',
             shell: false,
+            env: executable === 'node' && commandArgs.includes(publishManifestScriptPath)
+                ? {
+                    ...process.env,
+                    UV_THREADPOOL_SIZE: process.env.FOXWATCH_UV_THREADPOOL_SIZE ?? '4',
+                    FOXWATCH_SHARP_CONCURRENCY: process.env.FOXWATCH_SHARP_CONCURRENCY ?? '2',
+                }
+                : process.env,
         });
 
         child.on('error', reject);
@@ -225,6 +261,164 @@ function runNpm(commandArgs) {
     }
 
     return run('cmd.exe', ['/d', '/s', '/c', 'npm', ...commandArgs]);
+}
+
+async function runRegen(parsedArgs) {
+    if (getNormalizedValues(parsedArgs, 'only').length > 0 || hasCliFlag(parsedArgs, 'deep')) {
+        throw new Error('regen detects its targets automatically and does not accept --only or --deep. Use refresh for explicit targets.');
+    }
+
+    const timings = {};
+    const paths = createRegenPaths(repoRoot);
+    const releaseLock = await acquireRegenLock(paths.lockPath);
+    const startedAt = performance.now();
+    try {
+        const pakPath = resolveRegenPakDirectory(parsedArgs);
+        const priorObserved = await readJson(paths.observedPath);
+        const snapshotStartedAt = performance.now();
+        const snapshot = await buildInputSnapshot(repoRoot, regenStageMapPath, {
+            pakDirectory: pakPath,
+            priorSnapshot: priorObserved,
+        });
+        timings.inventoryMs = Math.round(performance.now() - snapshotStartedAt);
+        const previous = await readJson(paths.successfulPath);
+        await writeJsonAtomic(paths.observedPath, snapshot);
+
+        const publishedManifest = await readPublishedManifest();
+        if (!publishedManifest) {
+            throw new Error('regen requires the current published manifest. Run refresh --deep once to establish the catalog.');
+        }
+        const dependencyIndex = await readJson(modificationRenderIndexPath);
+        const plan = createRegenPlan(previous, snapshot, publishedManifest, dependencyIndex);
+        const runDirectory = path.join(paths.runRoot, plan.runId);
+        const planPath = path.join(runDirectory, 'regen-plan.v1.json');
+        await writeJsonAtomic(planPath, plan);
+
+        if (plan.baseline) {
+            await writeJsonAtomic(paths.successfulPath, snapshot);
+            timings.totalMs = Math.round(performance.now() - startedAt);
+            await writeJsonAtomic(path.join(runDirectory, 'regen-result.v1.json'), {
+                schemaVersion: 1,
+                runId: plan.runId,
+                status: 'baseline-seeded',
+                timings,
+            });
+            console.log(`FoxWatch regen baseline created in ${formatElapsed(timings.totalMs)}. Edit an authored input, then run regen again.`);
+            return;
+        }
+
+        if (plan.changedPaths.length === 0) {
+            timings.totalMs = Math.round(performance.now() - startedAt);
+            console.log(`FoxWatch regen is already current (${formatElapsed(timings.totalMs)}; no build, extraction, render, encode, or public write).`);
+            return;
+        }
+
+        if (plan.affectedAssetIds.length === 0) {
+            throw new Error(`FoxWatch inputs changed, but no published assets could be mapped: ${plan.changedPaths.join(', ')}`);
+        }
+
+        console.log(`FoxWatch regen ${plan.runId}: ${plan.affectedAssetIds.length} asset(s), ${plan.changedPaths.length} changed input(s).`);
+        for (const reason of plan.reasons) console.log(`  ${reason.kind}: ${reason.path}`);
+
+        const buildProvenance = await computeBuildProvenance(repoRoot);
+        const needsBuild = await shouldBuildFoxWatch(paths.buildPath, dllPath, buildProvenance);
+        if (needsBuild) {
+            const buildStartedAt = performance.now();
+            await runNpm(['run', 'build:foxwatch']);
+            timings.buildMs = Math.round(performance.now() - buildStartedAt);
+            await writeJsonAtomic(paths.buildPath, { ...buildProvenance, builtAt: new Date().toISOString() });
+        } else {
+            timings.buildMs = 0;
+            console.log('FoxWatch DLL provenance matches; skipping dotnet build.');
+        }
+
+        const foxwatchArgs = await buildFoxWatchArgsFromParsedArgs(parsedArgs, {
+            onlyIds: plan.affectedAssetIds,
+            categoryIds: [],
+        });
+        const rawCacheKey = createHash('sha256')
+            .update(JSON.stringify({
+                extract: snapshot.stageFingerprints.extract,
+                assets: plan.affectedAssetIds,
+            }))
+            .digest('hex');
+        const prepareStartedAt = performance.now();
+        if (plan.requiresHydration) {
+            await run('dotnet', [dllPath, 'prepare-regen', ...foxwatchArgs, '--regen-plan', planPath, '--raw-cache-key', rawCacheKey, '--strict']);
+        } else {
+            console.log('FoxWatch extraction and hydration inputs are unchanged; reusing the existing manifest and scene index.');
+        }
+        timings.prepareMs = Math.round(performance.now() - prepareStartedAt);
+
+        const previewIds = plan.affectedAssetIds.filter(id => plan.modesByAsset[id]?.some(mode => mode === 'preview' || mode === 'rendered-icon'));
+        const topdownIds = plan.affectedAssetIds.filter(id => plan.modesByAsset[id]?.some(mode => mode === 'component'));
+        const blenderStartedAt = performance.now();
+        if (previewIds.length > 0) {
+            await run(blenderExecutable, buildBlenderArgs(args, {
+                purgeExistingByDefault: false,
+                onlyIds: previewIds,
+                modes: ['preview'],
+                resultJournalPath: path.join(runDirectory, 'blender-results.preview.v1.json'),
+            }));
+        }
+        if (topdownIds.length > 0) {
+            await run(blenderExecutable, buildBlenderArgs(args, {
+                purgeExistingByDefault: false,
+                onlyIds: topdownIds,
+                modes: ['topdown'],
+                resultJournalPath: path.join(runDirectory, 'blender-results.topdown.v1.json'),
+            }));
+        }
+        timings.blenderMs = Math.round(performance.now() - blenderStartedAt);
+
+        const publishStartedAt = performance.now();
+        const publishArgs = await buildPublishArgsFromParsedArgs(parsedArgs, {
+            onlyIds: plan.affectedAssetIds,
+            categoryIds: [],
+        });
+        if (!plan.requiresImagePublish && !plan.dirtyStages.includes('publish')) {
+            publishArgs.push('--metadata-only');
+        }
+        await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...publishArgs, '--regen-plan', planPath]);
+        await publishPlannerCompat();
+        timings.publishMs = Math.round(performance.now() - publishStartedAt);
+
+        await writeJsonAtomic(paths.successfulPath, snapshot);
+        timings.totalMs = Math.round(performance.now() - startedAt);
+        await writeJsonAtomic(path.join(runDirectory, 'regen-result.v1.json'), {
+            schemaVersion: 1,
+            runId: plan.runId,
+            status: 'complete',
+            timings,
+            jobs: { preview: previewIds.length, topdown: topdownIds.length },
+        });
+        console.log(`FoxWatch regen completed in ${formatElapsed(timings.totalMs)} (${plan.affectedAssetIds.length} asset(s)).`);
+    } finally {
+        await releaseLock();
+    }
+}
+
+function resolveRegenPakDirectory(parsedArgs) {
+    const candidates = [
+        (parsedArgs['pak-path'] ?? []).at(-1),
+        process.env.FoxWatch__PakDirectoryPath,
+        process.env.FOXWATCH_PAK_PATH,
+        ...defaultPakDirectoryCandidates,
+    ];
+    for (const candidate of candidates) {
+        if (!candidate) {
+            continue;
+        }
+        const resolved = path.resolve(repoRoot, candidate);
+        if (nativeFs.existsSync(resolved)) {
+            return resolved;
+        }
+    }
+    return null;
+}
+
+function formatElapsed(milliseconds) {
+    return milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
 }
 
 function normalizeAssetId(value) {
@@ -643,6 +837,8 @@ function buildBlenderArgs(rawArgs, options = {}) {
     const outputArgs = [
         renderTemplatePath,
         '--background',
+        '--python-exit-code',
+        '1',
         '--python',
         blenderRenderScriptPath,
         '--',
@@ -657,6 +853,7 @@ function buildBlenderArgs(rawArgs, options = {}) {
     ];
 
     appendRepeatedArgs(outputArgs, 'only', options.onlyIds ?? getNormalizedValues(parsedArgs, 'only'));
+    appendRepeatedArgs(outputArgs, 'scene-entry', options.sceneEntries ?? []);
 
     for (const optionName of ['limit', 'public-root', 'foxwatch-output-root', 'pixels-per-meter', 'preview-size', 'icon-size']) {
         const values = parsedArgs[optionName] ?? [];
@@ -665,8 +862,10 @@ function buildBlenderArgs(rawArgs, options = {}) {
         }
     }
 
-    for (const optionName of ['mode', 'scene-variant']) {
-        appendRepeatedArgs(outputArgs, optionName, getNormalizedValues(parsedArgs, optionName));
+    appendRepeatedArgs(outputArgs, 'mode', options.modes ?? getNormalizedValues(parsedArgs, 'mode'));
+    appendRepeatedArgs(outputArgs, 'scene-variant', getNormalizedValues(parsedArgs, 'scene-variant'));
+    if (options.resultJournalPath) {
+        outputArgs.push('--result-journal', options.resultJournalPath);
     }
 
     const flagOptions = new Set();
@@ -689,6 +888,32 @@ function buildBlenderArgs(rawArgs, options = {}) {
     }
 
     return outputArgs;
+}
+
+async function runDeepRefreshBlenderBatches(rawArgs) {
+    const indexDocument = await readJson(renderScenesIndexPath);
+    const maxScenes = resolveBlenderBatchSceneLimit(process.env.FOXWATCH_BLENDER_BATCH_SCENES);
+    const batches = createBlenderSceneBatches(indexDocument, { maxScenes });
+    if (batches.length === 0) {
+        throw new Error('Deep refresh render index contains no scene entries');
+    }
+
+    const sceneCount = batches.reduce((total, batch) => total + batch.sceneEntries.length, 0);
+    console.log(
+        `Deep refresh: rendering ${sceneCount} scene document(s) in ${batches.length} sequential Blender process(es) `
+        + `(up to ${maxScenes} scenes per process; dependency groups stay together)`,
+    );
+
+    for (const [batchIndex, batch] of batches.entries()) {
+        console.log(
+            `Blender batch ${batchIndex + 1}/${batches.length}: ${batch.sceneEntries.length} scene document(s), `
+            + `${batch.dependencyGroups.length} dependency group(s)`,
+        );
+        await run(blenderExecutable, buildBlenderArgs(rawArgs, {
+            purgeExistingByDefault: true,
+            sceneEntries: batch.sceneEntries,
+        }));
+    }
 }
 
 async function buildPublishArgs(rawArgs) {
@@ -989,6 +1214,8 @@ function buildPoseEditorArgs(rawArgs, structureId) {
     const parsedArgs = parseCliArgs(rawArgs);
     const outputArgs = [
         renderTemplatePath,
+        '--python-exit-code',
+        '1',
         '--python',
         blenderPoseEditorScriptPath,
         '--',

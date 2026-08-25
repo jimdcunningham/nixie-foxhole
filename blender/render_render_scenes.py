@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tempfile
+from typing import Optional
 
 import bpy
 from mathutils import Vector
@@ -166,6 +167,7 @@ def parse_args():
     parser.add_argument("--render-data-root", default=None)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--only", action="append", default=[])
+    parser.add_argument("--scene-entry", action="append", default=[])
     parser.add_argument("--scene-variant", action="append", default=[])
     parser.add_argument("--mode", action="append", choices=["topdown", "preview", "icon", "flat"], default=[])
     parser.add_argument("--pixels-per-meter", type=float, default=PIXELS_PER_METER)
@@ -174,7 +176,78 @@ def parse_args():
     parser.add_argument("--debug-bounds", action="store_true")
     parser.add_argument("--purge-existing", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--result-journal", default=None, help="Write a machine-readable result journal")
     return parser.parse_args(raw_args)
+
+
+def file_sha256(file_path: str) -> str:
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def image_dimensions(image_path: str) -> tuple[int, int]:
+    image = bpy.data.images.load(image_path, check_existing=False)
+    try:
+        return int(image.size[0]), int(image.size[1])
+    finally:
+        bpy.data.images.remove(image)
+
+
+def process_memory_bytes() -> dict[str, int]:
+    if os.name != "nt":
+        try:
+            import resource
+            return {"rss": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024, "private": 0}
+        except Exception:
+            return {"rss": 0, "private": 0}
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+                ("PrivateUsage", ctypes.c_size_t),
+            ]
+
+        counters = PROCESS_MEMORY_COUNTERS_EX()
+        counters.cb = ctypes.sizeof(counters)
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb)
+        return {"rss": int(counters.WorkingSetSize), "private": int(counters.PrivateUsage)}
+    except Exception:
+        return {"rss": 0, "private": 0}
+
+
+def write_result_journal(file_path: Optional[str], outputs: list[dict], rendered_count: int) -> None:
+    if not file_path:
+        return
+    resolved_path = os.path.abspath(file_path)
+    ensure_directory(os.path.dirname(resolved_path))
+    document = {
+        "schemaVersion": 1,
+        "status": "complete",
+        "renderedStructures": rendered_count,
+        "memory": process_memory_bytes(),
+        "outputs": outputs,
+    }
+    temporary_path = f"{resolved_path}.{os.getpid()}.tmp"
+    with open(temporary_path, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2)
+        handle.write("\n")
+    os.replace(temporary_path, resolved_path)
 
 
 def alpha_margins_from_image_path(image_path: str, alpha_threshold: float = 0.04):
@@ -1155,42 +1228,60 @@ def generate_pencil_fallback_from_icon(icon_path: str, fallback_path: str) -> bo
         bpy.data.images.remove(image)
 
 
-def autocenter_ortho_camera_from_render(camera_object, output_path: str, resolution_x: int, resolution_y: int, tolerance_px: float = 1.5, max_iterations: int = 3):
-    last_margins = None
-
-    for _ in range(max_iterations):
+def autocenter_ortho_camera_from_render(camera_object, output_path: str, resolution_x: int, resolution_y: int, tolerance_px: float = 1.5):
+    scene = bpy.context.scene
+    probe_width = min(128, resolution_x)
+    probe_height = max(1, round(probe_width * float(resolution_y) / max(float(resolution_x), 1.0)))
+    probe_file = tempfile.NamedTemporaryFile(suffix=".center-probe.png", delete=False)
+    probe_path = probe_file.name
+    probe_file.close()
+    try:
+        scene.render.resolution_x = probe_width
+        scene.render.resolution_y = probe_height
+        scene.render.filepath = probe_path
         bpy.ops.render.render(write_still=True)
-        margins = alpha_margins_from_image_path(output_path)
-        last_margins = margins
-        if margins is None:
-            break
+        margins = alpha_margins_from_image_path(probe_path)
+        if margins is not None:
+            delta_x = margins["left"] - margins["right"]
+            delta_y = margins["top"] - margins["bottom"]
+            scaled_tolerance = tolerance_px * (float(probe_width) / max(float(resolution_x), 1.0))
+            if abs(delta_x) > scaled_tolerance or abs(delta_y) > scaled_tolerance:
+                aspect_ratio = max(float(probe_width) / max(float(probe_height), 1.0), 0.01)
+                view_height = float(camera_object.data.ortho_scale)
+                view_width = view_height * aspect_ratio
+                shift_local_x = (delta_x * 0.5) * (view_width / float(probe_width))
+                shift_local_y = (delta_y * 0.5) * (view_height / float(probe_height))
+                world_offset = camera_object.matrix_world.to_quaternion() @ Vector((shift_local_x, shift_local_y, 0.0))
+                camera_object.location += world_offset
+    finally:
+        if os.path.exists(probe_path):
+            os.remove(probe_path)
 
-        delta_x = margins["left"] - margins["right"]
-        delta_y = margins["top"] - margins["bottom"]
-        if abs(delta_x) <= tolerance_px and abs(delta_y) <= tolerance_px:
-            break
-
-        aspect_ratio = max(float(resolution_x) / max(float(resolution_y), 1.0), 0.01)
-        view_height = float(camera_object.data.ortho_scale)
-        view_width = view_height * aspect_ratio
-        shift_local_x = (delta_x * 0.5) * (view_width / float(resolution_x))
-        shift_local_y = (delta_y * 0.5) * (view_height / float(resolution_y))
-        world_offset = camera_object.matrix_world.to_quaternion() @ Vector((shift_local_x, shift_local_y, 0.0))
-        camera_object.location += world_offset
-
-    return last_margins
+    scene.render.resolution_x = resolution_x
+    scene.render.resolution_y = resolution_y
+    scene.render.filepath = output_path
+    bpy.ops.render.render(write_still=True)
+    return alpha_margins_from_image_path(output_path)
 
 
 def normalize_allowed_id(value):
     return str(value or "").strip().lower()
 
 
-def should_render(entry, allowed_ids):
-    if not allowed_ids:
-        return True
+def normalize_scene_entry(value):
+    return str(value or "").replace("\\", "/").strip().lower()
 
-    entry_ids = [entry.get("structureId"), *(entry.get("allowedStructureIds") or [])]
-    return any(normalize_allowed_id(value) in allowed_ids for value in entry_ids)
+
+def should_render(entry, allowed_ids, allowed_scene_entries):
+    if allowed_scene_entries and normalize_scene_entry(entry.get("outputPath")) not in allowed_scene_entries:
+        return False
+
+    if allowed_ids:
+        entry_ids = [entry.get("structureId"), *(entry.get("allowedStructureIds") or [])]
+        if not any(normalize_allowed_id(value) in allowed_ids for value in entry_ids):
+            return False
+
+    return True
 
 
 def normalize_asset_type_name(raw_asset_type: str | None) -> str:
@@ -1352,9 +1443,12 @@ def main():
     modes = args.mode or ["topdown", "preview"]
     rendered = 0
     pending_component_wall_miters = []
+    result_outputs = [] if args.result_journal else None
+    allowed_ids = {normalize_allowed_id(value) for value in args.only}
+    allowed_scene_entries = {normalize_scene_entry(value) for value in args.scene_entry}
     for entry in index_document.get("scenes", []):
         structure_id = entry["structureId"]
-        if not should_render(entry, {normalize_allowed_id(value) for value in args.only}):
+        if not should_render(entry, allowed_ids, allowed_scene_entries):
             continue
 
         scene_path = os.path.join(index_directory, entry["outputPath"])
@@ -1492,6 +1586,22 @@ def main():
                         output_key,
                         render_state["mode"],
                     ))
+                    if result_outputs is not None:
+                        result_outputs.append({
+                            "path": os.path.abspath(output_path),
+                            "structureId": structure_id,
+                            "sceneEntry": entry.get("outputPath"),
+                            "sceneVariant": scene_variant,
+                            "renderMode": render_state["mode"],
+                            "fingerprint": hashlib.sha256(
+                                json.dumps({
+                                    "scene": scene_document,
+                                    "sceneVariant": scene_variant,
+                                    "renderMode": render_state["mode"],
+                                    "previewVariant": preview_variant,
+                                }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                            ).hexdigest(),
+                        })
                     if args.verbose:
                         print(
                             f"Rendered {structure_id}"
@@ -1521,6 +1631,21 @@ def main():
     # could not yet see their perpendicular wall partners.
     for output_path, structure_id, output_key, mode in pending_component_wall_miters:
         apply_component_wall_miter_mask(output_path, structure_id, output_key, mode)
+
+    if result_outputs is not None:
+        for result in result_outputs:
+            output_path = result["path"]
+            width, height = image_dimensions(output_path)
+            margins = alpha_margins_from_image_path(output_path)
+            result.update({
+                "width": width,
+                "height": height,
+                "visible": margins is not None,
+                "contentHash": file_sha256(output_path),
+                "status": "written",
+            })
+
+        write_result_journal(args.result_journal, result_outputs, rendered)
 
     print(f"render_render_scenes: rendered {rendered} structure(s) to {args.output_dir}")
 

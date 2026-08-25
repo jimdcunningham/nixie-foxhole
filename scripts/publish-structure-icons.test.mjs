@@ -196,9 +196,9 @@ test('structureHasResolvableDestroyedRenderScene requires destroyed scene for ve
 });
 
 test('resolvePublishedIconWebpOptions uses lossy settings for rendered icons', () => {
-    assert.deepEqual(resolvePublishedIconWebpOptions('icon.rendered'), { quality: 90, effort: 6 });
+    assert.deepEqual(resolvePublishedIconWebpOptions('icon.rendered'), { quality: 90, effort: 3 });
     assert.equal(resolvePublishedIconWebpOptions('icon.default').lossless, true);
-    assert.deepEqual(resolvePublishedIconWebpOptions('preview'), { quality: 90, alphaQuality: 100, effort: 6 });
+    assert.deepEqual(resolvePublishedIconWebpOptions('preview'), { quality: 90, alphaQuality: 100, effort: 3 });
 });
 
 test('resolveRawVisualCopySource falls back to icon.default for blank preview', async () => {
