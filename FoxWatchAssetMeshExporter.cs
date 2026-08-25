@@ -47,78 +47,197 @@ public sealed class FoxWatchAssetMeshExporter
         EMeshFormat.UEFormat,
     ];
     private const EGame EngineVersion = EGame.GAME_UE4_24;
+    private const string InspectionSnapshotEnvironmentVariableName = "FOXWATCH_DECODED_INSPECTION_SNAPSHOT";
 
     private readonly ILogger<FoxWatchAssetMeshExporter> _logger;
     private readonly string? _pakDirectoryPath;
+    private readonly string? _inspectionSnapshotPath;
     private DefaultFileProvider? _fileProvider;
     private DefaultFileProvider FileProvider => EnsureMounted();
     private readonly Dictionary<string, IReadOnlyList<FoxWatchBlueprintComponentReference>> _blueprintComponentReferencesByPackagePath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FoxWatchBlueprintComponentReference?> _pickupMeshFallbackByItemComponentClassPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<FoxWatchModificationVariantReference>> _modificationVariantsByPackagePathAndTier = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _meshTypeByPackagePath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, double?> _meshLengthCentimetersByPackagePathAndAxis = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, FoxWatchAnimationPoseSample> _animationPoseSamplesByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _exportedMaterialSidecarKeys = new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<string> _mountedPackagePaths = [];
+    private IReadOnlyDictionary<string, string> _mountedPackagePathByNormalizedPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, IReadOnlyList<string>> _mountedPackagePathsByFileName = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, IReadOnlyList<string>> _mountedPackagePathsByDirectory = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<string>> _packageSearchCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _packagePrefixCache = new(StringComparer.Ordinal);
     private bool _mounted;
+
+    public int ModificationVariantCacheHits { get; private set; }
+
+    public int ModificationVariantCacheMisses { get; private set; }
+
+    public int BlueprintComponentCacheHits { get; private set; }
+
+    public int BlueprintComponentCacheMisses { get; private set; }
+
+    public TimeSpan BlueprintComponentInspectionElapsed { get; private set; }
+
+    public int MeshAxisLengthCacheHits { get; private set; }
+
+    public int MeshAxisLengthCacheMisses { get; private set; }
+
+    public TimeSpan MeshAxisLengthInspectionElapsed { get; private set; }
 
     public FoxWatchAssetMeshExporter(ILogger<FoxWatchAssetMeshExporter> logger, IOptions<FoxWatchOptions> options)
     {
         _logger = logger;
         _pakDirectoryPath = FoxWatchWorkspace.ResolvePakDirectoryPath(options.Value.PakDirectoryPath);
+        _inspectionSnapshotPath = FoxWatchWorkspace.ResolvePath(Environment.GetEnvironmentVariable(InspectionSnapshotEnvironmentVariableName));
+        TryLoadInspectionSnapshot();
+    }
+
+    public async Task WriteInspectionSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_inspectionSnapshotPath))
+        {
+            return;
+        }
+
+        EnsurePackageIndex();
+        var snapshot = new FoxWatchPackageInspectionSnapshot
+        {
+            PakFingerprint = Environment.GetEnvironmentVariable("FOXWATCH_DECODED_PACKAGE_PAK_FINGERPRINT") ?? string.Empty,
+            PackagePaths = _mountedPackagePaths.ToList(),
+            BlueprintComponents = _blueprintComponentReferencesByPackagePath.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.ToList(),
+                StringComparer.OrdinalIgnoreCase),
+            ModificationVariants = _modificationVariantsByPackagePathAndTier.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.ToList(),
+                StringComparer.OrdinalIgnoreCase),
+            MeshAxisLengths = new Dictionary<string, double?>(_meshLengthCentimetersByPackagePathAndAxis, StringComparer.OrdinalIgnoreCase),
+            AnimationPoseSamples = new Dictionary<string, FoxWatchAnimationPoseSample>(_animationPoseSamplesByKey, StringComparer.OrdinalIgnoreCase),
+        };
+
+        var snapshotDirectory = Path.GetDirectoryName(_inspectionSnapshotPath);
+        if (!string.IsNullOrWhiteSpace(snapshotDirectory))
+        {
+            Directory.CreateDirectory(snapshotDirectory);
+        }
+
+        var temporaryPath = $"{_inspectionSnapshotPath}.{Environment.ProcessId}.tmp";
+        try
+        {
+            await using (var stream = File.Create(temporaryPath))
+            {
+                await System.Text.Json.JsonSerializer.SerializeAsync(
+                    stream,
+                    snapshot,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true },
+                    cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+            File.Move(temporaryPath, _inspectionSnapshotPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+
+        _logger.LogInformation(
+            "Wrote decoded package inspection snapshot with {PackageCount} packages, {BlueprintCount} blueprints, {ModificationCount} modification sets, {MeshLengthCount} mesh lengths, and {PoseCount} poses to {SnapshotPath}",
+            snapshot.PackagePaths.Count,
+            snapshot.BlueprintComponents.Count,
+            snapshot.ModificationVariants.Count,
+            snapshot.MeshAxisLengths.Count,
+            snapshot.AnimationPoseSamples.Count,
+            _inspectionSnapshotPath);
     }
 
     public IReadOnlyList<string> FindMeshPackages(string query, int limit = 20)
     {
-        return EnsureMounted().Files
-            .Where(entry => entry.Value.IsUePackage)
-            .Select(entry => entry.Key)
+        EnsurePackageIndex();
+        var cacheKey = $"mesh\0{query}\0{limit}";
+        if (_packageSearchCache.TryGetValue(cacheKey, out var cachedPaths))
+        {
+            return cachedPaths;
+        }
+
+        var paths = _mountedPackagePaths
             .Where(path => path.StartsWith("War/Content/Meshes/", StringComparison.Ordinal))
             .Where(path => path.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => path, StringComparer.Ordinal)
             .Take(limit)
             .ToList();
+        _packageSearchCache[cacheKey] = paths;
+        return paths;
     }
 
     public IReadOnlyList<string> FindPackages(string query, int limit = 20, string? pathPrefix = null)
     {
-        return EnsureMounted().Files
-            .Where(entry => entry.Value.IsUePackage)
-            .Select(entry => entry.Key)
+        EnsurePackageIndex();
+        var cacheKey = $"all\0{query}\0{limit}\0{pathPrefix}";
+        if (_packageSearchCache.TryGetValue(cacheKey, out var cachedPaths))
+        {
+            return cachedPaths;
+        }
+
+        var paths = _mountedPackagePaths
             .Where(path => string.IsNullOrWhiteSpace(pathPrefix) || path.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase))
             .Where(path => path.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => path, StringComparer.Ordinal)
             .Take(limit)
             .ToList();
+        _packageSearchCache[cacheKey] = paths;
+        return paths;
     }
 
     public IReadOnlyList<string> ListPackagesByPrefixes(params string[] pathPrefixes)
     {
-        EnsureMounted();
+        EnsurePackageIndex();
 
         var normalizedPrefixes = pathPrefixes
             .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
             .Select(prefix => prefix.Replace('\\', '/').Trim())
             .ToArray();
 
-        return FileProvider.Files
-            .Where(entry => entry.Value.IsUePackage)
-            .Select(entry => entry.Key)
-            .Where(path => normalizedPrefixes.Length == 0 || normalizedPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToList();
+        var cacheKey = string.Join('\0', normalizedPrefixes.OrderBy(prefix => prefix, StringComparer.OrdinalIgnoreCase));
+        if (_packagePrefixCache.TryGetValue(cacheKey, out var cachedPaths))
+        {
+            return cachedPaths;
+        }
+
+        var paths = normalizedPrefixes.Length == 0
+            ? _mountedPackagePaths
+            : _mountedPackagePathsByDirectory
+                .Where(entry => normalizedPrefixes.Any(prefix =>
+                    entry.Key.StartsWith(prefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
+                    || prefix.StartsWith($"{entry.Key}/", StringComparison.OrdinalIgnoreCase)))
+                .SelectMany(entry => entry.Value)
+                .Where(path => normalizedPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+        _packagePrefixCache[cacheKey] = paths;
+        return paths;
     }
 
     public Task<IReadOnlyList<FoxWatchBlueprintComponentReference>> InspectBlueprintComponentsAsync(string assetPath, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        EnsureMounted();
+        EnsurePackageIndex();
 
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve blueprint package '{assetPath}' from mounted Foxhole pak files.");
 
         if (_blueprintComponentReferencesByPackagePath.TryGetValue(packagePath, out var cachedReferences))
         {
+            BlueprintComponentCacheHits++;
             return Task.FromResult(cachedReferences);
         }
 
+        BlueprintComponentCacheMisses++;
+        EnsureMounted();
+        var inspectionStopwatch = Stopwatch.StartNew();
         _logger.LogInformation("Loading blueprint package {PackagePath}", packagePath);
         var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
@@ -171,6 +290,7 @@ public sealed class FoxWatchAssetMeshExporter
         _logger.LogInformation("Blueprint package {PackagePath} resolved {ComponentCount} component templates", packagePath, references.Count);
         var resolvedReferences = references.AsReadOnly();
         _blueprintComponentReferencesByPackagePath[packagePath] = resolvedReferences;
+        BlueprintComponentInspectionElapsed += inspectionStopwatch.Elapsed;
         return Task.FromResult<IReadOnlyList<FoxWatchBlueprintComponentReference>>(resolvedReferences);
     }
 
@@ -271,10 +391,20 @@ public sealed class FoxWatchAssetMeshExporter
     public Task<IReadOnlyList<FoxWatchModificationVariantReference>> InspectModificationVariantsAsync(string assetPath, CancellationToken cancellationToken = default, int? preferredTier = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        EnsureMounted();
+        EnsurePackageIndex();
 
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve modification data package '{assetPath}' from mounted Foxhole pak files.");
+
+        var cacheKey = $"{packagePath}\0{preferredTier?.ToString(CultureInfo.InvariantCulture) ?? "default"}";
+        if (_modificationVariantsByPackagePathAndTier.TryGetValue(cacheKey, out var cachedVariants))
+        {
+            ModificationVariantCacheHits++;
+            return Task.FromResult(cachedVariants);
+        }
+
+        ModificationVariantCacheMisses++;
+        EnsureMounted();
 
         _logger.LogInformation("Loading modification data package {PackagePath}", packagePath);
         var package = FileProvider.LoadPackage(packagePath);
@@ -289,7 +419,9 @@ public sealed class FoxWatchAssetMeshExporter
         if (modificationsToken == null)
         {
             _logger.LogWarning("Modification data package {PackagePath} did not expose a Modifications array", packagePath);
-            return Task.FromResult<IReadOnlyList<FoxWatchModificationVariantReference>>([]);
+            IReadOnlyList<FoxWatchModificationVariantReference> emptyVariants = [];
+            _modificationVariantsByPackagePathAndTier[cacheKey] = emptyVariants;
+            return Task.FromResult(emptyVariants);
         }
 
         var variants = new List<FoxWatchModificationVariantReference>();
@@ -322,6 +454,7 @@ public sealed class FoxWatchAssetMeshExporter
         }
 
         _logger.LogInformation("Modification data package {PackagePath} resolved {VariantCount} modification variants", packagePath, variants.Count);
+        _modificationVariantsByPackagePathAndTier[cacheKey] = variants;
         return Task.FromResult<IReadOnlyList<FoxWatchModificationVariantReference>>(variants);
     }
 
@@ -381,7 +514,11 @@ public sealed class FoxWatchAssetMeshExporter
         return int.TryParse(digits, out numericTier) && numericTier == preferredTier;
     }
 
-    public Task<FoxWatchMeshExportResult> ExportMeshAsync(string assetPath, string outputDirectory, CancellationToken cancellationToken = default)
+    public Task<FoxWatchMeshExportResult> ExportMeshAsync(
+        string assetPath,
+        string outputDirectory,
+        CancellationToken cancellationToken = default,
+        bool exportReferencedMaterials = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureMounted();
@@ -414,21 +551,25 @@ public sealed class FoxWatchAssetMeshExporter
         if (staticMeshExport != null)
         {
             LogSelectedExport(packagePath, staticMeshExport, exports);
-            return Task.FromResult(ExportStaticMesh(packagePath, staticMeshExport.Name, staticMeshExport, outputDirectory));
+            return Task.FromResult(ExportStaticMesh(packagePath, staticMeshExport.Name, staticMeshExport, outputDirectory, exportReferencedMaterials));
         }
 
         var skeletalMeshExport = SelectPreferredExport(exports.OfType<USkeletalMesh>().ToArray(), preferredObjectName);
         if (skeletalMeshExport != null)
         {
             LogSelectedExport(packagePath, skeletalMeshExport, exports);
-            return Task.FromResult(ExportSkeletalMesh(packagePath, skeletalMeshExport.Name, skeletalMeshExport, outputDirectory));
+            return Task.FromResult(ExportSkeletalMesh(packagePath, skeletalMeshExport.Name, skeletalMeshExport, outputDirectory, exportReferencedMaterials));
         }
 
         var exportSummary = string.Join(", ", exports.Select(export => $"{export.ExportType}:{export.Name}").Take(20));
         throw new InvalidOperationException($"Package '{packagePath}' did not contain a UStaticMesh or USkeletalMesh export. Exports: {exportSummary}");
     }
 
-    public Task ExportMaterialAsync(string assetPath, string outputDirectory, CancellationToken cancellationToken = default)
+    public Task<FoxWatchMaterialExportResult> ExportMaterialAsync(
+        string assetPath,
+        string outputDirectory,
+        bool exportReferencedTextures = true,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureMounted();
@@ -442,7 +583,80 @@ public sealed class FoxWatchAssetMeshExporter
             throw new InvalidOperationException($"Package '{packagePath}' does not contain a material export.");
         }
 
-        ExportMaterials(materials, outputDirectory, EMeshFormat.Gltf2.ToString());
+        if (exportReferencedTextures)
+        {
+            ExportMaterials(materials, outputDirectory, EMeshFormat.Gltf2.ToString());
+            return Task.FromResult(new FoxWatchMaterialExportResult());
+        }
+
+        var result = new FoxWatchMaterialExportResult();
+        var exportOptions = CreateExporterOptions(EMeshFormat.Gltf2);
+        foreach (var material in materials)
+        {
+            var parameters = new CMaterialParams2();
+            material.GetParams(parameters, exportOptions.MaterialFormat);
+            var materialData = new MaterialData
+            {
+                Textures = parameters.Textures.ToDictionary(
+                    entry => entry.Key,
+                    entry => entry.Value.GetPathName(),
+                    StringComparer.Ordinal),
+                Parameters = parameters,
+            };
+            var sidecarPath = BuildMaterialSidecarPath(outputDirectory, material);
+            var sidecarDirectory = Path.GetDirectoryName(sidecarPath);
+            if (!string.IsNullOrWhiteSpace(sidecarDirectory))
+            {
+                Directory.CreateDirectory(sidecarDirectory);
+            }
+            File.WriteAllText(sidecarPath, JsonConvert.SerializeObject(materialData, Formatting.Indented));
+
+            result.ReferencedTexturePackagePaths.AddRange(parameters.Textures.Values
+                .OfType<UTexture2D>()
+                .Select(GetTexturePackagePath));
+        }
+        result.ReferencedTexturePackagePaths = result.ReferencedTexturePackagePaths
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task ExportTextureAsync(string assetPath, string outputDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureMounted();
+
+        var packagePath = ResolvePackagePath(assetPath)
+            ?? throw new FileNotFoundException($"Could not resolve texture package '{assetPath}' from mounted Foxhole pak files.");
+        var package = FileProvider.LoadPackage(packagePath);
+        var textures = package.GetExports().OfType<UTexture2D>().ToArray();
+        if (textures.Length == 0)
+        {
+            throw new InvalidOperationException($"Package '{packagePath}' does not contain a texture export.");
+        }
+
+        var exportOptions = CreateExporterOptions(EMeshFormat.Gltf2);
+        foreach (var texture in textures)
+        {
+            var decodedTexture = texture.Decode(exportOptions.Platform);
+            if (decodedTexture == null)
+            {
+                continue;
+            }
+            var imageBytes = decodedTexture.Encode(
+                exportOptions.TextureFormat,
+                exportOptions.ExportHdrTexturesAsHdr,
+                out var extension);
+            var outputPath = BuildOutputPath(outputDirectory, GetTextureInternalPath(texture), extension);
+            var outputPathDirectory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrWhiteSpace(outputPathDirectory))
+            {
+                Directory.CreateDirectory(outputPathDirectory);
+            }
+            File.WriteAllBytes(outputPath, imageBytes);
+        }
         return Task.CompletedTask;
     }
 
@@ -500,10 +714,18 @@ public sealed class FoxWatchAssetMeshExporter
     public Task<FoxWatchAnimationPoseSample> SampleAnimationPoseAsync(string assetPath, string? referenceMeshAssetPath = null, int frameIndex = 0, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        EnsureMounted();
+        EnsurePackageIndex();
 
         var packagePath = ResolvePackagePath(assetPath)
             ?? throw new FileNotFoundException($"Could not resolve animation package '{assetPath}' from mounted Foxhole pak files.");
+
+        var cacheKey = $"{packagePath}\0{frameIndex.ToString(CultureInfo.InvariantCulture)}";
+        if (_animationPoseSamplesByKey.TryGetValue(cacheKey, out var cachedSample))
+        {
+            return Task.FromResult(cachedSample);
+        }
+
+        EnsureMounted();
 
         var package = FileProvider.LoadPackage(packagePath);
         var exports = package.GetExports().ToArray();
@@ -554,13 +776,15 @@ public sealed class FoxWatchAssetMeshExporter
             });
         }
 
-        return Task.FromResult(new FoxWatchAnimationPoseSample
+        var sample = new FoxWatchAnimationPoseSample
         {
             AssetPath = packagePath,
             FrameIndex = clampedFrameIndex,
             BoneCount = bones.Count,
             Bones = bones,
-        });
+        };
+        _animationPoseSamplesByKey[cacheKey] = sample;
+        return Task.FromResult(sample);
     }
 
     private static FVector NormalizeSerializedRelativeBoneScale(FVector relativeScale, FVector originalScale, FVector? referenceScale)
@@ -767,7 +991,12 @@ public sealed class FoxWatchAssetMeshExporter
         return Task.FromResult<IReadOnlyList<string>>(writtenFiles);
     }
 
-    private FoxWatchMeshExportResult ExportStaticMesh(string packagePath, string objectName, UStaticMesh mesh, string outputDirectory)
+    private FoxWatchMeshExportResult ExportStaticMesh(
+        string packagePath,
+        string objectName,
+        UStaticMesh mesh,
+        string outputDirectory,
+        bool exportReferencedMaterials)
     {
         var geometryStopwatch = Stopwatch.StartNew();
         var result = ExportWithFallbacks(
@@ -779,19 +1008,16 @@ public sealed class FoxWatchAssetMeshExporter
             format => new MeshExporter(mesh, CreateExporterOptions(format)));
         _logger.LogInformation("Mesh geometry export for {PackagePath} completed in {ElapsedMs} ms", packagePath, geometryStopwatch.ElapsedMilliseconds);
 
-        var materialStopwatch = Stopwatch.StartNew();
-        var materialExportStats = ExportReferencedMaterials(mesh.Materials, outputDirectory, result.MeshFormat);
-        _logger.LogInformation(
-            "Extra material export for {PackagePath} completed in {ElapsedMs} ms ({ExportedCount} exported, {CachedCount} cached, {ExistingCount} existing)",
-            packagePath,
-            materialStopwatch.ElapsedMilliseconds,
-            materialExportStats.ExportedCount,
-            materialExportStats.CachedCount,
-            materialExportStats.ExistingCount);
+        PopulateReferencedMaterials(result, mesh.Materials, outputDirectory, exportReferencedMaterials);
         return result;
     }
 
-    private FoxWatchMeshExportResult ExportSkeletalMesh(string packagePath, string objectName, USkeletalMesh mesh, string outputDirectory)
+    private FoxWatchMeshExportResult ExportSkeletalMesh(
+        string packagePath,
+        string objectName,
+        USkeletalMesh mesh,
+        string outputDirectory,
+        bool exportReferencedMaterials)
     {
         var geometryStopwatch = Stopwatch.StartNew();
         var result = ExportWithFallbacks(
@@ -803,16 +1029,40 @@ public sealed class FoxWatchAssetMeshExporter
             format => new MeshExporter(mesh, CreateExporterOptions(format)));
         _logger.LogInformation("Mesh geometry export for {PackagePath} completed in {ElapsedMs} ms", packagePath, geometryStopwatch.ElapsedMilliseconds);
 
+        PopulateReferencedMaterials(result, mesh.Materials, outputDirectory, exportReferencedMaterials);
+        return result;
+    }
+
+    private void PopulateReferencedMaterials(
+        FoxWatchMeshExportResult result,
+        IEnumerable<ResolvedObject?> materialReferences,
+        string outputDirectory,
+        bool exportReferencedMaterials)
+    {
+        var materials = materialReferences
+            .Select(materialReference => materialReference?.Load<UMaterialInterface>())
+            .OfType<UMaterialInterface>()
+            .ToArray();
+        result.ReferencedMaterialPackagePaths = materials
+            .Select(GetMaterialInternalPath)
+            .Where(packagePath => !string.IsNullOrWhiteSpace(packagePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(packagePath => packagePath, StringComparer.Ordinal)
+            .ToList();
+        if (!exportReferencedMaterials)
+        {
+            return;
+        }
+
         var materialStopwatch = Stopwatch.StartNew();
-        var materialExportStats = ExportReferencedMaterials(mesh.Materials, outputDirectory, result.MeshFormat);
+        var materialExportStats = ExportMaterials(materials, outputDirectory, result.MeshFormat);
         _logger.LogInformation(
             "Extra material export for {PackagePath} completed in {ElapsedMs} ms ({ExportedCount} exported, {CachedCount} cached, {ExistingCount} existing)",
-            packagePath,
+            result.AssetPath,
             materialStopwatch.ElapsedMilliseconds,
             materialExportStats.ExportedCount,
             materialExportStats.CachedCount,
             materialExportStats.ExistingCount);
-        return result;
     }
 
     private FoxWatchMeshExportResult ExportWithFallbacks(string packagePath, string objectName, string outputDirectory, string meshType, Func<string> conversionProbeFactory, Func<EMeshFormat, MeshExporter> exporterFactory)
@@ -1014,6 +1264,12 @@ public sealed class FoxWatchAssetMeshExporter
         return TrimObjectSuffix(texturePath);
     }
 
+    private static string GetTexturePackagePath(UTexture2D texture)
+    {
+        return texture.Owner?.Provider?.FixPath(texture.Owner?.Name ?? texture.GetPathName())
+            ?? texture.GetPathName();
+    }
+
     private static string TrimObjectSuffix(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -1176,23 +1432,89 @@ public sealed class FoxWatchAssetMeshExporter
 
     private string? ResolvePackagePath(string assetPath)
     {
+        EnsurePackageIndex();
         var normalized = assetPath.Replace('\\', '/').Trim();
-        if (FileProvider.Files.ContainsKey(normalized))
+        if (_mountedPackagePathByNormalizedPath.TryGetValue(normalized, out var packagePath))
         {
-            return normalized;
+            return packagePath;
         }
 
         if (!normalized.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase))
         {
             var withExtension = $"{normalized}.uasset";
-            if (FileProvider.Files.ContainsKey(withExtension))
+            if (_mountedPackagePathByNormalizedPath.TryGetValue(withExtension, out packagePath))
             {
-                return withExtension;
+                return packagePath;
             }
         }
 
-        return FileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, normalized, StringComparison.OrdinalIgnoreCase))
-            ?? FileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, $"{normalized}.uasset", StringComparison.OrdinalIgnoreCase));
+        return null;
+    }
+
+    private void EnsurePackageIndex()
+    {
+        if (_mountedPackagePaths.Count > 0)
+        {
+            return;
+        }
+
+        EnsureMounted();
+    }
+
+    private void TryLoadInspectionSnapshot()
+    {
+        if (string.IsNullOrWhiteSpace(_inspectionSnapshotPath) || !File.Exists(_inspectionSnapshotPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = System.Text.Json.JsonSerializer.Deserialize<FoxWatchPackageInspectionSnapshot>(
+                File.ReadAllText(_inspectionSnapshotPath),
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (snapshot?.SchemaVersion != FoxWatchPackageInspectionSnapshot.CurrentSchemaVersion || snapshot.PackagePaths.Count == 0)
+            {
+                _logger.LogWarning("Ignoring incompatible or empty decoded package inspection snapshot {SnapshotPath}", _inspectionSnapshotPath);
+                return;
+            }
+
+            var expectedPakFingerprint = Environment.GetEnvironmentVariable("FOXWATCH_DECODED_PACKAGE_PAK_FINGERPRINT");
+            if (!string.IsNullOrWhiteSpace(expectedPakFingerprint)
+                && !string.Equals(snapshot.PakFingerprint, expectedPakFingerprint, StringComparison.Ordinal))
+            {
+                _logger.LogWarning("Ignoring decoded package inspection snapshot {SnapshotPath} because its PAK fingerprint does not match the active decoded bundle", _inspectionSnapshotPath);
+                return;
+            }
+
+            BuildPackageIndexes(snapshot.PackagePaths, "decoded inspection snapshot");
+            foreach (var entry in snapshot.BlueprintComponents)
+            {
+                _blueprintComponentReferencesByPackagePath[entry.Key] = entry.Value;
+            }
+            foreach (var entry in snapshot.ModificationVariants)
+            {
+                _modificationVariantsByPackagePathAndTier[entry.Key] = entry.Value;
+            }
+            foreach (var entry in snapshot.MeshAxisLengths)
+            {
+                _meshLengthCentimetersByPackagePathAndAxis[entry.Key] = entry.Value;
+            }
+            foreach (var entry in snapshot.AnimationPoseSamples)
+            {
+                _animationPoseSamplesByKey[entry.Key] = entry.Value;
+            }
+
+            _logger.LogInformation(
+                "Loaded decoded package inspection snapshot with {PackageCount} package paths and {InspectionCount} cached inspections from {SnapshotPath}",
+                snapshot.PackagePaths.Count,
+                snapshot.BlueprintComponents.Count + snapshot.ModificationVariants.Count + snapshot.MeshAxisLengths.Count + snapshot.AnimationPoseSamples.Count,
+                _inspectionSnapshotPath);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Ignoring unreadable decoded package inspection snapshot {SnapshotPath}; missing inspections will be rebuilt from the PAK", _inspectionSnapshotPath);
+        }
     }
 
     private static string NormalizeMeshAssetPath(string assetPath)
@@ -1217,16 +1539,47 @@ public sealed class FoxWatchAssetMeshExporter
 
         _fileProvider ??= CreateFileProvider(_pakDirectoryPath);
         _fileProvider.Mount();
+        BuildMountedPackageIndexes(_fileProvider);
         _mounted = true;
         return _fileProvider;
     }
 
+    private void BuildMountedPackageIndexes(DefaultFileProvider fileProvider)
+    {
+        BuildPackageIndexes(
+            fileProvider.Files
+            .Where(entry => entry.Value.IsUePackage)
+            .Select(entry => entry.Key),
+            "mounted PAK");
+    }
+
+    private void BuildPackageIndexes(IEnumerable<string> packagePaths, string sourceLabel)
+    {
+        _mountedPackagePaths = packagePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Replace('\\', '/').Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        _mountedPackagePathByNormalizedPath = _mountedPackagePaths
+            .GroupBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        _mountedPackagePathsByFileName = _mountedPackagePaths
+            .GroupBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        _mountedPackagePathsByDirectory = _mountedPackagePaths
+            .GroupBy(path => (Path.GetDirectoryName(path) ?? string.Empty).Replace('\\', '/'), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        _packageSearchCache.Clear();
+        _packagePrefixCache.Clear();
+        _logger.LogInformation("Indexed {PackageCount} UE package paths from {SourceLabel}", _mountedPackagePaths.Count, sourceLabel);
+    }
+
     private DefaultFileProvider CreateFileProvider(string pakDirectoryPath)
     {
-        var fileProvider = new DefaultFileProvider(
+        var fileProvider = FoxWatchPackageSource.CreateProvider(
             pakDirectoryPath,
-            SearchOption.TopDirectoryOnly,
-            new VersionContainer(EngineVersion),
+            EngineVersion,
             StringComparer.OrdinalIgnoreCase);
         fileProvider.Initialize();
 
@@ -1240,8 +1593,8 @@ public sealed class FoxWatchAssetMeshExporter
         {
             case UStaticMeshComponent staticMeshComponent:
             {
-                var mesh = staticMeshComponent.GetLoadedStaticMesh();
-                if (mesh == null)
+                var meshIndex = staticMeshComponent.GetStaticMesh();
+                if (!TryResolvePackageIndexReference(meshIndex, out var meshName, out var meshPath))
                 {
                     return null;
                 }
@@ -1253,8 +1606,8 @@ public sealed class FoxWatchAssetMeshExporter
                     ComponentType = component.ExportType,
                     DataClassPath = GetReferencedPackagePath(component, "DataClass"),
                     MeshType = "static",
-                    MeshName = mesh.Name,
-                    MeshPath = GetPackagePath(mesh),
+                    MeshName = meshName,
+                    MeshPath = meshPath,
                     AttachParentName = staticMeshComponent.GetAttachParent()?.Name ?? string.Empty,
                     AttachSocketName = GetAttachSocketName(staticMeshComponent),
                     RelativeLocation = staticMeshComponent.GetRelativeLocation().ToString(),
@@ -1277,8 +1630,7 @@ public sealed class FoxWatchAssetMeshExporter
                     return null;
                 }
 
-                var mesh = meshIndex.Load<USkeletalMesh>();
-                if (mesh == null)
+                if (!TryResolvePackageIndexReference(meshIndex, out var meshName, out var meshPath))
                 {
                     return null;
                 }
@@ -1291,8 +1643,8 @@ public sealed class FoxWatchAssetMeshExporter
                     DataClassPath = GetReferencedPackagePath(component, "DataClass"),
                     AnimationClassPath = GetReferencedPackagePath(component, "AnimClass"),
                     MeshType = "skeletal",
-                    MeshName = mesh.Name,
-                    MeshPath = GetPackagePath(mesh),
+                    MeshName = meshName,
+                    MeshPath = meshPath,
                     AttachParentName = skeletalMeshComponent.GetAttachParent()?.Name ?? string.Empty,
                     AttachSocketName = GetAttachSocketName(skeletalMeshComponent),
                     RelativeLocation = skeletalMeshComponent.GetRelativeLocation().ToString(),
@@ -1943,9 +2295,12 @@ public sealed class FoxWatchAssetMeshExporter
         var cacheKey = $"{packagePath}|{normalizedAxis}";
         if (_meshLengthCentimetersByPackagePathAndAxis.TryGetValue(cacheKey, out var cachedLength))
         {
+            MeshAxisLengthCacheHits++;
             return cachedLength;
         }
 
+        MeshAxisLengthCacheMisses++;
+        var inspectionStartedAt = Stopwatch.GetTimestamp();
         try
         {
             EnsureMounted();
@@ -1980,6 +2335,10 @@ public sealed class FoxWatchAssetMeshExporter
             _logger.LogDebug(exception, "Unable to resolve static mesh axis length for {PackagePath}", packagePath);
             _meshLengthCentimetersByPackagePathAndAxis[cacheKey] = null;
             return null;
+        }
+        finally
+        {
+            MeshAxisLengthInspectionElapsed += Stopwatch.GetElapsedTime(inspectionStartedAt);
         }
     }
 
@@ -3261,6 +3620,14 @@ public sealed class FoxWatchAssetMeshExporter
         return export.Owner?.Provider?.FixPath(export.Owner.Name) ?? export.Name;
     }
 
+    private static bool TryResolvePackageIndexReference(FPackageIndex packageIndex, out string objectName, out string packagePath)
+    {
+        var resolvedObject = packageIndex.ResolvedObject;
+        packagePath = ConvertObjectPathToPackagePath(resolvedObject?.GetPathName()) ?? string.Empty;
+        objectName = resolvedObject?.Name.Text ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(objectName) && !string.IsNullOrWhiteSpace(packagePath);
+    }
+
     private static string GetReferencedPackagePath(UObject export, string propertyName)
     {
         var resolvedObject = export.GetOrDefault<ResolvedObject?>(propertyName);
@@ -3329,6 +3696,25 @@ public sealed class FoxWatchAssetMeshExporter
         }
 
         return char.ToUpperInvariant(variantId[0]) + variantId[1..];
+    }
+
+    private sealed class FoxWatchPackageInspectionSnapshot
+    {
+        public const int CurrentSchemaVersion = 1;
+
+        public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
+        public string PakFingerprint { get; set; } = string.Empty;
+
+        public List<string> PackagePaths { get; set; } = [];
+
+        public Dictionary<string, List<FoxWatchBlueprintComponentReference>> BlueprintComponents { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, List<FoxWatchModificationVariantReference>> ModificationVariants { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, double?> MeshAxisLengths { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, FoxWatchAnimationPoseSample> AnimationPoseSamples { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }
 
@@ -3525,4 +3911,11 @@ public sealed class FoxWatchMeshExportResult
     public string? Label { get; set; }
 
     public string? SavedFilePath { get; set; }
+
+    public List<string> ReferencedMaterialPackagePaths { get; set; } = [];
+}
+
+public sealed class FoxWatchMaterialExportResult
+{
+    public List<string> ReferencedTexturePackagePaths { get; set; } = [];
 }

@@ -19,9 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="tmp\**;layers\**;tools\**;vendor\**" />
-    <Content Remove="tmp\**;layers\**;tools\**;vendor\**" />
-    <EmbeddedResource Remove="tmp\**;layers\**;tools\**;vendor\**" />
-    <None Remove="tmp\**;layers\**;tools\**;vendor\**" />
+    <Compile Remove="tmp\**;layers\**;monitor\**;tools\**;vendor\**" />
+    <Content Remove="tmp\**;layers\**;monitor\**;tools\**;vendor\**" />
+    <EmbeddedResource Remove="tmp\**;layers\**;monitor\**;tools\**;vendor\**" />
+    <None Remove="tmp\**;layers\**;monitor\**;tools\**;vendor\**" />
   </ItemGroup>
 </Project>

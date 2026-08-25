@@ -1,5 +1,6 @@
 namespace FoxWatchService;
 
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -81,6 +82,7 @@ public sealed class FoxWatchManifestGenerator
 
     public FoxWatchManifest BuildManifest(string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool strictExtraction = false, string? rawCacheKey = null)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         if (!string.IsNullOrWhiteSpace(pakDirectoryPath) && Directory.Exists(pakDirectoryPath))
         {
             _logger.LogInformation("Generating FoxWatch manifest from {PakDirectoryPath}", pakDirectoryPath);
@@ -91,6 +93,7 @@ public sealed class FoxWatchManifestGenerator
                 var rawCachePath = ResolveRawManifestCachePath(rawCacheKey);
                 var manifest = TryReadRawManifestCache(rawCachePath);
                 FoxWatchManifestAssetExtractor? extractor = null;
+                var extractionStopwatch = Stopwatch.StartNew();
                 if (manifest == null)
                 {
                     extractor = new FoxWatchManifestAssetExtractor(
@@ -104,18 +107,89 @@ public sealed class FoxWatchManifestGenerator
                 {
                     _logger.LogInformation("Reused cached raw FoxWatch extraction {RawCachePath}", rawCachePath);
                 }
+                extractionStopwatch.Stop();
 
                 manifest.Localizations[0].Strings["foxhole:meta:baseAssetsUrl"] = baseAssetsUrl;
                 _logger.LogInformation("Resolved {StructureCount} structures across {CategoryCount} categories from direct extraction", manifest.Assets.Count, manifest.Categories.Count);
+                var hydrationStopwatch = Stopwatch.StartNew();
                 manifest = _manifestReferenceHydrator.Hydrate(manifest);
+                hydrationStopwatch.Stop();
                 // Hydration can inject/synthetic-merge modification variants after extraction
                 // AssignRenderIds; re-assign so every non-default slot variant has a renderId.
+                var identityStopwatch = Stopwatch.StartNew();
                 FoxWatchModificationRenderIdentity.AssignRenderIds(manifest);
+                identityStopwatch.Stop();
+                var categoryIconStopwatch = Stopwatch.StartNew();
                 var exportedCategoryIconCount = extractor?.ExportCategoryIcons(manifest.Categories, iconOutputDirectory) ?? 0;
+                categoryIconStopwatch.Stop();
                 if (exportedCategoryIconCount > 0)
                 {
                     _logger.LogInformation("Exported {ExportedCategoryIconCount} category icon(s) from pak textures", exportedCategoryIconCount);
                 }
+
+                if (extractor != null)
+                {
+                    var timings = extractor.ExtractionTimings;
+                    _logger.LogInformation(
+                        "Manifest extraction stages: mount/index {MountIndexMs:F0} ms, candidate discovery {CandidateDiscoveryMs:F0} ms, decoded reads {DecodedReadMs:F0} ms, structure interpretation {StructureInterpretationMs:F0} ms, referenced build sites {ReferencedBuildSiteMs:F0} ms, post-processing {PostProcessingMs:F0} ms, localization {LocalizationMs:F0} ms, shared data {SharedDataMs:F0} ms ({CandidatePackageCount} candidate package(s))",
+                        timings.MountAndIndex.TotalMilliseconds,
+                        timings.CandidateDiscovery.TotalMilliseconds,
+                        timings.DecodedReads.TotalMilliseconds,
+                        timings.StructureInterpretation.TotalMilliseconds,
+                        timings.ReferencedBuildSites.TotalMilliseconds,
+                        timings.PostProcessing.TotalMilliseconds,
+                        timings.Localization.TotalMilliseconds,
+                        timings.SharedData.TotalMilliseconds,
+                        timings.CandidatePackageCount);
+                    if (timings.SlowPackages.Count > 0)
+                    {
+                    _logger.LogInformation(
+                        "Slowest manifest packages: {SlowPackages}",
+                            string.Join(
+                                ", ",
+                                timings.SlowPackages.Select(entry => $"{entry.PackagePath} {entry.Elapsed.TotalMilliseconds:F0} ms")));
+                    }
+                    _logger.LogInformation(
+                        "Inherited blueprint properties: {LookupCount} lookup(s) in {LookupMs:F0} ms",
+                        extractor.InheritedPropertyLookupCount,
+                        extractor.InheritedPropertyLookupElapsed.TotalMilliseconds);
+                    _logger.LogInformation(
+                        "Structure extraction phases: core metadata/icons {CoreMs:F0} ms, spatial components {SpatialMs:F0} ms, production/modifications {ProductionMs:F0} ms, combat/render metadata {CombatRenderMs:F0} ms, model assembly {AssemblyMs:F0} ms",
+                        extractor.CoreMetadataExtractionElapsed.TotalMilliseconds,
+                        extractor.SpatialComponentExtractionElapsed.TotalMilliseconds,
+                        extractor.ProductionModificationExtractionElapsed.TotalMilliseconds,
+                        extractor.CombatRenderExtractionElapsed.TotalMilliseconds,
+                        extractor.ModelAssemblyElapsed.TotalMilliseconds);
+                    _logger.LogInformation(
+                        "Spatial extraction detail: sockets {SocketsMs:F0} ms, crane spawns {CraneMs:F0} ms, emplacement {EmplacementMs:F0} ms, rail couplers {RailMs:F0} ms, footprints/volumes {VolumesMs:F0} ms, vehicle seats {SeatsMs:F0} ms, spotlights {SpotlightsMs:F0} ms",
+                        extractor.BuildSocketExtractionElapsed.TotalMilliseconds,
+                        extractor.CraneSpawnExtractionElapsed.TotalMilliseconds,
+                        extractor.EmplacementExtractionElapsed.TotalMilliseconds,
+                        extractor.RailCouplerExtractionElapsed.TotalMilliseconds,
+                        extractor.FootprintVolumeExtractionElapsed.TotalMilliseconds,
+                        extractor.VehicleSeatExtractionElapsed.TotalMilliseconds,
+                        extractor.SpotlightExtractionElapsed.TotalMilliseconds);
+                    _logger.LogInformation(
+                        "Manifest package-summary caches: blueprint components {BlueprintComponentHits} hit(s), {BlueprintComponentMisses} miss(es) in {BlueprintComponentMs:F0} ms; mesh-axis bounds {MeshAxisHits} hit(s), {MeshAxisMisses} miss(es) in {MeshAxisMs:F0} ms; modification data {ModificationDataHits} hit(s), {ModificationDataMisses} miss(es); variant inspection {VariantHits} hit(s), {VariantMisses} miss(es)",
+                        _meshAssetExporter.BlueprintComponentCacheHits,
+                        _meshAssetExporter.BlueprintComponentCacheMisses,
+                        _meshAssetExporter.BlueprintComponentInspectionElapsed.TotalMilliseconds,
+                        _meshAssetExporter.MeshAxisLengthCacheHits,
+                        _meshAssetExporter.MeshAxisLengthCacheMisses,
+                        _meshAssetExporter.MeshAxisLengthInspectionElapsed.TotalMilliseconds,
+                        extractor.ModificationDataCacheHits,
+                        extractor.ModificationDataCacheMisses,
+                        _meshAssetExporter.ModificationVariantCacheHits,
+                        _meshAssetExporter.ModificationVariantCacheMisses);
+                }
+
+                _logger.LogInformation(
+                    "Manifest timings: extraction {ExtractionMs:F0} ms, hydration {HydrationMs:F0} ms, render identities {IdentityMs:F0} ms, category icons {CategoryIconMs:F0} ms, total {TotalMs:F0} ms",
+                    extractionStopwatch.Elapsed.TotalMilliseconds,
+                    hydrationStopwatch.Elapsed.TotalMilliseconds,
+                    identityStopwatch.Elapsed.TotalMilliseconds,
+                    categoryIconStopwatch.Elapsed.TotalMilliseconds,
+                    totalStopwatch.Elapsed.TotalMilliseconds);
 
                 return ApplyTargetFilter(manifest, targetFilter);
             }
@@ -268,7 +342,7 @@ public sealed class FoxWatchManifestGenerator
             "tools",
             "foxwatch",
             "tmp",
-            "regen-cache",
+            "pipeline-cache",
             "v1",
             "raw-manifests",
             $"{rawCacheKey.ToLowerInvariant()}.json"));

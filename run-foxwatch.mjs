@@ -2,31 +2,108 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import nativeFs from 'node:fs';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import sharp from 'sharp';
 
 import {
-    createBlenderSceneBatches,
+    analyzeBlenderSceneIndex,
+    createWeightedBlenderBatches,
+    orderBlenderGroupsByObservedCost,
     resolveBlenderBatchSceneLimit,
+    validateBlenderOutputOwnership,
 } from './scripts/blender-batches.mjs';
+import {
+    canLaunchSecondBlenderWorker,
+    dequeueNextConcurrentBlenderBatch,
+    formatBlenderWorkerLine,
+    mergeBlenderPeakMemory,
+    parseBlenderProgressLine,
+    parseWindowsProcessMemoryLine,
+    resolveRecycledSceneEntries,
+    resolveBlenderWorkerCount,
+    shouldSuppressRoutineBlenderLine,
+    shouldRequestBlenderRecycle,
+} from './scripts/blender-runner.mjs';
+import {
+    computeDeepAssetFingerprint,
+    computeDeepExtractorFingerprint,
+    createDeepExtractionCacheIdentity,
+    createRawManifestCacheKey,
+    deepExtractionCacheMatches,
+    deepExtractionRunMatches,
+    resolveInvalidatedDecodedAssetSections,
+} from './scripts/deep-extraction-cache.mjs';
+import {
+    classifyDecodedAssetFile,
+    createActiveDecodedAssetBundlePointer,
+    createDecodedAssetBundleMetadata,
+    createDecodedAssetBundlePaths,
+} from './scripts/decoded-asset-bundle.mjs';
 import { configurePublishLogging, logPublishDetail } from './scripts/publish-log.mjs';
 import {
-    acquireRegenLock,
-    buildInputSnapshot,
+    buildPakInventory,
     computeBuildProvenance,
-    createRegenPaths,
-    createRegenPlan,
     readJson,
-    shouldBuildFoxWatch,
     writeJsonAtomic,
-} from './scripts/regen-core.mjs';
+} from './scripts/pipeline-core.mjs';
+import { acquireProcessLock } from './scripts/process-lock.mjs';
+import {
+    createManifestSourceBenchmarkReport,
+    resolveManifestBenchmarkIterations,
+} from './scripts/manifest-source-benchmark.mjs';
+import {
+    runSteamMonitorCommand,
+    steamMonitorCommands,
+} from './scripts/steam-monitor.mjs';
 
 const [, , command, ...commandArgs] = process.argv;
 const rawArgs = commandArgs.filter(arg => arg !== '--');
 
-if (!command) {
-    console.error('Usage: node ./tools/foxwatch/run-foxwatch.mjs <foxwatch-command> [...args]');
+const workflowCommands = [
+    'refresh',
+    'refresh-modifications',
+    'publish-manifest',
+    'open-asset-manifest',
+    'open-pose-editor',
+];
+const diagnosticCommands = [
+    'benchmark-manifest-source',
+    'find-assets',
+    'find-mesh-assets',
+    'inspect-blueprint',
+    'compare-animation-reference-pose',
+    'probe-mesh-export',
+    'export-mesh',
+    'export-mesh-dir',
+    'dump-package-files',
+    'dump-matching-packages',
+];
+const internalCommands = [
+    'generate-map-data',
+    'generate-manifest',
+    'extract-ui-assets',
+    'generate-render-scenes',
+    'prepare-refresh',
+    'snapshot-pak',
+    'snapshot-decoded-packages',
+    'export-asset-cache',
+];
+const knownCommands = new Set([
+    ...workflowCommands,
+    ...steamMonitorCommands,
+    ...diagnosticCommands,
+    ...internalCommands,
+]);
+
+if (!command || command === 'help' || command === '--help' || command === '-h') {
+    printCommandHelp();
+    process.exit(command ? 0 : 1);
+}
+if (!knownCommands.has(command)) {
+    console.error(`Unknown FoxWatch command: ${command}`);
+    printCommandHelp();
     process.exit(1);
 }
 
@@ -45,17 +122,39 @@ const publishedManifestPath = path.join(foxholePlannerRoot, 'public', 'foxhole',
 const rawFoxWatchManifestPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-manifest.v1.json');
 const blueprintTargetIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-blueprint-target-index.v1.json');
 const modificationRenderIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'modification-render-index.v1.json');
+const foxholeIconOutputRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxhole-icons');
+const activeDecodedAssetBundlePointerPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundle.active.v1.json');
+const decodedAssetBundleRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundles', 'v1');
+const legacyDeepExtractionCacheStampPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'deep-extraction-cache.v1.json');
+const blenderTimingHistoryPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'blender-timing-history.v1.json');
+const pakSnapshotRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'pak-snapshots', 'v1');
+const decodedPackageSnapshotRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-package-snapshots', 'v3');
 const blenderExecutable = process.env.BLENDER_PATH || 'blender';
 const publishManifestScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'scripts', 'publish-manifest.mjs');
 const publishPlannerCompatScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'scripts', 'publish-planner-compat.mjs');
 const runnerScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'run-foxwatch.mjs');
+const refreshLockPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-refresh.lock.json');
 const inheritNpmConfigArguments = Boolean(process.env.npm_lifecycle_event);
 const defaultIconOverrideExtensions = ['.webp', '.png', '.jpg', '.jpeg'];
-const regenStageMapPath = path.join(repoRoot, 'tools', 'foxwatch', 'regen-stages.v1.json');
 const defaultPakDirectoryCandidates = [
     'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
     'C:\\Program Files\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
 ];
+
+if (steamMonitorCommands.includes(command)) {
+    await runSteamMonitorCommand({
+        command,
+        args: rawArgs,
+        repoRoot,
+        runnerScriptPath,
+    });
+    process.exit(0);
+}
+
+if (['publish-manifest', 'refresh', 'refresh-modifications'].includes(command)) {
+    const releaseRefreshLock = acquireProcessLock(refreshLockPath, 'FoxWatch refresh/publish pipeline');
+    process.on('exit', releaseRefreshLock);
+}
 
 const args = [...rawArgs];
 appendNpmConfigArgument(args, 'category');
@@ -69,13 +168,17 @@ appendNpmConfigArgument(args, 'limit');
 appendNpmConfigArgument(args, 'skip-existing-assets');
 appendNpmConfigArgument(args, 'verbose');
 appendNpmConfigArgument(args, 'publish-concurrency');
+appendNpmConfigArgument(args, 'blender-workers');
 appendNpmConfigArgument(args, 'mod');
+appendNpmConfigArgument(args, 'iterations');
+appendNpmConfigArgument(args, 'snapshot-dir');
+appendNpmConfigArgument(args, 'decoded-snapshot-dir');
 
 const parsedFoxwatchArgs = parseCliArgs(args);
 configurePublishLogging({ verbose: hasCliFlag(parsedFoxwatchArgs, 'verbose') });
 
-if (command === 'regen') {
-    await runRegen(parsedFoxwatchArgs);
+if (command === 'benchmark-manifest-source') {
+    await runManifestSourceBenchmark(parsedFoxwatchArgs);
     process.exit(0);
 }
 
@@ -131,12 +234,77 @@ if (command === 'refresh') {
     const parsedArgs = parseCliArgs(args);
     await resetBlueprintTargetIndexForDeepRefresh(parsedArgs);
     const refreshExecution = await buildRefreshExecution(args);
+    emitFoxWatchProgress({
+        kind: 'pipeline',
+        stage: 'Building FoxWatch',
+        detail: 'Compiling the current FoxWatch pipeline.',
+        overallPercent: 8,
+    });
     await runNpm(['run', 'build:foxwatch']);
-    await run('dotnet', [dllPath, 'generate-manifest', ...refreshExecution.foxwatchArgs]);
-    await run('dotnet', [dllPath, 'generate-render-scenes', ...refreshExecution.foxwatchArgs]);
+    if (hasCliFlag(parsedArgs, 'deep')) {
+        emitFoxWatchProgress({
+            kind: 'pipeline',
+            stage: 'Preparing Game Snapshot',
+            detail: 'Validating the selected Foxhole build and decoded snapshot.',
+            overallPercent: 14,
+        });
+    }
+    const deepExtractionCache = hasCliFlag(parsedArgs, 'deep')
+        ? await prepareDeepExtractionCache(parsedArgs)
+        : null;
+    const assetExportRun = deepExtractionCache
+        ? createDeepAssetExportRun()
+        : null;
+    const prepareRefreshFoxWatchArgs = deepExtractionCache
+        ? replaceCliOption(
+            replaceCliOption(refreshExecution.foxwatchArgs, 'pak-path', deepExtractionCache.pakDirectory),
+            'render-asset-output-dir',
+            deepExtractionCache.assetOutputRoot,
+        )
+        : refreshExecution.foxwatchArgs;
+    const prepareRefreshArgs = [dllPath, 'prepare-refresh', ...prepareRefreshFoxWatchArgs];
+    if (assetExportRun) {
+        prepareRefreshArgs.push('--asset-export-plan', assetExportRun.planPath);
+    }
+    if (deepExtractionCache?.rawManifestCacheKey) {
+        prepareRefreshArgs.push('--raw-cache-key', deepExtractionCache.rawManifestCacheKey, '--strict');
+    }
+    emitFoxWatchProgress({
+        kind: 'pipeline',
+        stage: 'Preparing Manifest',
+        detail: 'Generating the manifest and Blender scene documents.',
+        overallPercent: 25,
+    });
+    await run('dotnet', prepareRefreshArgs, {
+        env: deepExtractionCache
+            ? {
+                ...process.env,
+                FOXWATCH_DECODED_PACKAGE_SNAPSHOT: deepExtractionCache.decodedPackageSnapshotDirectory,
+                FOXWATCH_DECODED_PACKAGE_PAK_FINGERPRINT: deepExtractionCache.identity.pakFingerprint,
+                FOXWATCH_DECODED_INSPECTION_SNAPSHOT: deepExtractionCache.bundlePaths.inspectionPath,
+                FoxWatch__IconOutputDirectory: deepExtractionCache.iconOutputRoot,
+            }
+            : process.env,
+    });
+    if (deepExtractionCache) {
+        emitFoxWatchProgress({
+            kind: 'pipeline',
+            stage: 'Preparing Render Assets',
+            detail: 'Exporting the decoded meshes, materials, textures, and icons needed for rendering.',
+            overallPercent: 40,
+        });
+        await runDeepAssetCacheExport(assetExportRun, deepExtractionCache, parsedArgs);
+        await commitDeepExtractionCache(deepExtractionCache);
+    }
     if (refreshExecution.onlyIds === null && !hasCliFlag(parsedArgs, 'limit')) {
         await runDeepRefreshBlenderBatches(args);
     } else {
+        emitFoxWatchProgress({
+            kind: 'pipeline',
+            stage: 'Rendering',
+            detail: 'Rendering the requested FoxWatch scenes in Blender.',
+            overallPercent: 50,
+        });
         await run(blenderExecutable, buildBlenderArgs(args, {
             purgeExistingByDefault: true,
             onlyIds: refreshExecution.onlyIds
@@ -144,10 +312,22 @@ if (command === 'refresh') {
                 : refreshExecution.onlyIds,
         }));
     }
+    emitFoxWatchProgress({
+        kind: 'pipeline',
+        stage: 'Publishing',
+        detail: 'Publishing generated assets and committing the manifest.',
+        overallPercent: 92,
+    });
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...refreshExecution.publishArgs]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
         skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),
+    });
+    emitFoxWatchProgress({
+        kind: 'pipeline',
+        stage: 'Complete',
+        detail: 'The FoxWatch refresh completed successfully.',
+        overallPercent: 100,
     });
     process.exit(0);
 }
@@ -228,19 +408,42 @@ if (command === 'open-asset-manifest') {
 
 await run('dotnet', [dllPath, command, ...args]);
 
-function run(executable, commandArgs) {
+function printCommandHelp() {
+    console.log('Usage: npm run foxwatch -- <command> [options]');
+    console.log('\nWorkflows:');
+    for (const value of workflowCommands) console.log(`  ${value}`);
+    console.log('\nLocal Steam monitoring:');
+    for (const value of steamMonitorCommands) console.log(`  ${value}`);
+    console.log('\nDiagnostics and export tools:');
+    for (const value of diagnosticCommands) console.log(`  ${value}`);
+    console.log('\nInternal pipeline commands:');
+    for (const value of internalCommands) console.log(`  ${value}`);
+}
+
+function run(executable, commandArgs, options = {}) {
+    if (executable === blenderExecutable && commandArgs.includes(blenderRenderScriptPath)) {
+        const startedAt = performance.now();
+        return runBlenderBatchProcess(commandArgs, {
+            workerNumber: 1,
+            verbose: commandArgs.includes('--verbose'),
+        }).then(() => {
+            console.log(`Blender render completed in ${formatElapsedMilliseconds(performance.now() - startedAt)}.`);
+        });
+    }
+
     return new Promise((resolve, reject) => {
+        const baseEnvironment = options.env ?? process.env;
         const child = spawn(executable, commandArgs, {
             cwd: repoRoot,
             stdio: 'inherit',
             shell: false,
             env: executable === 'node' && commandArgs.includes(publishManifestScriptPath)
                 ? {
-                    ...process.env,
-                    UV_THREADPOOL_SIZE: process.env.FOXWATCH_UV_THREADPOOL_SIZE ?? '4',
-                    FOXWATCH_SHARP_CONCURRENCY: process.env.FOXWATCH_SHARP_CONCURRENCY ?? '2',
+                    ...baseEnvironment,
+                    UV_THREADPOOL_SIZE: baseEnvironment.FOXWATCH_UV_THREADPOOL_SIZE ?? '4',
+                    FOXWATCH_SHARP_CONCURRENCY: baseEnvironment.FOXWATCH_SHARP_CONCURRENCY ?? '2',
                 }
-                : process.env,
+                : baseEnvironment,
         });
 
         child.on('error', reject);
@@ -263,139 +466,194 @@ function runNpm(commandArgs) {
     return run('cmd.exe', ['/d', '/s', '/c', 'npm', ...commandArgs]);
 }
 
-async function runRegen(parsedArgs) {
-    if (getNormalizedValues(parsedArgs, 'only').length > 0 || hasCliFlag(parsedArgs, 'deep')) {
-        throw new Error('regen detects its targets automatically and does not accept --only or --deep. Use refresh for explicit targets.');
+async function runManifestSourceBenchmark(parsedArgs) {
+    const pakDirectory = resolveRegenPakDirectory(parsedArgs);
+    if (!pakDirectory) {
+        throw new Error('Manifest source benchmark requires a readable Foxhole PAK directory.');
     }
 
-    const timings = {};
-    const paths = createRegenPaths(repoRoot);
-    const releaseLock = await acquireRegenLock(paths.lockPath);
-    const startedAt = performance.now();
-    try {
-        const pakPath = resolveRegenPakDirectory(parsedArgs);
-        const priorObserved = await readJson(paths.observedPath);
-        const snapshotStartedAt = performance.now();
-        const snapshot = await buildInputSnapshot(repoRoot, regenStageMapPath, {
-            pakDirectory: pakPath,
-            priorSnapshot: priorObserved,
-        });
-        timings.inventoryMs = Math.round(performance.now() - snapshotStartedAt);
-        const previous = await readJson(paths.successfulPath);
-        await writeJsonAtomic(paths.observedPath, snapshot);
+    const iterations = resolveManifestBenchmarkIterations((parsedArgs.iterations ?? []).at(-1));
+    const pakInventory = await buildPakInventory(pakDirectory);
+    const snapshotDirectory = (parsedArgs['snapshot-dir'] ?? []).at(-1)
+        ? path.resolve(repoRoot, (parsedArgs['snapshot-dir'] ?? []).at(-1))
+        : path.join(pakSnapshotRoot, pakInventory.fingerprint);
+    const decodedSnapshotDirectory = (parsedArgs['decoded-snapshot-dir'] ?? []).at(-1)
+        ? path.resolve(repoRoot, (parsedArgs['decoded-snapshot-dir'] ?? []).at(-1))
+        : path.join(decodedPackageSnapshotRoot, pakInventory.fingerprint);
+    assertSafeGeneratedCacheRoot(snapshotDirectory);
+    assertSafeGeneratedCacheRoot(decodedSnapshotDirectory);
 
-        const publishedManifest = await readPublishedManifest();
-        if (!publishedManifest) {
-            throw new Error('regen requires the current published manifest. Run refresh --deep once to establish the catalog.');
-        }
-        const dependencyIndex = await readJson(modificationRenderIndexPath);
-        const plan = createRegenPlan(previous, snapshot, publishedManifest, dependencyIndex);
-        const runDirectory = path.join(paths.runRoot, plan.runId);
-        const planPath = path.join(runDirectory, 'regen-plan.v1.json');
-        await writeJsonAtomic(planPath, plan);
+    const runId = `${new Date().toISOString().replace(/[:.]/g, '')}-pid${process.pid}`;
+    const runDirectory = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'manifest-source-benchmarks', runId);
+    await fs.mkdir(runDirectory, { recursive: true });
 
-        if (plan.baseline) {
-            await writeJsonAtomic(paths.successfulPath, snapshot);
-            timings.totalMs = Math.round(performance.now() - startedAt);
-            await writeJsonAtomic(path.join(runDirectory, 'regen-result.v1.json'), {
-                schemaVersion: 1,
-                runId: plan.runId,
-                status: 'baseline-seeded',
-                timings,
-            });
-            console.log(`FoxWatch regen baseline created in ${formatElapsed(timings.totalMs)}. Edit an authored input, then run regen again.`);
-            return;
-        }
+    console.log(
+        `Manifest source benchmark: Steam build ${pakInventory.steamBuildId ?? 'unknown'}, `
+        + `${iterations} iteration(s) per source.`,
+    );
+    await runNpm(['run', 'build:foxwatch']);
 
-        if (plan.changedPaths.length === 0) {
-            timings.totalMs = Math.round(performance.now() - startedAt);
-            console.log(`FoxWatch regen is already current (${formatElapsed(timings.totalMs)}; no build, extraction, render, encode, or public write).`);
-            return;
-        }
-
-        if (plan.affectedAssetIds.length === 0) {
-            throw new Error(`FoxWatch inputs changed, but no published assets could be mapped: ${plan.changedPaths.join(', ')}`);
-        }
-
-        console.log(`FoxWatch regen ${plan.runId}: ${plan.affectedAssetIds.length} asset(s), ${plan.changedPaths.length} changed input(s).`);
-        for (const reason of plan.reasons) console.log(`  ${reason.kind}: ${reason.path}`);
-
-        const buildProvenance = await computeBuildProvenance(repoRoot);
-        const needsBuild = await shouldBuildFoxWatch(paths.buildPath, dllPath, buildProvenance);
-        if (needsBuild) {
-            const buildStartedAt = performance.now();
-            await runNpm(['run', 'build:foxwatch']);
-            timings.buildMs = Math.round(performance.now() - buildStartedAt);
-            await writeJsonAtomic(paths.buildPath, { ...buildProvenance, builtAt: new Date().toISOString() });
-        } else {
-            timings.buildMs = 0;
-            console.log('FoxWatch DLL provenance matches; skipping dotnet build.');
-        }
-
-        const foxwatchArgs = await buildFoxWatchArgsFromParsedArgs(parsedArgs, {
-            onlyIds: plan.affectedAssetIds,
-            categoryIds: [],
-        });
-        const rawCacheKey = createHash('sha256')
-            .update(JSON.stringify({
-                extract: snapshot.stageFingerprints.extract,
-                assets: plan.affectedAssetIds,
-            }))
-            .digest('hex');
-        const prepareStartedAt = performance.now();
-        if (plan.requiresHydration) {
-            await run('dotnet', [dllPath, 'prepare-regen', ...foxwatchArgs, '--regen-plan', planPath, '--raw-cache-key', rawCacheKey, '--strict']);
-        } else {
-            console.log('FoxWatch extraction and hydration inputs are unchanged; reusing the existing manifest and scene index.');
-        }
-        timings.prepareMs = Math.round(performance.now() - prepareStartedAt);
-
-        const previewIds = plan.affectedAssetIds.filter(id => plan.modesByAsset[id]?.some(mode => mode === 'preview' || mode === 'rendered-icon'));
-        const topdownIds = plan.affectedAssetIds.filter(id => plan.modesByAsset[id]?.some(mode => mode === 'component'));
-        const blenderStartedAt = performance.now();
-        if (previewIds.length > 0) {
-            await run(blenderExecutable, buildBlenderArgs(args, {
-                purgeExistingByDefault: false,
-                onlyIds: previewIds,
-                modes: ['preview'],
-                resultJournalPath: path.join(runDirectory, 'blender-results.preview.v1.json'),
-            }));
-        }
-        if (topdownIds.length > 0) {
-            await run(blenderExecutable, buildBlenderArgs(args, {
-                purgeExistingByDefault: false,
-                onlyIds: topdownIds,
-                modes: ['topdown'],
-                resultJournalPath: path.join(runDirectory, 'blender-results.topdown.v1.json'),
-            }));
-        }
-        timings.blenderMs = Math.round(performance.now() - blenderStartedAt);
-
-        const publishStartedAt = performance.now();
-        const publishArgs = await buildPublishArgsFromParsedArgs(parsedArgs, {
-            onlyIds: plan.affectedAssetIds,
-            categoryIds: [],
-        });
-        if (!plan.requiresImagePublish && !plan.dirtyStages.includes('publish')) {
-            publishArgs.push('--metadata-only');
-        }
-        await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...publishArgs, '--regen-plan', planPath]);
-        await publishPlannerCompat();
-        timings.publishMs = Math.round(performance.now() - publishStartedAt);
-
-        await writeJsonAtomic(paths.successfulPath, snapshot);
-        timings.totalMs = Math.round(performance.now() - startedAt);
-        await writeJsonAtomic(path.join(runDirectory, 'regen-result.v1.json'), {
-            schemaVersion: 1,
-            runId: plan.runId,
-            status: 'complete',
-            timings,
-            jobs: { preview: previewIds.length, topdown: topdownIds.length },
-        });
-        console.log(`FoxWatch regen completed in ${formatElapsed(timings.totalMs)} (${plan.affectedAssetIds.length} asset(s)).`);
-    } finally {
-        await releaseLock();
+    const snapshotMetadataPath = path.join(snapshotDirectory, 'foxwatch-pak-snapshot.v1.json');
+    const snapshotPreviouslyComplete = await pathExists(snapshotMetadataPath);
+    const snapshotStartedAt = performance.now();
+    await run('dotnet', [
+        dllPath,
+        'snapshot-pak',
+        '--pak-path',
+        pakDirectory,
+        '--output-dir',
+        snapshotDirectory,
+        '--pak-fingerprint',
+        pakInventory.fingerprint,
+    ]);
+    const snapshotBuildMs = performance.now() - snapshotStartedAt;
+    const snapshotMetadata = await readJson(snapshotMetadataPath);
+    if (snapshotMetadata?.complete !== true || snapshotMetadata?.pakFingerprint !== pakInventory.fingerprint) {
+        throw new Error(`Package snapshot did not produce valid complete metadata: ${snapshotMetadataPath}`);
     }
+
+    const decodedMetadataPath = path.join(decodedSnapshotDirectory, 'foxwatch-decoded-packages.v3.json');
+    const decodedSnapshotPreviouslyComplete = await pathExists(decodedMetadataPath);
+    const decodedSnapshotStartedAt = performance.now();
+    await run('dotnet', [
+        dllPath,
+        'snapshot-decoded-packages',
+        '--pak-path',
+        snapshotDirectory,
+        '--output-dir',
+        decodedSnapshotDirectory,
+        '--pak-fingerprint',
+        pakInventory.fingerprint,
+    ]);
+    const decodedSnapshotBuildMs = performance.now() - decodedSnapshotStartedAt;
+    const decodedMetadata = await readJson(decodedMetadataPath);
+    if (decodedMetadata?.complete !== true
+        || decodedMetadata?.schemaVersion !== 3
+        || decodedMetadata?.pakFingerprint !== pakInventory.fingerprint) {
+        throw new Error(`Decoded package snapshot did not produce valid complete metadata: ${decodedMetadataPath}`);
+    }
+
+    const directTimings = [];
+    const snapshotTimings = [];
+    const decodedTimings = [];
+    const decodedDirectTimings = [];
+    const completedOutputs = [];
+    const runTrial = async (sourceKind, iteration) => {
+        const sourceDirectory = sourceKind === 'direct' || sourceKind === 'decoded-direct'
+            ? pakDirectory
+            : snapshotDirectory;
+        const trialRoot = path.join(runDirectory, `${sourceKind}-${iteration + 1}`);
+        const outputPath = path.join(trialRoot, 'manifest.v1.json');
+        const iconOutputDirectory = path.join(trialRoot, 'icons');
+        const assetOutputDirectory = path.join(trialRoot, 'assets');
+        await fs.mkdir(trialRoot, { recursive: true });
+        const environment = {
+            ...process.env,
+            FoxWatch__PakDirectoryPath: sourceDirectory,
+            FoxWatch__IconOutputDirectory: iconOutputDirectory,
+            FoxWatch__RenderAssetOutputDirectory: assetOutputDirectory,
+            ...(sourceKind === 'decoded' || sourceKind === 'decoded-direct'
+                ? {
+                    FOXWATCH_DECODED_PACKAGE_SNAPSHOT: decodedSnapshotDirectory,
+                    ...(sourceKind === 'decoded-direct'
+                        ? { FOXWATCH_DECODED_PACKAGE_PAK_FINGERPRINT: pakInventory.fingerprint }
+                        : {}),
+                }
+                : {}),
+        };
+        console.log(`Manifest benchmark ${sourceKind} ${iteration + 1}/${iterations}: ${sourceDirectory}`);
+        const startedAt = performance.now();
+        await run('dotnet', [
+            dllPath,
+            'generate-manifest',
+            '--pak-path',
+            sourceDirectory,
+            '--output',
+            outputPath,
+            '--base-assets-url',
+            '/foxhole/assets/',
+            '--strict',
+        ], { env: environment });
+        const elapsedMs = performance.now() - startedAt;
+        if (sourceKind === 'direct') directTimings.push(elapsedMs);
+        else if (sourceKind === 'decoded') decodedTimings.push(elapsedMs);
+        else if (sourceKind === 'decoded-direct') decodedDirectTimings.push(elapsedMs);
+        else snapshotTimings.push(elapsedMs);
+        completedOutputs.push({ sourceKind, iteration, outputPath, elapsedMs });
+    };
+
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+        const order = iteration % 2 === 0
+            ? ['direct', 'snapshot', 'decoded', 'decoded-direct']
+            : ['decoded-direct', 'decoded', 'snapshot', 'direct'];
+        for (const sourceKind of order) {
+            await runTrial(sourceKind, iteration);
+        }
+    }
+
+    const [baselineOutput, ...comparisonOutputs] = completedOutputs;
+    const baselineBytes = await fs.readFile(baselineOutput.outputPath);
+    const baselineHash = createHash('sha256').update(baselineBytes).digest('hex');
+    for (const output of comparisonOutputs) {
+        const outputBytes = await fs.readFile(output.outputPath);
+        const outputHash = createHash('sha256').update(outputBytes).digest('hex');
+        if (!outputBytes.equals(baselineBytes)) {
+            throw new Error(
+                `Manifest benchmark correctness failure: ${output.sourceKind} iteration ${output.iteration + 1} `
+                + `produced ${outputHash}, expected ${baselineHash}. Outputs remain in ${runDirectory}.`,
+            );
+        }
+    }
+
+    const report = createManifestSourceBenchmarkReport({
+        pakFingerprint: pakInventory.fingerprint,
+        steamBuildId: pakInventory.steamBuildId,
+        snapshotDirectory,
+        snapshotReused: snapshotPreviouslyComplete,
+        snapshotBuildMs,
+        snapshotFileCount: snapshotMetadata.fileCount,
+        snapshotBytes: snapshotMetadata.totalBytes,
+        decodedSnapshotDirectory,
+        decodedSnapshotReused: decodedSnapshotPreviouslyComplete,
+        decodedSnapshotBuildMs,
+        decodedSnapshotPackageCount: decodedMetadata.packageCount,
+        decodedSnapshotBytes: decodedMetadata.totalBytes,
+        decodedUnsupportedPackageCount: (decodedMetadata.unsupportedPackagePaths ?? []).length,
+        directTimings,
+        snapshotTimings,
+        decodedTimings,
+        decodedDirectTimings,
+        manifestBytes: baselineBytes.length,
+        manifestSha256: baselineHash,
+    });
+    const reportPath = path.join(runDirectory, 'benchmark-results.v3.json');
+    await writeJsonAtomic(reportPath, report);
+
+    console.log(`Direct PAK manifest median: ${formatElapsedMilliseconds(report.direct.medianMs)}.`);
+    console.log(`Loose snapshot manifest median: ${formatElapsedMilliseconds(report.looseSnapshot.medianMs)}.`);
+    console.log(`Decoded snapshot manifest median: ${formatElapsedMilliseconds(report.decoded.medianMs)}.`);
+    console.log(`Decoded snapshot + direct PAK manifest median: ${formatElapsedMilliseconds(report.decodedDirect.medianMs)}.`);
+    if (report.medianSavingsMs >= 0) {
+        console.log(
+            `Snapshot result: ${report.medianSpeedup?.toFixed(2) ?? 'n/a'}x speedup, `
+            + `${formatElapsedMilliseconds(report.medianSavingsMs)} median savings.`,
+        );
+    } else {
+        console.log(
+            `Snapshot result: ${report.medianSpeedup?.toFixed(2) ?? 'n/a'}x direct throughput, `
+            + `${formatElapsedMilliseconds(-report.medianSavingsMs)} slower.`,
+        );
+    }
+    console.log(
+        `Decoded result: ${report.decodedMedianSpeedup?.toFixed(2) ?? 'n/a'}x speedup, `
+        + `${formatElapsedMilliseconds(report.decodedMedianSavingsMs)} median savings.`,
+    );
+    console.log(
+        `Decoded + direct PAK result: ${report.decodedDirectMedianSpeedup?.toFixed(2) ?? 'n/a'}x speedup, `
+        + `${formatElapsedMilliseconds(report.decodedDirectMedianSavingsMs)} median savings.`,
+    );
+    console.log(`All ${completedOutputs.length} manifests were byte-identical (${baselineHash}).`);
+    console.log(`Benchmark report: ${reportPath}`);
 }
 
 function resolveRegenPakDirectory(parsedArgs) {
@@ -417,8 +675,660 @@ function resolveRegenPakDirectory(parsedArgs) {
     return null;
 }
 
-function formatElapsed(milliseconds) {
-    return milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
+async function prepareDeepExtractionCache(parsedArgs) {
+    const pakDirectory = resolveRegenPakDirectory(parsedArgs);
+    if (!pakDirectory) {
+        throw new Error('Deep refresh requires a readable Foxhole PAK directory before extracted-asset cache validation.');
+    }
+
+    const [pakInventory, buildProvenance] = await Promise.all([
+        buildPakInventory(pakDirectory),
+        computeBuildProvenance(repoRoot),
+    ]);
+    const bundlePaths = createDecodedAssetBundlePaths(decodedAssetBundleRoot, pakInventory.fingerprint);
+    const assetOutputRoot = (parsedArgs['render-asset-output-dir'] ?? []).at(-1)
+        ? path.resolve(repoRoot, (parsedArgs['render-asset-output-dir'] ?? []).at(-1))
+        : bundlePaths.assetRoot;
+    const iconOutputRoot = bundlePaths.iconRoot;
+    assertSafeGeneratedCacheRoot(assetOutputRoot);
+    assertSafeGeneratedCacheRoot(iconOutputRoot);
+    assertSafeGeneratedCacheRoot(bundlePaths.packageSnapshotRoot);
+    const runtimeDirectory = path.dirname(dllPath);
+    const [extractorFingerprint, assetFingerprint] = await Promise.all([
+        computeDeepExtractorFingerprint(buildProvenance.fingerprint, runtimeDirectory),
+        computeDeepAssetFingerprint(repoRoot, runtimeDirectory),
+    ]);
+    const identity = createDeepExtractionCacheIdentity({
+        pakInventory,
+        extractorFingerprint,
+        assetFingerprint,
+        assetOutputRoot,
+        iconOutputRoot,
+    });
+    const rawManifestCacheKey = createRawManifestCacheKey({ pakInventory, extractorFingerprint });
+    const packageSnapshots = await prepareDeepPackageSnapshots(
+        pakDirectory,
+        pakInventory,
+        bundlePaths.packageSnapshotRoot,
+    );
+
+    let cached = null;
+    try {
+        cached = await readJson(bundlePaths.cacheStampPath);
+    } catch (error) {
+        console.warn(`Ignoring corrupt deep extraction cache stamp: ${error.message}`);
+    }
+
+    if (!cached) {
+        cached = await migrateLegacyDecodedAssetCache({
+            pakInventory,
+            identity,
+            assetOutputRoot,
+            iconOutputRoot,
+        });
+    }
+
+    const invalidatedSections = new Set(resolveInvalidatedDecodedAssetSections(cached, identity));
+    if (deepExtractionCacheMatches(cached, identity)) {
+        if (!await pathExists(bundlePaths.inspectionPath)) {
+            invalidatedSections.add('inspections');
+        }
+        if (!await pathExists(path.join(iconOutputRoot, 'icon-source-index.v1.json'))) {
+            invalidatedSections.add('icons');
+        }
+        if (!await pathExists(assetOutputRoot)) {
+            invalidatedSections.add('geometry');
+            invalidatedSections.add('materials');
+            invalidatedSections.add('textures');
+        }
+    }
+
+    if (invalidatedSections.size === 0) {
+        console.log(
+            `Decoded asset bundle verified for Steam build ${identity.steamBuildId ?? 'unknown'}; `
+            + 'canonical mesh, material, texture, and icon exports may be reused.',
+        );
+    } else {
+        await fs.rm(bundlePaths.cacheStampPath, { force: true });
+        await invalidateDecodedAssetSections(
+            assetOutputRoot,
+            iconOutputRoot,
+            bundlePaths.inspectionPath,
+            [...invalidatedSections],
+        );
+        if (invalidatedSections.has('icons')) {
+            await fs.rm(path.join(
+                repoRoot,
+                'tools',
+                'foxwatch',
+                'tmp',
+                'pipeline-cache',
+                'v1',
+                'raw-manifests',
+                `${rawManifestCacheKey}.json`,
+            ), { force: true });
+        }
+        console.log(
+            `Decoded asset bundle requires ${[...invalidatedSections].join(', ')} for Steam build ${identity.steamBuildId ?? 'unknown'}; `
+            + 'only those canonical sections will be rebuilt from the current PAK.',
+        );
+    }
+
+    return {
+        pakDirectory,
+        identity,
+        assetOutputRoot,
+        iconOutputRoot,
+        bundlePaths,
+        cacheStampPath: bundlePaths.cacheStampPath,
+        rawManifestCacheKey,
+        ...packageSnapshots,
+    };
+}
+
+async function prepareDeepPackageSnapshots(pakDirectory, pakInventory, decodedPackageSnapshotDirectory) {
+    assertSafeGeneratedCacheRoot(decodedPackageSnapshotDirectory);
+
+    const legacySnapshotDirectory = path.join(decodedPackageSnapshotRoot, pakInventory.fingerprint);
+    if (!await pathExists(decodedPackageSnapshotDirectory) && await pathExists(legacySnapshotDirectory)) {
+        await fs.mkdir(path.dirname(decodedPackageSnapshotDirectory), { recursive: true });
+        await fs.rename(legacySnapshotDirectory, decodedPackageSnapshotDirectory);
+        console.log('Moved the existing decoded package snapshot into the canonical decoded asset bundle.');
+    }
+
+    const decodedMetadataPath = path.join(decodedPackageSnapshotDirectory, 'foxwatch-decoded-packages.v3.json');
+    const decodedSnapshotWasReady = await pathExists(decodedMetadataPath);
+    await run('dotnet', [
+        dllPath,
+        'snapshot-decoded-packages',
+        '--pak-path',
+        pakDirectory,
+        '--output-dir',
+        decodedPackageSnapshotDirectory,
+        '--pak-fingerprint',
+        pakInventory.fingerprint,
+    ]);
+    const decodedMetadata = await readJson(decodedMetadataPath);
+    if (decodedMetadata?.complete !== true
+        || decodedMetadata?.schemaVersion !== 3
+        || decodedMetadata?.pakFingerprint !== pakInventory.fingerprint) {
+        throw new Error(`Decoded package snapshot did not produce valid complete metadata: ${decodedMetadataPath}`);
+    }
+
+    console.log(
+        `Deep package source ready for Steam build ${pakInventory.steamBuildId ?? 'unknown'}: `
+        + `${decodedSnapshotWasReady ? 'reused' : 'built'} ${formatBytes(decodedMetadata.totalBytes)} decoded snapshot `
+        + `(${decodedMetadata.packageCount} package(s), ${(decodedMetadata.unsupportedPackagePaths ?? []).length} unsupported).`,
+    );
+
+    return { decodedPackageSnapshotDirectory };
+}
+
+async function migrateLegacyDecodedAssetCache({ pakInventory, identity, assetOutputRoot, iconOutputRoot }) {
+    let legacyStamp = null;
+    try {
+        legacyStamp = await readJson(legacyDeepExtractionCacheStampPath);
+    } catch {
+        return null;
+    }
+    if (legacyStamp?.pakFingerprint !== pakInventory.fingerprint
+        || !await pathExists(foxwatchOutputRoot)
+        || path.resolve(assetOutputRoot) === path.resolve(foxwatchOutputRoot)
+        || path.resolve(iconOutputRoot) === path.resolve(foxholeIconOutputRoot)) {
+        return null;
+    }
+
+    await fs.mkdir(path.dirname(assetOutputRoot), { recursive: true });
+    await fs.cp(foxwatchOutputRoot, assetOutputRoot, { recursive: true, force: false });
+    console.log('Migrated the verified legacy mesh, material, and texture cache into the decoded asset bundle.');
+    return {
+        ...identity,
+        assetContractVersions: {
+            ...identity.assetContractVersions,
+            inspections: 0,
+            icons: 0,
+        },
+    };
+}
+
+async function invalidateDecodedAssetSections(assetOutputRoot, iconOutputRoot, inspectionPath, invalidatedSections) {
+    const invalidated = new Set(invalidatedSections);
+    if (invalidated.has('inspections')) {
+        await fs.rm(inspectionPath, { force: true });
+    }
+    if (invalidated.has('icons')) {
+        await resetGeneratedCacheRoot(iconOutputRoot);
+    } else {
+        await fs.mkdir(iconOutputRoot, { recursive: true });
+    }
+
+    const assetSections = ['geometry', 'materials', 'textures'];
+    if (assetSections.every(section => invalidated.has(section))) {
+        await resetGeneratedCacheRoot(assetOutputRoot);
+        return;
+    }
+    await fs.mkdir(assetOutputRoot, { recursive: true });
+    for (const filePath of await walkDirectoryFiles(assetOutputRoot)) {
+        const section = classifyDecodedAssetFile(filePath);
+        if (section && invalidated.has(section)) {
+            await fs.rm(filePath, { force: true });
+        }
+    }
+    await removeEmptyDirectories(assetOutputRoot);
+}
+
+async function removeEmptyDirectories(directoryPath) {
+    if (!await pathExists(directoryPath)) {
+        return true;
+    }
+    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            await removeEmptyDirectories(path.join(directoryPath, entry.name));
+        }
+    }
+    if ((await fs.readdir(directoryPath)).length === 0) {
+        await fs.rmdir(directoryPath);
+        return true;
+    }
+    return false;
+}
+
+function createDeepAssetExportRun() {
+    const runId = `${new Date().toISOString().replace(/[:.]/g, '')}-pid${process.pid}`;
+    const runRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'asset-cache-runs', runId);
+    return {
+        runId,
+        runRoot,
+        planPath: path.join(runRoot, 'asset-export-plan.v1.json'),
+        mergedRoot: path.join(runRoot, 'merged'),
+        backupRoot: path.join(runRoot, 'previous'),
+    };
+}
+
+async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
+    const plan = await readJson(runContext.planPath);
+    const meshCount = plan?.meshPackagePaths?.length ?? 0;
+    const explicitMaterialPaths = plan?.materialPackagePaths ?? [];
+    if (meshCount + explicitMaterialPaths.length === 0) {
+        console.log('Deep asset cache is complete; no mesh or material export jobs are required.');
+        return;
+    }
+
+    const workerCount = resolveAssetCacheWorkerCount(process.env.FOXWATCH_ASSET_WORKERS);
+    const pakArgument = (parsedArgs['pak-path'] ?? []).at(-1) ?? cacheContext.pakDirectory;
+    const startedAt = performance.now();
+    const stageRoots = [];
+    const referencedMaterialPaths = new Set(explicitMaterialPaths);
+
+    if (meshCount > 0) {
+        const geometryPlanPath = path.join(runContext.runRoot, 'geometry-export-plan.v1.json');
+        await writeJsonAtomic(geometryPlanPath, {
+            schemaVersion: 1,
+            meshPackagePaths: plan.meshPackagePaths,
+            materialPackagePaths: [],
+            texturePackagePaths: [],
+        });
+        const geometryWorkerCount = Math.min(workerCount, meshCount);
+        const geometryStageRoots = Array.from(
+            { length: geometryWorkerCount },
+            (_, index) => path.join(runContext.runRoot, `geometry-worker-${index + 1}`),
+        );
+        const resultPaths = geometryStageRoots.map(
+            (_, index) => path.join(runContext.runRoot, `geometry-worker-${index + 1}.result.json`),
+        );
+        const claimDirectory = path.join(runContext.runRoot, 'geometry-claims');
+        console.log(
+            `Deep asset cache geometry phase: exporting ${meshCount} unique mesh package(s) `
+            + `with ${geometryWorkerCount} isolated worker(s).`,
+        );
+        await Promise.all(geometryStageRoots.map((stageRoot, workerIndex) => run('dotnet', [
+            dllPath,
+            'export-asset-cache',
+            '--plan',
+            geometryPlanPath,
+            '--output-dir',
+            stageRoot,
+            '--result',
+            resultPaths[workerIndex],
+            '--pak-path',
+            pakArgument,
+            '--worker-index',
+            String(workerIndex),
+            '--worker-count',
+            String(geometryWorkerCount),
+            '--claim-dir',
+            claimDirectory,
+            '--mesh-geometry-only',
+        ])));
+        await assertAssetWorkerCompletion(resultPaths, meshCount, 'geometry');
+        for (const resultPath of resultPaths) {
+            const result = await readJson(resultPath);
+            for (const materialPath of result?.referencedMaterialPackagePaths ?? []) {
+                referencedMaterialPaths.add(materialPath);
+            }
+        }
+        stageRoots.push(...geometryStageRoots);
+        console.log(
+            `Deep asset cache geometry phase discovered ${referencedMaterialPaths.size} unique material package(s).`,
+        );
+    }
+
+    if (referencedMaterialPaths.size > 0) {
+        const materialPlanPath = path.join(runContext.runRoot, 'material-export-plan.v1.json');
+        await writeJsonAtomic(materialPlanPath, {
+            schemaVersion: 1,
+            meshPackagePaths: [],
+            materialPackagePaths: [...referencedMaterialPaths].sort((left, right) => left.localeCompare(right)),
+            texturePackagePaths: [],
+        });
+        const materialWorkerCount = Math.min(workerCount, referencedMaterialPaths.size);
+        const materialStageRoots = Array.from(
+            { length: materialWorkerCount },
+            (_, index) => path.join(runContext.runRoot, `material-worker-${index + 1}`),
+        );
+        const resultPaths = materialStageRoots.map(
+            (_, index) => path.join(runContext.runRoot, `material-worker-${index + 1}.result.json`),
+        );
+        const claimDirectory = path.join(runContext.runRoot, 'material-claims');
+        console.log(
+            `Deep asset cache material phase: exporting ${referencedMaterialPaths.size} unique material package(s) `
+            + `with ${materialWorkerCount} isolated worker(s).`,
+        );
+        await Promise.all(materialStageRoots.map((stageRoot, workerIndex) => run('dotnet', [
+            dllPath,
+            'export-asset-cache',
+            '--plan',
+            materialPlanPath,
+            '--output-dir',
+            stageRoot,
+            '--result',
+            resultPaths[workerIndex],
+            '--pak-path',
+            pakArgument,
+            '--worker-index',
+            String(workerIndex),
+            '--worker-count',
+            String(materialWorkerCount),
+            '--claim-dir',
+            claimDirectory,
+            '--material-metadata-only',
+        ])));
+        await assertAssetWorkerCompletion(resultPaths, referencedMaterialPaths.size, 'material');
+        stageRoots.push(...materialStageRoots);
+
+        const referencedTexturePaths = new Set();
+        for (const resultPath of resultPaths) {
+            const result = await readJson(resultPath);
+            for (const texturePath of result?.referencedTexturePackagePaths ?? []) {
+                referencedTexturePaths.add(texturePath);
+            }
+        }
+        console.log(
+            `Deep asset cache material phase discovered ${referencedTexturePaths.size} unique texture package(s).`,
+        );
+
+        if (referencedTexturePaths.size > 0) {
+            const texturePlanPath = path.join(runContext.runRoot, 'texture-export-plan.v1.json');
+            await writeJsonAtomic(texturePlanPath, {
+                schemaVersion: 1,
+                meshPackagePaths: [],
+                materialPackagePaths: [],
+                texturePackagePaths: [...referencedTexturePaths].sort((left, right) => left.localeCompare(right)),
+            });
+            const textureWorkerCount = Math.min(
+                resolveTextureWorkerCount(
+                    process.env.FOXWATCH_TEXTURE_WORKERS,
+                    process.env.FOXWATCH_ASSET_WORKERS,
+                    workerCount,
+                ),
+                referencedTexturePaths.size,
+            );
+            const textureStageRoots = Array.from(
+                { length: textureWorkerCount },
+                (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}`),
+            );
+            const resultPaths = textureStageRoots.map(
+                (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}.result.json`),
+            );
+            const claimDirectory = path.join(runContext.runRoot, 'texture-claims');
+            console.log(
+                `Deep asset cache texture phase: exporting ${referencedTexturePaths.size} unique texture package(s) `
+                + `with ${textureWorkerCount} isolated worker(s).`,
+            );
+            await Promise.all(textureStageRoots.map((stageRoot, workerIndex) => run('dotnet', [
+                dllPath,
+                'export-asset-cache',
+                '--plan',
+                texturePlanPath,
+                '--output-dir',
+                stageRoot,
+                '--result',
+                resultPaths[workerIndex],
+                '--pak-path',
+                pakArgument,
+                '--worker-index',
+                String(workerIndex),
+                '--worker-count',
+                String(textureWorkerCount),
+                '--claim-dir',
+                claimDirectory,
+            ])));
+            await assertAssetWorkerCompletion(resultPaths, referencedTexturePaths.size, 'texture');
+            stageRoots.push(...textureStageRoots);
+        }
+    }
+
+    const mergeMetrics = await mergeAssetCacheStages(
+        cacheContext.assetOutputRoot,
+        stageRoots,
+        runContext,
+    );
+    console.log(
+        `Deep asset cache completed in ${formatElapsedMilliseconds(performance.now() - startedAt)}: `
+        + `${mergeMetrics.installedFiles} installed file(s), ${mergeMetrics.identicalCollisions} verified shared output(s), `
+        + `${formatBytes(mergeMetrics.installedBytes)} staged.`,
+    );
+}
+
+async function assertAssetWorkerCompletion(resultPaths, expectedJobs, phase) {
+    const results = await Promise.all(resultPaths.map(resultPath => readJson(resultPath)));
+    const completedJobs = results.reduce((total, result) => total + Number(result?.completedJobs ?? 0), 0);
+    if (completedJobs !== expectedJobs) {
+        throw new Error(
+            `Deep asset cache ${phase} workers completed ${completedJobs}/${expectedJobs} jobs; refusing to install a partial cache.`,
+        );
+    }
+}
+
+function resolveAssetCacheWorkerCount(value) {
+    if (value == null || value === '') {
+        return 2;
+    }
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 2) {
+        throw new Error(`FOXWATCH_ASSET_WORKERS must be 1 or 2; received ${value}.`);
+    }
+    return parsed;
+}
+
+function resolveTextureWorkerCount(value, assetWorkerOverride, fallbackWorkerCount) {
+    if (value != null && value !== '') {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 4) {
+            throw new Error(`FOXWATCH_TEXTURE_WORKERS must be between 1 and 4; received ${value}.`);
+        }
+        return parsed;
+    }
+    if (assetWorkerOverride != null && assetWorkerOverride !== '') {
+        return fallbackWorkerCount;
+    }
+    const hasCapacity = os.totalmem() >= 24 * 1024 ** 3 && os.freemem() >= 12 * 1024 ** 3;
+    return hasCapacity ? 4 : fallbackWorkerCount;
+}
+
+async function mergeAssetCacheStages(assetOutputRoot, stageRoots, runContext) {
+    assertSafeGeneratedCacheRoot(assetOutputRoot);
+    await fs.rm(runContext.mergedRoot, { recursive: true, force: true });
+    await fs.mkdir(runContext.mergedRoot, { recursive: true });
+    if (await pathExists(assetOutputRoot)) {
+        await fs.cp(assetOutputRoot, runContext.mergedRoot, { recursive: true, force: false });
+    }
+
+    let installedFiles = 0;
+    let installedBytes = 0;
+    let identicalCollisions = 0;
+    for (const stageRoot of stageRoots) {
+        for (const sourcePath of await walkDirectoryFiles(stageRoot)) {
+            const relativePath = path.relative(stageRoot, sourcePath);
+            const destinationPath = path.join(runContext.mergedRoot, relativePath);
+            if (await pathExists(destinationPath)) {
+                const [sourceHash, destinationHash] = await Promise.all([
+                    readFileSignature(sourcePath),
+                    readFileSignature(destinationPath),
+                ]);
+                if (sourceHash !== destinationHash) {
+                    throw new Error(`Asset cache workers produced different bytes for ${relativePath}.`);
+                }
+                identicalCollisions += 1;
+                continue;
+            }
+
+            await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+            await fs.copyFile(sourcePath, destinationPath);
+            const stat = await fs.stat(sourcePath);
+            installedFiles += 1;
+            installedBytes += stat.size;
+        }
+    }
+
+    await fs.rm(runContext.backupRoot, { recursive: true, force: true });
+    if (await pathExists(assetOutputRoot)) {
+        await fs.rename(assetOutputRoot, runContext.backupRoot);
+    }
+    try {
+        await fs.rename(runContext.mergedRoot, assetOutputRoot);
+    } catch (error) {
+        if (await pathExists(runContext.backupRoot)) {
+            await fs.rename(runContext.backupRoot, assetOutputRoot);
+        }
+        throw error;
+    }
+    await fs.rm(runContext.backupRoot, { recursive: true, force: true });
+    return { installedFiles, installedBytes, identicalCollisions };
+}
+
+async function walkDirectoryFiles(directoryPath) {
+    const files = [];
+    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+    for (const entry of entries) {
+        const entryPath = path.join(directoryPath, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...await walkDirectoryFiles(entryPath));
+        } else if (entry.isFile()) {
+            files.push(entryPath);
+        }
+    }
+    return files;
+}
+
+async function commitDeepExtractionCache(context) {
+    const [pakInventory, buildProvenance] = await Promise.all([
+        buildPakInventory(context.pakDirectory),
+        computeBuildProvenance(repoRoot),
+    ]);
+    const runtimeDirectory = path.dirname(dllPath);
+    const [extractorFingerprint, assetFingerprint] = await Promise.all([
+        computeDeepExtractorFingerprint(buildProvenance.fingerprint, runtimeDirectory),
+        computeDeepAssetFingerprint(repoRoot, runtimeDirectory),
+    ]);
+    const verifiedIdentity = createDeepExtractionCacheIdentity({
+        pakInventory,
+        extractorFingerprint,
+        assetFingerprint,
+        assetOutputRoot: context.identity.assetOutputRoot,
+        iconOutputRoot: context.identity.iconOutputRoot,
+    });
+    if (!deepExtractionRunMatches(context.identity, verifiedIdentity)) {
+        await fs.rm(context.cacheStampPath, { force: true });
+        throw new Error('Foxhole PAK inventory or FoxWatch extraction sources changed during preparation; refusing to render or publish mixed extraction data.');
+    }
+
+    const packageMetadataPath = path.join(
+        context.decodedPackageSnapshotDirectory,
+        'foxwatch-decoded-packages.v3.json',
+    );
+    const packageMetadata = await readJson(packageMetadataPath);
+    const inventory = await buildDecodedAssetBundleInventory(
+        context.assetOutputRoot,
+        context.iconOutputRoot,
+        context.bundlePaths.inspectionPath,
+    );
+    const bundleMetadata = createDecodedAssetBundleMetadata({
+        identity: verifiedIdentity,
+        packageMetadata,
+        inventory,
+        paths: context.bundlePaths,
+    });
+    await writeJsonAtomic(context.bundlePaths.metadataPath, bundleMetadata);
+    await writeJsonAtomic(context.cacheStampPath, {
+        ...verifiedIdentity,
+        verifiedAt: new Date().toISOString(),
+    });
+    await activateDecodedAssetBundle(bundleMetadata, context.bundlePaths);
+    await fs.rm(legacyDeepExtractionCacheStampPath, { force: true });
+    console.log(
+        `Activated decoded asset bundle: ${inventory.geometry.fileCount} mesh, `
+        + `${inventory.materials.fileCount} material, ${inventory.textures.fileCount} texture, `
+        + `${inventory.icons.fileCount} icon source, ${inventory.inspections.fileCount} inspection snapshot file(s).`,
+    );
+}
+
+async function buildDecodedAssetBundleInventory(assetRoot, iconRoot, inspectionPath) {
+    const inventory = Object.fromEntries(
+        ['inspections', 'geometry', 'materials', 'textures', 'icons']
+            .map(section => [section, { fileCount: 0, totalBytes: 0 }]),
+    );
+    if (await pathExists(inspectionPath)) {
+        const inspectionStats = await fs.stat(inspectionPath);
+        inventory.inspections.fileCount = 1;
+        inventory.inspections.totalBytes = inspectionStats.size;
+    }
+    for (const root of [assetRoot, iconRoot]) {
+        if (!await pathExists(root)) {
+            continue;
+        }
+        for (const filePath of await walkDirectoryFiles(root)) {
+            const section = classifyDecodedAssetFile(filePath, iconRoot);
+            if (!section) {
+                continue;
+            }
+            const fileStats = await fs.stat(filePath);
+            inventory[section].fileCount += 1;
+            inventory[section].totalBytes += fileStats.size;
+        }
+    }
+    return inventory;
+}
+
+async function activateDecodedAssetBundle(bundleMetadata, bundlePaths) {
+    const pointer = createActiveDecodedAssetBundlePointer(bundleMetadata, bundlePaths);
+    const activations = [
+        [foxwatchOutputRoot, bundlePaths.assetRoot],
+        [foxholeIconOutputRoot, bundlePaths.iconRoot],
+    ];
+    const completed = [];
+    try {
+        for (const [viewPath, targetPath] of activations) {
+            const backupPath = `${viewPath}.previous-${process.pid}`;
+            const pendingPath = `${viewPath}.next-${process.pid}`;
+            await fs.rm(backupPath, { recursive: true, force: true });
+            await fs.rm(pendingPath, { recursive: true, force: true });
+            await fs.mkdir(path.dirname(viewPath), { recursive: true });
+            await fs.symlink(targetPath, pendingPath, process.platform === 'win32' ? 'junction' : 'dir');
+            let movedPrevious = false;
+            if (await pathExists(viewPath)) {
+                await fs.rename(viewPath, backupPath);
+                movedPrevious = true;
+            }
+            try {
+                await fs.rename(pendingPath, viewPath);
+            } catch (error) {
+                if (movedPrevious && await pathExists(backupPath)) {
+                    await fs.rename(backupPath, viewPath);
+                }
+                throw error;
+            }
+            completed.push({ viewPath, backupPath });
+        }
+        await writeJsonAtomic(activeDecodedAssetBundlePointerPath, pointer);
+    } catch (error) {
+        for (const { viewPath, backupPath } of completed.reverse()) {
+            await fs.rm(viewPath, { recursive: true, force: true });
+            if (await pathExists(backupPath)) {
+                await fs.rename(backupPath, viewPath);
+            }
+        }
+        throw error;
+    }
+    for (const { backupPath } of completed) {
+        await fs.rm(backupPath, { recursive: true, force: true });
+    }
+}
+
+function assertSafeGeneratedCacheRoot(directoryPath) {
+    const resolvedPath = path.resolve(directoryPath);
+    const relativePath = path.relative(repoRoot, resolvedPath);
+    if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        throw new Error(`Refusing to invalidate generated FoxWatch cache outside the repository: ${resolvedPath}`);
+    }
+}
+
+async function resetGeneratedCacheRoot(directoryPath) {
+    const resolvedPath = path.resolve(directoryPath);
+    assertSafeGeneratedCacheRoot(resolvedPath);
+    await fs.rm(resolvedPath, { recursive: true, force: true });
+    await fs.mkdir(resolvedPath, { recursive: true });
 }
 
 function normalizeAssetId(value) {
@@ -867,6 +1777,12 @@ function buildBlenderArgs(rawArgs, options = {}) {
     if (options.resultJournalPath) {
         outputArgs.push('--result-journal', options.resultJournalPath);
     }
+    if (options.metricsJournalPath) {
+        outputArgs.push('--metrics-journal', options.metricsJournalPath);
+    }
+    if (options.recycleRequestPath) {
+        outputArgs.push('--recycle-request', options.recycleRequestPath);
+    }
 
     const flagOptions = new Set();
     for (const optionName of ['debug-bounds', 'purge-existing']) {
@@ -890,30 +1806,393 @@ function buildBlenderArgs(rawArgs, options = {}) {
     return outputArgs;
 }
 
+function replaceCliOption(inputArgs, optionName, value) {
+    const flag = `--${optionName}`;
+    const outputArgs = [];
+    for (let index = 0; index < inputArgs.length; index += 1) {
+        if (inputArgs[index] === flag) {
+            index += 1;
+            continue;
+        }
+        outputArgs.push(inputArgs[index]);
+    }
+    outputArgs.push(flag, value);
+    return outputArgs;
+}
+
 async function runDeepRefreshBlenderBatches(rawArgs) {
+    const blenderPhaseStartedAt = performance.now();
+    const parsedArgs = parseCliArgs(rawArgs);
     const indexDocument = await readJson(renderScenesIndexPath);
     const maxScenes = resolveBlenderBatchSceneLimit(process.env.FOXWATCH_BLENDER_BATCH_SCENES);
-    const batches = createBlenderSceneBatches(indexDocument, { maxScenes });
+    const analysis = await analyzeBlenderSceneIndex(indexDocument, {
+        renderDataRoot,
+        foxwatchOutputRoot,
+    });
+    validateBlenderOutputOwnership(analysis.sceneDocuments);
+    const timingHistory = await readJson(blenderTimingHistoryPath) ?? { schemaVersion: 1, groups: {} };
+    const orderedGroups = orderBlenderGroupsByObservedCost(analysis.groups, timingHistory);
+    const batches = createWeightedBlenderBatches(orderedGroups, { maxScenes });
     if (batches.length === 0) {
         throw new Error('Deep refresh render index contains no scene entries');
     }
 
-    const sceneCount = batches.reduce((total, batch) => total + batch.sceneEntries.length, 0);
-    console.log(
-        `Deep refresh: rendering ${sceneCount} scene document(s) in ${batches.length} sequential Blender process(es) `
-        + `(up to ${maxScenes} scenes per process; dependency groups stay together)`,
+    const workerCount = resolveBlenderWorkerCount(
+        (parsedArgs['blender-workers'] ?? []).at(-1),
+        process.env.FOXWATCH_BLENDER_WORKERS,
+        os.totalmem(),
     );
+    const verbose = hasCliFlag(parsedArgs, 'verbose');
+    const sceneCount = batches.reduce((total, batch) => total + batch.sceneEntries.length, 0);
+    const concurrentCandidateCount = batches.filter(batch => !batch.exclusive).length;
+    console.log(
+        `Deep refresh: rendering ${sceneCount} scene document(s) in ${batches.length} weighted batch(es) `
+        + `with up to ${workerCount} guarded Blender worker(s) `
+        + `(${concurrentCandidateCount} non-exclusive batch(es) available for resource-matched concurrency)`,
+    );
+    emitFoxWatchProgress({
+        kind: 'blender-start',
+        stage: 'Rendering',
+        detail: `Rendering ${sceneCount} scenes in ${batches.length} Blender batches.`,
+        overallPercent: 50,
+        batchTotal: batches.length,
+        sceneTotal: sceneCount,
+        workerCount,
+    });
 
-    for (const [batchIndex, batch] of batches.entries()) {
-        console.log(
-            `Blender batch ${batchIndex + 1}/${batches.length}: ${batch.sceneEntries.length} scene document(s), `
-            + `${batch.dependencyGroups.length} dependency group(s)`,
-        );
-        await run(blenderExecutable, buildBlenderArgs(rawArgs, {
-            purgeExistingByDefault: true,
-            sceneEntries: batch.sceneEntries,
-        }));
+    const metricsRoot = path.join(
+        repoRoot,
+        'tools',
+        'foxwatch',
+        'tmp',
+        'blender-batches',
+        `${new Date().toISOString().replace(/[:.]/g, '')}-pid${process.pid}`,
+    );
+    await fs.mkdir(metricsRoot, { recursive: true });
+    const queue = batches.map((batch, index) => ({
+        ...batch,
+        plannedBatchNumber: index + 1,
+        recycleCount: 0,
+        completedBeforeRecycle: 0,
+        originalSceneCount: batch.sceneEntries.length,
+    }));
+    const active = new Map();
+    const activeBatches = new Map();
+    const completedPlannedBatches = new Set();
+    const plannedBatchSceneProgress = new Map(batches.map((_, index) => [index + 1, 0]));
+    const workerBatchCounts = new Map([[1, 0], [2, 0]]);
+    let launchSequence = 0;
+    let failedResult = null;
+    let reportedMemoryGuard = false;
+
+    const launchBatch = (batch, workerNumber) => {
+        if (!batch.workerBatchNumber || batch.assignedWorker !== workerNumber) {
+            batch.workerBatchNumber = (workerBatchCounts.get(workerNumber) ?? 0) + 1;
+            batch.assignedWorker = workerNumber;
+            workerBatchCounts.set(workerNumber, batch.workerBatchNumber);
+        }
+        launchSequence += 1;
+        const metricsJournalPath = path.join(metricsRoot, `launch-${String(launchSequence).padStart(4, '0')}-w${workerNumber}.json`);
+        const recycleRequestPath = path.join(metricsRoot, `launch-${String(launchSequence).padStart(4, '0')}-w${workerNumber}.recycle`);
+        const promise = runBlenderBatchProcess(
+            buildBlenderArgs(rawArgs, {
+                purgeExistingByDefault: true,
+                sceneEntries: batch.sceneEntries,
+                metricsJournalPath,
+                recycleRequestPath,
+            }),
+            {
+                workerNumber,
+                verbose,
+                recycleRequestPath,
+                onProgress(progress) {
+                    const completedScenes = batch.completedBeforeRecycle + progress.completed;
+                    plannedBatchSceneProgress.set(batch.plannedBatchNumber, completedScenes);
+                    emitFoxWatchProgress({
+                        kind: 'blender-scene',
+                        stage: 'Rendering',
+                        worker: workerNumber,
+                        workerBatch: batch.workerBatchNumber,
+                        batch: batch.plannedBatchNumber,
+                        batchTotal: batches.length,
+                        scene: completedScenes,
+                        sceneTotal: batch.originalSceneCount,
+                        completedBatches: completedPlannedBatches.size,
+                        completedScenes: [...plannedBatchSceneProgress.values()].reduce((total, value) => total + value, 0),
+                        structureId: progress.structureId,
+                        sceneEntry: progress.sceneEntry,
+                        overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
+                    });
+                },
+            },
+        ).then(async processMetrics => ({
+            ok: true,
+            workerNumber,
+            batch,
+            metrics: mergeBlenderPeakMemory(await readJson(metricsJournalPath), processMetrics.externalPeakMemory),
+        })).catch(error => ({ ok: false, workerNumber, batch, error }));
+        active.set(workerNumber, promise);
+        activeBatches.set(workerNumber, batch);
+    };
+
+    const settleOne = async () => {
+        const result = await Promise.race(active.values());
+        active.delete(result.workerNumber);
+        activeBatches.delete(result.workerNumber);
+        if (!result.ok) {
+            failedResult = result;
+            return;
+        }
+
+        reportBlenderBatchMetrics(result.workerNumber, result.batch, result.metrics, batches.length);
+        updateBlenderTimingHistory(timingHistory, result.metrics?.dependencyGroupTimings);
+        if (result.metrics?.status === 'recycle') {
+            let remainingSceneEntries;
+            try {
+                remainingSceneEntries = resolveRecycledSceneEntries(result.batch.sceneEntries, result.metrics);
+            } catch (error) {
+                failedResult = {
+                    ...result,
+                    ok: false,
+                    error,
+                };
+                return;
+            }
+            queue.unshift({
+                ...result.batch,
+                sceneEntries: remainingSceneEntries,
+                recycleCount: result.batch.recycleCount + 1,
+                completedBeforeRecycle: result.batch.completedBeforeRecycle
+                    + (result.metrics?.completedSceneEntries?.length ?? 0),
+            });
+        } else {
+            completedPlannedBatches.add(result.batch.plannedBatchNumber);
+            plannedBatchSceneProgress.set(result.batch.plannedBatchNumber, result.batch.originalSceneCount);
+            emitFoxWatchProgress({
+                kind: 'blender-batch',
+                stage: 'Rendering',
+                worker: result.workerNumber,
+                workerBatch: result.batch.workerBatchNumber,
+                batch: result.batch.plannedBatchNumber,
+                batchTotal: batches.length,
+                scene: result.batch.originalSceneCount,
+                sceneTotal: result.batch.originalSceneCount,
+                completedBatches: completedPlannedBatches.size,
+                completedScenes: [...plannedBatchSceneProgress.values()].reduce((total, value) => total + value, 0),
+                overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
+            });
+        }
+    };
+
+    while ((queue.length > 0 || active.size > 0) && !failedResult) {
+        const nextBatch = queue[0];
+        if (active.size === 0 && nextBatch?.exclusive) {
+            queue.shift();
+            launchBatch(nextBatch, 1);
+            await settleOne();
+            continue;
+        }
+
+        while (queue.length > 0 && active.size < workerCount) {
+            if (active.size === 1 && !canLaunchSecondBlenderWorker(os.freemem())) {
+                if (!reportedMemoryGuard) {
+                    console.log('Blender memory guard is holding the second worker until at least 12 GiB is available.');
+                    reportedMemoryGuard = true;
+                }
+                break;
+            }
+
+            const batch = active.size === 0
+                ? queue.shift()
+                : dequeueNextConcurrentBlenderBatch(queue, activeBatches.values().next().value);
+            if (!batch) {
+                break;
+            }
+            const workerNumber = [1, 2].find(candidate => !active.has(candidate));
+            launchBatch(batch, workerNumber);
+        }
+        if (active.size > 0) {
+            await settleOne();
+        }
     }
+
+    if (failedResult) {
+        await Promise.allSettled(active.values());
+        const groups = failedResult.batch.dependencyGroups.join(', ');
+        throw new Error(
+            `Blender worker ${failedResult.workerNumber} failed in planned batch ${failedResult.batch.plannedBatchNumber} `
+            + `(dependency groups: ${groups}): ${failedResult.error.message}`,
+            { cause: failedResult.error },
+        );
+    }
+
+    await writeJsonAtomic(blenderTimingHistoryPath, timingHistory);
+
+    console.log(`Blender phase completed in ${formatElapsedMilliseconds(performance.now() - blenderPhaseStartedAt)}.`);
+}
+
+function updateBlenderTimingHistory(history, timings) {
+    if (!Array.isArray(timings)) return;
+    history.schemaVersion = 1;
+    history.groups ??= {};
+    for (const timing of timings) {
+        const dependencyGroup = String(timing?.dependencyGroup ?? '').trim().toLowerCase();
+        const elapsedMs = Number(timing?.elapsedMs ?? 0);
+        if (!dependencyGroup || !Number.isFinite(elapsedMs) || elapsedMs <= 0) continue;
+        const previous = history.groups[dependencyGroup];
+        const samples = Math.min(Number(previous?.samples ?? 0), 4);
+        history.groups[dependencyGroup] = {
+            samples: samples + 1,
+            estimateMs: Math.round(((Number(previous?.estimateMs ?? 0) * samples) + elapsedMs) / (samples + 1)),
+            lastMs: Math.round(elapsedMs),
+        };
+    }
+    history.updatedAt = new Date().toISOString();
+}
+
+function runBlenderBatchProcess(commandArgs, options) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(blenderExecutable, commandArgs, {
+            cwd: repoRoot,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: false,
+            env: process.env,
+        });
+        const memorySampler = startWindowsProcessMemorySampler(child.pid, options.recycleRequestPath);
+        drainBlenderOutput(child.stdout, options, false);
+        drainBlenderOutput(child.stderr, options, true);
+        child.on('error', reject);
+        child.on('close', (code, signal) => {
+            memorySampler.stop();
+            if (code === 0) {
+                resolve({ externalPeakMemory: memorySampler.peakMemory });
+                return;
+            }
+            reject(new Error(`Blender exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`));
+        });
+    });
+}
+
+function startWindowsProcessMemorySampler(processId, recycleRequestPath) {
+    const peakMemory = { rss: 0, private: 0 };
+    if (process.platform !== 'win32' || !Number.isSafeInteger(processId)) {
+        return { peakMemory, stop() {} };
+    }
+
+    const script = [
+        "$ErrorActionPreference='SilentlyContinue'",
+        `while ($true) { $p = Get-Process -Id ${processId} -ErrorAction SilentlyContinue; if ($null -eq $p) { break }; `
+            + "[Console]::Out.WriteLine(('{0},{1}' -f $p.WorkingSet64,$p.PrivateMemorySize64)); [Console]::Out.Flush(); Start-Sleep -Milliseconds 1000 }",
+    ].join('; ');
+    const encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+    const sampler = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand], {
+        cwd: repoRoot,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        shell: false,
+        windowsHide: true,
+    });
+    let buffered = '';
+    let recycleRequested = false;
+    sampler.stdout?.setEncoding('utf8');
+    sampler.stdout?.on('data', chunk => {
+        buffered += chunk;
+        const lines = buffered.split(/\r?\n/);
+        buffered = lines.pop() ?? '';
+        for (const line of lines) {
+            const memory = parseWindowsProcessMemoryLine(line);
+            if (!memory) continue;
+            peakMemory.rss = Math.max(peakMemory.rss, memory.rss);
+            peakMemory.private = Math.max(peakMemory.private, memory.private);
+            if (!recycleRequested && shouldRequestBlenderRecycle(memory)) {
+                recycleRequested = true;
+                void fs.writeFile(recycleRequestPath, `${JSON.stringify(memory)}\n`, 'utf8');
+            }
+        }
+    });
+    sampler.on('error', () => {});
+
+    return {
+        peakMemory,
+        stop() {
+            if (!sampler.killed) sampler.kill();
+        },
+    };
+}
+
+function drainBlenderOutput(stream, options, isErrorStream) {
+    let buffered = '';
+    stream.setEncoding('utf8');
+    const emitLine = (line) => {
+        const normalized = line.replace(/\r$/, '');
+        const progress = parseBlenderProgressLine(normalized);
+        if (progress) {
+            options.onProgress?.(progress);
+            return;
+        }
+        if (!options.verbose && shouldSuppressRoutineBlenderLine(normalized)) {
+            return;
+        }
+        const formatted = formatBlenderWorkerLine(options.workerNumber, normalized);
+        if (isErrorStream) {
+            console.error(formatted);
+        } else {
+            console.log(formatted);
+        }
+    };
+    stream.on('data', chunk => {
+        buffered += chunk;
+        const lines = buffered.split('\n');
+        buffered = lines.pop() ?? '';
+        for (const line of lines) {
+            emitLine(line);
+        }
+    });
+    stream.on('end', () => {
+        if (buffered) {
+            emitLine(buffered);
+        }
+    });
+}
+
+function emitFoxWatchProgress(progress) {
+    console.log(`FOXWATCH_PROGRESS ${JSON.stringify(progress)}`);
+}
+
+function renderOverallPercent(batchSceneProgress, totalScenes) {
+    const completedScenes = [...batchSceneProgress.values()].reduce((total, value) => total + value, 0);
+    return 50 + Math.floor((completedScenes / Math.max(totalScenes, 1)) * 40);
+}
+
+function reportBlenderBatchMetrics(workerNumber, batch, metrics, plannedBatchCount) {
+    const peakMemory = metrics?.peakMemory ?? {};
+    console.log(
+        `Blender W${workerNumber} batch ${batch.plannedBatchNumber}/${plannedBatchCount}: `
+        + `${metrics?.completedSceneEntries?.length ?? batch.sceneEntries.length} scene(s) in `
+        + `${formatElapsedMilliseconds(metrics?.elapsedMs ?? 0)}, peak ${formatBytes(peakMemory.rss)} RSS / `
+        + `${formatBytes(peakMemory.private)} private`,
+    );
+    for (const role of metrics?.slowRoles ?? []) {
+        console.log(
+            `Slow render: ${role.structureId} ${role.renderMode}`
+            + `${role.sceneVariant ? ` [${role.sceneVariant}]` : ''} — ${formatElapsedMilliseconds(role.elapsedMs)}`,
+        );
+    }
+    if (metrics?.status === 'recycle') {
+        console.log(
+            `Blender W${workerNumber} recycled after ${metrics.completedSceneEntries?.length ?? 0} scene(s); `
+            + `${metrics.remainingSceneEntries?.length ?? 0} scene(s) requeued.`,
+        );
+    }
+}
+
+function formatBytes(value) {
+    const bytes = Number(value ?? 0);
+    return bytes > 0 ? `${(bytes / (1024 ** 3)).toFixed(1)} GiB` : 'n/a';
+}
+
+function formatElapsedMilliseconds(value) {
+    const milliseconds = Number(value ?? 0);
+    return `${(milliseconds / 1000).toFixed(1)}s`;
 }
 
 async function buildPublishArgs(rawArgs) {

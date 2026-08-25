@@ -26,9 +26,27 @@ try
 		return;
 	}
 
-	if (args.Length > 0 && string.Equals(args[0], "prepare-regen", StringComparison.OrdinalIgnoreCase))
+	if (args.Length > 0 && string.Equals(args[0], "prepare-refresh", StringComparison.OrdinalIgnoreCase))
 	{
-		Environment.ExitCode = await FoxWatchCli.RunPrepareRegenAsync(args[1..]);
+		Environment.ExitCode = await FoxWatchCli.RunPrepareRefreshAsync(args[1..]);
+		return;
+	}
+
+	if (args.Length > 0 && string.Equals(args[0], "snapshot-pak", StringComparison.OrdinalIgnoreCase))
+	{
+		Environment.ExitCode = await FoxWatchCli.RunSnapshotPakAsync(args[1..]);
+		return;
+	}
+
+	if (args.Length > 0 && string.Equals(args[0], "snapshot-decoded-packages", StringComparison.OrdinalIgnoreCase))
+	{
+		Environment.ExitCode = await FoxWatchCli.RunSnapshotDecodedPackagesAsync(args[1..]);
+		return;
+	}
+
+	if (args.Length > 0 && string.Equals(args[0], "export-asset-cache", StringComparison.OrdinalIgnoreCase))
+	{
+		Environment.ExitCode = await FoxWatchCli.RunExportAssetCacheAsync(args[1..]);
 		return;
 	}
 

@@ -15,6 +15,7 @@ import {
     LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS,
     LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS,
     publishStructureIconsForManifest,
+    resolveGeneratedIconFilePathByKey,
     resolveGeneratedIconFilePathForAssetId,
     resolveSubtypeOverlayUrl,
     sanitizeVehicleDestroyedVisuals,
@@ -54,7 +55,9 @@ import {
     loadExcludedStructureOverrideIds,
     preserveAuthoredStructureMarkedCargoOverlays,
     preserveAuthoredStructurePreviewDirections,
+    resolveFactionTextureVariants,
     shouldPublishVehicleDestroyedVisual,
+    stripSyntheticFactionTextureVariants,
 } from './publish-manifest-overrides.mjs';
 import { loadVehicleDestroyedPublishAllowlist } from './vehicle-destroyed-allowlist.mjs';
 import {
@@ -96,7 +99,6 @@ const defaultWreckedSubtypeIconUrl = '/foxhole/assets/icons/subtypewreckedicon.w
 const sharedModificationHashDiagnosticsDirectory = resolve(repositoryRoot, 'tools/foxwatch/tmp/diagnostics/shared-modification-hash');
 
 const iconSourceExtensions = new Set(['.png', '.jpg', '.jpeg']);
-const publishedImageSourceExtensions = ['.png', '.jpg', '.jpeg', '.webp'];
 const rawRenderedImageSourceExtensions = ['.webp', ...iconSourceExtensions];
 const losslessPublishedWebpOptions = LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS;
 const lossyPreviewWebpOptions = LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS;
@@ -130,6 +132,9 @@ const renderVisibilityByFilePath = new Map();
 let temporaryFileWriteSequence = 0;
 
 const cliArgs = parseCliArgs(process.argv.slice(2));
+if (Object.hasOwn(cliArgs, 'regen-plan') || hasCliFlag(cliArgs, 'metadata-only')) {
+    throw new Error('FoxWatch regen has been removed. Use refresh --only, refresh --category, or refresh --deep.');
+}
 const targetFilter = {
     only: new Set(getNormalizedValues(cliArgs, 'only').map(normalizeId)),
     category: new Set(getNormalizedValues(cliArgs, 'category').map(normalizeId)),
@@ -364,13 +369,9 @@ async function resolvePublishedIconSourceFilePath(directory, value) {
         return null;
     }
 
-    if (await pathExists(directory)) {
-        for (const extension of publishedImageSourceExtensions) {
-            const generatedPath = resolve(directory, `${fileKey}${extension}`);
-            if (await pathExists(generatedPath)) {
-                return generatedPath;
-            }
-        }
+    const generatedPath = await resolveGeneratedIconFilePathByKey(fileKey, directory);
+    if (generatedPath) {
+        return generatedPath;
     }
 
     const existingPublishedIconFilePath = resolveExistingPublishedIconFilePath(value);
@@ -7150,8 +7151,12 @@ function applyStructureRenderUrls(
                 const meshlessFallbackUrl = isMeshlessScene && !usesSyntheticRender ? structureDefaultIconUrl : null;
                 const textureUrl = defaultStructureColor?.textureUrl ?? renderEntry?.textureUrl ?? meshlessFallbackUrl;
                 const defaultTextureUrl = renderEntry?.factions?.c?.textureUrl ?? textureUrl ?? structure.variants.default?.textureUrl;
-                const colonialTextureUrl = renderEntry?.factions?.c?.textureUrl ?? structure.variants.c?.textureUrl ?? defaultTextureUrl;
-                const wardenTextureUrl = renderEntry?.factions?.w?.textureUrl ?? structure.variants.w?.textureUrl ?? defaultTextureUrl;
+                const {
+                    colonialTextureUrl,
+                    wardenTextureUrl,
+                    hasColonialVariant,
+                    hasWardenVariant,
+                } = resolveFactionTextureVariants(structure.variants, renderEntry?.factions, defaultTextureUrl);
                 const previewUrl = defaultStructureColor?.previewUrl ?? renderEntry?.previewUrl ?? meshlessFallbackUrl ?? structure.previewUrl;
                 const previewDirection = renderEntry?.previewDirection
                     ?? sceneMetadata?.previewDirection
@@ -7327,10 +7332,10 @@ function applyStructureRenderUrls(
                         ...(!hasPublishedColorVariants && defaultTextureUrl
                             ? { default: { textureUrl: defaultTextureUrl } }
                             : {}),
-                        ...(colonialTextureUrl && (renderEntry?.factions?.c || colonialTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl))
+                        ...(colonialTextureUrl && hasColonialVariant
                             ? { c: { textureUrl: colonialTextureUrl } }
                             : {}),
-                        ...(wardenTextureUrl && (renderEntry?.factions?.w || wardenTextureUrl !== (primaryColorTextureUrl ?? defaultTextureUrl))
+                        ...(wardenTextureUrl && hasWardenVariant
                             ? { w: { textureUrl: wardenTextureUrl } }
                             : {}),
                     },
@@ -8185,9 +8190,11 @@ try {
     await writeLocalizationFiles(publicLocalizationsDirectory, manifestWithStableRecipeIds);
     await writeLocalizationFiles(fixtureLocalizationsDirectory, manifestWithStableRecipeIds);
 
-    const manifest = compactPublishedFoxholeManifest(normalizeOptionalStructureProperties(splitManifestLocalizations(
-        applyPublishedCanBlueprintFlags(manifestWithStableRecipeIds, prunedMergedManifest),
-    )));
+    const manifest = compactPublishedFoxholeManifest(stripSyntheticFactionTextureVariants(
+        normalizeOptionalStructureProperties(splitManifestLocalizations(
+            applyPublishedCanBlueprintFlags(manifestWithStableRecipeIds, prunedMergedManifest),
+        )),
+    ));
     const serializedManifest = stringifyJsonAscii(manifest);
 
     const outputPaths = [

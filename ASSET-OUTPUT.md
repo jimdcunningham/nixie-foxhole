@@ -52,6 +52,26 @@ These paths are **not** served to the planner. They are inputs to publish.
 | `rendered-assets/` | Blender image outputs (`types/…`, `shared/…`) synced by publish |
 | `foxhole-icons/` | Extracted blueprint UI icons (PNG/WebP sources) from `extract-ui-assets` |
 
+For deep refreshes, `assets/` and `foxhole-icons/` are stable active views into the
+verified PAK-addressed decoded bundle under
+`tmp/decoded-asset-bundles/v1/<pak-fingerprint>/`. The bundle stores no copied
+`.uasset`, `.uexp`, or `.ubulk` files. Its reusable sections are:
+
+| Bundle path | Contents |
+| --- | --- |
+| `packages/War/Content/...json` | Generic decoded Unreal package exports |
+| `inspections/foxwatch-package-inspections.v1.json` | Canonical package index plus decoded blueprint, modification, mesh-bound, and animation-pose lookups used by scene generation |
+| `assets/War/Content/...glb` | Canonical mesh geometry and hierarchy |
+| `assets/War/Content/...json` | Canonical material metadata and texture references |
+| `assets/War/Content/...png` | Lossless decoded material textures |
+| `icons/War/Content/Textures/UI/...png` | Lossless decoded UI icon sources |
+| `icons/icon-source-index.v1.json` | Published icon-key lookup into canonical Unreal paths |
+
+The original Unreal virtual path is preserved below each section. Published
+Foxhole Planner paths remain unchanged and are still owned by the publish stage.
+The bundle is activated only after its PAK identity and extraction provenance are
+rechecked; the stable active views are then switched together.
+
 ### Per-structure render bundle (`tmp/renders/<structureId>/`)
 
 Each renderable asset has a bundle folder containing:

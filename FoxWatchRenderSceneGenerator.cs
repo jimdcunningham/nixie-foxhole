@@ -1,5 +1,6 @@
 namespace FoxWatchService;
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -93,6 +94,8 @@ public sealed class FoxWatchRenderSceneGenerator
     private readonly FoxWatchPoseOverrideLoader _poseOverrideLoader;
     private readonly ILogger<FoxWatchRenderSceneGenerator> _logger;
     private readonly Dictionary<string, string?> _exportUrlByPackagePath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _pendingMeshPackagePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _pendingMaterialPackagePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FoxWatchCraneRenderAsset?> _craneRenderAssetByStructureId = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<SharedModificationHashDiagnosticEntry> _sharedModificationHashDiagnostics = [];
     private IReadOnlyList<string>? _bargePoseAnimationPackagePaths;
@@ -121,7 +124,7 @@ public sealed class FoxWatchRenderSceneGenerator
         _logger = logger;
     }
 
-    public async Task GenerateAsync(string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default)
+    public async Task GenerateAsync(string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default, string? assetExportPlanPath = null)
     {
         var manifest = _manifestGenerator.BuildManifest(baseAssetsUrl, pakDirectoryPath, targetFilter);
         await GenerateAsync(
@@ -132,13 +135,19 @@ public sealed class FoxWatchRenderSceneGenerator
             pakDirectoryPath,
             targetFilter,
             includePoseVariants,
-            cancellationToken);
+            cancellationToken,
+            assetExportPlanPath);
     }
 
-    public async Task GenerateAsync(FoxWatchManifest manifest, string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default)
+    public async Task GenerateAsync(FoxWatchManifest manifest, string outputDirectory, string? renderAssetOutputDirectory, string baseAssetsUrl, string? pakDirectoryPath, FoxWatchTargetFilter? targetFilter = null, bool includePoseVariants = false, CancellationToken cancellationToken = default, string? assetExportPlanPath = null)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         targetFilter ??= FoxWatchTargetFilter.Empty;
         _sharedModificationHashDiagnostics.Clear();
+        _exportUrlByPackagePath.Clear();
+        _pendingMeshPackagePaths.Clear();
+        _pendingMaterialPackagePaths.Clear();
+        var deferAssetExports = !string.IsNullOrWhiteSpace(assetExportPlanPath);
         var diagnosticsRunId = CreateSharedModificationHashDiagnosticsRunId();
 
         var serializerOptions = new JsonSerializerOptions
@@ -159,25 +168,32 @@ public sealed class FoxWatchRenderSceneGenerator
             var index = new FoxWatchRenderSceneIndex();
             var indexEntriesByOutputPath = new Dictionary<string, FoxWatchRenderSceneIndexEntry>(StringComparer.OrdinalIgnoreCase);
             var generatedSceneDocuments = new List<FoxWatchGeneratedRenderSceneDocument>();
+            var sceneExtractionStopwatch = Stopwatch.StartNew();
             foreach (var structure in manifest.Assets.OrderBy(entry => entry.Id, StringComparer.Ordinal))
             {
                 var sceneDocuments = await CreateSceneDocumentsAsync(
                     structure,
                     renderAssetOutputDirectory,
                     includePoseVariants,
-                    cancellationToken);
+                    cancellationToken,
+                    deferAssetExports);
 
                 generatedSceneDocuments.AddRange(sceneDocuments);
             }
+            sceneExtractionStopwatch.Stop();
 
+            var sharedSceneStopwatch = Stopwatch.StartNew();
             generatedSceneDocuments.AddRange(await CreateSharedPackagedPalletSceneDocumentsAsync(
                 renderAssetOutputDirectory,
-                cancellationToken));
+                cancellationToken,
+                deferAssetExports));
+            sharedSceneStopwatch.Stop();
 
             var modificationRenderIndex = await FoxWatchModificationRenderIndexWriter.LoadAsync(
                 FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultModificationRenderIndexRelativePath)!,
                 cancellationToken);
 
+            var deduplicationStopwatch = Stopwatch.StartNew();
             var deduplicatedSceneDocuments = DeduplicateStandaloneModificationSceneDocuments(
                 generatedSceneDocuments,
                 modificationRenderIndex);
@@ -200,7 +216,9 @@ public sealed class FoxWatchRenderSceneGenerator
                     FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultModificationRenderIndexRelativePath)!,
                     cancellationToken);
             }
+            deduplicationStopwatch.Stop();
 
+            var sceneWriteStopwatch = Stopwatch.StartNew();
             foreach (var sceneDocument in deduplicatedSceneDocuments.OrderBy(entry => entry.RelativeScenePath, StringComparer.Ordinal))
             {
                 var filePath = Path.Combine(outputDirectory, sceneDocument.RelativeScenePath);
@@ -257,7 +275,19 @@ public sealed class FoxWatchRenderSceneGenerator
             var indexPath = Path.Combine(outputDirectory, "index.render-scenes.v1.json");
             var indexJson = JsonSerializer.Serialize(index, serializerOptions);
             await File.WriteAllTextAsync(indexPath, $"{indexJson}{Environment.NewLine}", cancellationToken);
+            if (deferAssetExports)
+            {
+                await WriteAssetExportPlanAsync(assetExportPlanPath!, cancellationToken);
+            }
+            sceneWriteStopwatch.Stop();
             _logger.LogInformation("Wrote {SceneCount} FoxWatch render bundle scene documents to {OutputDirectory}", index.Scenes.Count, outputDirectory);
+            _logger.LogInformation(
+                "Render-scene timings: extraction {ExtractionMs:F0} ms, shared scenes {SharedMs:F0} ms, deduplication {DeduplicationMs:F0} ms, scene writes {WriteMs:F0} ms, total {TotalMs:F0} ms",
+                sceneExtractionStopwatch.Elapsed.TotalMilliseconds,
+                sharedSceneStopwatch.Elapsed.TotalMilliseconds,
+                deduplicationStopwatch.Elapsed.TotalMilliseconds,
+                sceneWriteStopwatch.Elapsed.TotalMilliseconds,
+                totalStopwatch.Elapsed.TotalMilliseconds);
         }
         finally
         {
@@ -276,14 +306,15 @@ public sealed class FoxWatchRenderSceneGenerator
         FoxWatchManifestStructure structure,
         string? renderAssetOutputDirectory,
         bool includePoseVariants,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool deferAssetExports)
     {
         var blueprintScene = await _blueprintSceneExtractor.TryExtractAsync(structure, cancellationToken);
         blueprintScene = await AppendCraneSpawnVisualsAsync(structure, blueprintScene, cancellationToken);
         blueprintScene = AppendResourceFieldNodeVisuals(structure, blueprintScene);
         if (blueprintScene?.Meshes.Count > 0)
         {
-            await PopulateMeshExportsAsync(blueprintScene.Meshes, renderAssetOutputDirectory, cancellationToken);
+            await PopulateMeshExportsAsync(blueprintScene.Meshes, renderAssetOutputDirectory, cancellationToken, deferAssetExports);
         }
 
         var collapsedBlueprint = CollapseBlueprintSceneForBaseRender(
@@ -324,10 +355,10 @@ public sealed class FoxWatchRenderSceneGenerator
             collapsedStructureScene = PrepareWorldRoadBaseScene(structure, collapsedBlueprint);
             componentStructureScene = CloneBlueprintSceneExtraction(collapsedBlueprint);
         }
-        else if (IsTrenchEmplacementStructure(structure))
+        else if (RequiresUnclippedEntrenchmentPreview(structure))
         {
-            // The top-down texture needs its below-ground floor clipped away, while the
-            // preview/icon need the complete assembled mesh so the emplacement keeps its depth.
+            // The top-down texture needs its below-ground geometry clipped away, while the
+            // preview/icon need the complete assembled mesh so the entrenchment keeps its depth.
             collapsedStructureScene = PrepareBlueprintSceneForBaseRender(structure, collapsedBlueprint);
             baseSceneModes = ["topdown"];
         }
@@ -415,7 +446,7 @@ public sealed class FoxWatchRenderSceneGenerator
                     cancellationToken),
             });
         }
-        else if (IsTrenchEmplacementStructure(structure))
+        else if (RequiresUnclippedEntrenchmentPreview(structure))
         {
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
             {
@@ -472,7 +503,7 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             if (destroyedVehicleScene.Meshes.Count > 0)
             {
-                await PopulateMeshExportsAsync(destroyedVehicleScene.Meshes, renderAssetOutputDirectory, cancellationToken);
+                await PopulateMeshExportsAsync(destroyedVehicleScene.Meshes, renderAssetOutputDirectory, cancellationToken, deferAssetExports);
             }
 
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
@@ -501,7 +532,7 @@ public sealed class FoxWatchRenderSceneGenerator
         {
             if (packagedScene.Meshes.Count > 0)
             {
-                await PopulateMeshExportsAsync(packagedScene.Meshes, renderAssetOutputDirectory, cancellationToken);
+                await PopulateMeshExportsAsync(packagedScene.Meshes, renderAssetOutputDirectory, cancellationToken, deferAssetExports);
             }
 
             documents.Add(new FoxWatchGeneratedRenderSceneDocument
@@ -716,7 +747,8 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private async Task<List<FoxWatchGeneratedRenderSceneDocument>> CreateSharedPackagedPalletSceneDocumentsAsync(
         string? renderAssetOutputDirectory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool deferAssetExports)
     {
         var documents = new List<FoxWatchGeneratedRenderSceneDocument>();
         foreach (var shippableType in SharedPackagedPalletShippableTypes)
@@ -729,7 +761,7 @@ public sealed class FoxWatchRenderSceneGenerator
 
             if (palletScene.Meshes.Count > 0)
             {
-                await PopulateMeshExportsAsync(palletScene.Meshes, renderAssetOutputDirectory, cancellationToken);
+                await PopulateMeshExportsAsync(palletScene.Meshes, renderAssetOutputDirectory, cancellationToken, deferAssetExports);
             }
 
             var structure = new FoxWatchManifestStructure
@@ -2786,11 +2818,16 @@ public sealed class FoxWatchRenderSceneGenerator
         return IsTrenchStructureWithComponentLayers(structure) || IsFortEntrenchmentStructure(structure);
     }
 
-    private static bool IsTrenchEmplacementStructure(FoxWatchManifestStructure structure)
+    private static bool RequiresUnclippedEntrenchmentPreview(FoxWatchManifestStructure structure)
     {
-        return string.Equals(structure.CodeName, "TrenchEmpT1", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(structure.CodeName, "TrenchEmpT2", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(structure.CodeName, "TrenchEmpT3", StringComparison.OrdinalIgnoreCase);
+        if (!GetClipFloor(structure)
+            || !string.Equals(structure.CategoryId, "bunker", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return IsEntrenchmentStructureForFloorClipping(structure)
+            || (structure.CodeName?.StartsWith("TrenchConnector", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static bool IsStandaloneDestroyedOrBreachedStructure(FoxWatchManifestStructure structure)
@@ -6117,7 +6154,11 @@ public sealed class FoxWatchRenderSceneGenerator
             ["FacilityFoundationDirt"] = "War/Content/Meshes/Structures/Foundations/Foundation01_1x2_T1.uasset",
         };
 
-    private async Task PopulateMeshExportsAsync(IEnumerable<FoxWatchRenderSceneMeshAsset> meshAssets, string? renderAssetOutputDirectory, CancellationToken cancellationToken)
+    private async Task PopulateMeshExportsAsync(
+        IEnumerable<FoxWatchRenderSceneMeshAsset> meshAssets,
+        string? renderAssetOutputDirectory,
+        CancellationToken cancellationToken,
+        bool deferAssetExports)
     {
         if (string.IsNullOrWhiteSpace(renderAssetOutputDirectory))
         {
@@ -6145,8 +6186,15 @@ public sealed class FoxWatchRenderSceneGenerator
             var expectedExportPath = BuildExportPath(renderAssetOutputDirectory, exportUrl);
             if (!string.IsNullOrWhiteSpace(expectedExportPath) && !File.Exists(expectedExportPath))
             {
-                var result = await _meshAssetExporter.ExportMeshAsync(meshPackagePath, renderAssetOutputDirectory, cancellationToken);
-                exportUrl = BuildExportUrlFromSavedFilePath(renderAssetOutputDirectory, result.SavedFilePath) ?? exportUrl;
+                if (deferAssetExports)
+                {
+                    _pendingMeshPackagePaths.Add(meshPackagePath);
+                }
+                else
+                {
+                    var result = await _meshAssetExporter.ExportMeshAsync(meshPackagePath, renderAssetOutputDirectory, cancellationToken);
+                    exportUrl = BuildExportUrlFromSavedFilePath(renderAssetOutputDirectory, result.SavedFilePath) ?? exportUrl;
+                }
             }
 
             meshAsset.ExportUrl = exportUrl;
@@ -6165,7 +6213,14 @@ public sealed class FoxWatchRenderSceneGenerator
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await _meshAssetExporter.ExportMeshAsync(referenceMeshPackagePath, renderAssetOutputDirectory, cancellationToken);
+            if (deferAssetExports)
+            {
+                _pendingMeshPackagePaths.Add(referenceMeshPackagePath);
+            }
+            else
+            {
+                await _meshAssetExporter.ExportMeshAsync(referenceMeshPackagePath, renderAssetOutputDirectory, cancellationToken);
+            }
             _exportUrlByPackagePath[referenceMeshPackagePath] = BuildExportUrl(referenceMeshPackagePath) ?? referenceMeshPackagePath;
         }
 
@@ -6177,8 +6232,68 @@ public sealed class FoxWatchRenderSceneGenerator
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await _meshAssetExporter.ExportMaterialAsync(materialPackagePath, renderAssetOutputDirectory, cancellationToken);
+            var expectedMaterialPath = BuildExpectedMaterialSidecarPath(renderAssetOutputDirectory, materialPackagePath);
+            if (!File.Exists(expectedMaterialPath))
+            {
+                if (deferAssetExports)
+                {
+                    _pendingMaterialPackagePaths.Add(materialPackagePath);
+                }
+                else
+                {
+                    await _meshAssetExporter.ExportMaterialAsync(
+                        materialPackagePath,
+                        renderAssetOutputDirectory,
+                        cancellationToken: cancellationToken);
+                }
+            }
         }
+    }
+
+    private async Task WriteAssetExportPlanAsync(string planPath, CancellationToken cancellationToken)
+    {
+        var resolvedPath = FoxWatchWorkspace.ResolvePath(planPath)
+            ?? throw new InvalidOperationException("Asset export plan path could not be resolved.");
+        var directory = Path.GetDirectoryName(resolvedPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var plan = new FoxWatchAssetExportPlan
+        {
+            MeshPackagePaths = _pendingMeshPackagePaths.OrderBy(value => value, StringComparer.Ordinal).ToList(),
+            MaterialPackagePaths = _pendingMaterialPackagePaths.OrderBy(value => value, StringComparer.Ordinal).ToList(),
+        };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+        };
+        await File.WriteAllTextAsync(
+            resolvedPath,
+            $"{JsonSerializer.Serialize(plan, options)}{Environment.NewLine}",
+            cancellationToken);
+        _logger.LogInformation(
+            "Prepared asset cache export plan with {MeshCount} mesh package(s) and {MaterialCount} explicit material package(s) at {PlanPath}",
+            plan.MeshPackagePaths.Count,
+            plan.MaterialPackagePaths.Count,
+            resolvedPath);
+    }
+
+    private static string BuildExpectedMaterialSidecarPath(string outputDirectory, string materialPackagePath)
+    {
+        var normalized = materialPackagePath.Replace('\\', '/').Trim();
+        var objectSeparatorIndex = normalized.LastIndexOf('.');
+        if (objectSeparatorIndex > normalized.LastIndexOf('/'))
+        {
+            normalized = normalized[..objectSeparatorIndex];
+        }
+        if (normalized.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[..^".uasset".Length];
+        }
+        return Path.Combine(outputDirectory, normalized.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)) + ".json";
     }
 
     private static string? ConvertMeshSourcePathToPackagePath(string? sourcePath)

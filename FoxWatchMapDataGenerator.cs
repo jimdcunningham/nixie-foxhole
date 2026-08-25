@@ -534,10 +534,9 @@ public sealed class FoxWatchMapDataGenerator
             throw new DirectoryNotFoundException($"Foxhole pak directory is unavailable: '{_pakDirectoryPath}'.");
         }
 
-        _fileProvider = new DefaultFileProvider(
+        _fileProvider = FoxWatchPackageSource.CreateProvider(
             _pakDirectoryPath,
-            SearchOption.TopDirectoryOnly,
-            new VersionContainer(EngineVersion),
+            EngineVersion,
             StringComparer.OrdinalIgnoreCase);
         _fileProvider.Initialize();
         _fileProvider.Mount();

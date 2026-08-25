@@ -7,6 +7,60 @@ function normalizeId(value) {
     return String(value ?? '').trim().toLowerCase();
 }
 
+function normalizeTextureUrl(value) {
+    const normalized = String(value ?? '').trim();
+    return normalized || null;
+}
+
+export function resolveFactionTextureVariants(structureVariants, renderFactions, defaultTextureUrl) {
+    const renderedColonialTextureUrl = normalizeTextureUrl(renderFactions?.c?.textureUrl);
+    const renderedWardenTextureUrl = normalizeTextureUrl(renderFactions?.w?.textureUrl);
+    const authoredColonialTextureUrl = normalizeTextureUrl(structureVariants?.c?.textureUrl);
+    const authoredWardenTextureUrl = normalizeTextureUrl(structureVariants?.w?.textureUrl);
+    const hasDistinctAuthoredFactionPair = Boolean(
+        authoredColonialTextureUrl
+        && authoredWardenTextureUrl
+        && authoredColonialTextureUrl !== authoredWardenTextureUrl,
+    );
+    const fallbackTextureUrl = normalizeTextureUrl(defaultTextureUrl);
+
+    return {
+        colonialTextureUrl: renderedColonialTextureUrl
+            ?? (hasDistinctAuthoredFactionPair ? authoredColonialTextureUrl : null)
+            ?? fallbackTextureUrl,
+        wardenTextureUrl: renderedWardenTextureUrl
+            ?? (hasDistinctAuthoredFactionPair ? authoredWardenTextureUrl : null)
+            ?? fallbackTextureUrl,
+        hasColonialVariant: Boolean(renderedColonialTextureUrl || hasDistinctAuthoredFactionPair),
+        hasWardenVariant: Boolean(renderedWardenTextureUrl || hasDistinctAuthoredFactionPair),
+    };
+}
+
+export function stripSyntheticFactionTextureVariants(manifest) {
+    if (!manifest || typeof manifest !== 'object' || !Array.isArray(manifest.assets)) {
+        return manifest;
+    }
+
+    return {
+        ...manifest,
+        assets: manifest.assets.map((asset) => {
+            const colonialTextureUrl = normalizeTextureUrl(asset?.variants?.c?.textureUrl);
+            const wardenTextureUrl = normalizeTextureUrl(asset?.variants?.w?.textureUrl);
+            if (!colonialTextureUrl || colonialTextureUrl !== wardenTextureUrl) {
+                return asset;
+            }
+
+            const variants = { ...asset.variants };
+            delete variants.c;
+            delete variants.w;
+            return {
+                ...asset,
+                ...(Object.keys(variants).length > 0 ? { variants } : { variants: undefined }),
+            };
+        }),
+    };
+}
+
 async function pathExists(filePath) {
     try {
         await access(filePath);

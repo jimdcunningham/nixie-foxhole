@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -23,6 +24,8 @@ using System.Text;
 using System.Text.Json;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using CueBlueprintGeneratedClass = CUE4Parse.UE4.Objects.Engine.UBlueprintGeneratedClass;
+using UBlueprintGeneratedClass = System.Object;
 
 namespace FoxWatchService;
 
@@ -65,13 +68,21 @@ public class FoxWatchManifestAssetExtractor
         private readonly string? _blueprintTargetIndexPath;
         private readonly string _pakDirectorySignature;
         private readonly DefaultFileProvider _fileProvider;
+        private readonly FoxWatchDecodedPackageSource _decodedPackageSource;
         private readonly FoxWatchAssetMeshExporter? _meshAssetExporter;
         private readonly FoxWatchNonCodeNameStructureWhitelistLoader? _nonCodeNameStructureWhitelistLoader;
+        private readonly Dictionary<string, string> _iconSourcePathsByKey = new(StringComparer.OrdinalIgnoreCase);
+        private IReadOnlyList<string> _mountedPackagePaths = [];
+        private IReadOnlyList<string> _blueprintPackagePaths = [];
+        private IReadOnlyDictionary<string, string> _mountedPackagePathByNormalizedPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private IReadOnlyDictionary<string, IReadOnlyList<string>> _mountedPackagePathsByFileName = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        private IReadOnlyDictionary<string, IReadOnlyList<string>> _mountedPackagePathsByDirectory = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, IReadOnlyList<FoxWatchBlueprintComponentReference>> _blueprintComponentReferencesByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, IReadOnlyList<BlueprintComponentScope>> _blueprintComponentScopesByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, VehicleBodyFrameCorrection?> _vehicleBodyFrameCorrectionsByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, VehicleSeatForwardHints> _vehicleSeatForwardHintsByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, IReadOnlyDictionary<string, ManifestComponentTransform>> _skeletalMeshAttachPointTransformsByPackagePath = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, JObject?> _modificationDataDefaultObjectsByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _unknownCategoryTokens = new(StringComparer.Ordinal);
         private IReadOnlyDictionary<string, FoxWatchMountDynamicDataEntry>? _mountDynamicDataEntriesByKey;
         private IReadOnlyDictionary<string, FoxWatchConstructionDynamicDataEntry>? _constructionDynamicDataEntriesByKey;
@@ -80,6 +91,23 @@ public class FoxWatchManifestAssetExtractor
         private readonly Dictionary<string, FoxWatchLiquidItemComponentMetadata?> _liquidItemComponentMetadataByPackagePath = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, HashSet<string>>? _blueprintPackagePathsByTargetId;
         private bool _blueprintTargetIndexDirty;
+        public int ModificationDataCacheHits { get; private set; }
+        public int ModificationDataCacheMisses { get; private set; }
+        public FoxWatchManifestExtractionTimings ExtractionTimings { get; private set; } = new();
+        public int InheritedPropertyLookupCount { get; private set; }
+        public TimeSpan InheritedPropertyLookupElapsed { get; private set; }
+        public TimeSpan CoreMetadataExtractionElapsed { get; private set; }
+        public TimeSpan SpatialComponentExtractionElapsed { get; private set; }
+        public TimeSpan BuildSocketExtractionElapsed { get; private set; }
+        public TimeSpan CraneSpawnExtractionElapsed { get; private set; }
+        public TimeSpan EmplacementExtractionElapsed { get; private set; }
+        public TimeSpan RailCouplerExtractionElapsed { get; private set; }
+        public TimeSpan FootprintVolumeExtractionElapsed { get; private set; }
+        public TimeSpan VehicleSeatExtractionElapsed { get; private set; }
+        public TimeSpan SpotlightExtractionElapsed { get; private set; }
+        public TimeSpan ProductionModificationExtractionElapsed { get; private set; }
+        public TimeSpan CombatRenderExtractionElapsed { get; private set; }
+        public TimeSpan ModelAssemblyElapsed { get; private set; }
         private const string SignedFloatPattern = @"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?";
         private static readonly Regex VectorPattern = new($@"X=(?<x>{SignedFloatPattern})\s+Y=(?<y>{SignedFloatPattern})\s+Z=(?<z>{SignedFloatPattern})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex RotatorPattern = new($@"P=(?<pitch>{SignedFloatPattern})\s+Y=(?<yaw>{SignedFloatPattern})\s+R=(?<roll>{SignedFloatPattern})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -140,19 +168,23 @@ public class FoxWatchManifestAssetExtractor
             _pakDirectoryPath = FoxWatchWorkspace.ResolvePath(pakFilePath);
             _blueprintTargetIndexPath = FoxWatchWorkspace.ResolvePath(FoxWatchWorkspace.DefaultBlueprintTargetIndexRelativePath);
             _pakDirectorySignature = ComputePakDirectorySignature(_pakDirectoryPath);
-            _fileProvider = new DefaultFileProvider(
+            _fileProvider = FoxWatchPackageSource.CreateProvider(
                 pakFilePath,
-                SearchOption.TopDirectoryOnly,
-                new VersionContainer(resolvedEngineVersion),
+                resolvedEngineVersion,
                 StringComparer.OrdinalIgnoreCase);
             _fileProvider.Initialize();
+            _decodedPackageSource = new FoxWatchDecodedPackageSource(pakFilePath);
             _meshAssetExporter = meshAssetExporter;
             _nonCodeNameStructureWhitelistLoader = nonCodeNameStructureWhitelistLoader;
         }
 
         public FoxWatchManifest BuildStructureManifest(string baseAssetsUrl, string? iconOutputDirectory = null, FoxWatchTargetFilter? targetFilter = null)
         {
+            var totalStopwatch = Stopwatch.StartNew();
+            var stageStopwatch = Stopwatch.StartNew();
             _fileProvider.Mount();
+            BuildMountedPackageIndexes();
+            var mountAndIndexElapsed = stageStopwatch.Elapsed;
 
             var englishStrings = new Dictionary<string, string>(StringComparer.Ordinal);
             var localizationReferencesById = new Dictionary<string, FoxWatchLocalizationReference>(StringComparer.Ordinal);
@@ -160,29 +192,43 @@ public class FoxWatchManifestAssetExtractor
             var structuresById = new Dictionary<string, FoxWatchManifestStructure>(StringComparer.Ordinal);
             var referencedBuildSiteRequestsById = new Dictionary<string, ReferencedBuildSiteExtractionRequest>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var packagePath in EnumerateCandidateBlueprintPackagePaths(targetFilter))
+            stageStopwatch.Restart();
+            var candidatePackagePaths = EnumerateCandidateBlueprintPackagePaths(targetFilter).ToArray();
+            var candidateDiscoveryElapsed = stageStopwatch.Elapsed;
+            var decodedReadElapsed = TimeSpan.Zero;
+            var structureInterpretationElapsed = TimeSpan.Zero;
+            var slowPackages = new List<FoxWatchSlowManifestPackage>();
+
+            foreach (var packagePath in candidatePackagePaths)
             {
                 IReadOnlyCollection<dynamic> objects;
                 try
                 {
-                    var package = _fileProvider.LoadPackage(packagePath);
-                    objects = package.GetExports().Cast<dynamic>().ToArray();
+                    stageStopwatch.Restart();
+                    objects = LoadPackageExports(packagePath);
+                    decodedReadElapsed += stageStopwatch.Elapsed;
                 }
                 catch
                 {
+                    decodedReadElapsed += stageStopwatch.Elapsed;
                     continue;
                 }
 
-                var blueprint = objects.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
+                var blueprint = FindBlueprintGeneratedClass(objects);
                 if (blueprint == null)
                 {
                     continue;
                 }
 
                 var packageProducedStructure = false;
-                foreach (var obj in objects)
+                var packageInterpretationElapsed = TimeSpan.Zero;
+                foreach (object obj in objects)
                 {
+                    stageStopwatch.Restart();
                     var structure = TryBuildStructure(obj, objects, blueprint, baseAssetsUrl, iconOutputDirectory, categoriesById, englishStrings, localizationReferencesById);
+                    var objectInterpretationElapsed = stageStopwatch.Elapsed;
+                    structureInterpretationElapsed += objectInterpretationElapsed;
+                    packageInterpretationElapsed += objectInterpretationElapsed;
                     if (structure == null)
                     {
                         continue;
@@ -195,7 +241,7 @@ public class FoxWatchManifestAssetExtractor
                     }
 
                     FoxWatchManifestStructure resolvedStructure;
-                    if (structuresById.TryGetValue(structureId, out FoxWatchManifestStructure existingStructure))
+                    if (structuresById.TryGetValue(structureId, out FoxWatchManifestStructure? existingStructure) && existingStructure != null)
                     {
                         var shouldPreferCandidate = ShouldPreferStructureCandidate(existingStructure, structure);
                         var preferredStructure = shouldPreferCandidate ? structure : existingStructure;
@@ -221,9 +267,13 @@ public class FoxWatchManifestAssetExtractor
                     if (!string.IsNullOrWhiteSpace(fallbackCodeName))
                     {
                         var defaultObject = ResolveBlueprintDefaultObject(objects, blueprint);
+                        stageStopwatch.Restart();
                         var structure = defaultObject == null
                             ? null
                             : TryBuildStructure(defaultObject, objects, blueprint, baseAssetsUrl, iconOutputDirectory, categoriesById, englishStrings, localizationReferencesById, fallbackCodeName);
+                        var fallbackInterpretationElapsed = stageStopwatch.Elapsed;
+                        structureInterpretationElapsed += fallbackInterpretationElapsed;
+                        packageInterpretationElapsed += fallbackInterpretationElapsed;
                         if (structure != null)
                         {
                             var structureId = structure.Id;
@@ -233,7 +283,7 @@ public class FoxWatchManifestAssetExtractor
                             }
 
                             FoxWatchManifestStructure resolvedStructure;
-                            if (structuresById.TryGetValue(structureId, out FoxWatchManifestStructure existingStructure))
+                            if (structuresById.TryGetValue(structureId, out FoxWatchManifestStructure? existingStructure) && existingStructure != null)
                             {
                                 var shouldPreferCandidate = ShouldPreferStructureCandidate(existingStructure, structure);
                                 var preferredStructure = shouldPreferCandidate ? structure : existingStructure;
@@ -253,8 +303,14 @@ public class FoxWatchManifestAssetExtractor
                         }
                     }
                 }
+
+                if (packageInterpretationElapsed >= TimeSpan.FromMilliseconds(250))
+                {
+                    slowPackages.Add(new FoxWatchSlowManifestPackage(packagePath, packageInterpretationElapsed));
+                }
             }
 
+            stageStopwatch.Restart();
             ExtractReferencedBuildSiteStructures(
                 referencedBuildSiteRequestsById,
                 structuresById,
@@ -263,7 +319,9 @@ public class FoxWatchManifestAssetExtractor
                 categoriesById,
                 englishStrings,
                 localizationReferencesById);
+            var referencedBuildSitesElapsed = stageStopwatch.Elapsed;
 
+            stageStopwatch.Restart();
             AppendFieldModificationCenterVehicleUpgradeConversions(structuresById);
 
             foreach (var rawCategoryToken in _unknownCategoryTokens.OrderBy(value => value, StringComparer.Ordinal))
@@ -272,8 +330,15 @@ public class FoxWatchManifestAssetExtractor
             }
 
             PersistBlueprintTargetIndex();
+            var postProcessingElapsed = stageStopwatch.Elapsed;
 
+            stageStopwatch.Restart();
             var localizationBundles = BuildLocalizationBundles(englishStrings, localizationReferencesById);
+            var localizationElapsed = stageStopwatch.Elapsed;
+
+            stageStopwatch.Restart();
+            var bunkerDestruction = ExtractBunkerDestructionSharedData();
+            var sharedDataElapsed = stageStopwatch.Elapsed;
 
             var manifest = new FoxWatchManifest
             {
@@ -283,7 +348,7 @@ public class FoxWatchManifestAssetExtractor
                 },
                 Shared = new FoxWatchManifestShared
                 {
-                    BunkerDestruction = ExtractBunkerDestructionSharedData(),
+                    BunkerDestruction = bunkerDestruction,
                 },
                 Categories = categoriesById.Values.OrderBy(category => category.Order).ThenBy(category => category.Name?.Fallback ?? category.Id).ToList(),
                 Assets = structuresById.Values.OrderBy(structure => structure.CategoryId).ThenBy(structure => structure.BuildOrder).ThenBy(structure => structure.Name?.Fallback ?? structure.Id).ToList(),
@@ -291,16 +356,63 @@ public class FoxWatchManifestAssetExtractor
                 Localizations = localizationBundles,
             };
             FoxWatchModificationRenderIdentity.AssignRenderIds(manifest);
+            totalStopwatch.Stop();
+            ExtractionTimings = new FoxWatchManifestExtractionTimings
+            {
+                CandidatePackageCount = candidatePackagePaths.Length,
+                MountAndIndex = mountAndIndexElapsed,
+                CandidateDiscovery = candidateDiscoveryElapsed,
+                DecodedReads = decodedReadElapsed,
+                StructureInterpretation = structureInterpretationElapsed,
+                ReferencedBuildSites = referencedBuildSitesElapsed,
+                PostProcessing = postProcessingElapsed,
+                Localization = localizationElapsed,
+                SharedData = sharedDataElapsed,
+                SlowPackages = slowPackages
+                    .OrderByDescending(entry => entry.Elapsed)
+                    .ThenBy(entry => entry.PackagePath, StringComparer.Ordinal)
+                    .Take(10)
+                    .ToArray(),
+                Total = totalStopwatch.Elapsed,
+            };
+            WriteIconSourceIndex(iconOutputDirectory);
             return manifest;
+        }
+
+        private IReadOnlyCollection<dynamic> LoadPackageExports(string packagePath)
+        {
+            return _decodedPackageSource.LoadExports(_fileProvider, packagePath);
+        }
+
+        private static object? FindBlueprintGeneratedClass(IEnumerable<dynamic> objects)
+        {
+            return objects.Cast<object>().FirstOrDefault(IsBlueprintGeneratedClass);
+        }
+
+        private static bool IsBlueprintGeneratedClass(object? value)
+        {
+            if (value is CueBlueprintGeneratedClass)
+            {
+                return true;
+            }
+
+            var typeName = NormalizeString(ExtractText(GetNamedValue(value, "Type")));
+            return typeName.EndsWith("BlueprintGeneratedClass", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetObjectName(object? value)
+        {
+            if (value is UObject unrealObject)
+            {
+                return NormalizeString(unrealObject.Name);
+            }
+
+            return NormalizeString(ExtractText(GetNamedValue(value, "Name") ?? GetNamedValue(value, "ObjectName")));
         }
 
         private IEnumerable<string> EnumerateCandidateBlueprintPackagePaths(FoxWatchTargetFilter? targetFilter)
         {
-            var blueprintPackagePaths = _fileProvider.Files
-                .Where(file => file.Value.IsUePackage && file.Key.StartsWith(BlueprintPackagePrefix, StringComparison.Ordinal))
-                .Select(file => file.Key)
-                .OrderBy(path => path, StringComparer.Ordinal)
-                .ToArray();
+            var blueprintPackagePaths = _blueprintPackagePaths;
 
             if (targetFilter == null || !targetFilter.HasFilters)
             {
@@ -649,7 +761,7 @@ public class FoxWatchManifestAssetExtractor
         }
 
         private FoxWatchManifestStructure? TryBuildStructure(
-            dynamic obj,
+            object obj,
             IReadOnlyCollection<dynamic> objects,
             UBlueprintGeneratedClass blueprint,
             string baseAssetsUrl,
@@ -659,12 +771,12 @@ public class FoxWatchManifestAssetExtractor
             IDictionary<string, FoxWatchLocalizationReference> localizationReferencesById,
             string? fallbackCodeName = null)
         {
-            if (obj is UBlueprintGeneratedClass)
+            if (IsBlueprintGeneratedClass(obj))
             {
                 return null;
             }
 
-            var codeNameText = NormalizeString(ExtractText((object?)obj.GetOrDefault<dynamic>("CodeName")));
+            var codeNameText = NormalizeString(ExtractText(GetNamedValue(obj, "CodeName")));
             if (string.IsNullOrWhiteSpace(codeNameText))
             {
                 codeNameText = NormalizeString(fallbackCodeName);
@@ -676,9 +788,10 @@ public class FoxWatchManifestAssetExtractor
 
             var structureId = codeNameText.ToLowerInvariant();
             object? inheritedProperty(string propertyName) => GetInheritedBlueprintProperty(objects, blueprint, obj, propertyName);
+            var structureStageStartedAt = Stopwatch.GetTimestamp();
 
-            object? displayNameText = inheritedProperty("DisplayName") ?? (object?)obj.GetOrDefault<dynamic>("DisplayName");
-            object? descriptionText = inheritedProperty("Description") ?? (object?)obj.GetOrDefault<dynamic>("Description");
+            object? displayNameText = inheritedProperty("DisplayName") ?? GetNamedValue(obj, "DisplayName");
+            object? descriptionText = inheritedProperty("Description") ?? GetNamedValue(obj, "Description");
             var displayName = ExtractLocalizedText(
                 displayNameText,
                 $"foxhole:structure:{structureId}:name",
@@ -763,25 +876,43 @@ public class FoxWatchManifestAssetExtractor
             var packagedMeshPackagePath = ResolveReferencedPackagePath(inheritedProperty("PackagedMesh"));
             var shippableInfoValue = inheritedProperty("ShippableInfo");
             var shippableType = ResolveShippableType(shippableInfoValue);
+            CoreMetadataExtractionElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
+            structureStageStartedAt = Stopwatch.GetTimestamp();
+            var spatialStageStartedAt = Stopwatch.GetTimestamp();
             var buildSockets = ExtractBuildSockets(objects, blueprint, obj);
+            BuildSocketExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var craneSpawns = ExtractCraneSpawns(objects, blueprint, obj);
+            CraneSpawnExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
             var supportsEmplacedStructures = ExtractBoolValue(inheritedProperty("bSupportsEmplacedStructures")) == true;
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var emplacementLocation = ExtractEmplacementLocation(objects, blueprint, obj);
+            EmplacementExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
             var isEmplacedWeapon = IsEmplacedWeaponBlueprint(blueprint);
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var railCouplers = ExtractRailCouplers(objects, blueprint, obj);
+            RailCouplerExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
             var wheelBase = ExtractDouble(inheritedProperty("WheelBase"));
             if (wheelBase is not > 0)
             {
                 wheelBase = null;
             }
             var trackGauge = ResolveRailTrackGauge(inheritedProperty("TrackGauge"), wheelBase);
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var buildFootprintBoxes = ExtractBuildFootprintBoxes(objects, blueprint, obj);
             var structureVolumes = MergeStructureVolumes(
                 ExtractStructureVolumes(objects, blueprint, obj),
                 BuildFootprintStructureVolumes(buildFootprintBoxes));
+            FootprintVolumeExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
 
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var vehicleSeats = ExtractVehicleSeats(objects, blueprint, baseAssetsUrl, iconOutputDirectory);
+            VehicleSeatExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
+            spatialStageStartedAt = Stopwatch.GetTimestamp();
             var spotlights = ExtractSpotlights(objects, blueprint);
+            SpotlightExtractionElapsed += Stopwatch.GetElapsedTime(spatialStageStartedAt);
+            SpatialComponentExtractionElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
+            structureStageStartedAt = Stopwatch.GetTimestamp();
             var fuelTanks = ExtractFuelTanks(inheritedProperty("FuelTanks"));
             var stockpile = ExtractStockpile(objects, blueprint);
             var specializedFactoryMetadata = ExtractSpecializedFactoryMetadata(objects, blueprint);
@@ -842,6 +973,8 @@ public class FoxWatchManifestAssetExtractor
                 subTypeIconUrl = ExportReferencedIcon(WreckedSubTypeIconObjectPath, "subtypewreckedicon", baseAssetsUrl, iconOutputDirectory) ?? subTypeIconUrl;
             }
 
+            ProductionModificationExtractionElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
+            structureStageStartedAt = Stopwatch.GetTimestamp();
             var isItem = !string.IsNullOrWhiteSpace(itemCategoryId);
             var ranges = ExtractRanges(objects, blueprint, obj);
             NormalizeKnownVehicleComponentFrames(codeNameText, vehicleSeats, spotlights, ranges);
@@ -851,6 +984,8 @@ public class FoxWatchManifestAssetExtractor
             buildSockets = ApplyEntrenchmentSocketVisibilityTags(buildSockets);
             buildSockets = ApplyBunkerBreachFaceMetadata(buildSockets, blueprintPackagePath, breachable == true);
             var renderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets);
+            CombatRenderExtractionElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
+            structureStageStartedAt = Stopwatch.GetTimestamp();
 
             var structure = new FoxWatchManifestStructure
             {
@@ -955,6 +1090,7 @@ public class FoxWatchManifestAssetExtractor
             };
 
             ApplyModificationUpgradeClassification(structure);
+            ModelAssemblyElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
 
             return structure;
         }
@@ -2303,10 +2439,11 @@ public class FoxWatchManifestAssetExtractor
             return null;
         }
 
-        private static bool ComputeIsDestroyedStructure(dynamic obj, UBlueprintGeneratedClass blueprint, bool isVehicle, string? profileType, string? armourType)
+        private static bool ComputeIsDestroyedStructure(object obj, UBlueprintGeneratedClass blueprint, bool isVehicle, string? profileType, string? armourType)
         {
-            var superStructName = NormalizeString(blueprint.SuperStruct?.Name);
-            var superStructReference = NormalizeString(blueprint.SuperStruct?.ToString());
+            var superStruct = GetNamedValue(blueprint, "SuperStruct");
+            var superStructName = NormalizeComponentReferenceName(ExtractText(GetNamedValue(superStruct, "ObjectName") ?? GetNamedValue(superStruct, "Name")));
+            var superStructReference = NormalizeString(ExtractText(GetNamedValue(superStruct, "ObjectPath") ?? superStruct));
             if (string.Equals(superStructName, "DestroyedStructure", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(superStructName, "DestroyedFort", StringComparison.OrdinalIgnoreCase)
                 || superStructReference.Contains("DestroyedStructure", StringComparison.OrdinalIgnoreCase)
@@ -2337,7 +2474,7 @@ public class FoxWatchManifestAssetExtractor
                 return false;
             }
 
-            var ruinedComponent = (object?)obj.GetOrDefault<dynamic>("RuinedComponent");
+            var ruinedComponent = GetNamedValue(obj, "RuinedComponent");
             return ruinedComponent != null;
         }
 
@@ -2560,7 +2697,7 @@ public class FoxWatchManifestAssetExtractor
             return normalized.Length is 6 or 8 ? normalized : string.Empty;
         }
 
-        private static string? ExportStructureIcon(string structureId, UTexture2D iconTexture, string baseAssetsUrl, string? iconOutputDirectory)
+        private string? ExportStructureIcon(string structureId, UTexture2D iconTexture, string baseAssetsUrl, string? iconOutputDirectory)
         {
             var normalizedStructureId = NormalizeString(structureId).ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(normalizedStructureId) || string.IsNullOrWhiteSpace(iconOutputDirectory))
@@ -2569,27 +2706,98 @@ public class FoxWatchManifestAssetExtractor
             }
 
             var fileName = $"{normalizedStructureId}.png";
-            var outputPath = Path.Combine(iconOutputDirectory, fileName);
+            var texturePackagePath = ConvertObjectPathToPackagePath(
+                iconTexture.Owner?.Provider?.FixPath(iconTexture.Owner?.Name ?? iconTexture.GetPathName())
+                ?? iconTexture.GetPathName());
+            var canonicalPackageStem = texturePackagePath?.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase) == true
+                ? texturePackagePath[..^".uasset".Length]
+                : texturePackagePath;
+            var canonicalRelativePath = string.IsNullOrWhiteSpace(texturePackagePath)
+                ? Path.Combine("unresolved", fileName)
+                : $"{canonicalPackageStem}.png".Replace('/', Path.DirectorySeparatorChar);
+            var outputPath = Path.Combine(iconOutputDirectory, canonicalRelativePath);
             var iconUrl = BuildIconUrl(baseAssetsUrl, fileName);
 
             try
             {
-                Directory.CreateDirectory(iconOutputDirectory);
+                Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
                 var decodedTexture = iconTexture.Decode();
                 if (decodedTexture == null)
                 {
-                    return File.Exists(outputPath) ? iconUrl : null;
+                    if (!File.Exists(outputPath))
+                    {
+                        return null;
+                    }
+                    _iconSourcePathsByKey[normalizedStructureId] = canonicalRelativePath.Replace('\\', '/');
+                    return iconUrl;
                 }
 
                 var imageBytes = decodedTexture.Encode(ETextureFormat.Png, saveHdrAsHdr: false, out _);
                 File.WriteAllBytes(outputPath, imageBytes);
+                _iconSourcePathsByKey[normalizedStructureId] = canonicalRelativePath.Replace('\\', '/');
                 return iconUrl;
             }
             catch
             {
-                return File.Exists(outputPath) ? iconUrl : null;
+                if (!File.Exists(outputPath))
+                {
+                    return null;
+                }
+                _iconSourcePathsByKey[normalizedStructureId] = canonicalRelativePath.Replace('\\', '/');
+                return iconUrl;
             }
+        }
+
+        private void WriteIconSourceIndex(string? iconOutputDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(iconOutputDirectory) || _iconSourcePathsByKey.Count == 0)
+            {
+                return;
+            }
+            Directory.CreateDirectory(iconOutputDirectory);
+            var indexPath = Path.Combine(iconOutputDirectory, "icon-source-index.v1.json");
+            var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(indexPath))
+            {
+                try
+                {
+                    using var existingDocument = JsonDocument.Parse(File.ReadAllText(indexPath));
+                    if (existingDocument.RootElement.TryGetProperty("schemaVersion", out var schemaVersion)
+                        && schemaVersion.GetInt32() == 1
+                        && existingDocument.RootElement.TryGetProperty("sources", out var existingSources))
+                    {
+                        foreach (var source in existingSources.EnumerateObject())
+                        {
+                            if (source.Value.ValueKind == JsonValueKind.String && source.Value.GetString() is { Length: > 0 } sourcePath)
+                            {
+                                sources[source.Name] = sourcePath;
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    sources.Clear();
+                }
+            }
+            foreach (var entry in _iconSourcePathsByKey)
+            {
+                sources[entry.Key] = entry.Value;
+            }
+            var document = new
+            {
+                schemaVersion = 1,
+                sources = sources
+                    .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+                    .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal),
+            };
+            var temporaryPath = $"{indexPath}.{Environment.ProcessId}.tmp";
+            File.WriteAllText(temporaryPath, System.Text.Json.JsonSerializer.Serialize(document, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }) + Environment.NewLine);
+            File.Move(temporaryPath, indexPath, overwrite: true);
         }
 
         private string? ExportModificationSlotVariantIcon(
@@ -2687,6 +2895,7 @@ public class FoxWatchManifestAssetExtractor
                 }
             }
 
+            WriteIconSourceIndex(iconOutputDirectory);
             return exportedCount;
         }
 
@@ -2910,9 +3119,7 @@ public class FoxWatchManifestAssetExtractor
                 yield break;
             }
 
-            foreach (var candidatePath in _fileProvider.Files.Keys
-                .Where(path => path.EndsWith($"/{packageName}", StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var candidatePath in _mountedPackagePathsByFileName.GetValueOrDefault(packageName, []))
             {
                 if (!string.Equals(candidatePath, packagePath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -3442,15 +3649,14 @@ public class FoxWatchManifestAssetExtractor
             IReadOnlyCollection<dynamic> objects;
             try
             {
-                var package = _fileProvider.LoadPackage(blueprintPackagePath);
-                objects = package.GetExports().Cast<dynamic>().ToArray();
+                objects = LoadPackageExports(blueprintPackagePath);
             }
             catch
             {
                 return null;
             }
 
-            var blueprint = objects.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
+            var blueprint = FindBlueprintGeneratedClass(objects);
             if (blueprint == null)
             {
                 return null;
@@ -3480,9 +3686,9 @@ public class FoxWatchManifestAssetExtractor
                 && (_nonCodeNameStructureWhitelistLoader?.Contains(codeName) ?? false);
         }
 
-        private static dynamic? ResolveBlueprintDefaultObject(IReadOnlyCollection<dynamic> objects, UBlueprintGeneratedClass blueprint)
+        private static object? ResolveBlueprintDefaultObject(IReadOnlyCollection<dynamic> objects, UBlueprintGeneratedClass blueprint)
         {
-            var defaultObjectName = NormalizeString($"Default__{blueprint.Name}");
+            var defaultObjectName = NormalizeString($"Default__{GetObjectName(blueprint)}");
             var matchedDefaultObject = objects.FirstOrDefault(candidate =>
                 string.Equals(
                     NormalizeString(ExtractText(GetNamedValue(candidate, "Name"))),
@@ -6708,6 +6914,21 @@ public class FoxWatchManifestAssetExtractor
             return mountDynamicData.MaxDistance is > 0 ? "killbox" : null;
         }
 
+        private static string GetRuntimeReferenceDescriptor(object? value)
+        {
+            if (value is JObject)
+            {
+                // ObjectName/ObjectPath are serializer metadata for decoded FPackageIndex values;
+                // the live FPackageIndex does not expose them through GetNamedValue.
+                return string.Empty;
+            }
+
+            return string.Join(
+                " ",
+                ExtractText(GetNamedValue(value, "ObjectName")),
+                ExtractText(GetNamedValue(value, "ObjectPath")));
+        }
+
         private static string? ClassifyAiTurretRangeType(
             UBlueprintGeneratedClass blueprint,
             object component,
@@ -6718,16 +6939,12 @@ public class FoxWatchManifestAssetExtractor
                 " ",
                 new[]
                 {
-                    NormalizeString(blueprint.Name),
+                    NormalizeString(GetObjectName(blueprint)),
                     NormalizeString(ExtractText(GetNamedValue(component, "Name"))),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "DamageType"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "DamageType"), "ObjectPath")),
-                    ExtractText(GetNamedValue(GetNamedValue(alternateDamageAttributes, "DamageType"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(alternateDamageAttributes, "DamageType"), "ObjectPath")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "ShotSoundCue"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "ShotSoundCue"), "ObjectPath")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "WeaponFireFXClass"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageAttributes, "WeaponFireFXClass"), "ObjectPath")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(damageAttributes, "DamageType")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(alternateDamageAttributes, "DamageType")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(damageAttributes, "ShotSoundCue")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(damageAttributes, "WeaponFireFXClass")),
                 }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
             if (ContainsAny(descriptor, "artillery", "mortar", "indirect", "howitzer", "heavyartillery", "longrangeartillery", "150", "120"))
@@ -6767,12 +6984,10 @@ public class FoxWatchManifestAssetExtractor
                 " ",
                 new[]
                 {
-                    NormalizeString(blueprint.Name),
+                    NormalizeString(GetObjectName(blueprint)),
                     NormalizeString(ExtractText(GetNamedValue(defaultObject, "CodeName"))),
-                    ExtractText(GetNamedValue(GetNamedValue(damageParams, "Type"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageParams, "Type"), "ObjectPath")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageParams, "ShotSoundCue"), "ObjectName")),
-                    ExtractText(GetNamedValue(GetNamedValue(damageParams, "ShotSoundCue"), "ObjectPath")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(damageParams, "Type")),
+                    GetRuntimeReferenceDescriptor(GetNamedValue(damageParams, "ShotSoundCue")),
                 }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
             return ContainsAny(descriptor, "artillery", "mortar", "indirect", "howitzer", "heavyartillery", "longrangeartillery", "150", "120")
@@ -7377,12 +7592,13 @@ public class FoxWatchManifestAssetExtractor
 
             var resolvedScopes = new List<BlueprintComponentScope>();
             var yieldedPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var currentStruct = (UStruct?)blueprint;
+            object? currentBlueprint = blueprint;
             var useRootObjects = true;
 
-            while (currentStruct != null)
+            while (currentBlueprint != null)
             {
-                if (currentStruct is UBlueprintGeneratedClass currentBlueprint)
+                var currentBlueprintName = GetObjectName(currentBlueprint);
+                if (IsBlueprintGeneratedClass(currentBlueprint))
                 {
                     IReadOnlyList<object> scopeObjects;
                     var packagePath = GetPackagePath(currentBlueprint);
@@ -7399,8 +7615,7 @@ public class FoxWatchManifestAssetExtractor
                     {
                         try
                         {
-                            var package = _fileProvider.LoadPackage(packagePath);
-                            scopeObjects = package.GetExports().Cast<object>().ToArray();
+                            scopeObjects = LoadPackageExports(packagePath).Cast<object>().ToArray();
                         }
                         catch
                         {
@@ -7418,21 +7633,26 @@ public class FoxWatchManifestAssetExtractor
                     }
 
                     resolvedScopes.Add(CreateBlueprintComponentScope(
-                        currentBlueprint.Name,
-                        $"Default__{currentBlueprint.Name}",
+                        currentBlueprintName,
+                        $"Default__{currentBlueprintName}",
                         scopeObjects));
                 }
 
                 try
                 {
-                    var parentStruct = currentStruct.SuperStruct;
-                    currentStruct = parentStruct != null && parentStruct.TryLoad<UStruct>(out var superStruct)
-                        ? superStruct
-                        : null;
+                    var parentPackagePath = GetReferencedPackagePath(currentBlueprint, "SuperStruct");
+                    if (string.IsNullOrWhiteSpace(parentPackagePath))
+                    {
+                        currentBlueprint = null;
+                    }
+                    else
+                    {
+                        currentBlueprint = FindBlueprintGeneratedClass(LoadPackageExports(parentPackagePath));
+                    }
                 }
                 catch
                 {
-                    currentStruct = null;
+                    currentBlueprint = null;
                 }
             }
 
@@ -7475,27 +7695,36 @@ public class FoxWatchManifestAssetExtractor
             object defaultObject,
             string propertyName)
         {
-            var resolvedValue = GetNamedValue(defaultObject, propertyName);
-            if (resolvedValue != null)
+            var startedAt = Stopwatch.GetTimestamp();
+            try
             {
-                return resolvedValue;
-            }
-
-            foreach (var scope in EnumerateBlueprintComponentScopes(rootObjects, blueprint))
-            {
-                if (!scope.FirstObjectByNormalizedName.TryGetValue(scope.NormalizedDefaultObjectName, out var scopeDefaultObject))
-                {
-                    continue;
-                }
-
-                resolvedValue = GetNamedValue(scopeDefaultObject, propertyName);
+                var resolvedValue = GetNamedValue(defaultObject, propertyName);
                 if (resolvedValue != null)
                 {
                     return resolvedValue;
                 }
-            }
 
-            return null;
+                foreach (var scope in EnumerateBlueprintComponentScopes(rootObjects, blueprint))
+                {
+                    if (!scope.FirstObjectByNormalizedName.TryGetValue(scope.NormalizedDefaultObjectName, out var scopeDefaultObject))
+                    {
+                        continue;
+                    }
+
+                    resolvedValue = GetNamedValue(scopeDefaultObject, propertyName);
+                    if (resolvedValue != null)
+                    {
+                        return resolvedValue;
+                    }
+                }
+
+                return null;
+            }
+            finally
+            {
+                InheritedPropertyLookupCount++;
+                InheritedPropertyLookupElapsed += Stopwatch.GetElapsedTime(startedAt);
+            }
         }
 
         private static bool IsObjectOwnedByBlueprintScope(object component, string blueprintName, string defaultObjectName)
@@ -7541,9 +7770,10 @@ public class FoxWatchManifestAssetExtractor
 
         private static bool IsEmplacedWeaponBlueprint(UBlueprintGeneratedClass blueprint)
         {
-            var superStructName = NormalizeString(blueprint.SuperStruct?.Name);
-            var superStructReference = NormalizeString(blueprint.SuperStruct?.ToString());
-            return string.Equals(superStructName, "EmplacedWeapon", StringComparison.OrdinalIgnoreCase)
+            var superStruct = GetNamedValue(blueprint, "SuperStruct");
+            var superStructName = NormalizeComponentReferenceName(ExtractText(GetNamedValue(superStruct, "ObjectName") ?? GetNamedValue(superStruct, "Name")));
+            var superStructReference = NormalizeString(ExtractText(GetNamedValue(superStruct, "ObjectPath") ?? superStruct));
+            return superStructName.Contains("EmplacedWeapon", StringComparison.OrdinalIgnoreCase)
                 || superStructReference.Contains("EmplacedWeapon", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -8473,9 +8703,14 @@ public class FoxWatchManifestAssetExtractor
                 volume.Rotation?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty);
             }
 
-        private static string GetPackagePath(UObject export)
+        private static string GetPackagePath(object export)
         {
-            return export.Owner?.Provider?.FixPath(export.Owner.Name) ?? export.Name;
+            if (export is UObject unrealExport)
+            {
+                return unrealExport.Owner?.Provider?.FixPath(unrealExport.Owner.Name) ?? unrealExport.Name;
+            }
+
+            return NormalizeString(ExtractText(GetNamedValue(export, "$PackagePath")));
         }
 
         private static FoxWatchManifestBuildFootprintBox? ExtractBuildFootprintBox(
@@ -10404,7 +10639,7 @@ public class FoxWatchManifestAssetExtractor
             {
                 var package = _fileProvider.LoadPackage(templateActorPackagePath);
                 var exports = package.GetExports().Cast<dynamic>().ToArray();
-                var blueprint = exports.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
+                var blueprint = FindBlueprintGeneratedClass(exports);
                 if (blueprint == null)
                 {
                     return ExtractModificationSlotsFromComponentReferences(
@@ -10576,13 +10811,7 @@ public class FoxWatchManifestAssetExtractor
 
             try
             {
-                var package = _fileProvider.LoadPackage(assetPath);
-                var exports = package.GetExports().ToArray();
-                var exportsJson = JsonConvert.SerializeObject(exports, Formatting.None);
-                var exportTokens = JArray.Parse(exportsJson);
-                var defaultObjectToken = exportTokens
-                    .OfType<JObject>()
-                    .FirstOrDefault(token => token.Value<string>("Name")?.StartsWith("Default__", StringComparison.OrdinalIgnoreCase) == true);
+                var defaultObjectToken = LoadModificationDataDefaultObject(assetPath);
 
                 var modificationsToken = defaultObjectToken?["Properties"]?["Modifications"] as JArray;
                 if (modificationsToken == null)
@@ -10836,9 +11065,34 @@ public class FoxWatchManifestAssetExtractor
                 return null;
             }
 
-            return _fileProvider.Files.ContainsKey(normalizedCandidatePath)
-                ? normalizedCandidatePath
-                : _fileProvider.Files.Keys.FirstOrDefault(path => string.Equals(path, normalizedCandidatePath, StringComparison.OrdinalIgnoreCase));
+            return _mountedPackagePathByNormalizedPath.GetValueOrDefault(normalizedCandidatePath);
+        }
+
+        private void BuildMountedPackageIndexes()
+        {
+            _mountedPackagePaths = _fileProvider.Files
+                .Where(entry => entry.Value.IsUePackage)
+                .Select(entry => entry.Key)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            _blueprintPackagePaths = _mountedPackagePaths
+                .Where(path => path.StartsWith(BlueprintPackagePrefix, StringComparison.Ordinal))
+                .ToArray();
+            _mountedPackagePathByNormalizedPath = _mountedPackagePaths
+                .GroupBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            _mountedPackagePathsByFileName = _mountedPackagePaths
+                .GroupBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<string>)group.ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+            _mountedPackagePathsByDirectory = _mountedPackagePaths
+                .GroupBy(path => (Path.GetDirectoryName(path) ?? string.Empty).Replace('\\', '/'), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<string>)group.ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         private List<FoxWatchManifestModificationVariantReference> InspectModificationVariants(string assetPath, int? preferredTier)
@@ -10866,13 +11120,7 @@ public class FoxWatchManifestAssetExtractor
 
             try
             {
-                var package = _fileProvider.LoadPackage(assetPath);
-                var exports = package.GetExports().ToArray();
-                var exportsJson = JsonConvert.SerializeObject(exports, Formatting.None);
-                var exportTokens = JArray.Parse(exportsJson);
-                var defaultObjectToken = exportTokens
-                    .OfType<JObject>()
-                    .FirstOrDefault(token => token.Value<string>("Name")?.StartsWith("Default__", StringComparison.OrdinalIgnoreCase) == true);
+                var defaultObjectToken = LoadModificationDataDefaultObject(assetPath);
 
                 var modificationsToken = defaultObjectToken?["Properties"]?["Modifications"] as JArray;
                 if (modificationsToken == null)
@@ -10908,6 +11156,28 @@ public class FoxWatchManifestAssetExtractor
             {
                 return [];
             }
+        }
+
+        private JObject? LoadModificationDataDefaultObject(string assetPath)
+        {
+            var packagePath = ResolvePackagePath(assetPath)
+                ?? NormalizeString(assetPath).Replace('\\', '/');
+            if (_modificationDataDefaultObjectsByPackagePath.TryGetValue(packagePath, out var cachedDefaultObject))
+            {
+                ModificationDataCacheHits++;
+                return cachedDefaultObject;
+            }
+
+            ModificationDataCacheMisses++;
+            var package = _fileProvider.LoadPackage(packagePath);
+            var exports = package.GetExports().ToArray();
+            var exportsJson = JsonConvert.SerializeObject(exports, Formatting.None);
+            var exportTokens = JArray.Parse(exportsJson);
+            var defaultObjectToken = exportTokens
+                .OfType<JObject>()
+                .FirstOrDefault(token => token.Value<string>("Name")?.StartsWith("Default__", StringComparison.OrdinalIgnoreCase) == true);
+            _modificationDataDefaultObjectsByPackagePath[packagePath] = defaultObjectToken;
+            return defaultObjectToken;
         }
 
         private static JObject? ResolveModificationTierValueToken(JObject? valueToken, int? preferredTier)
@@ -10999,7 +11269,7 @@ public class FoxWatchManifestAssetExtractor
             {
                 var package = _fileProvider.LoadPackage(templateActorPath);
                 var exports = package.GetExports().Cast<dynamic>().ToArray();
-                var blueprint = exports.OfType<UBlueprintGeneratedClass>().FirstOrDefault();
+                var blueprint = FindBlueprintGeneratedClass(exports);
                 if (blueprint == null)
                 {
                     return null;
@@ -11685,6 +11955,21 @@ public class FoxWatchManifestAssetExtractor
                 return string.Empty;
             }
 
+            if (value is JValue jsonValue)
+            {
+                return NormalizeString(jsonValue.Value?.ToString());
+            }
+
+            if (value is JObject jsonObject)
+            {
+                return NormalizeString(
+                    jsonObject["ObjectName"]?.Value<string>()
+                    ?? jsonObject["ObjectPath"]?.Value<string>()
+                    ?? jsonObject["Name"]?.Value<string>()
+                    ?? jsonObject["Text"]?.Value<string>()
+                    ?? jsonObject.ToString(Formatting.None));
+            }
+
             var textProperty = value.GetType().GetProperty("Text");
             if (textProperty != null)
             {
@@ -11827,6 +12112,12 @@ public class FoxWatchManifestAssetExtractor
                 return string.Empty;
             }
 
+            var cachedClassText = NormalizeString(ExtractText(GetNamedValue(source, "$ClassText")));
+            if (!string.IsNullOrWhiteSpace(cachedClassText))
+            {
+                return cachedClassText;
+            }
+
             var directType = NormalizeString(ExtractText(GetNamedValue(source, "Type")));
             if (!string.IsNullOrWhiteSpace(directType))
             {
@@ -11958,6 +12249,38 @@ public class FoxWatchManifestAssetExtractor
         {
             if (source == null)
             {
+                return null;
+            }
+
+            if (source is JObject jsonObject)
+            {
+                var directProperty = jsonObject.Properties().FirstOrDefault(property =>
+                    string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                if (directProperty != null)
+                {
+                    return UnwrapScriptValue(directProperty.Value);
+                }
+
+                if (jsonObject["Properties"] is JObject jsonProperties)
+                {
+                    var nestedProperty = jsonProperties.Properties().FirstOrDefault(property =>
+                        string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                    if (nestedProperty != null)
+                    {
+                        return UnwrapScriptValue(nestedProperty.Value);
+                    }
+                }
+
+                if (jsonObject["$RuntimeProperties"] is JObject runtimeProperties)
+                {
+                    var runtimeProperty = runtimeProperties.Properties().FirstOrDefault(property =>
+                        string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+                    if (runtimeProperty != null)
+                    {
+                        return UnwrapScriptValue(runtimeProperty.Value);
+                    }
+                }
+
                 return null;
             }
 
@@ -12158,6 +12481,15 @@ public class FoxWatchManifestAssetExtractor
             if (value == null)
             {
                 return null;
+            }
+
+            if (value is JValue jsonValue)
+            {
+                if (jsonValue.Type == JTokenType.Float)
+                {
+                    return (double)jsonValue.Value<float>();
+                }
+                return jsonValue.Value;
             }
 
             var runtimeType = value.GetType();
@@ -13400,3 +13732,30 @@ public class FoxWatchManifestAssetExtractor
             public object? Value { get; set; }
         }
     }
+
+public sealed class FoxWatchManifestExtractionTimings
+{
+    public int CandidatePackageCount { get; init; }
+
+    public TimeSpan MountAndIndex { get; init; }
+
+    public TimeSpan CandidateDiscovery { get; init; }
+
+    public TimeSpan DecodedReads { get; init; }
+
+    public TimeSpan StructureInterpretation { get; init; }
+
+    public TimeSpan ReferencedBuildSites { get; init; }
+
+    public TimeSpan PostProcessing { get; init; }
+
+    public TimeSpan Localization { get; init; }
+
+    public TimeSpan SharedData { get; init; }
+
+    public IReadOnlyList<FoxWatchSlowManifestPackage> SlowPackages { get; init; } = [];
+
+    public TimeSpan Total { get; init; }
+}
+
+public sealed record FoxWatchSlowManifestPackage(string PackagePath, TimeSpan Elapsed);

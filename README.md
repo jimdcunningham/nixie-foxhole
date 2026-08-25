@@ -16,7 +16,9 @@ Common paths:
 - `tools/foxwatch/tmp/foxwatch-manifest.v1.json`: raw generated source manifest
 - `tools/foxwatch/tmp/modification-render-index.v1.json`: canonical modification `renderId` index
 - `tools/foxwatch/tmp/renders/`: generated Blender render scene bundles
-- `tools/foxwatch/tmp/assets/`: extracted mesh and material packages used during rendering
+- `tools/foxwatch/tmp/decoded-asset-bundles/v1/<pak-fingerprint>/`: PAK-addressed, fully decoded package/inspection/mesh/material/texture/icon bundle
+- `tools/foxwatch/tmp/assets/`: stable active view of the current bundle's canonical render assets
+- `tools/foxwatch/tmp/foxhole-icons/`: stable active view of the current bundle's canonical UI textures and icon-key index
 - `tools/foxwatch/tmp/rendered-assets/`: Blender image outputs (`types/`, `shared/`) before publish
 - `packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json`: published planner manifest
 - `packages/extensions/foxhole/public/foxhole/assets/planner-compat.json`: CI metadata tying assets to planner version and schema versions
@@ -31,6 +33,10 @@ Required:
 
 Optional, but required for render workflows such as `refresh`:
 - Blender 5.x or another compatible Blender install on `PATH`
+
+Optional for automatic Steam acquisition:
+- A Steam account that owns Foxhole and can access both `public` and `devbranch`
+- Windows Task Scheduler (included with Windows)
 
 Install workspace dependencies from the repo root:
 
@@ -54,12 +60,145 @@ npm run foxwatch -- refresh -- --deep
 
 That workflow:
 - builds the FoxWatch .NET service
+- reuses a PAK-fingerprinted decoded asset bundle, rebuilding only missing or explicitly versioned package, inspection, geometry, material, texture, and icon sections
 - generates a full raw FoxWatch manifest
 - generates full render scene bundles
 - renders planner images through Blender
 - publishes outputs into `packages/extensions/foxhole/public/foxhole/assets`
 
 If Blender is not installed yet, start with non-render workflows such as `generate-manifest`, `generate-map-data`, or `extract-ui-assets`.
+
+## Automatic Steam monitoring
+
+FoxWatch can maintain its own verified Foxhole installation without reading the
+normal Steam client installation. Setup is guided and idempotent:
+
+```powershell
+npm run foxwatch -- setup-monitor
+```
+
+The first setup asks for:
+
+- the Steam username and password
+- an optional Discord incoming webhook URL
+
+Passwords and webhook URLs are encrypted with Windows DPAPI for the current
+Windows account and are never written as plaintext configuration. SteamCMD
+receives the decrypted password transiently for its login command, so it can be
+visible to same-user or administrator process inspection while SteamCMD runs. Existing encrypted credentials are retained when
+setup is rerun unless `--replace-credentials` is provided.
+
+Setup downloads the official SteamCMD bootstrap, verifies authentication and
+the BuildIDs for both `public` and `devbranch`, then publishes and starts the
+lightweight FoxWatch Windows tray monitor. It polls once every ten minutes by
+default and starts with the current user's Windows session. Closing its window
+hides it back to the notification area; **Exit** stops the background monitor.
+The resolved Blender executable is stored in the non-secret local configuration
+so the scheduled task does not depend on a temporary shell environment. Use
+`--blender-path <path>` if Blender is not already available through
+`BLENDER_PATH` or `PATH`.
+
+All machine-local data stays under the ignored directory
+`tools/foxwatch/local/`:
+
+```text
+local/
+  credentials/       DPAPI-encrypted credentials
+  downloads/         SteamCMD bootstrap archive
+  installs/          isolated public or devbranch acquisition slots
+  locks/              concurrent-run protection
+  logs/               monitor and FoxWatch output
+  monitor-app/        published Windows tray monitor
+  state/              observed, acquired, and successful BuildIDs
+  steamcmd/           metadata and branch-specific SteamCMD clients
+```
+
+Every poll queries both branches and selects the numerically higher BuildID so
+FoxWatch always follows the latest available build. Equal BuildIDs select
+`public`. When Steam reports a new selected BuildID, the monitor updates that
+branch's inactive installation slot, runs SteamCMD validation,
+checks the installed app manifest, inventories the PAK/UTOC/UCAS files, and
+writes an acquisition receipt. FoxWatch cannot consume the installation until
+all checks agree on the requested BuildID.
+
+Acquisition and pipeline success are separate states. If Blender or publishing
+fails, the verified Steam installation remains reusable, but that BuildID stays
+pending and is retried on the next poll. A completed build is not marked
+successful until the deep refresh exits successfully.
+
+Useful monitor commands:
+
+```powershell
+npm run foxwatch -- monitor-status
+npm run foxwatch -- open-monitor
+npm run foxwatch -- install-monitor-app
+npm run foxwatch -- monitor-now
+npm run foxwatch -- monitor-now -- --force-refresh
+npm run foxwatch -- monitor-logs
+npm run foxwatch -- monitor-logs -- --lines 250
+npm run foxwatch -- monitor
+npm run foxwatch -- uninstall-monitor
+```
+
+`open-monitor` shows the existing tray monitor window. `install-monitor-app`
+migrates an existing configured monitor from the legacy repeating scheduled
+task without asking for credentials again. Pass `-- --paused` to inspect a
+failed or pending state before allowing the first tray-hosted poll. `monitor`
+runs the same polling loop in the foreground for diagnostics.
+
+### Tray app lifecycle
+
+The tray app source is committed under `tools/foxwatch/monitor/`; its generated
+Windows binaries are not committed. First-time `setup-monitor` configures the
+Steam account and optional Discord webhook, downloads SteamCMD, publishes the
+Release app into the ignored `tools/foxwatch/local/monitor-app/` directory,
+registers it for the current user's Windows startup, and starts it.
+
+Opening the generated executable does not perform first-time setup by itself.
+After setup, use `open-monitor` or double-click the notification-area icon to
+show the existing process. Closing its window returns it to the notification
+area. `Start with Windows` controls the startup registration, while `Start
+Minimized` controls whether that Windows-startup launch stays in the tray or
+opens the monitor window. The monitor shows the current pipeline stage, overall
+progress, aggregate Blender batch progress, and separate per-worker scene
+progress. It also records the exact elapsed poll time and estimates remaining
+Blender time from aggregate scene throughput. Full child-process output remains
+in the persistent log files opened by `Open Logs`; it is intentionally not
+rendered in the monitor window.
+
+`Stop` terminates the active FoxWatch process tree and disables automatic
+polling. The stopped state is saved under `local/state/`, so restarting the tray
+app or Windows does not silently resume work. `Start` re-enables polling and
+immediately begins a Steam metadata check. The monitor shows the exact local
+time of the next scheduled poll whenever it is idle.
+
+After pulling changes to the tray app source, run `install-monitor-app` to stop
+the existing host, publish the updated binaries, preserve the machine-local
+configuration and preferences, restart it, and open the updated window:
+
+```powershell
+npm run foxwatch -- install-monitor-app -- --paused
+```
+
+Omit `--paused` when the monitor should resume polling immediately. To remove
+the app, run `uninstall-monitor`. It stops the tray host and removes both its
+current-user startup entry and any legacy scheduled task, while deliberately
+preserving Steam installations, decoded caches, credentials, state, and logs:
+
+```powershell
+npm run foxwatch -- uninstall-monitor
+```
+
+For unattended setup, provide `FOXWATCH_STEAM_USERNAME` and
+`FOXWATCH_STEAM_PASSWORD`, optionally
+`FOXWATCH_DISCORD_WEBHOOK_URL`, and run:
+
+```powershell
+npm run foxwatch -- setup-monitor -- --non-interactive --interval-minutes 10
+```
+
+The environment values are consumed only during setup and persisted as
+DPAPI-encrypted values. Clear the environment variables after setup.
 
 ## Command wrapper
 
@@ -200,7 +339,29 @@ Use this to regenerate Foxhole map data outputs:
 npm run foxwatch -- generate-map-data
 ```
 
-### 8. Open and watch an asset manifest override
+### 8. Benchmark direct PAK, loose raw snapshot, and decoded sources
+
+Use this isolated benchmark to compare full manifest generation from the Foxhole PAK, the same CUE4Parse-recognized files extracted once into `tools/foxwatch/tmp/pak-snapshots/v1/`, generic decoded exports backed by that loose snapshot, and the production hybrid of decoded exports backed by the original PAK for residual typed reads:
+
+```powershell
+npm run foxwatch -- benchmark-manifest-source
+```
+
+The benchmark creates immutable raw and decoded fixtures keyed by the current Steam build and PAK inventory, then reuses them on later runs. Normal deep refreshes do not create or retain the loose raw fixture. All benchmark sources execute the same strict FoxWatch manifest extractor without the semantic raw-manifest cache, and the benchmark fails unless every generated manifest is byte-identical.
+
+Deep refreshes maintain a generic decoded bundle under `tools/foxwatch/tmp/decoded-asset-bundles/v1/<pak-fingerprint>/`. It contains decoded Unreal export JSON, a persisted canonical package index and scene-inspection lookups, plus canonical GLBs, material sidecars, lossless textures, and UI icon pixels. Every game asset retains its Unreal virtual path below its section (`War/Content/...`); flat public icon keys live only in `icons/icon-source-index.v1.json`. No raw `.uasset`, `.uexp`, or `.ubulk` copies are retained.
+
+The bundle identity depends on the PAK fingerprint and explicit per-section format versions, not arbitrary FoxWatch implementation hashes. A manifest interpretation, Blender, or publisher change therefore reuses the decoded bundle. If a canonical decoder format intentionally changes, bump only that section's contract version; texture invalidation also refreshes material metadata so referenced texture discovery remains complete. A Foxhole PAK change creates a new bundle. The original installed PAK remains the source of truth for constructing or repairing a bundle, and missing decoded packages fail closed rather than falling back silently.
+
+Run additional alternating trials when comparing noisy timings:
+
+```powershell
+npm run foxwatch -- benchmark-manifest-source -- --iterations 3
+```
+
+Benchmark artifacts and `benchmark-results.v2.json` are written under `tools/foxwatch/tmp/manifest-source-benchmarks/`. This command does not render or publish assets.
+
+### 9. Open and watch an asset manifest override
 
 Use this to scaffold or edit a per-asset manifest override:
 
@@ -214,7 +375,7 @@ With auto-refresh on save:
 npm run foxwatch -- open-asset-manifest -- --only trencht1 --watch-refresh
 ```
 
-### 9. Open the pose editor for one asset
+### 10. Open the pose editor for one asset
 
 Use this to work on pose overrides in Blender for a single asset:
 

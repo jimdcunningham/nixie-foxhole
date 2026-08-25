@@ -254,7 +254,6 @@ def configure_world_lighting() -> None:
         world = bpy.data.worlds.new("World")
         scene.world = world
 
-    world.use_nodes = True
     nodes = world.node_tree.nodes
     links = world.node_tree.links
 
@@ -665,7 +664,6 @@ def make_image_material(name: str, image_path: str):
     if material is None:
         material = bpy.data.materials.new(name=name)
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()
@@ -692,7 +690,6 @@ def ensure_clay_material(name: str = "FoxWatchClay"):
     if material is None:
         material = bpy.data.materials.new(name=name)
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()
@@ -718,7 +715,6 @@ def ensure_solid_color_material(name: str, color: list[float]):
     while len(rgba) < 4:
         rgba.append(1.0)
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()
@@ -750,7 +746,6 @@ def ensure_emissive_color_material(name: str, color: list[float], strength: floa
     while len(rgba) < 4:
         rgba.append(1.0)
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()
@@ -1086,7 +1081,6 @@ def ensure_parameter_light_material(name: str, primary_color: list[float], secon
 
     rgba[3] = max(0.0, min(1.0, float(opacity) * rgba[3]))
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()
@@ -1276,8 +1270,6 @@ def ensure_clip_bounds_material(material, clip_object, min_corner: Vector, max_c
     if clip_material is None:
         clip_material = material.copy()
         clip_material.name = clip_material_name
-        clip_material.use_nodes = True
-
         node_tree = clip_material.node_tree
         if node_tree is None:
             return clip_material
@@ -1499,7 +1491,6 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
             emissive_strength=max(float(scalars.get("Emissive", 1.0)) * 6.0, 4.0),
         )
 
-    material.use_nodes = True
     nodes = material.node_tree.nodes
     links = material.node_tree.links
     nodes.clear()

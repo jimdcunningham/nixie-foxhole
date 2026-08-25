@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>FoxWatchMonitor</AssemblyName>
+    <RootNamespace>FoxWatchMonitor</RootNamespace>
+    <ApplicationIcon>..\..\..\apps\nixie-electron\build\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+</Project>

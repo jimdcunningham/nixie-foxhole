@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from typing import Optional
 
 import bpy
@@ -76,6 +77,9 @@ FLAT_FILL_VIBRANCE = 0.32
 FLAT_FILL_CONTRAST = 1.18
 FLAT_FILL_GAMMA = 0.90
 PENCIL_FALLBACK_MIN_VISIBLE_SOURCE_RATIO = 0.08
+BLENDER_RECYCLE_RSS_BYTES = 6 * 1024 * 1024 * 1024
+BLENDER_RECYCLE_PRIVATE_BYTES = 8 * 1024 * 1024 * 1024
+SLOW_RENDER_ROLE_SECONDS = 10.0
 FORTT3_MITERED_WALL_COMPONENT_KEYS = {
     "components/backwall",
     "components/frontwall",
@@ -177,6 +181,8 @@ def parse_args():
     parser.add_argument("--purge-existing", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--result-journal", default=None, help="Write a machine-readable result journal")
+    parser.add_argument("--metrics-journal", default=None, help="Write lightweight batch metrics and recycling state")
+    parser.add_argument("--recycle-request", default=None, help="Recycle between dependency groups when this file exists")
     return parser.parse_args(raw_args)
 
 
@@ -224,8 +230,14 @@ def process_memory_bytes() -> dict[str, int]:
 
         counters = PROCESS_MEMORY_COUNTERS_EX()
         counters.cb = ctypes.sizeof(counters)
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb)
+        get_current_process = ctypes.windll.kernel32.GetCurrentProcess
+        get_current_process.restype = wintypes.HANDLE
+        handle = get_current_process()
+        get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        get_process_memory_info.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+        get_process_memory_info.restype = wintypes.BOOL
+        if not get_process_memory_info(handle, ctypes.byref(counters), counters.cb):
+            return {"rss": 0, "private": 0}
         return {"rss": int(counters.WorkingSetSize), "private": int(counters.PrivateUsage)}
     except Exception:
         return {"rss": 0, "private": 0}
@@ -242,6 +254,39 @@ def write_result_journal(file_path: Optional[str], outputs: list[dict], rendered
         "renderedStructures": rendered_count,
         "memory": process_memory_bytes(),
         "outputs": outputs,
+    }
+    temporary_path = f"{resolved_path}.{os.getpid()}.tmp"
+    with open(temporary_path, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2)
+        handle.write("\n")
+    os.replace(temporary_path, resolved_path)
+
+
+def write_metrics_journal(
+    file_path: Optional[str],
+    status: str,
+    completed_scene_entries: list[str],
+    remaining_scene_entries: list[str],
+    rendered_count: int,
+    elapsed_seconds: float,
+    peak_memory: dict[str, int],
+    slow_roles: list[dict],
+    dependency_group_timings: list[dict],
+) -> None:
+    if not file_path:
+        return
+    resolved_path = os.path.abspath(file_path)
+    ensure_directory(os.path.dirname(resolved_path))
+    document = {
+        "schemaVersion": 1,
+        "status": status,
+        "completedSceneEntries": completed_scene_entries,
+        "remainingSceneEntries": remaining_scene_entries,
+        "renderedStructures": rendered_count,
+        "elapsedMs": round(elapsed_seconds * 1000.0),
+        "peakMemory": peak_memory,
+        "slowRoles": slow_roles,
+        "dependencyGroupTimings": dependency_group_timings,
     }
     temporary_path = f"{resolved_path}.{os.getpid()}.tmp"
     with open(temporary_path, "w", encoding="utf-8") as handle:
@@ -672,7 +717,6 @@ def ensure_fallback_source_material():
         return existing_material
 
     material = bpy.data.materials.new(name=material_name)
-    material.use_nodes = True
     node_tree = material.node_tree
     node_tree.nodes.clear()
 
@@ -693,7 +737,6 @@ def ensure_flat_lineart_material():
         return existing_material
 
     material = bpy.data.materials.new(name=material_name)
-    material.use_nodes = True
     node_tree = material.node_tree
     node_tree.nodes.clear()
 
@@ -1423,6 +1466,7 @@ def allowed_modes_for_scene(scene_document: dict, requested_modes: list[str]) ->
 
 
 def main():
+    batch_started_at = time.perf_counter()
     args = parse_args()
     args.index = os.path.abspath(args.index)
     args.output_dir = os.path.abspath(args.output_dir)
@@ -1432,6 +1476,13 @@ def main():
         args.foxwatch_output_root = os.path.abspath(args.foxwatch_output_root)
     if args.render_data_root:
         args.render_data_root = os.path.abspath(args.render_data_root)
+    if args.recycle_request:
+        args.recycle_request = os.path.abspath(args.recycle_request)
+    # Blender writes volatile Date and RenderTime PNG metadata even when visual
+    # stamping is disabled. Removing only those metadata fields keeps pixels
+    # unchanged and makes equivalent worker schedules byte deterministic.
+    bpy.context.scene.render.use_stamp_date = False
+    bpy.context.scene.render.use_stamp_render_time = False
     remove_default_startup_scene_objects()
     index_document = load_json(args.index)
     index_directory = os.path.dirname(args.index)
@@ -1444,12 +1495,21 @@ def main():
     rendered = 0
     pending_component_wall_miters = []
     result_outputs = [] if args.result_journal else None
+    completed_scene_entries = []
+    slow_roles = []
+    dependency_group_timings = []
+    peak_memory = {"rss": 0, "private": 0}
+    recycle_requested = False
     allowed_ids = {normalize_allowed_id(value) for value in args.only}
     allowed_scene_entries = {normalize_scene_entry(value) for value in args.scene_entry}
-    for entry in index_document.get("scenes", []):
+    selected_entries = [
+        entry for entry in index_document.get("scenes", [])
+        if should_render(entry, allowed_ids, allowed_scene_entries)
+    ]
+    selected_scene_entry_names = [entry.get("outputPath") for entry in selected_entries]
+    dependency_group_started_at = time.perf_counter()
+    for entry_index, entry in enumerate(selected_entries):
         structure_id = entry["structureId"]
-        if not should_render(entry, allowed_ids, allowed_scene_entries):
-            continue
 
         scene_path = os.path.join(index_directory, entry["outputPath"])
         scene_document = load_json(scene_path)
@@ -1473,6 +1533,7 @@ def main():
             for mode in allowed_modes_for_scene(scene_document, modes):
                 preview_variants = preview_variants_for_mode(scene_document, mode)
                 for preview_variant in preview_variants:
+                    role_started_at = time.perf_counter()
                     render_state = apply_render_mode(
                         scene_document,
                         collection,
@@ -1602,6 +1663,16 @@ def main():
                                 }, sort_keys=True, separators=(",", ":")).encode("utf-8")
                             ).hexdigest(),
                         })
+                    role_elapsed_seconds = time.perf_counter() - role_started_at
+                    if role_elapsed_seconds >= SLOW_RENDER_ROLE_SECONDS:
+                        slow_roles.append({
+                            "structureId": structure_id,
+                            "sceneEntry": entry.get("outputPath"),
+                            "sceneVariant": scene_variant,
+                            "renderMode": render_state["mode"],
+                            "outputKey": output_key,
+                            "elapsedMs": round(role_elapsed_seconds * 1000.0),
+                        })
                     if args.verbose:
                         print(
                             f"Rendered {structure_id}"
@@ -1623,6 +1694,39 @@ def main():
             continue
 
         rendered += 1
+        completed_scene_entries.append(entry.get("outputPath"))
+        print(
+            "FOXWATCH_BLENDER_PROGRESS " + json.dumps({
+                "completed": len(completed_scene_entries),
+                "total": len(selected_entries),
+                "sceneEntry": entry.get("outputPath"),
+                "structureId": structure_id,
+            }, separators=(",", ":")),
+            flush=True,
+        )
+        next_entry = selected_entries[entry_index + 1] if entry_index + 1 < len(selected_entries) else None
+        current_dependency_group = normalize_allowed_id(entry.get("structureId")) or normalize_scene_entry(entry.get("outputPath"))
+        next_dependency_group = (
+            normalize_allowed_id(next_entry.get("structureId")) or normalize_scene_entry(next_entry.get("outputPath"))
+            if next_entry is not None
+            else None
+        )
+        if next_dependency_group != current_dependency_group:
+            dependency_group_timings.append({
+                "dependencyGroup": current_dependency_group,
+                "elapsedMs": round((time.perf_counter() - dependency_group_started_at) * 1000.0),
+            })
+            dependency_group_started_at = time.perf_counter()
+            memory = process_memory_bytes()
+            peak_memory["rss"] = max(peak_memory["rss"], memory.get("rss", 0))
+            peak_memory["private"] = max(peak_memory["private"], memory.get("private", 0))
+            if next_entry is not None and (
+                memory.get("rss", 0) >= BLENDER_RECYCLE_RSS_BYTES
+                or memory.get("private", 0) >= BLENDER_RECYCLE_PRIVATE_BYTES
+                or (args.recycle_request and os.path.exists(args.recycle_request))
+            ):
+                recycle_requested = True
+                break
         if args.limit > 0 and rendered >= args.limit:
             break
 
@@ -1646,6 +1750,19 @@ def main():
             })
 
         write_result_journal(args.result_journal, result_outputs, rendered)
+
+    remaining_scene_entries = selected_scene_entry_names[len(completed_scene_entries):]
+    write_metrics_journal(
+        args.metrics_journal,
+        "recycle" if recycle_requested else "complete",
+        completed_scene_entries,
+        remaining_scene_entries,
+        rendered,
+        time.perf_counter() - batch_started_at,
+        peak_memory,
+        slow_roles,
+        dependency_group_timings,
+    )
 
     print(f"render_render_scenes: rendered {rendered} structure(s) to {args.output_dir}")
 

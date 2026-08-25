@@ -16,6 +16,9 @@ import {
     normalizeIconContentDimensions,
     publishStructureIconAsset,
     publishStructureIconsForManifest,
+    resolveGeneratedIconFilePath,
+    resolveGeneratedIconFilePathByKey,
+    resolveGeneratedIconFilePathForAssetId,
     resolveRawIconSource,
     resolveSubtypeOverlayUrl,
     resolveSubtypeOverlayUrlForIconFallback,
@@ -33,6 +36,34 @@ import {
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = resolve(currentDir, '../../../tests/fixtures/foxhole/icon-publish');
+
+test('generated icon lookup resolves canonical Unreal paths through the source index', async () => {
+    const temporaryRoot = await mkdtemp(resolve(tmpdir(), 'foxwatch-icon-source-index-'));
+    try {
+        const canonicalRelativePath = 'War/Content/Textures/UI/StructureIcons/RefineryIcon.png';
+        const canonicalPath = resolve(temporaryRoot, canonicalRelativePath);
+        await mkdir(dirname(canonicalPath), { recursive: true });
+        await writeFile(canonicalPath, 'icon');
+        await writeFile(resolve(temporaryRoot, 'icon-source-index.v1.json'), JSON.stringify({
+            schemaVersion: 1,
+            sources: { refinery: canonicalRelativePath },
+        }));
+        assert.equal(
+            await resolveGeneratedIconFilePathForAssetId('refinery', temporaryRoot),
+            canonicalPath,
+        );
+        assert.equal(
+            await resolveGeneratedIconFilePath('/foxhole/assets/icons/refinery.webp', temporaryRoot),
+            canonicalPath,
+        );
+        assert.equal(
+            await resolveGeneratedIconFilePathByKey('refinery', temporaryRoot),
+            canonicalPath,
+        );
+    } finally {
+        await rm(temporaryRoot, { recursive: true, force: true });
+    }
+});
 
 test('shouldSyncRenderedAssetToPublic rejects icon webp patterns', () => {
     assert.equal(shouldSyncRenderedAssetToPublic('wood.icon.default.webp'), false);

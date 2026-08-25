@@ -8,7 +8,9 @@ import {
     getExplicitlyRemovedStructureIdsForTargetedPublish,
     preserveAuthoredStructureMarkedCargoOverlays,
     preserveAuthoredStructurePreviewDirections,
+    resolveFactionTextureVariants,
     shouldPublishVehicleDestroyedVisual,
+    stripSyntheticFactionTextureVariants,
 } from './publish-manifest-overrides.mjs';
 import { isVehicleDestroyedPublishAllowlisted } from './vehicle-destroyed-allowlist.mjs';
 
@@ -122,6 +124,74 @@ test('getExplicitlyRemovedStructureIdsForTargetedPublish never treats missing pa
         new Set(),
         { assets: [{ id: 'liquidcontainer' }] },
     ).size, 0);
+});
+
+test('resolveFactionTextureVariants drops identical synthetic faction fallbacks', () => {
+    assert.deepEqual(
+        resolveFactionTextureVariants(
+            {
+                c: { textureUrl: '/foxhole/assets/icons/trenchintt3.webp' },
+                w: { textureUrl: '/foxhole/assets/icons/trenchintt3.webp' },
+            },
+            null,
+            '/foxhole/assets/types/structures/trenchintt3/trenchintt3.texture.webp',
+        ),
+        {
+            colonialTextureUrl: '/foxhole/assets/types/structures/trenchintt3/trenchintt3.texture.webp',
+            wardenTextureUrl: '/foxhole/assets/types/structures/trenchintt3/trenchintt3.texture.webp',
+            hasColonialVariant: false,
+            hasWardenVariant: false,
+        },
+    );
+});
+
+test('resolveFactionTextureVariants preserves genuine extracted faction textures', () => {
+    assert.deepEqual(
+        resolveFactionTextureVariants(
+            {},
+            {
+                c: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.c.webp' },
+                w: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.w.webp' },
+            },
+            '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.webp',
+        ),
+        {
+            colonialTextureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.c.webp',
+            wardenTextureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.w.webp',
+            hasColonialVariant: true,
+            hasWardenVariant: true,
+        },
+    );
+});
+
+test('stripSyntheticFactionTextureVariants cleans merged assets but preserves genuine pairs', () => {
+    const manifest = stripSyntheticFactionTextureVariants({
+        assets: [
+            {
+                id: 'trenchintt3',
+                variants: {
+                    default: { textureUrl: '/foxhole/assets/types/structures/trenchintt3/trenchintt3.texture.webp' },
+                    c: { textureUrl: '/foxhole/assets/icons/trenchintt3.webp' },
+                    w: { textureUrl: '/foxhole/assets/icons/trenchintt3.webp' },
+                },
+            },
+            {
+                id: 'engineeringcenter',
+                variants: {
+                    c: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.c.webp' },
+                    w: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.w.webp' },
+                },
+            },
+        ],
+    });
+
+    assert.deepEqual(manifest.assets[0].variants, {
+        default: { textureUrl: '/foxhole/assets/types/structures/trenchintt3/trenchintt3.texture.webp' },
+    });
+    assert.deepEqual(manifest.assets[1].variants, {
+        c: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.c.webp' },
+        w: { textureUrl: '/foxhole/assets/types/structures/engineeringcenter/engineeringcenter.texture.w.webp' },
+    });
 });
 
 test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manifests', () => {

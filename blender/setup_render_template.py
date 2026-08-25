@@ -80,8 +80,15 @@ def main():
 
     world = scene.world or bpy.data.worlds.new("World")
     scene.world = world
-    world.use_nodes = False
     world.color = (0.98, 0.98, 1.0)
+    nodes = world.node_tree.nodes
+    links = world.node_tree.links
+    nodes.clear()
+    background = nodes.new(type="ShaderNodeBackground")
+    background.inputs["Color"].default_value = (0.98, 0.98, 1.0, 1.0)
+    background.inputs["Strength"].default_value = 1.0
+    output = nodes.new(type="ShaderNodeOutputWorld")
+    links.new(background.outputs["Background"], output.inputs["Surface"])
 
     configure_camera(TOPDOWN_CAMERA_NAME, Vector((0.0, 0.0, 20.0)), Vector((0.0, 0.0, 0.0)))
     configure_camera(PREVIEW_CAMERA_NAME, Vector((12.0, 12.0, 12.0)), Vector((0.0, 0.0, 2.0)))

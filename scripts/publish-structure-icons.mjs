@@ -16,6 +16,7 @@ export const LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS = { quality: 90, effort: 3 };
 export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality: 100, effort: 3 };
 
 const OUTPUT_FILE_RETRY_DELAYS_MS = [50, 100, 250, 500, 1000, 2000, 4000];
+const generatedIconSourceIndexByDirectory = new Map();
 
 function isRetryableOutputFileError(error) {
     const code = String(error?.code ?? '').toUpperCase();
@@ -544,7 +545,7 @@ export async function normalizeIconContentDimensions(
         .toBuffer();
 }
 
-async function resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory) {
+export async function resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirectory) {
     const normalizedKey = normalizeId(iconKey);
     if (!normalizedKey || !generatedIconsDirectory) {
         return null;
@@ -557,10 +558,44 @@ async function resolveGeneratedIconFilePathByKey(iconKey, generatedIconsDirector
         }
     }
 
+    const sourceIndex = await loadGeneratedIconSourceIndex(generatedIconsDirectory);
+    const canonicalRelativePath = sourceIndex.get(normalizedKey);
+    if (canonicalRelativePath) {
+        const candidatePath = resolve(generatedIconsDirectory, canonicalRelativePath);
+        if (await pathExists(candidatePath)) {
+            return candidatePath;
+        }
+    }
+
     return null;
 }
 
-async function resolveGeneratedIconFilePath(iconUrl, generatedIconsDirectory) {
+async function loadGeneratedIconSourceIndex(generatedIconsDirectory) {
+    if (generatedIconSourceIndexByDirectory.has(generatedIconsDirectory)) {
+        return generatedIconSourceIndexByDirectory.get(generatedIconsDirectory);
+    }
+    const index = new Map();
+    try {
+        const document = JSON.parse(await readFile(resolve(generatedIconsDirectory, 'icon-source-index.v1.json'), 'utf8'));
+        if (document?.schemaVersion === 1) {
+            for (const [key, relativePath] of Object.entries(document.sources ?? {})) {
+                const normalizedKey = normalizeId(key);
+                const normalizedPath = String(relativePath ?? '').replaceAll('\\', '/');
+                if (normalizedKey && normalizedPath && !normalizedPath.split('/').includes('..')) {
+                    index.set(normalizedKey, normalizedPath);
+                }
+            }
+        }
+    } catch (error) {
+        if (error?.code !== 'ENOENT') {
+            throw error;
+        }
+    }
+    generatedIconSourceIndexByDirectory.set(generatedIconsDirectory, index);
+    return index;
+}
+
+export async function resolveGeneratedIconFilePath(iconUrl, generatedIconsDirectory) {
     const iconKey = extractPublishedIconKey(iconUrl);
     if (!iconKey) {
         return null;

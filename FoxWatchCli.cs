@@ -4,8 +4,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 public static class FoxWatchCli
 {
@@ -58,7 +59,13 @@ public static class FoxWatchCli
         var baseAssetsUrl = parsedArguments.GetValueOrDefault("base-assets-url") ?? configuredOptions.BaseAssetsUrl ?? FoxWatchWorkspace.DefaultBaseAssetsUrl;
         var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: false);
 
-        await generator.GenerateAsync(outputPath, baseAssetsUrl, pakDirectoryPath, targetFilter);
+        var manifest = generator.BuildManifest(
+            baseAssetsUrl,
+            pakDirectoryPath,
+            targetFilter,
+            strictExtraction: parsedArguments.ContainsKey("strict"),
+            rawCacheKey: parsedArguments.GetValueOrDefault("raw-cache-key"));
+        await generator.WriteAsync(manifest, outputPath, targetFilter);
         return 0;
     }
 
@@ -139,7 +146,7 @@ public static class FoxWatchCli
         return 0;
     }
 
-    public static async Task<int> RunPrepareRegenAsync(string[] args)
+    public static async Task<int> RunPrepareRefreshAsync(string[] args)
     {
         var parsedArguments = FoxWatchCliArguments.Parse(args);
         var verbose = parsedArguments.ContainsKey("verbose");
@@ -148,7 +155,7 @@ public static class FoxWatchCli
             configuration,
             builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
 
-        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("prepare-regen");
+        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("prepare-refresh");
         var configuredOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FoxWatchOptions>>().Value;
         var manifestGenerator = provider.GetRequiredService<FoxWatchManifestGenerator>();
         var renderSceneGenerator = provider.GetRequiredService<FoxWatchRenderSceneGenerator>();
@@ -173,41 +180,17 @@ public static class FoxWatchCli
 
         var renderAssetOutputDirectory = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("render-asset-output-dir") ?? configuredOptions.RenderAssetOutputDirectory);
         var baseAssetsUrl = parsedArguments.GetValueOrDefault("base-assets-url") ?? configuredOptions.BaseAssetsUrl ?? FoxWatchWorkspace.DefaultBaseAssetsUrl;
-        var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: true);
-        if (string.IsNullOrWhiteSpace(pakDirectoryPath) || !Directory.Exists(pakDirectoryPath))
-        {
-            return 1;
-        }
-
+        var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: false);
+        var stopwatch = Stopwatch.StartNew();
         var manifest = manifestGenerator.BuildManifest(
             baseAssetsUrl,
             pakDirectoryPath,
             targetFilter,
             strictExtraction: parsedArguments.ContainsKey("strict"),
             rawCacheKey: parsedArguments.GetValueOrDefault("raw-cache-key"));
-        if (manifest.Assets.Count == 0)
-        {
-            logger.LogError("Strict regen extraction produced no requested assets; refusing to write or render outputs.");
-            return 1;
-        }
-
-        var requestedAssetIds = parsedArguments.GetListValues("only")
-            .Select(value => value.Trim().ToLowerInvariant())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var extractedAssetIds = manifest.Assets
-            .Select(asset => asset.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missingAssetIds = requestedAssetIds
-            .Where(assetId => !extractedAssetIds.Contains(assetId))
-            .OrderBy(assetId => assetId, StringComparer.Ordinal)
-            .ToArray();
-        if (missingAssetIds.Length > 0)
-        {
-            logger.LogError("Strict regen extraction did not resolve requested assets: {MissingAssetIds}", string.Join(", ", missingAssetIds));
-            return 1;
-        }
-
+        var extractionElapsed = stopwatch.Elapsed;
         await manifestGenerator.WriteAsync(manifest, outputPath, targetFilter);
+        var manifestWriteElapsed = stopwatch.Elapsed - extractionElapsed;
         await renderSceneGenerator.GenerateAsync(
             manifest,
             outputDirectory,
@@ -215,96 +198,367 @@ public static class FoxWatchCli
             baseAssetsUrl,
             pakDirectoryPath,
             targetFilter,
-            includePoseVariants: parsedArguments.ContainsKey("pose-variants"));
-        var regenPlanPath = parsedArguments.GetValueOrDefault("regen-plan");
-        if (!string.IsNullOrWhiteSpace(regenPlanPath))
-        {
-            await EnrichRegenPlanAsync(
-                FoxWatchWorkspace.ResolvePath(regenPlanPath)!,
-                Path.Combine(outputDirectory, "index.render-scenes.v1.json"),
-                manifest);
-        }
-        logger.LogInformation("Prepared regen manifest and scenes from one hydrated extraction pass for {AssetCount} asset(s)", manifest.Assets.Count);
+            includePoseVariants: parsedArguments.ContainsKey("pose-variants"),
+            assetExportPlanPath: parsedArguments.GetValueOrDefault("asset-export-plan"));
+        var meshExporter = provider.GetRequiredService<FoxWatchAssetMeshExporter>();
+        await meshExporter.WriteInspectionSnapshotAsync();
+        var sceneElapsed = stopwatch.Elapsed - extractionElapsed - manifestWriteElapsed;
+
+        logger.LogInformation(
+            "Prepared refresh from one hydrated manifest in {ElapsedMs:F0} ms (manifest {ManifestMs:F0} ms, write {ManifestWriteMs:F0} ms, scenes {SceneMs:F0} ms)",
+            stopwatch.Elapsed.TotalMilliseconds,
+            extractionElapsed.TotalMilliseconds,
+            manifestWriteElapsed.TotalMilliseconds,
+            sceneElapsed.TotalMilliseconds);
         return 0;
     }
 
-    private static async Task EnrichRegenPlanAsync(string planPath, string sceneIndexPath, FoxWatchManifest manifest)
+    public static async Task<int> RunSnapshotPakAsync(string[] args)
     {
-        var plan = JsonNode.Parse(await File.ReadAllTextAsync(planPath))?.AsObject()
-            ?? throw new InvalidDataException($"Invalid regen plan: {planPath}");
-        var sceneIndex = JsonNode.Parse(await File.ReadAllTextAsync(sceneIndexPath))?.AsObject()
-            ?? throw new InvalidDataException($"Invalid render scene index: {sceneIndexPath}");
-        var modesByAsset = plan["modesByAsset"]?.AsObject();
-        var jobs = new JsonArray();
-        var seenJobs = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var sceneNode in sceneIndex["scenes"]?.AsArray() ?? [])
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var configuration = FoxWatchCliSupport.BuildConfiguration();
+        using var provider = FoxWatchCliSupport.BuildProvider(configuration);
+        var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger("snapshot-pak");
+        var configuredOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FoxWatchOptions>>().Value;
+        var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: true);
+        var outputDirectory = FoxWatchCliSupport.ResolveRequiredPath(
+            logger,
+            parsedArguments.GetValueOrDefault("output-dir"),
+            "output-dir",
+            "",
+            "package snapshot output directory");
+        var pakFingerprint = parsedArguments.GetValueOrDefault("pak-fingerprint");
+        if (string.IsNullOrWhiteSpace(pakDirectoryPath) || !Directory.Exists(pakDirectoryPath)
+            || string.IsNullOrWhiteSpace(outputDirectory)
+            || string.IsNullOrWhiteSpace(pakFingerprint))
         {
-            if (sceneNode is not JsonObject scene)
+            if (string.IsNullOrWhiteSpace(pakFingerprint))
             {
-                continue;
+                logger.LogError("Package snapshot requires --pak-fingerprint <fingerprint>.");
+            }
+            return 1;
+        }
+
+        var builder = new FoxWatchPakSnapshotBuilder(loggerFactory.CreateLogger<FoxWatchPakSnapshotBuilder>());
+        await builder.BuildAsync(pakDirectoryPath, outputDirectory, pakFingerprint);
+        return 0;
+    }
+
+    public static async Task<int> RunSnapshotDecodedPackagesAsync(string[] args)
+    {
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var configuration = FoxWatchCliSupport.BuildConfiguration();
+        using var provider = FoxWatchCliSupport.BuildProvider(configuration);
+        var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger("snapshot-decoded-packages");
+        var configuredOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FoxWatchOptions>>().Value;
+        var packageSourcePath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: true);
+        var outputDirectory = FoxWatchCliSupport.ResolveRequiredPath(
+            logger,
+            parsedArguments.GetValueOrDefault("output-dir"),
+            "output-dir",
+            "",
+            "decoded package snapshot output directory");
+        var pakFingerprint = parsedArguments.GetValueOrDefault("pak-fingerprint");
+        if (string.IsNullOrWhiteSpace(packageSourcePath) || !Directory.Exists(packageSourcePath)
+            || string.IsNullOrWhiteSpace(outputDirectory)
+            || string.IsNullOrWhiteSpace(pakFingerprint))
+        {
+            if (string.IsNullOrWhiteSpace(pakFingerprint))
+            {
+                logger.LogError("Decoded package snapshot requires --pak-fingerprint <fingerprint>.");
+            }
+            return 1;
+        }
+
+        var builder = new FoxWatchDecodedPackageSnapshotBuilder(
+            loggerFactory.CreateLogger<FoxWatchDecodedPackageSnapshotBuilder>());
+        await builder.BuildAsync(packageSourcePath, outputDirectory, pakFingerprint);
+        return 0;
+    }
+
+    public static async Task<int> RunExportAssetCacheAsync(string[] args)
+    {
+        var parsedArguments = FoxWatchCliArguments.Parse(args);
+        var verbose = parsedArguments.ContainsKey("verbose");
+        var configuration = FoxWatchCliSupport.BuildConfiguration();
+        using var provider = FoxWatchCliSupport.BuildProvider(
+            configuration,
+            builder => FoxWatchCliSupport.ApplyStandardLoggingFilters(builder, verbose));
+
+        var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger("asset-cache-worker");
+        var configuredOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FoxWatchOptions>>().Value;
+        var pakDirectoryPath = FoxWatchCliSupport.ResolvePakDirectoryPath(logger, parsedArguments, configuredOptions, required: true);
+        var planPath = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("plan"));
+        var outputDirectory = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("output-dir"));
+        var resultPath = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("result"));
+        var claimDirectory = FoxWatchWorkspace.ResolvePath(parsedArguments.GetValueOrDefault("claim-dir"));
+        var meshGeometryOnly = parsedArguments.ContainsKey("mesh-geometry-only");
+        var materialMetadataOnly = parsedArguments.ContainsKey("material-metadata-only");
+        if (string.IsNullOrWhiteSpace(pakDirectoryPath) || !Directory.Exists(pakDirectoryPath)
+            || string.IsNullOrWhiteSpace(planPath) || !File.Exists(planPath)
+            || string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            logger.LogError("Asset cache worker requires readable --pak-path and --plan values plus --output-dir.");
+            return 1;
+        }
+
+        if (!int.TryParse(parsedArguments.GetValueOrDefault("worker-index"), out var workerIndex)
+            || !int.TryParse(parsedArguments.GetValueOrDefault("worker-count"), out var workerCount)
+            || workerCount is < 1 or > 4
+            || workerIndex < 0
+            || workerIndex >= workerCount)
+        {
+            logger.LogError("Asset cache worker requires --worker-index <0..N-1> and --worker-count <1..4>.");
+            return 1;
+        }
+
+        var plan = JsonSerializer.Deserialize<FoxWatchAssetExportPlan>(
+            await File.ReadAllTextAsync(planPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidDataException($"Invalid asset cache export plan: {planPath}");
+        if (plan.SchemaVersion != 1)
+        {
+            throw new InvalidDataException($"Unsupported asset cache export plan schema: {plan.SchemaVersion}");
+        }
+
+        var allJobs = plan.MeshPackagePaths
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(packagePath => (Kind: "mesh", PackagePath: packagePath))
+            .Concat(plan.MaterialPackagePaths
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(packagePath => (Kind: "material", PackagePath: packagePath)))
+            .Concat(plan.TexturePackagePaths
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(packagePath => (Kind: "texture", PackagePath: packagePath)))
+            .OrderBy(job => StableAssetJobOrder(job.PackagePath), StringComparer.Ordinal)
+            .ToArray();
+        var jobs = string.IsNullOrWhiteSpace(claimDirectory)
+            ? allJobs.Where((_, index) => index % workerCount == workerIndex).ToArray()
+            : allJobs;
+
+        Directory.CreateDirectory(outputDirectory);
+        if (!string.IsNullOrWhiteSpace(claimDirectory))
+        {
+            Directory.CreateDirectory(claimDirectory);
+        }
+        var exporter = new FoxWatchAssetMeshExporter(
+            loggerFactory.CreateLogger<FoxWatchAssetMeshExporter>(),
+            Microsoft.Extensions.Options.Options.Create(new FoxWatchOptions { PakDirectoryPath = pakDirectoryPath }));
+        var stopwatch = Stopwatch.StartNew();
+        var lastProgressAt = TimeSpan.Zero;
+        var referencedMaterialPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var referencedTexturePackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var canonicalMeshAliases = 0;
+        logger.LogInformation(
+            "Asset cache worker {WorkerNumber}/{WorkerCount} starting {JobCount} job(s) ({MeshCount} mesh, {MaterialCount} material, {TextureCount} texture, geometry-only {GeometryOnly}, material-metadata-only {MaterialMetadataOnly})",
+            workerIndex + 1,
+            workerCount,
+            string.IsNullOrWhiteSpace(claimDirectory) ? jobs.Length : allJobs.Length,
+            allJobs.Count(job => job.Kind == "mesh"),
+            allJobs.Count(job => job.Kind == "material"),
+            allJobs.Count(job => job.Kind == "texture"),
+            meshGeometryOnly,
+            materialMetadataOnly);
+
+        var completedJobs = 0;
+        while (true)
+        {
+            (string Kind, string PackagePath) job;
+            if (!string.IsNullOrWhiteSpace(claimDirectory))
+            {
+                if (!TryClaimNextAssetJob(allJobs, claimDirectory, workerIndex, completedJobs, out job))
+                {
+                    break;
+                }
+            }
+            else
+            {
+                if (completedJobs >= jobs.Length)
+                {
+                    break;
+                }
+                job = jobs[completedJobs];
             }
 
-            var sceneEntry = scene["outputPath"]?.GetValue<string>();
-            var structureIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (scene["structureId"]?.GetValue<string>() is { Length: > 0 } structureId)
+            var jobStopwatch = Stopwatch.StartNew();
+            if (job.Kind == "mesh")
             {
-                structureIds.Add(structureId);
-            }
-            foreach (var allowedId in scene["allowedStructureIds"]?.AsArray() ?? [])
-            {
-                if (allowedId?.GetValue<string>() is { Length: > 0 } value)
+                var result = await exporter.ExportMeshAsync(
+                    job.PackagePath,
+                    outputDirectory,
+                    exportReferencedMaterials: !meshGeometryOnly);
+                foreach (var packagePath in result.ReferencedMaterialPackagePaths)
                 {
-                    structureIds.Add(value);
+                    referencedMaterialPackagePaths.Add(packagePath);
                 }
+                if (meshGeometryOnly && EnsureCanonicalMeshOutput(job.PackagePath, outputDirectory, result.SavedFilePath))
+                {
+                    canonicalMeshAliases += 1;
+                }
+            }
+            else if (job.Kind == "material")
+            {
+                var result = await exporter.ExportMaterialAsync(
+                    job.PackagePath,
+                    outputDirectory,
+                    exportReferencedTextures: !materialMetadataOnly);
+                foreach (var packagePath in result.ReferencedTexturePackagePaths)
+                {
+                    referencedTexturePackagePaths.Add(packagePath);
+                }
+            }
+            else
+            {
+                await exporter.ExportTextureAsync(job.PackagePath, outputDirectory);
             }
 
-            var requestedModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var assetId in structureIds)
+            if (jobStopwatch.Elapsed >= TimeSpan.FromSeconds(5))
             {
-                if (modesByAsset?[assetId] is not JsonArray assetModes)
-                {
-                    continue;
-                }
-                foreach (var modeNode in assetModes)
-                {
-                    var mode = modeNode?.GetValue<string>();
-                    if (mode is "preview" or "rendered-icon") requestedModes.Add("preview");
-                    if (mode is "component") requestedModes.Add("topdown");
-                }
+                logger.LogInformation(
+                    "Asset cache worker {WorkerNumber}: slow {JobKind} job {PackagePath} took {ElapsedSeconds:F1}s",
+                    workerIndex + 1,
+                    job.Kind,
+                    job.PackagePath,
+                    jobStopwatch.Elapsed.TotalSeconds);
             }
 
-            foreach (var renderMode in requestedModes.OrderBy(value => value, StringComparer.Ordinal))
+            completedJobs += 1;
+            if ((!string.IsNullOrWhiteSpace(claimDirectory) && completedJobs == 1)
+                || (string.IsNullOrWhiteSpace(claimDirectory) && completedJobs == jobs.Length)
+                || completedJobs == 1
+                || stopwatch.Elapsed - lastProgressAt >= TimeSpan.FromSeconds(10))
             {
-                var jobKey = $"{sceneEntry}|default|{renderMode}";
-                if (!seenJobs.Add(jobKey))
-                {
-                    continue;
-                }
-                jobs.Add(new JsonObject
-                {
-                    ["jobKey"] = jobKey,
-                    ["sceneEntry"] = sceneEntry,
-                    ["sceneVariant"] = null,
-                    ["renderMode"] = renderMode,
-                    ["structureIds"] = new JsonArray(structureIds
-                        .OrderBy(value => value, StringComparer.Ordinal)
-                        .Select(value => (JsonNode?)JsonValue.Create(value))
-                        .ToArray()),
-                });
+                lastProgressAt = stopwatch.Elapsed;
+                logger.LogInformation(
+                    "Asset cache worker {WorkerNumber}: {Completed}/{Total} job(s) in {ElapsedSeconds:F1}s ({JobsPerSecond:F2}/s)",
+                    workerIndex + 1,
+                    completedJobs,
+                    string.IsNullOrWhiteSpace(claimDirectory) ? jobs.Length : allJobs.Length,
+                    stopwatch.Elapsed.TotalSeconds,
+                    completedJobs / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001));
             }
         }
 
-        plan["preparedAt"] = DateTimeOffset.UtcNow.ToString("O");
-        plan["preparedManifestAssetCount"] = manifest.Assets.Count;
-        plan["manifestChanges"] = new JsonArray(manifest.Assets
-            .Select(asset => (JsonNode?)new JsonObject { ["assetId"] = asset.Id, ["status"] = "prepared" })
-            .ToArray());
-        plan["jobs"] = jobs;
+        logger.LogInformation(
+            "Asset cache worker {WorkerNumber}/{WorkerCount} completed {JobCount} job(s) in {ElapsedSeconds:F1}s ({CanonicalMeshAliasCount} canonical mesh alias(es))",
+            workerIndex + 1,
+            workerCount,
+            completedJobs,
+            stopwatch.Elapsed.TotalSeconds,
+            canonicalMeshAliases);
+        if (!string.IsNullOrWhiteSpace(resultPath))
+        {
+            var resultDirectory = Path.GetDirectoryName(resultPath);
+            if (!string.IsNullOrWhiteSpace(resultDirectory))
+            {
+                Directory.CreateDirectory(resultDirectory);
+            }
+            var workerResult = new FoxWatchAssetExportWorkerResult
+            {
+                WorkerIndex = workerIndex,
+                CompletedJobs = completedJobs,
+                ReferencedMaterialPackagePaths = referencedMaterialPackagePaths
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToList(),
+                ReferencedTexturePackagePaths = referencedTexturePackagePaths
+                    .OrderBy(value => value, StringComparer.Ordinal)
+                    .ToList(),
+            };
+            await File.WriteAllTextAsync(
+                resultPath,
+                $"{JsonSerializer.Serialize(workerResult, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = true,
+                })}{Environment.NewLine}");
+            logger.LogInformation(
+                "Asset cache worker {WorkerNumber} recorded {MaterialCount} referenced material and {TextureCount} referenced texture package(s) at {ResultPath}",
+                workerIndex + 1,
+                workerResult.ReferencedMaterialPackagePaths.Count,
+                workerResult.ReferencedTexturePackagePaths.Count,
+                resultPath);
+        }
+        return 0;
+    }
 
-        var temporaryPath = $"{planPath}.{Environment.ProcessId}.tmp";
-        await File.WriteAllTextAsync(temporaryPath, $"{plan.ToJsonString(new JsonSerializerOptions { WriteIndented = true })}{Environment.NewLine}");
-        File.Move(temporaryPath, planPath, overwrite: true);
+    private static string StableAssetJobOrder(string packagePath)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(packagePath)));
+    }
+
+    private static bool TryClaimNextAssetJob(
+        (string Kind, string PackagePath)[] jobs,
+        string claimDirectory,
+        int workerIndex,
+        int completedJobs,
+        out (string Kind, string PackagePath) claimedJob)
+    {
+        for (var offset = 0; offset < jobs.Length; offset++)
+        {
+            var jobIndex = (workerIndex + completedJobs + offset) % jobs.Length;
+            var candidate = jobs[jobIndex];
+            var claimKey = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes($"{candidate.Kind}\n{candidate.PackagePath}"))).ToLowerInvariant();
+            var claimPath = Path.Combine(claimDirectory, $"{claimKey}.claim");
+            try
+            {
+                using var stream = new FileStream(claimPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                using var writer = new StreamWriter(stream, Encoding.UTF8);
+                writer.Write($"worker={workerIndex + 1}\nkind={candidate.Kind}\npackage={candidate.PackagePath}\n");
+                claimedJob = candidate;
+                return true;
+            }
+            catch (IOException) when (File.Exists(claimPath))
+            {
+                // Another long-lived worker owns this job. Continue scanning so
+                // whichever worker finishes first steals the next unclaimed job.
+            }
+        }
+
+        claimedJob = default;
+        return false;
+    }
+
+    private static bool EnsureCanonicalMeshOutput(string packagePath, string outputDirectory, string? savedFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(savedFilePath) || !File.Exists(savedFilePath))
+        {
+            throw new InvalidDataException($"Mesh export for '{packagePath}' did not produce a readable output file.");
+        }
+
+        var extension = Path.GetExtension(savedFilePath);
+        if (!string.Equals(extension, ".glb", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Deferred mesh export for '{packagePath}' produced '{extension}' instead of the GLB path required by render scenes.");
+        }
+
+        var normalizedPackagePath = packagePath.Replace('\\', '/').TrimStart('/');
+        if (normalizedPackagePath.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedPackagePath = normalizedPackagePath[..^".uasset".Length];
+        }
+        var canonicalPath = Path.Combine(
+            outputDirectory,
+            normalizedPackagePath.Replace('/', Path.DirectorySeparatorChar)) + extension;
+        if (string.Equals(
+                Path.GetFullPath(canonicalPath),
+                Path.GetFullPath(savedFilePath),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var canonicalDirectory = Path.GetDirectoryName(canonicalPath);
+        if (!string.IsNullOrWhiteSpace(canonicalDirectory))
+        {
+            Directory.CreateDirectory(canonicalDirectory);
+        }
+        File.Copy(savedFilePath, canonicalPath, overwrite: true);
+        return true;
     }
 
     public static async Task<int> RunProbeMeshExportAsync(string[] args)

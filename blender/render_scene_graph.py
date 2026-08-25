@@ -82,7 +82,7 @@ def apply_node_transform(object_handle, node_document, parent_object=None, paren
 
 def create_debug_marker(node_document, collection, parent_object=None):
     marker_size = node_document.get("markerSize")
-    if marker_size is None:
+    if marker_size is None or bpy.app.background:
         return None
 
     half = float(marker_size) / 2.0
