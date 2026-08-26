@@ -9,4 +9,8 @@
     <RootNamespace>FoxWatchMonitor</RootNamespace>
     <ApplicationIcon>..\..\..\apps\nixie-electron\build\icon.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="assets\icons\clock.svg" LogicalName="FoxWatchMonitor.Assets.clock.svg" />
+    <EmbeddedResource Include="assets\icons\hourglass.svg" LogicalName="FoxWatchMonitor.Assets.hourglass.svg" />
+  </ItemGroup>
 </Project>

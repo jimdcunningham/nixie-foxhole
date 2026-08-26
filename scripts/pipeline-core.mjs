@@ -44,6 +44,24 @@ export async function readJson(filePath) {
     }
 }
 
+export function createFoxWatchCacheTargets(repoRoot) {
+    const temporaryRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp');
+    return [
+        // Remove compatibility junctions before their decoded bundle targets so
+        // Windows never leaves a broken cache view behind.
+        path.join(temporaryRoot, 'assets'),
+        path.join(temporaryRoot, 'foxhole-icons'),
+        path.join(temporaryRoot, 'pak-assets'),
+        path.join(temporaryRoot, 'decoded-asset-bundle.active.v1.json'),
+        path.join(temporaryRoot, 'decoded-asset-bundles'),
+        path.join(temporaryRoot, 'deep-extraction-cache.v1.json'),
+        path.join(temporaryRoot, 'pipeline-cache'),
+        path.join(temporaryRoot, 'pak-snapshots'),
+        path.join(temporaryRoot, 'decoded-package-snapshots'),
+        path.join(temporaryRoot, 'asset-cache-runs'),
+    ];
+}
+
 export async function buildPakInventory(directory) {
     const files = await walkFiles(directory);
     const entries = [];

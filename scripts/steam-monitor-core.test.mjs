@@ -7,6 +7,7 @@ import {
     parseSteamAppInfoBuilds,
     parseSteamAppManifest,
     quoteSteamConsoleValue,
+    resolveVerifiedMonitorPakSource,
     selectLatestSteamBuild,
     selectInactiveAcquisitionSlot,
     shouldAcquireSteamBuild,
@@ -15,6 +16,74 @@ import {
     validateMonitorConfig,
     verifyInstalledAppManifest,
 } from './steam-monitor-core.mjs';
+
+test('resolves the monitor-managed PAK only from matching acquired state and receipt', () => {
+    const receiptPath = 'C:/repo/tools/foxwatch/local/state/acquisitions/public/222.json';
+    const state = {
+        selectedBranch: 'public',
+        selectedBuildId: '222',
+        branches: {
+            public: {
+                activeSlot: 'a',
+                acquiredBuildId: '222',
+                pakDirectory: 'C:/repo/tools/foxwatch/local/installs/public/a/game/War/Content/Paks',
+                pakFingerprint: 'pak-222',
+                acquisitionReceiptPath: receiptPath,
+            },
+        },
+    };
+    const receipt = {
+        schemaVersion: 1,
+        appId: '505460',
+        branch: 'public',
+        buildId: '222',
+        slot: 'a',
+        pakDirectory: state.branches.public.pakDirectory,
+        pakFingerprint: 'pak-222',
+    };
+
+    assert.deepEqual(resolveVerifiedMonitorPakSource(state, receipt, receiptPath), {
+        branch: 'public',
+        buildId: '222',
+        pakDirectory: state.branches.public.pakDirectory,
+        pakFingerprint: 'pak-222',
+    });
+    assert.equal(resolveVerifiedMonitorPakSource({ branches: {} }, null, receiptPath), null);
+});
+
+test('rejects stale monitor state and acquisition receipts', () => {
+    const receiptPath = 'C:/repo/tools/foxwatch/local/state/acquisitions/public/222.json';
+    const branchState = {
+        activeSlot: 'a',
+        acquiredBuildId: '221',
+        pakDirectory: 'C:/repo/paks',
+        pakFingerprint: 'pak-221',
+        acquisitionReceiptPath: receiptPath,
+    };
+    const state = {
+        selectedBranch: 'public',
+        selectedBuildId: '222',
+        branches: { public: branchState },
+    };
+    assert.throws(
+        () => resolveVerifiedMonitorPakSource(state, null, receiptPath),
+        /not fully acquired and verified/,
+    );
+
+    branchState.acquiredBuildId = '222';
+    assert.throws(
+        () => resolveVerifiedMonitorPakSource(state, {
+            schemaVersion: 1,
+            appId: '505460',
+            branch: 'public',
+            buildId: '221',
+            slot: 'a',
+            pakDirectory: branchState.pakDirectory,
+            pakFingerprint: branchState.pakFingerprint,
+        }, receiptPath),
+        /receipt is invalid/,
+    );
+});
 
 test('parses public and devbranch BuildIDs from Steam app info', () => {
     const text = `AppID : 505460\n"505460"\n{\n  "common"\n  {\n    "branches"\n    {\n      "public" { "buildid" "111" "timeupdated" "1" }\n      "devbranch" { "buildid" "222" "timeupdated" "2" }\n    }\n  }\n}`;

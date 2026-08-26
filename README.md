@@ -136,6 +136,7 @@ npm run foxwatch -- monitor-now
 npm run foxwatch -- monitor-now -- --force-refresh
 npm run foxwatch -- monitor-logs
 npm run foxwatch -- monitor-logs -- --lines 250
+npm run foxwatch -- clear-cache
 npm run foxwatch -- monitor
 npm run foxwatch -- uninstall-monitor
 ```
@@ -171,6 +172,12 @@ polling. The stopped state is saved under `local/state/`, so restarting the tray
 app or Windows does not silently resume work. `Start` re-enables polling and
 immediately begins a Steam metadata check. The monitor shows the exact local
 time of the next scheduled poll whenever it is idle.
+
+`Run Refresh` forces the latest verified monitor-managed build through a full
+deep refresh even when that BuildID already succeeded. `Clear Cache` requires a
+confirmation and removes decoded package/asset bundles plus transient pipeline
+caches. It preserves Steam installations, credentials, monitor state, logs,
+rendered outputs, and published assets; the next refresh rebuilds the cache.
 
 After pulling changes to the tray app source, run `install-monitor-app` to stop
 the existing host, publish the updated binaries, preserve the machine-local
@@ -232,7 +239,13 @@ FoxWatch resolves the Foxhole pak directory in this order:
 - `--pak-path <path>`
 - `FoxWatch__PakDirectoryPath` environment variable
 - `FoxWatch:PakDirectoryPath` in `tools/foxwatch/appsettings.json`
+- the latest fully acquired and inventory-verified Steam monitor installation
 - built-in Steam install fallbacks in `FoxWatchWorkspace.cs`
+
+The Node workflow validates the monitor acquisition receipt and current PAK
+fingerprint before selecting that installation. This keeps a manual
+`refresh --deep` on the same latest build and decoded cache as the tray monitor
+instead of silently falling back to an older normal Steam installation.
 
 PowerShell example:
 

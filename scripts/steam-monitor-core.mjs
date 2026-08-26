@@ -127,6 +127,48 @@ export function shouldRunFoxWatch(branchState, remoteBuildId, { forceRefresh = f
     return forceRefresh || branchState?.successfulBuildId !== String(remoteBuildId);
 }
 
+export function resolveVerifiedMonitorPakSource(state, receipt, expectedReceiptPath) {
+    const selectedBranchValue = String(state?.selectedBranch ?? '').trim();
+    const selectedBuildId = String(state?.selectedBuildId ?? '').trim();
+    if (!selectedBranchValue && !selectedBuildId) {
+        return null;
+    }
+    if (!selectedBranchValue || !/^\d+$/.test(selectedBuildId)) {
+        throw new Error('FoxWatch monitor state has an incomplete selected Steam build.');
+    }
+
+    const branch = normalizeMonitorBranch(selectedBranchValue);
+    const branchState = state?.branches?.[branch];
+    if (branchState?.acquiredBuildId !== selectedBuildId
+        || !FOXWATCH_MONITOR_SLOTS.includes(branchState?.activeSlot)
+        || !branchState?.pakDirectory
+        || !branchState?.pakFingerprint) {
+        throw new Error(
+            `FoxWatch monitor has selected ${branch} BuildID ${selectedBuildId}, but that build is not fully acquired and verified.`,
+        );
+    }
+    if (!expectedReceiptPath
+        || normalizeLocalPath(branchState.acquisitionReceiptPath) !== normalizeLocalPath(expectedReceiptPath)) {
+        throw new Error(`FoxWatch monitor acquisition receipt path is inconsistent for ${branch} BuildID ${selectedBuildId}.`);
+    }
+    if (receipt?.schemaVersion !== FOXWATCH_MONITOR_SCHEMA_VERSION
+        || receipt?.appId !== FOXHOLE_APP_ID
+        || receipt?.branch !== branch
+        || receipt?.buildId !== selectedBuildId
+        || receipt?.slot !== branchState.activeSlot
+        || normalizeLocalPath(receipt?.pakDirectory) !== normalizeLocalPath(branchState.pakDirectory)
+        || receipt?.pakFingerprint !== branchState.pakFingerprint) {
+        throw new Error(`FoxWatch monitor acquisition receipt is invalid for ${branch} BuildID ${selectedBuildId}.`);
+    }
+
+    return {
+        branch,
+        buildId: selectedBuildId,
+        pakDirectory: branchState.pakDirectory,
+        pakFingerprint: branchState.pakFingerprint,
+    };
+}
+
 export function createPakInventoryFingerprint(entries) {
     const canonical = entries
         .map(entry => ({
@@ -136,6 +178,10 @@ export function createPakInventoryFingerprint(entries) {
         }))
         .sort((left, right) => left.path.localeCompare(right.path));
     return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
+function normalizeLocalPath(value) {
+    return String(value ?? '').replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
 }
 
 export function quoteSteamConsoleValue(value) {

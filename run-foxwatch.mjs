@@ -45,6 +45,7 @@ import { configurePublishLogging, logPublishDetail } from './scripts/publish-log
 import {
     buildPakInventory,
     computeBuildProvenance,
+    createFoxWatchCacheTargets,
     readJson,
     writeJsonAtomic,
 } from './scripts/pipeline-core.mjs';
@@ -57,6 +58,7 @@ import {
     runSteamMonitorCommand,
     steamMonitorCommands,
 } from './scripts/steam-monitor.mjs';
+import { resolveVerifiedMonitorPakSource } from './scripts/steam-monitor-core.mjs';
 
 const [, , command, ...commandArgs] = process.argv;
 const rawArgs = commandArgs.filter(arg => arg !== '--');
@@ -65,6 +67,7 @@ const workflowCommands = [
     'refresh',
     'refresh-modifications',
     'publish-manifest',
+    'clear-cache',
     'open-asset-manifest',
     'open-pose-editor',
 ];
@@ -124,6 +127,9 @@ const blueprintTargetIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp',
 const modificationRenderIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'modification-render-index.v1.json');
 const foxholeIconOutputRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxhole-icons');
 const activeDecodedAssetBundlePointerPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundle.active.v1.json');
+const foxWatchAppSettingsPath = path.join(repoRoot, 'tools', 'foxwatch', 'appsettings.json');
+const monitorStatePath = path.join(repoRoot, 'tools', 'foxwatch', 'local', 'state', 'monitor-state.v1.json');
+const monitorAcquisitionsRoot = path.join(repoRoot, 'tools', 'foxwatch', 'local', 'state', 'acquisitions');
 const decodedAssetBundleRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundles', 'v1');
 const legacyDeepExtractionCacheStampPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'deep-extraction-cache.v1.json');
 const blenderTimingHistoryPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'blender-timing-history.v1.json');
@@ -151,7 +157,7 @@ if (steamMonitorCommands.includes(command)) {
     process.exit(0);
 }
 
-if (['publish-manifest', 'refresh', 'refresh-modifications'].includes(command)) {
+if (['publish-manifest', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
     const releaseRefreshLock = acquireProcessLock(refreshLockPath, 'FoxWatch refresh/publish pipeline');
     process.on('exit', releaseRefreshLock);
 }
@@ -176,6 +182,11 @@ appendNpmConfigArgument(args, 'decoded-snapshot-dir');
 
 const parsedFoxwatchArgs = parseCliArgs(args);
 configurePublishLogging({ verbose: hasCliFlag(parsedFoxwatchArgs, 'verbose') });
+
+if (command === 'clear-cache') {
+    await clearFoxWatchCaches();
+    process.exit(0);
+}
 
 if (command === 'benchmark-manifest-source') {
     await runManifestSourceBenchmark(parsedFoxwatchArgs);
@@ -467,7 +478,7 @@ function runNpm(commandArgs) {
 }
 
 async function runManifestSourceBenchmark(parsedArgs) {
-    const pakDirectory = resolveRegenPakDirectory(parsedArgs);
+    const pakDirectory = await resolveRegenPakDirectory(parsedArgs);
     if (!pakDirectory) {
         throw new Error('Manifest source benchmark requires a readable Foxhole PAK directory.');
     }
@@ -656,14 +667,13 @@ async function runManifestSourceBenchmark(parsedArgs) {
     console.log(`Benchmark report: ${reportPath}`);
 }
 
-function resolveRegenPakDirectory(parsedArgs) {
-    const candidates = [
+async function resolveRegenPakDirectory(parsedArgs) {
+    const configuredCandidates = [
         (parsedArgs['pak-path'] ?? []).at(-1),
         process.env.FoxWatch__PakDirectoryPath,
         process.env.FOXWATCH_PAK_PATH,
-        ...defaultPakDirectoryCandidates,
     ];
-    for (const candidate of candidates) {
+    for (const candidate of configuredCandidates) {
         if (!candidate) {
             continue;
         }
@@ -672,11 +682,72 @@ function resolveRegenPakDirectory(parsedArgs) {
             return resolved;
         }
     }
+
+    const appSettings = await readJson(foxWatchAppSettingsPath);
+    const configuredPakDirectory = appSettings?.FoxWatch?.PakDirectoryPath;
+    if (configuredPakDirectory) {
+        const resolved = path.resolve(repoRoot, configuredPakDirectory);
+        if (nativeFs.existsSync(resolved)) {
+            return resolved;
+        }
+    }
+
+    const monitorPakDirectory = await resolveMonitorManagedPakDirectory();
+    if (monitorPakDirectory) {
+        return monitorPakDirectory;
+    }
+
+    for (const candidate of defaultPakDirectoryCandidates) {
+        const resolved = path.resolve(repoRoot, candidate);
+        if (nativeFs.existsSync(resolved)) {
+            return resolved;
+        }
+    }
     return null;
 }
 
+async function resolveMonitorManagedPakDirectory() {
+    const state = await readJson(monitorStatePath);
+    if (!state?.selectedBranch && !state?.selectedBuildId) {
+        return null;
+    }
+
+    const branch = String(state.selectedBranch ?? '').trim().toLowerCase();
+    const buildId = String(state.selectedBuildId ?? '').trim();
+    const receiptPath = path.join(monitorAcquisitionsRoot, branch, `${buildId}.json`);
+    const receipt = await readJson(receiptPath);
+    const source = resolveVerifiedMonitorPakSource(state, receipt, receiptPath);
+    const inventory = await buildPakInventory(source.pakDirectory);
+    if (inventory.steamBuildId !== source.buildId || inventory.fingerprint !== source.pakFingerprint) {
+        throw new Error(
+            `Monitor-managed ${source.branch} BuildID ${source.buildId} no longer matches its verified PAK inventory. `
+            + 'Run the FoxWatch monitor again or pass --pak-path explicitly.',
+        );
+    }
+    console.log(
+        `Using verified monitor-managed ${source.branch} BuildID ${source.buildId}: ${source.pakDirectory}`,
+    );
+    return source.pakDirectory;
+}
+
+async function clearFoxWatchCaches() {
+    const targets = createFoxWatchCacheTargets(repoRoot);
+    let removedTargets = 0;
+    for (const target of targets) {
+        assertSafeGeneratedCacheRoot(target);
+        if (await pathExists(target)) {
+            await fs.rm(target, { recursive: true, force: true });
+            removedTargets += 1;
+        }
+    }
+    console.log(
+        `Cleared ${removedTargets} FoxWatch cache location(s). `
+        + 'Steam installations, monitor state, logs, rendered outputs, and published assets were preserved.',
+    );
+}
+
 async function prepareDeepExtractionCache(parsedArgs) {
-    const pakDirectory = resolveRegenPakDirectory(parsedArgs);
+    const pakDirectory = await resolveRegenPakDirectory(parsedArgs);
     if (!pakDirectory) {
         throw new Error('Deep refresh requires a readable Foxhole PAK directory before extracted-asset cache validation.');
     }
@@ -1994,9 +2065,19 @@ async function runDeepRefreshBlenderBatches(rawArgs) {
         }
 
         while (queue.length > 0 && active.size < workerCount) {
-            if (active.size === 1 && !canLaunchSecondBlenderWorker(os.freemem())) {
+            const availableMemoryBytes = os.freemem();
+            if (active.size === 1 && !canLaunchSecondBlenderWorker(availableMemoryBytes)) {
                 if (!reportedMemoryGuard) {
-                    console.log('Blender memory guard is holding the second worker until at least 12 GiB is available.');
+                    const memoryGuardDetail = `Waiting for 12 GiB available RAM (${formatBytes(availableMemoryBytes)} available).`;
+                    console.log(`Blender memory guard is holding the second worker. ${memoryGuardDetail}`);
+                    emitFoxWatchProgress({
+                        kind: 'blender-worker-wait',
+                        stage: 'Rendering',
+                        worker: 2,
+                        reason: 'memory-guard',
+                        detail: memoryGuardDetail,
+                        overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
+                    });
                     reportedMemoryGuard = true;
                 }
                 break;

@@ -23,6 +23,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _timer;
     private readonly ConcurrentQueue<string> _pendingProcessLines = new();
     private Process? _activeProcess;
+    private RunnerOperation _activeOperation;
     private DateTimeOffset _nextPollAt;
     private DateTimeOffset _lastStateReadAt = DateTimeOffset.MinValue;
     private int _pipelinePercent;
@@ -58,6 +59,8 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         _ = _form.Handle;
         _form.StartRequested += (_, _) => StartPollingNow();
         _form.StopRequested += (_, _) => StopRunAndPolling();
+        _form.RunRefreshRequested += (_, _) => StartFullRefresh();
+        _form.ClearCacheRequested += (_, _) => ConfirmAndClearCache();
         _form.OpenLogsRequested += (_, _) => OpenLogsFolder();
         _form.StartWithWindowsChanged += (_, enabled) => SetStartWithWindows(enabled);
         _form.StartMinimizedChanged += (_, enabled) => SetStartMinimized(enabled);
@@ -177,6 +180,61 @@ internal sealed class MonitorApplicationContext : ApplicationContext
 
     private void StartPoll()
     {
+        StartRunnerOperation(
+            RunnerOperation.Poll,
+            "monitor-once",
+            [],
+            "Starting Poll",
+            "Starting Steam metadata and FoxWatch checks.");
+    }
+
+    private void StartFullRefresh()
+    {
+        if (_activeProcess is not null)
+        {
+            UpdateStatus("Running", "A FoxWatch operation is already active.");
+            return;
+        }
+        StartRunnerOperation(
+            RunnerOperation.Refresh,
+            "monitor-now",
+            ["--force-refresh"],
+            "Starting Refresh",
+            "Starting a full refresh for the latest verified Foxhole build.");
+    }
+
+    private void ConfirmAndClearCache()
+    {
+        if (_activeProcess is not null)
+        {
+            UpdateStatus("Running", "Stop the active FoxWatch operation before clearing its cache.");
+            return;
+        }
+        var result = MessageBox.Show(
+            _form,
+            "Clear FoxWatch's decoded package, mesh, material, texture, icon, and pipeline caches?\n\n"
+            + "Steam installations, monitor settings, logs, rendered outputs, and published assets will be preserved. "
+            + "The next refresh will rebuild the cache.",
+            "Clear FoxWatch Cache",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (result != DialogResult.Yes) return;
+        StartRunnerOperation(
+            RunnerOperation.ClearCache,
+            "clear-cache",
+            [],
+            "Clearing Cache",
+            "Removing generated FoxWatch caches while preserving installations and published assets.");
+    }
+
+    private void StartRunnerOperation(
+        RunnerOperation operation,
+        string command,
+        IReadOnlyList<string> commandArguments,
+        string initialStage,
+        string initialDetail)
+    {
         if (_activeProcess is not null || _shuttingDown) return;
         _pipelinePercent = 0;
         _renderSceneTotal = 0;
@@ -186,8 +244,10 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         _pipelineCompletedAt = null;
         _renderStartedAt = null;
         _form.ResetWorkerProgress();
-        _form.SetPipelineProgress("Starting Poll", "Starting Steam metadata and FoxWatch checks.", 0);
-        _form.SetTiming("Elapsed 0s");
+        _form.SetPipelineProgress(initialStage, initialDetail, 0);
+        _form.SetTiming("0s");
+        _form.SetActionsEnabled(false);
+        SetStoppedControls(false);
         var startInfo = new ProcessStartInfo
         {
             FileName = _options.NodePath,
@@ -198,7 +258,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             RedirectStandardError = true,
         };
         startInfo.ArgumentList.Add(_options.RunnerScriptPath);
-        startInfo.ArgumentList.Add("monitor-once");
+        startInfo.ArgumentList.Add(command);
+        foreach (var argument in commandArguments)
+            startInfo.ArgumentList.Add(argument);
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, eventArgs) => AppendProcessLine(eventArgs.Data);
@@ -208,7 +270,8 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         {
             if (!process.Start()) throw new InvalidOperationException("The monitor process did not start.");
             _activeProcess = process;
-            HostDiagnostics.Write($"started monitor-once pid={process.Id}");
+            _activeOperation = operation;
+            HostDiagnostics.Write($"started {command} pid={process.Id}");
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             UpdateStatus("Running", $"Steam and FoxWatch monitor process {process.Id} is active.");
@@ -216,6 +279,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         catch (Exception error)
         {
             process.Dispose();
+            _activeOperation = RunnerOperation.None;
+            _form.SetActionsEnabled(true);
+            SetStoppedControls(_paused);
             _nextPollAt = DateTimeOffset.Now.AddMinutes(_options.IntervalMinutes);
             UpdateStatus("Failed", error.Message);
             _form.SetPipelineProgress("Failed", error.Message, _pipelinePercent);
@@ -230,11 +296,14 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         process.WaitForExit();
         FlushPendingProcessLines(int.MaxValue);
         var exitCode = process.ExitCode;
+        var operation = _activeOperation;
+        _activeOperation = RunnerOperation.None;
         var stoppedByUser = _stopRequested;
         _stopRequested = false;
         HostDiagnostics.Write($"monitor-once pid={process.Id} exited code={exitCode}");
         process.Dispose();
         _activeProcess = null;
+        _form.SetActionsEnabled(true);
         _nextPollAt = DateTimeOffset.Now.AddMinutes(_options.IntervalMinutes);
         if (stoppedByUser)
         {
@@ -247,16 +316,29 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         else if (exitCode == 0)
         {
             _pipelineCompletedAt = DateTimeOffset.Now;
-            UpdateStatus(_paused ? "Stopped" : "Idle", "The latest Steam metadata poll completed successfully.");
+            var completion = operation switch
+            {
+                RunnerOperation.Refresh => ("Refresh Complete", "The full FoxWatch refresh completed successfully."),
+                RunnerOperation.ClearCache => ("Cache Cleared", "FoxWatch caches were cleared. The next refresh will rebuild them."),
+                _ => ("Complete", "The latest poll and any required FoxWatch work completed successfully."),
+            };
+            UpdateStatus(_paused ? "Stopped" : "Idle", completion.Item2);
             _pipelinePercent = 100;
-            _form.SetPipelineProgress("Complete", "The latest poll and any required FoxWatch work completed successfully.", 100);
+            _form.SetPipelineProgress(completion.Item1, completion.Item2, 100);
         }
         else
         {
             _pipelineCompletedAt = DateTimeOffset.Now;
-            UpdateStatus("Failed", $"The monitor process exited with code {exitCode}. It will retry at the next poll.");
-            _form.SetPipelineProgress("Failed", $"The monitor process exited with code {exitCode}.", _pipelinePercent);
+            var operationName = operation switch
+            {
+                RunnerOperation.Refresh => "refresh",
+                RunnerOperation.ClearCache => "cache clear",
+                _ => "monitor poll",
+            };
+            UpdateStatus("Failed", $"The FoxWatch {operationName} exited with code {exitCode}.");
+            _form.SetPipelineProgress("Failed", $"The FoxWatch {operationName} exited with code {exitCode}.", _pipelinePercent);
         }
+        SetStoppedControls(_paused);
         RefreshStateDisplay();
         if (_exitWhenIdle) Shutdown();
     }
@@ -364,7 +446,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
                 successfulBuild = GetString(branchState, "successfulBuildId") ?? "none";
                 lastError = GetString(branchState, "lastError");
             }
-            _form.SetBuildState($"{branch} · BuildID {buildId}", successfulBuild);
+            _form.SetBuildState($"{branch} · {buildId}", successfulBuild);
             if (_activeProcess is null && !_paused && !string.IsNullOrWhiteSpace(lastError))
                 UpdateStatus("Failed", lastError);
         }
@@ -448,6 +530,12 @@ internal sealed class MonitorApplicationContext : ApplicationContext
                 _form.SetRenderSummary(0, GetInt32(root, "batchTotal", 0), _renderSceneTotal);
                 return true;
             }
+            if (kind == "blender-worker-wait")
+            {
+                var worker = GetInt32(root, "worker", 0);
+                _form.SetWorkerWaiting(worker, "Memory Guard", detail);
+                return true;
+            }
             if (kind is "blender-scene" or "blender-batch")
             {
                 var worker = GetInt32(root, "worker", 0);
@@ -507,7 +595,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
     {
         if (_pipelineStartedAt is null) return;
         var elapsed = (_pipelineCompletedAt ?? DateTimeOffset.Now) - _pipelineStartedAt.Value;
-        var timing = $"Elapsed {FormatDuration(elapsed)}";
+        string? remaining = null;
         if (_activeProcess is not null
             && _renderStartedAt is not null
             && _renderCompletedScenes > 0
@@ -517,9 +605,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             var remainingSeconds = renderElapsedSeconds
                 * (_renderSceneTotal - _renderCompletedScenes)
                 / _renderCompletedScenes;
-            timing += $" · About {FormatDuration(TimeSpan.FromSeconds(remainingSeconds))} remaining";
+            remaining = FormatDuration(TimeSpan.FromSeconds(remainingSeconds));
         }
-        _form.SetTiming(timing);
+        _form.SetTiming(FormatDuration(elapsed), remaining);
     }
 
     private static string FormatDuration(TimeSpan duration)
@@ -616,5 +704,13 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         if (_shuttingDown) return;
         if (_form.InvokeRequired) _form.BeginInvoke(action);
         else action();
+    }
+
+    private enum RunnerOperation
+    {
+        None,
+        Poll,
+        Refresh,
+        ClearCache,
     }
 }
