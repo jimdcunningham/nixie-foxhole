@@ -59,6 +59,10 @@ import {
     shouldPublishVehicleDestroyedVisual,
     stripSyntheticFactionTextureVariants,
 } from './publish-manifest-overrides.mjs';
+import {
+    normalizeConversionRecipeCursorOrder,
+    stripPublishedManifestLocalizationMetadata,
+} from './publish-manifest-normalization.mjs';
 import { loadVehicleDestroyedPublishAllowlist } from './vehicle-destroyed-allowlist.mjs';
 import {
     assignRecipeIdsToConversionEntries,
@@ -2698,7 +2702,12 @@ function resolvePublishedUpgradeVariantContext(slot, variantId, variant, sourceM
     };
 }
 
-function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument = null, modificationRenderIndexDocument = null) {
+function buildScopedRawRenderedAssetTargets(
+    manifest,
+    renderScenesIndexDocument = null,
+    modificationRenderIndexDocument = null,
+    options = {},
+) {
     const assetIds = new Set((manifest?.assets ?? [])
         .flatMap(structure => [structure?.id, structure?.codeName, structure?.parentStructureId, structure?.rootStructureId])
         .map(normalizeId)
@@ -2710,12 +2719,14 @@ function buildScopedRawRenderedAssetTargets(manifest, renderScenesIndexDocument 
     for (const sharedModificationId of collectSharedModificationIdsFromModificationRenderIndex(modificationRenderIndexDocument, assetIds)) {
         sharedModificationIds.add(sharedModificationId);
     }
-    const sharedPackagingKeys = new Set([
-        ...sharedPackagingTargetKeys,
-        ...Object.keys(manifest?.shared?.packaging ?? {})
-            .map(normalizeFoxholePackagedPalletKey)
-            .filter(Boolean),
-    ]);
+    const sharedPackagingKeys = options.includeSharedPackaging
+        ? new Set([
+            ...sharedPackagingTargetKeys,
+            ...Object.keys(manifest?.shared?.packaging ?? {})
+                .map(normalizeFoxholePackagedPalletKey)
+                .filter(Boolean),
+        ])
+        : new Set();
 
     return {
         assetIds,
@@ -7835,7 +7846,7 @@ function splitManifestLocalizations(manifest) {
         if (locale === 'en') {
             inlineLocalizations.push({
                 locale,
-                strings: bundle.strings,
+                strings: stripPublishedManifestLocalizationMetadata(bundle.strings),
             });
             continue;
         }
@@ -7968,6 +7979,9 @@ try {
         manifestWithSeededSharedModificationIds,
         renderScenesIndexDocument,
         modificationRenderIndexDocument,
+        {
+            includeSharedPackaging: hasCliFlag(cliArgs, 'deep') || !hasTargetFilters(targetFilter),
+        },
     );
 
     if (!metadataOnlyPublish) {
@@ -8181,6 +8195,7 @@ try {
         prunedMergedManifestWithCompactLocalizationIds,
         publishedManifestBeforeWrite,
     );
+    normalizeConversionRecipeCursorOrder(manifestWithStableRecipeIds);
     if (recipeIdStats.owners > 0) {
         logPublishSummary(
             `publish-manifest: recipe ids exact=${recipeIdStats.exact} output=${recipeIdStats.output} allocated=${recipeIdStats.allocated} preserved=${recipeIdStats.preserved} owners=${recipeIdStats.owners}`,

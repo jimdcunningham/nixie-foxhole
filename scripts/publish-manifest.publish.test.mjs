@@ -12,7 +12,52 @@ import {
     shouldPublishVehicleDestroyedVisual,
     stripSyntheticFactionTextureVariants,
 } from './publish-manifest-overrides.mjs';
+import {
+    normalizeConversionRecipeCursorOrder,
+    stripPublishedManifestLocalizationMetadata,
+} from './publish-manifest-normalization.mjs';
 import { isVehicleDestroyedPublishAllowlisted } from './vehicle-destroyed-allowlist.mjs';
+
+test('published localization compaction strips extraction metadata', () => {
+    assert.deepEqual(
+        stripPublishedManifestLocalizationMetadata({
+            'asset:aircraftfighter2c:name': 'The Charon',
+            'foxhole:meta:baseAssetsUrl': '/foxhole/assets/',
+            'meta:legacy': 'not public',
+            'category:vehicles:name': 'Vehicles',
+        }),
+        {
+            'asset:aircraftfighter2c:name': 'The Charon',
+            'category:vehicles:name': 'Vehicles',
+        },
+    );
+});
+
+test('conversion recipe cursors have deterministic property order after targeted parsing', () => {
+    const manifest = {
+        assets: [{
+            id: 'facilitytest',
+            nextRecipeId: 3,
+            conversionEntries: [{ id: 1, inputs: [], outputs: [] }],
+            modificationSlots: [{
+                name: 'UpgradeSlot',
+                variants: {
+                    default: {
+                        nextRecipeId: 2,
+                        conversionEntries: [{ id: 1, inputs: [], outputs: [] }],
+                    },
+                },
+            }],
+        }],
+    };
+
+    normalizeConversionRecipeCursorOrder(manifest);
+
+    const structure = manifest.assets[0];
+    const variant = structure.modificationSlots[0].variants.default;
+    assert.equal(Object.keys(structure).at(-1), 'nextRecipeId');
+    assert.equal(Object.keys(variant).at(-1), 'nextRecipeId');
+});
 
 test('shouldPublishVehicleDestroyedVisual requires allowlist membership for vehicles', () => {
     const allowlist = new Set(['truckliquidc']);

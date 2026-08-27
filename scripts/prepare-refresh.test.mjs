@@ -31,6 +31,20 @@ describe('FoxWatch combined refresh preparation', () => {
         assert.doesNotMatch(refreshBranch, /'generate-render-scenes'/);
     });
 
+    it('renders shared packaged pallets only as part of deep refreshes', async () => {
+        const source = await fs.readFile(path.join(repositoryRoot, 'tools', 'foxwatch', 'run-foxwatch.mjs'), 'utf8');
+        const publisherSource = await fs.readFile(path.join(repositoryRoot, 'tools', 'foxwatch', 'scripts', 'publish-manifest.mjs'), 'utf8');
+        const refreshBranch = source.match(/if \(command === 'refresh'\) \{(?<body>[\s\S]*?)\n\}/)?.groups?.body;
+        assert.ok(refreshBranch, 'refresh command branch must exist');
+        assert.match(refreshBranch, /if \(refreshExecution\.onlyIds === null/);
+        assert.match(refreshBranch, /runDeepRefreshBlenderBatches\(args\)/);
+        assert.match(refreshBranch, /onlyIds: refreshExecution\.onlyIds/);
+        assert.doesNotMatch(refreshBranch, /packaged-pallets/);
+        assert.match(source, /if \(hasCliFlag\(parsedArgs, 'deep'\)\) \{\s*outputArgs\.push\('--deep'\)/);
+        assert.match(publisherSource, /includeSharedPackaging: hasCliFlag\(cliArgs, 'deep'\) \|\| !hasTargetFilters\(targetFilter\)/);
+        assert.match(publisherSource, /const sharedPackagingKeys = options\.includeSharedPackaging/);
+    });
+
     it('builds once and passes the same manifest to both writers', async () => {
         const source = await fs.readFile(path.join(repositoryRoot, 'tools', 'foxwatch', 'FoxWatchCli.cs'), 'utf8');
         const method = source.match(/RunPrepareRefreshAsync\(string\[\] args\)(?<body>[\s\S]*?)\n    public static async Task<int> RunSnapshotPakAsync/)?.groups?.body;

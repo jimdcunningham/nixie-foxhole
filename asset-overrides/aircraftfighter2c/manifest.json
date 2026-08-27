@@ -1,3 +1,4 @@
 {
-  "categoryId": "aircraft"
+  "categoryId": "aircraft",
+  "previewDirection": "sw"
 }

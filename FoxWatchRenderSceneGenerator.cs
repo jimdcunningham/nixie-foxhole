@@ -6371,9 +6371,10 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool GetClipFloor(FoxWatchManifestStructure structure)
     {
-        if (IsStandaloneDestroyedOrBreachedStructure(structure))
+        if (IsStandaloneDestroyedOrBreachedStructure(structure)
+            && string.Equals(structure.CategoryId, "bunker", StringComparison.OrdinalIgnoreCase))
         {
-            // Wreck meshes deliberately extend below the living structure's ground plane.
+            // Destroyed and breached entrenchments deliberately extend below the world floor.
             // Clipping them leaves only scattered above-ground fragments.
             return false;
         }

@@ -318,9 +318,7 @@ if (command === 'refresh') {
         });
         await run(blenderExecutable, buildBlenderArgs(args, {
             purgeExistingByDefault: true,
-            onlyIds: refreshExecution.onlyIds
-                ? [...new Set([...refreshExecution.onlyIds, 'packaged-pallets'])]
-                : refreshExecution.onlyIds,
+            onlyIds: refreshExecution.onlyIds,
         }));
     }
     emitFoxWatchProgress({
@@ -2294,6 +2292,10 @@ async function buildPublishArgsFromParsedArgs(parsedArgs, options = {}) {
 }
 
 function appendPublishCliPassthroughArgs(outputArgs, parsedArgs) {
+    if (hasCliFlag(parsedArgs, 'deep')) {
+        outputArgs.push('--deep');
+    }
+
     if (hasCliFlag(parsedArgs, 'skip-existing-assets')) {
         outputArgs.push('--skip-existing-assets');
     }
