@@ -44,17 +44,16 @@ export function validateMonitorConfig(config) {
     if (!blenderPath) {
         throw new Error('FoxWatch monitor configuration requires a resolved Blender executable path.');
     }
+    const currentConfig = { ...config };
+    delete currentConfig.heartbeatHours;
     return {
-        ...config,
+        ...currentConfig,
         schemaVersion: FOXWATCH_MONITOR_SCHEMA_VERSION,
         branchMode,
         intervalMinutes,
         steamUsername,
         blenderPath,
         discordEnabled: Boolean(config.discordEnabled),
-        heartbeatHours: Number.isFinite(config.heartbeatHours) && config.heartbeatHours > 0
-            ? config.heartbeatHours
-            : 24,
     };
 }
 
@@ -227,7 +226,6 @@ export function createMonitorState(existing = null) {
             ? { ...existing.branches }
             : {},
         lastPollAt: existing?.lastPollAt ?? null,
-        lastHeartbeatAt: existing?.lastHeartbeatAt ?? null,
     };
 }
 

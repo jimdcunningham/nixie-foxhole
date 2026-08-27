@@ -7,6 +7,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
+import {
+    sendDiscordCheckpoint,
+    shouldSendDiscordCheckpoints,
+} from './discord-checkpoints.mjs';
 import { buildPakInventory, readJson, writeJsonAtomic } from './pipeline-core.mjs';
 import {
     FOXHOLE_APP_ID,
@@ -86,11 +90,18 @@ export async function runSteamMonitorCommand({ command, args, repoRoot, runnerSc
             runnerScriptPath,
             logger,
             forceRefresh: hasFlag(args, 'force-refresh'),
+            notifyDiscord: shouldSendDiscordCheckpoints(command),
         });
         return;
     }
     if (command === 'monitor-once') {
-        await monitorOnce({ paths, repoRoot, runnerScriptPath, logger });
+        await monitorOnce({
+            paths,
+            repoRoot,
+            runnerScriptPath,
+            logger,
+            notifyDiscord: shouldSendDiscordCheckpoints(command),
+        });
         return;
     }
     if (command === 'monitor') {
@@ -98,7 +109,13 @@ export async function runSteamMonitorCommand({ command, args, repoRoot, runnerSc
         logger.info(`FoxWatch monitor running in the foreground every ${config.intervalMinutes} minute(s). Press Ctrl+C to stop.`);
         while (true) {
             try {
-                await monitorOnce({ paths, repoRoot, runnerScriptPath, logger });
+                await monitorOnce({
+                    paths,
+                    repoRoot,
+                    runnerScriptPath,
+                    logger,
+                    notifyDiscord: shouldSendDiscordCheckpoints(command),
+                });
             } catch (error) {
                 logger.error(error instanceof Error ? error.stack ?? error.message : String(error));
             }
@@ -186,7 +203,6 @@ async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger })
         steamUsername: requestedUsername,
         blenderPath,
         discordEnabled: Boolean(encryptedDiscordWebhook),
-        heartbeatHours: 24,
         minimumAvailableMemoryGiB: 12,
         steamAppId: FOXHOLE_APP_ID,
         createdAt: existingConfig?.createdAt ?? new Date().toISOString(),
@@ -223,7 +239,14 @@ async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger })
     logger.info('The tray monitor is running in the Windows notification area.');
 }
 
-async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRefresh = false }) {
+async function monitorOnce({
+    paths,
+    repoRoot,
+    runnerScriptPath,
+    logger,
+    forceRefresh = false,
+    notifyDiscord = false,
+}) {
     const lock = await acquireMonitorLock(paths.lockPath);
     let config;
     let secrets;
@@ -232,17 +255,19 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
     let branchState;
     let activeBranch = null;
     let remoteBuildId = null;
+    let failureCheckpoint = 'FoxWatch Monitor Failed';
     try {
         config = await loadMonitorConfig(paths);
         secrets = await loadMonitorSecrets(paths);
         const password = await decryptSecret(paths, secrets.encryptedSteamPassword);
-        if (config.discordEnabled && secrets.encryptedDiscordWebhook) {
+        if (notifyDiscord && config.discordEnabled && secrets.encryptedDiscordWebhook) {
             webhookUrl = validateDiscordWebhookUrl(await decryptSecret(paths, secrets.encryptedDiscordWebhook));
         }
         state = createMonitorState(await readJson(paths.statePath));
         state.lastPollAt = new Date().toISOString();
 
         const metadataSteamRoot = path.join(paths.steamCmdRoot, 'metadata');
+        failureCheckpoint = 'SteamCMD Poll Failed';
         const steamCmdPath = await ensureSteamCmd(paths, metadataSteamRoot, logger);
         const builds = await queryRemoteSteamBuilds({
             steamCmdPath,
@@ -261,8 +286,17 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
             `Steam builds: public=${builds.public}, devbranch=${builds.devbranch}; `
             + `selected ${activeBranch} BuildID ${remoteBuildId}.`,
         );
-        if (branchState.lastObservedBuildId && branchState.lastObservedBuildId !== remoteBuildId) {
-            branchState.discordMessageId = null;
+        const foundNewBuild = branchState.lastObservedBuildId !== remoteBuildId;
+        delete branchState.discordMessageId;
+        if (foundNewBuild) {
+            await sendDiscordCheckpoint({
+                webhookUrl,
+                checkpoint: 'New Foxhole Build Detected',
+                description: 'An automatic Steam poll found a Foxhole build that has not been processed by this monitor yet.',
+                branch: activeBranch,
+                buildId: remoteBuildId,
+                logger,
+            });
         }
         branchState.lastObservedBuildId = remoteBuildId;
         branchState.lastObservedAt = new Date().toISOString();
@@ -281,17 +315,7 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
         }
 
         if (acquisitionRequired) {
-            branchState.discordMessageId = await sendDiscordBuildStatus({
-                webhookUrl,
-                messageId: branchState.discordMessageId,
-                branch: activeBranch,
-                buildId: remoteBuildId,
-                stage: 'Detected',
-                description: 'A new Steam build was detected. FoxWatch is acquiring and validating it.',
-                logger,
-            });
-            state.branches[activeBranch] = branchState;
-            await writeJsonAtomic(paths.statePath, state);
+            failureCheckpoint = 'SteamCMD Acquisition Failed';
             const acquisition = await acquireSteamBuild({
                 config,
                 branch: activeBranch,
@@ -312,22 +336,10 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
             };
             state.branches[activeBranch] = branchState;
             await writeJsonAtomic(paths.statePath, state);
-            branchState.discordMessageId = await sendDiscordBuildStatus({
-                webhookUrl,
-                messageId: branchState.discordMessageId,
-                branch: activeBranch,
-                buildId: remoteBuildId,
-                stage: 'Verified',
-                description: `Steam BuildID and ${acquisition.pakCount} PAK container file(s) passed validation.`,
-                logger,
-            });
-            state.branches[activeBranch] = branchState;
-            await writeJsonAtomic(paths.statePath, state);
         }
 
         if (!shouldRunFoxWatch(branchState, remoteBuildId, { forceRefresh })) {
             logger.info(`FoxWatch already completed successfully for ${activeBranch} BuildID ${remoteBuildId}; no work required.`);
-            await maybeSendHeartbeat({ webhookUrl, config, state, branchState, branch: activeBranch, remoteBuildId, paths, logger });
             return;
         }
 
@@ -339,25 +351,16 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
             state.branches[activeBranch] = branchState;
             await writeJsonAtomic(paths.statePath, state);
             logger.info(`Deferring FoxWatch for BuildID ${remoteBuildId}: ${branchState.deferredReason}`);
-            await sendDiscordBuildStatus({
-                webhookUrl,
-                messageId: branchState.discordMessageId,
-                branch: activeBranch,
-                buildId: remoteBuildId,
-                stage: 'Waiting',
-                description: branchState.deferredReason,
-                logger,
-            });
             return;
         }
 
-        branchState.discordMessageId = await sendDiscordBuildStatus({
+        failureCheckpoint = 'FoxWatch Refresh Failed';
+        await sendDiscordCheckpoint({
             webhookUrl,
-            messageId: branchState.discordMessageId,
+            checkpoint: 'FoxWatch Refresh Started',
+            description: 'The automatic poll is starting a full FoxWatch deep refresh for this build.',
             branch: activeBranch,
             buildId: remoteBuildId,
-            stage: 'Running',
-            description: 'The verified Steam build is now running through the full FoxWatch deep refresh.',
             logger,
         });
         branchState.pipelineStartedAt = new Date().toISOString();
@@ -389,13 +392,12 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
         branchState.deferredReason = null;
         state.branches[activeBranch] = branchState;
         await writeJsonAtomic(paths.statePath, state);
-        await sendDiscordBuildStatus({
+        await sendDiscordCheckpoint({
             webhookUrl,
-            messageId: branchState.discordMessageId,
+            checkpoint: 'FoxWatch Refresh Finished',
+            description: `The FoxWatch refresh completed successfully in ${formatDuration(durationMs)}.`,
             branch: activeBranch,
             buildId: remoteBuildId,
-            stage: 'Succeeded',
-            description: `FoxWatch completed in ${formatDuration(durationMs)}.`,
             color: 0x43d9a3,
             logger,
         });
@@ -410,13 +412,12 @@ async function monitorOnce({ paths, repoRoot, runnerScriptPath, logger, forceRef
             state.branches[activeBranch] = branchState;
             await writeJsonAtomic(paths.statePath, state).catch(() => {});
         }
-        await sendDiscordBuildStatus({
+        await sendDiscordCheckpoint({
             webhookUrl,
-            messageId: branchState?.discordMessageId,
+            checkpoint: failureCheckpoint,
+            description: message.slice(0, 1_000),
             branch: activeBranch ?? 'unknown',
             buildId: remoteBuildId ?? branchState?.lastObservedBuildId ?? 'unknown',
-            stage: 'Failed',
-            description: message.slice(0, 1_000),
             color: 0xe05252,
             logger,
         });
@@ -839,58 +840,6 @@ async function printMonitorLogs(paths, args) {
     }
     const content = await fs.readFile(path.join(paths.logsRoot, latest), 'utf8');
     console.log(content.split(/\r?\n/).slice(-Math.max(1, requestedLines)).join('\n'));
-}
-
-async function maybeSendHeartbeat({ webhookUrl, config, state, branch, remoteBuildId, paths, logger }) {
-    if (!webhookUrl) return;
-    const elapsed = Date.now() - Date.parse(state.lastHeartbeatAt ?? 0);
-    if (elapsed < config.heartbeatHours * 60 * 60 * 1_000) return;
-    await sendDiscordBuildStatus({
-        webhookUrl,
-        messageId: null,
-        branch,
-        buildId: remoteBuildId,
-        stage: 'Healthy',
-        description: 'Steam polling is healthy and the latest observed build completed successfully.',
-        color: 0x43d9a3,
-        logger,
-    });
-    state.lastHeartbeatAt = new Date().toISOString();
-    await writeJsonAtomic(paths.statePath, state);
-}
-
-async function sendDiscordBuildStatus({ webhookUrl, messageId, branch, buildId, stage, description, color = 0x4b9cff, logger }) {
-    if (!webhookUrl) return messageId ?? null;
-    try {
-        const payload = {
-            username: 'FoxWatch',
-            allowed_mentions: { parse: [] },
-            embeds: [{
-                title: `FoxWatch · ${branch} · ${buildId}`,
-                description,
-                color,
-                fields: [{ name: 'Status', value: stage, inline: true }],
-                timestamp: new Date().toISOString(),
-            }],
-        };
-        const url = messageId
-            ? `${webhookUrl}/messages/${encodeURIComponent(messageId)}`
-            : `${webhookUrl}?wait=true`;
-        const response = await fetch(url, {
-            method: messageId ? 'PATCH' : 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(15_000),
-        });
-        if (!response.ok) {
-            throw new Error(`Discord returned HTTP ${response.status}.`);
-        }
-        const document = await response.json();
-        return document.id ?? messageId ?? null;
-    } catch (error) {
-        logger.error(`Discord notification failed: ${error instanceof Error ? error.message : error}`);
-        return messageId ?? null;
-    }
 }
 
 async function createMonitorLogger(paths) {

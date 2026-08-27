@@ -17,6 +17,7 @@ import {
 import {
     canLaunchSecondBlenderWorker,
     dequeueNextConcurrentBlenderBatch,
+    describeConcurrentBlenderWait,
     formatBlenderWorkerLine,
     mergeBlenderPeakMemory,
     parseBlenderProgressLine,
@@ -1950,9 +1951,25 @@ async function runDeepRefreshBlenderBatches(rawArgs) {
     const completedPlannedBatches = new Set();
     const plannedBatchSceneProgress = new Map(batches.map((_, index) => [index + 1, 0]));
     const workerBatchCounts = new Map([[1, 0], [2, 0]]);
+    const workerWaitKeys = new Map();
     let launchSequence = 0;
     let failedResult = null;
-    let reportedMemoryGuard = false;
+
+    const reportWorkerWait = (worker, reason, detail, waitKey) => {
+        if (!worker || workerWaitKeys.get(worker) === waitKey) {
+            return false;
+        }
+        workerWaitKeys.set(worker, waitKey);
+        emitFoxWatchProgress({
+            kind: 'blender-worker-wait',
+            stage: 'Rendering',
+            worker,
+            reason,
+            detail,
+            overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
+        });
+        return true;
+    };
 
     const launchBatch = (batch, workerNumber) => {
         if (!batch.workerBatchNumber || batch.assignedWorker !== workerNumber) {
@@ -1960,6 +1977,23 @@ async function runDeepRefreshBlenderBatches(rawArgs) {
             batch.assignedWorker = workerNumber;
             workerBatchCounts.set(workerNumber, batch.workerBatchNumber);
         }
+        workerWaitKeys.delete(workerNumber);
+        const totalCompletedScenes = [...plannedBatchSceneProgress.values()].reduce((total, value) => total + value, 0);
+        const batchAction = batch.completedBeforeRecycle > 0 ? 'Resuming' : 'Starting';
+        emitFoxWatchProgress({
+            kind: 'blender-batch-start',
+            stage: 'Rendering',
+            worker: workerNumber,
+            workerBatch: batch.workerBatchNumber,
+            batch: batch.plannedBatchNumber,
+            batchTotal: batches.length,
+            scene: batch.completedBeforeRecycle,
+            sceneTotal: batch.originalSceneCount,
+            completedBatches: completedPlannedBatches.size,
+            completedScenes: totalCompletedScenes,
+            detail: `${batchAction} planned batch ${batch.plannedBatchNumber} of ${batches.length}.`,
+            overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
+        });
         launchSequence += 1;
         const metricsJournalPath = path.join(metricsRoot, `launch-${String(launchSequence).padStart(4, '0')}-w${workerNumber}.json`);
         const recycleRequestPath = path.join(metricsRoot, `launch-${String(launchSequence).padStart(4, '0')}-w${workerNumber}.recycle`);
@@ -2058,25 +2092,26 @@ async function runDeepRefreshBlenderBatches(rawArgs) {
         if (active.size === 0 && nextBatch?.exclusive) {
             queue.shift();
             launchBatch(nextBatch, 1);
+            if (workerCount > 1) {
+                reportWorkerWait(
+                    2,
+                    'exclusive-batch',
+                    describeConcurrentBlenderWait(nextBatch, queue),
+                    `exclusive-batch:${nextBatch.plannedBatchNumber}`,
+                );
+            }
             await settleOne();
             continue;
         }
 
+        let memoryGuardedWorker = null;
         while (queue.length > 0 && active.size < workerCount) {
             const availableMemoryBytes = os.freemem();
             if (active.size === 1 && !canLaunchSecondBlenderWorker(availableMemoryBytes)) {
-                if (!reportedMemoryGuard) {
-                    const memoryGuardDetail = `Waiting for 12 GiB available RAM (${formatBytes(availableMemoryBytes)} available).`;
-                    console.log(`Blender memory guard is holding the second worker. ${memoryGuardDetail}`);
-                    emitFoxWatchProgress({
-                        kind: 'blender-worker-wait',
-                        stage: 'Rendering',
-                        worker: 2,
-                        reason: 'memory-guard',
-                        detail: memoryGuardDetail,
-                        overallPercent: renderOverallPercent(plannedBatchSceneProgress, sceneCount),
-                    });
-                    reportedMemoryGuard = true;
+                memoryGuardedWorker = [1, 2].find(candidate => !active.has(candidate));
+                const memoryGuardDetail = `Waiting for 12 GiB available RAM (${formatBytes(availableMemoryBytes)} available).`;
+                if (reportWorkerWait(memoryGuardedWorker, 'memory-guard', memoryGuardDetail, 'memory-guard')) {
+                    console.log(`Blender memory guard is holding worker ${memoryGuardedWorker}. ${memoryGuardDetail}`);
                 }
                 break;
             }
@@ -2089,6 +2124,19 @@ async function runDeepRefreshBlenderBatches(rawArgs) {
             }
             const workerNumber = [1, 2].find(candidate => !active.has(candidate));
             launchBatch(batch, workerNumber);
+        }
+        if (active.size === 1 && workerCount > 1 && memoryGuardedWorker === null) {
+            const waitingWorker = [1, 2].find(candidate => !active.has(candidate));
+            const activeBatch = activeBatches.values().next().value;
+            const waitDetail = describeConcurrentBlenderWait(activeBatch, queue);
+            if (waitDetail) {
+                reportWorkerWait(
+                    waitingWorker,
+                    'resource-match',
+                    waitDetail,
+                    `resource-match:${activeBatch.plannedBatchNumber}:${queue.length}`,
+                );
+            }
         }
         if (active.size > 0) {
             await settleOne();

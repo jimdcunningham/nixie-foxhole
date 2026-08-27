@@ -478,7 +478,7 @@ internal sealed class MonitorForm : Form
         _batchSummary.Text = "WORKER ACTIVITY";
     }
 
-    public void SetWorkerProgress(int worker, int workerBatch, int scene, int sceneTotal, string sceneLabel)
+    public void SetWorkerProgress(int worker, int batch, int scene, int sceneTotal, string sceneLabel)
     {
         if (worker is < 1 or > 2) return;
         var index = worker - 1;
@@ -487,7 +487,7 @@ internal sealed class MonitorForm : Form
         var complete = sceneLabel.Equals("Batch Complete", StringComparison.OrdinalIgnoreCase);
         _workerStateLabels[index].Text = complete ? "●  Waiting" : "●  Active";
         _workerStateLabels[index].ForeColor = complete ? SecondaryText : Accent;
-        _workerBatchLabels[index].Text = $"Batch {workerBatch:N0}";
+        _workerBatchLabels[index].Text = $"Batch {batch:N0}";
         _workerSceneLabels[index].Text = $"Scene {safeScene:N0}/{safeSceneTotal:N0}";
         _workerAssetLabels[index].Text = complete
             ? "Waiting for next batch"

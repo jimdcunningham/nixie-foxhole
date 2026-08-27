@@ -130,7 +130,6 @@ test('normalizes branches and constructs a clean state', () => {
         schemaVersion: 1,
         branches: {},
         lastPollAt: null,
-        lastHeartbeatAt: null,
     });
 });
 
@@ -158,10 +157,11 @@ test('validates a complete local monitor configuration', () => {
         steamUsername: 'foxwatch-bot',
         blenderPath: 'C:/Blender/blender.exe',
         discordEnabled: true,
+        heartbeatHours: 24,
     });
     assert.equal(config.branchMode, 'latest');
     assert.equal(config.blenderPath, 'C:/Blender/blender.exe');
-    assert.equal(config.heartbeatHours, 24);
+    assert.equal(Object.hasOwn(config, 'heartbeatHours'), false);
 });
 
 test('quotes Steam console values and rejects control characters', () => {

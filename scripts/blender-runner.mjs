@@ -58,6 +58,44 @@ export function dequeueNextConcurrentBlenderBatch(queue, activeBatch) {
     return queue.splice(batchIndex, 1)[0];
 }
 
+export function describeConcurrentBlenderWait(activeBatch, queue) {
+    const plannedBatchNumber = Number(activeBatch?.plannedBatchNumber ?? 0);
+    const batchLabel = plannedBatchNumber > 0 ? `planned batch ${plannedBatchNumber}` : 'the active batch';
+    if (activeBatch?.exclusive) {
+        return `${capitalize(batchLabel)} must run alone.`;
+    }
+    if (!Array.isArray(queue) || queue.length === 0) {
+        return `No queued batches remain; waiting for ${batchLabel} to finish.`;
+    }
+    if (queue.some(batch => canRunBlenderBatchesConcurrently(activeBatch, batch))) {
+        return null;
+    }
+
+    const blockers = new Set();
+    for (const batch of queue) {
+        if (batch?.exclusive) {
+            blockers.add('exclusive batches');
+        }
+        if (Number(activeBatch?.uniqueMeshBytes ?? 0) + Number(batch?.uniqueMeshBytes ?? 0)
+            > MAXIMUM_CONCURRENT_BLENDER_MESH_BYTES) {
+            blockers.add('the 80 MiB mesh limit');
+        }
+        if (Number(activeBatch?.nodeCount ?? 0) + Number(batch?.nodeCount ?? 0)
+            > MAXIMUM_CONCURRENT_BLENDER_NODES) {
+            blockers.add('the 800-node limit');
+        }
+        if (Number(activeBatch?.defaultIconCount ?? 0) + Number(batch?.defaultIconCount ?? 0)
+            > MAXIMUM_CONCURRENT_BLENDER_DEFAULT_ICONS) {
+            blockers.add('the 10-icon limit');
+        }
+    }
+    const blockerList = [...blockers];
+    const reason = blockerList.length > 0
+        ? formatList(blockerList)
+        : 'the dual-worker safety limits';
+    return `No queued batch can run beside ${batchLabel} without exceeding ${reason}.`;
+}
+
 export function shouldSuppressRoutineBlenderLine(line) {
     const normalized = String(line ?? '').trimEnd();
     if (!normalized.trim()) {
@@ -159,4 +197,18 @@ function sameSceneEntryCounts(left, right) {
 
 function normalizeSceneEntry(entry) {
     return String(entry).replace(/\\/g, '/').toLowerCase();
+}
+
+function capitalize(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatList(values) {
+    if (values.length <= 1) {
+        return values[0] ?? '';
+    }
+    if (values.length === 2) {
+        return `${values[0]} or ${values[1]}`;
+    }
+    return `${values.slice(0, -1).join(', ')}, or ${values.at(-1)}`;
 }

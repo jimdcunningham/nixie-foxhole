@@ -533,13 +533,20 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             if (kind == "blender-worker-wait")
             {
                 var worker = GetInt32(root, "worker", 0);
-                _form.SetWorkerWaiting(worker, "Memory Guard", detail);
+                var reason = GetString(root, "reason") switch
+                {
+                    "memory-guard" => "Memory Guard",
+                    "exclusive-batch" => "Waiting",
+                    "resource-match" => "Waiting",
+                    _ => "Waiting",
+                };
+                _form.SetWorkerWaiting(worker, reason, detail);
                 return true;
             }
-            if (kind is "blender-scene" or "blender-batch")
+            if (kind is "blender-batch-start" or "blender-scene" or "blender-batch")
             {
                 var worker = GetInt32(root, "worker", 0);
-                var workerBatch = GetInt32(root, "workerBatch", 0);
+                var batch = GetInt32(root, "batch", 0);
                 var batchTotal = GetInt32(root, "batchTotal", 0);
                 var scene = GetInt32(root, "scene", 0);
                 var sceneTotal = GetInt32(root, "sceneTotal", 0);
@@ -547,13 +554,16 @@ internal sealed class MonitorApplicationContext : ApplicationContext
                 _renderCompletedScenes = GetInt32(root, "completedScenes", _renderCompletedScenes);
                 var sceneEntry = GetString(root, "sceneEntry");
                 var structureId = GetString(root, "structureId");
-                var sceneLabel = kind == "blender-batch"
-                    ? "Batch Complete"
-                    : FormatSceneLabel(sceneEntry, structureId);
+                var sceneLabel = kind switch
+                {
+                    "blender-batch-start" => detail,
+                    "blender-batch" => "Batch Complete",
+                    _ => FormatSceneLabel(sceneEntry, structureId),
+                };
                 var workerLabel = _renderWorkerCount == 1 ? "One Blender worker is" : $"{_renderWorkerCount} Blender workers are";
                 SetPipelineStage("Rendering", $"{workerLabel} rendering FoxWatch scenes.", percent, showWorkers: true);
                 _form.SetRenderSummary(completedBatches, batchTotal, _renderSceneTotal);
-                _form.SetWorkerProgress(worker, workerBatch, scene, sceneTotal, sceneLabel);
+                _form.SetWorkerProgress(worker, batch, scene, sceneTotal, sceneLabel);
                 return true;
             }
         }

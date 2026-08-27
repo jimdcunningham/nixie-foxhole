@@ -6,6 +6,7 @@ import {
     canRunBlenderBatchesConcurrently,
     canLaunchSecondBlenderWorker,
     dequeueNextConcurrentBlenderBatch,
+    describeConcurrentBlenderWait,
     formatBlenderWorkerLine,
     mergeBlenderPeakMemory,
     parseBlenderProgressLine,
@@ -75,6 +76,28 @@ describe('FoxWatch Blender worker controls', () => {
         assert.deepEqual(queue, [blocked, exclusive, laterEligible]);
         assert.equal(dequeueNextConcurrentBlenderBatch(queue, active), laterEligible);
         assert.deepEqual(queue, [blocked, exclusive]);
+    });
+
+    it('explains why a free worker cannot take another batch', () => {
+        const active = {
+            plannedBatchNumber: 62,
+            uniqueMeshBytes: 20 * 1024 * 1024,
+            nodeCount: 500,
+            defaultIconCount: 2,
+        };
+        const queue = [{
+            uniqueMeshBytes: 10 * 1024 * 1024,
+            nodeCount: 350,
+            defaultIconCount: 1,
+        }];
+
+        assert.equal(
+            describeConcurrentBlenderWait(active, queue),
+            'No queued batch can run beside planned batch 62 without exceeding the 800-node limit.',
+        );
+        assert.equal(describeConcurrentBlenderWait(active, []), 'No queued batches remain; waiting for planned batch 62 to finish.');
+        assert.equal(describeConcurrentBlenderWait({ ...active, exclusive: true }, queue), 'Planned batch 62 must run alone.');
+        assert.equal(describeConcurrentBlenderWait(active, [{ ...queue[0], nodeCount: 200 }]), null);
     });
 
     it('requeues Blender\'s untouched scene partition after memory recycling', () => {

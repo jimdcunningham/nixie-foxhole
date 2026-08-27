@@ -126,6 +126,14 @@ fails, the verified Steam installation remains reusable, but that BuildID stays
 pending and is retried on the next poll. A completed build is not marked
 successful until the deep refresh exits successfully.
 
+When Discord is configured, automatic polls post new checkpoint messages for a
+newly detected Foxhole build, the start of its FoxWatch refresh, successful
+refresh completion, and any SteamCMD, acquisition, or FoxWatch failure. These
+messages are append-only: the monitor never edits an earlier Discord message.
+Routine successful polls, acquisition verification, memory deferrals,
+heartbeats, and in-progress pipeline stages do not post. Manual `monitor-now`
+runs and the tray app's `Run Refresh` action also stay quiet on Discord.
+
 Useful monitor commands:
 
 ```powershell
