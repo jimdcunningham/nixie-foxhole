@@ -54,6 +54,7 @@ export function validateMonitorConfig(config) {
         steamUsername,
         blenderPath,
         discordEnabled: Boolean(config.discordEnabled),
+        nixieEnabled: Boolean(config.nixieEnabled),
     };
 }
 
@@ -227,6 +228,22 @@ export function createMonitorState(existing = null) {
             : {},
         lastPollAt: existing?.lastPollAt ?? null,
     };
+}
+
+export function validateNixieWebhookUrl(value) {
+    let url;
+    try {
+        url = new URL(String(value));
+    } catch {
+        throw new Error('Nixie webhook URL is not a valid URL.');
+    }
+    if (url.protocol !== 'https:') throw new Error('Nixie webhook URL must use HTTPS.');
+    if (!/^\/api\/nixie\/incoming-webhooks\/[^/]+\/[^/]+\/?$/.test(url.pathname)) {
+        throw new Error('Nixie webhook URL does not match the expected incoming webhook format.');
+    }
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
 }
 
 function parseNamedVdfObject(text, objectName) {

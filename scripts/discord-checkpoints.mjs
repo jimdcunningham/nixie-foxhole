@@ -1,26 +1,22 @@
 const AUTOMATIC_POLL_COMMANDS = new Set(['monitor', 'monitor-once']);
 
-export function shouldSendDiscordCheckpoints(command) {
+export function shouldSendCheckpointNotifications(command) {
     return AUTOMATIC_POLL_COMMANDS.has(String(command ?? '').trim().toLowerCase());
 }
 
-export function createDiscordCheckpointPayload({ checkpoint, description, branch, buildId, color = 0x4b9cff }) {
+export const shouldSendDiscordCheckpoints = shouldSendCheckpointNotifications;
+
+function checkpointEmbed({ checkpoint, description, branch, buildId, color = 0x4b9cff }) {
     const normalizedCheckpoint = String(checkpoint ?? '').trim();
     const normalizedDescription = String(description ?? '').trim();
     const normalizedBranch = String(branch ?? 'unknown').trim() || 'unknown';
     const normalizedBuildId = String(buildId ?? 'unknown').trim() || 'unknown';
-    if (!normalizedCheckpoint) {
-        throw new Error('Discord checkpoint notifications require a checkpoint name.');
-    }
-    if (!normalizedDescription) {
-        throw new Error('Discord checkpoint notifications require a description.');
-    }
-
+    if (!normalizedCheckpoint) throw new Error('Checkpoint notifications require a checkpoint name.');
+    if (!normalizedDescription) throw new Error('Checkpoint notifications require a description.');
     return {
-        username: 'FoxWatch',
+        checkpoint: normalizedCheckpoint,
         content: `FoxWatch: ${normalizedCheckpoint} — ${normalizedBranch} BuildID ${normalizedBuildId}.`,
-        allowed_mentions: { parse: [] },
-        embeds: [{
+        embed: {
             title: normalizedCheckpoint,
             description: normalizedDescription,
             color,
@@ -29,8 +25,52 @@ export function createDiscordCheckpointPayload({ checkpoint, description, branch
                 { name: 'Build ID', value: normalizedBuildId, inline: true },
             ],
             timestamp: new Date().toISOString(),
-        }],
+        },
     };
+}
+
+function discordPayload(notification) {
+    return {
+        username: 'FoxWatch',
+        content: notification.content,
+        allowed_mentions: { parse: [] },
+        embeds: [notification.embed],
+    };
+}
+
+export function createDiscordCheckpointPayload({ checkpoint, description, branch, buildId, color = 0x4b9cff }) {
+    return discordPayload(checkpointEmbed({ checkpoint, description, branch, buildId, color }));
+}
+
+function nixiePayload(notification) {
+    return {
+        content: notification.content,
+        embed: {
+            ...notification.embed,
+            color: `#${notification.embed.color.toString(16).padStart(6, '0').toUpperCase()}`,
+        },
+    };
+}
+
+export function createNixieCheckpointPayload({ checkpoint, description, branch, buildId, color = 0x4b9cff }) {
+    return nixiePayload(checkpointEmbed({ checkpoint, description, branch, buildId, color }));
+}
+
+async function sendCheckpointDestination({ name, webhookUrl, payload, logger, fetchImpl }) {
+    if (!webhookUrl) return false;
+    try {
+        const response = await fetchImpl(webhookUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(15_000),
+        });
+        if (!response.ok) throw new Error(`${name} returned HTTP ${response.status}.`);
+        return true;
+    } catch (error) {
+        logger?.error(`${name} notification failed: ${error instanceof Error ? error.message : error}`);
+        return false;
+    }
 }
 
 export async function sendDiscordCheckpoint({
@@ -43,28 +83,30 @@ export async function sendDiscordCheckpoint({
     logger,
     fetchImpl = fetch,
 }) {
-    if (!webhookUrl) {
-        return false;
-    }
-    try {
-        const response = await fetchImpl(webhookUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(createDiscordCheckpointPayload({
-                checkpoint,
-                description,
-                branch,
-                buildId,
-                color,
-            })),
-            signal: AbortSignal.timeout(15_000),
-        });
-        if (!response.ok) {
-            throw new Error(`Discord returned HTTP ${response.status}.`);
-        }
-        return true;
-    } catch (error) {
-        logger?.error(`Discord notification failed: ${error instanceof Error ? error.message : error}`);
-        return false;
-    }
+    return await sendCheckpointDestination({
+        name: 'Discord',
+        webhookUrl,
+        payload: createDiscordCheckpointPayload({ checkpoint, description, branch, buildId, color }),
+        logger,
+        fetchImpl,
+    });
+}
+
+export async function sendCheckpointNotifications({
+    discordWebhookUrl,
+    nixieWebhookUrl,
+    checkpoint,
+    description,
+    branch,
+    buildId,
+    color = 0x4b9cff,
+    logger,
+    fetchImpl = fetch,
+}) {
+    const notification = checkpointEmbed({ checkpoint, description, branch, buildId, color });
+    const [discord, nixie] = await Promise.all([
+        sendCheckpointDestination({ name: 'Discord', webhookUrl: discordWebhookUrl, payload: discordPayload(notification), logger, fetchImpl }),
+        sendCheckpointDestination({ name: 'Nixie', webhookUrl: nixieWebhookUrl, payload: nixiePayload(notification), logger, fetchImpl }),
+    ]);
+    return { discord, nixie };
 }

@@ -81,6 +81,11 @@ The first setup asks for:
 
 - the Steam username and password
 - an optional Discord incoming webhook URL
+- an optional Nixie workspace-chat incoming webhook URL
+
+For unattended setup, provide the Nixie URL through
+`FOXWATCH_NIXIE_WEBHOOK_URL`. Use `--no-nixie` to explicitly remove that
+destination while preserving the Discord configuration.
 
 Passwords and webhook URLs are encrypted with Windows DPAPI for the current
 Windows account and are never written as plaintext configuration. SteamCMD

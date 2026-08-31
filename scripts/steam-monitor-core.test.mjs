@@ -13,6 +13,7 @@ import {
     shouldAcquireSteamBuild,
     shouldRunFoxWatch,
     validateDiscordWebhookUrl,
+    validateNixieWebhookUrl,
     validateMonitorConfig,
     verifyInstalledAppManifest,
 } from './steam-monitor-core.mjs';
@@ -175,4 +176,13 @@ test('accepts only Discord incoming webhook URLs', () => {
         'https://discord.com/api/webhooks/123/token_value',
     );
     assert.throws(() => validateDiscordWebhookUrl('https://example.com/api/webhooks/123/token'), /discord.com/);
+});
+
+test('accepts only Nixie incoming webhook URLs', () => {
+    assert.equal(
+        validateNixieWebhookUrl('https://nixiejs.com/api/nixie/incoming-webhooks/integration/secret?ignored=true'),
+        'https://nixiejs.com/api/nixie/incoming-webhooks/integration/secret',
+    );
+    assert.throws(() => validateNixieWebhookUrl('http://nixiejs.com/api/nixie/incoming-webhooks/integration/secret'), /HTTPS/);
+    assert.throws(() => validateNixieWebhookUrl('https://nixiejs.com/api/webhooks/integration/secret'), /expected incoming webhook format/);
 });

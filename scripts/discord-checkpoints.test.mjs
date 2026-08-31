@@ -3,7 +3,10 @@ import test from 'node:test';
 
 import {
     createDiscordCheckpointPayload,
+    createNixieCheckpointPayload,
+    sendCheckpointNotifications,
     sendDiscordCheckpoint,
+    shouldSendCheckpointNotifications,
     shouldSendDiscordCheckpoints,
 } from './discord-checkpoints.mjs';
 
@@ -12,6 +15,12 @@ test('enables Discord checkpoints only for automatic polling commands', () => {
     assert.equal(shouldSendDiscordCheckpoints('monitor-once'), true);
     assert.equal(shouldSendDiscordCheckpoints('monitor-now'), false);
     assert.equal(shouldSendDiscordCheckpoints('refresh'), false);
+});
+
+test('enables dual-destination checkpoints for the same automatic polling commands', () => {
+    assert.equal(shouldSendCheckpointNotifications('monitor'), true);
+    assert.equal(shouldSendCheckpointNotifications('monitor-once'), true);
+    assert.equal(shouldSendCheckpointNotifications('monitor-now'), false);
 });
 
 test('formats append-only FoxWatch checkpoint messages with branch and build details', () => {
@@ -29,6 +38,45 @@ test('formats append-only FoxWatch checkpoint messages with branch and build det
         { name: 'Build ID', value: '24850000', inline: true },
     ]);
     assert.deepEqual(payload.allowed_mentions, { parse: [] });
+});
+
+test('formats the same checkpoint for a Nixie system message', () => {
+    const payload = createNixieCheckpointPayload({
+        checkpoint: 'FoxWatch Refresh Finished',
+        description: 'The refresh completed successfully.',
+        branch: 'public',
+        buildId: '24842742',
+        color: 0x43d9a3,
+    });
+
+    assert.equal(payload.content, 'FoxWatch: FoxWatch Refresh Finished — public BuildID 24842742.');
+    assert.equal(payload.embed.title, 'FoxWatch Refresh Finished');
+    assert.equal(payload.embed.color, '#43D9A3');
+    assert.deepEqual(payload.embed.fields, [
+        { name: 'Branch', value: 'public', inline: true },
+        { name: 'Build ID', value: '24842742', inline: true },
+    ]);
+});
+
+test('dual-sends one checkpoint model to Discord and Nixie', async () => {
+    const requests = [];
+    const result = await sendCheckpointNotifications({
+        discordWebhookUrl: 'https://discord.com/api/webhooks/123/token',
+        nixieWebhookUrl: 'https://nixiejs.com/api/nixie/incoming-webhooks/integration/secret',
+        checkpoint: 'New Foxhole Build Detected',
+        description: 'A new build is available.',
+        branch: 'devbranch',
+        buildId: '24850000',
+        logger: { error() {} },
+        fetchImpl: async (url, init) => {
+            requests.push({ url, body: JSON.parse(init.body) });
+            return { ok: true, status: 204 };
+        },
+    });
+
+    assert.deepEqual(result, { discord: true, nixie: true });
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].body.embeds[0].title, requests[1].body.embed.title);
 });
 
 test('posts every Discord checkpoint as a new message', async () => {
