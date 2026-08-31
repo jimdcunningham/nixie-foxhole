@@ -62,7 +62,7 @@ test('dual-sends one checkpoint model to Discord and Nixie', async () => {
     const requests = [];
     const result = await sendCheckpointNotifications({
         discordWebhookUrl: 'https://discord.com/api/webhooks/123/token',
-        nixieWebhookUrl: 'https://nixiejs.com/api/nixie/incoming-webhooks/integration/secret',
+        nixieWebhookUrl: 'https://nixiejs.com/api/nixie/webhooks/integration/secret',
         checkpoint: 'New Foxhole Build Detected',
         description: 'A new build is available.',
         branch: 'devbranch',
