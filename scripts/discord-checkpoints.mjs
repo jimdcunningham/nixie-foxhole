@@ -56,17 +56,33 @@ export function createNixieCheckpointPayload({ checkpoint, description, branch, 
     return nixiePayload(checkpointEmbed({ checkpoint, description, branch, buildId, color }));
 }
 
-async function sendCheckpointDestination({ name, webhookUrl, payload, logger, fetchImpl }) {
+function retryableWebhookStatus(status) {
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function sendCheckpointDestination({ name, webhookUrl, payload, headers = {}, logger, fetchImpl }) {
     if (!webhookUrl) return false;
     try {
-        const response = await fetchImpl(webhookUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(15_000),
-        });
-        if (!response.ok) throw new Error(`${name} returned HTTP ${response.status}.`);
-        return true;
+        const attempts = name === 'Nixie' ? 4 : 1;
+        let lastError;
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+            try {
+                const response = await fetchImpl(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', ...headers },
+                    body: JSON.stringify(payload),
+                    signal: AbortSignal.timeout(15_000),
+                });
+                if (response.ok) return true;
+                lastError = new Error(`${name} returned HTTP ${response.status}.`);
+                if (!retryableWebhookStatus(response.status)) throw lastError;
+            } catch (error) {
+                lastError = error;
+                if (attempt >= attempts) throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500 * (2 ** (attempt - 1))));
+        }
+        throw lastError;
     } catch (error) {
         logger?.error(`${name} notification failed: ${error instanceof Error ? error.message : error}`);
         return false;
@@ -106,7 +122,14 @@ export async function sendCheckpointNotifications({
     const notification = checkpointEmbed({ checkpoint, description, branch, buildId, color });
     const [discord, nixie] = await Promise.all([
         sendCheckpointDestination({ name: 'Discord', webhookUrl: discordWebhookUrl, payload: discordPayload(notification), logger, fetchImpl }),
-        sendCheckpointDestination({ name: 'Nixie', webhookUrl: nixieWebhookUrl, payload: nixiePayload(notification), logger, fetchImpl }),
+        sendCheckpointDestination({
+            name: 'Nixie',
+            webhookUrl: nixieWebhookUrl,
+            payload: nixiePayload(notification),
+            headers: { 'idempotency-key': `foxwatch:${notification.checkpoint}:${branch}:${buildId}` },
+            logger,
+            fetchImpl,
+        }),
     ]);
     return { discord, nixie };
 }
