@@ -239,7 +239,7 @@ export function validateNixieWebhookUrl(value) {
     }
     if (url.protocol !== 'https:') throw new Error('Nixie webhook URL must use HTTPS.');
     const publicUrl = url.hostname === 'api.nixiejs.com'
-        && /^\/v1\/webhooks\/[^/]+\/[^/]+\/?$/.test(url.pathname);
+        && /^\/functions\/v1\/webhooks\/[^/]+\/[^/]+\/?$/.test(url.pathname);
     const previewUrl = url.hostname.endsWith('.supabase.co')
         && /^\/functions\/v1\/webhooks\/[^/]+\/[^/]+\/?$/.test(url.pathname);
     if (!publicUrl && !previewUrl) {

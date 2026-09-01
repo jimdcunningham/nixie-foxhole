@@ -180,9 +180,9 @@ test('accepts only Discord incoming webhook URLs', () => {
 
 test('accepts only Nixie webhook URLs', () => {
     assert.equal(
-        validateNixieWebhookUrl('https://api.nixiejs.com/v1/webhooks/integration/secret?ignored=true'),
-        'https://api.nixiejs.com/v1/webhooks/integration/secret',
+        validateNixieWebhookUrl('https://api.nixiejs.com/functions/v1/webhooks/integration/secret?ignored=true'),
+        'https://api.nixiejs.com/functions/v1/webhooks/integration/secret',
     );
-    assert.throws(() => validateNixieWebhookUrl('http://api.nixiejs.com/v1/webhooks/integration/secret'), /HTTPS/);
+    assert.throws(() => validateNixieWebhookUrl('http://api.nixiejs.com/functions/v1/webhooks/integration/secret'), /HTTPS/);
     assert.throws(() => validateNixieWebhookUrl('https://api.nixiejs.com/api/webhooks/integration/secret'), /expected webhook format/);
 });
