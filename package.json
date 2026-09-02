@@ -1,23 +1,21 @@
 {
-  "name": "@nixie/foxwatch",
-  "private": true,
+  "name": "nixie-foxhole",
   "version": "0.1.0",
-  "type": "module",
+  "private": true,
+  "description": "Open-source Foxhole tooling and Nixie extension workspace",
+  "workspaces": [
+    "extensions/*",
+    "packages/*",
+    "packages/extensions/*",
+    "tools/*"
+  ],
   "scripts": {
-    "build": "dotnet build ./FoxWatchService.csproj",
-    "test": "node --test ./scripts/**/*.test.mjs"
+    "build": "npm run build --workspaces --if-present",
+    "build:foxwatch": "npm run build --workspace @nixie/foxwatch",
+    "foxwatch": "node ./tools/foxwatch/run-foxwatch.mjs",
+    "test": "npm run test --workspaces --if-present"
   },
-  "dependencies": {
-    "sharp": "0.35.3"
-  },
-  "optionalDependencies": {
-    "@img/sharp-darwin-arm64": "0.35.3",
-    "@img/sharp-darwin-x64": "0.35.3",
-    "@img/sharp-libvips-darwin-arm64": "1.3.2",
-    "@img/sharp-libvips-darwin-x64": "1.3.2",
-    "@img/sharp-libvips-linux-x64": "1.3.2",
-    "@img/sharp-libvips-win32-x64": "1.3.2",
-    "@img/sharp-linux-x64": "0.35.3",
-    "@img/sharp-win32-x64": "0.35.3"
+  "engines": {
+    "node": ">=24 <25"
   }
 }

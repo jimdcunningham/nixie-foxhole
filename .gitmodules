@@ -1,0 +1,3 @@
+[submodule "tools/foxwatch/vendor/CUE4Parse"]
+	path = tools/foxwatch/vendor/CUE4Parse
+	url = https://github.com/FabianFG/CUE4Parse.git

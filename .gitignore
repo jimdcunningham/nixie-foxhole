@@ -1,0 +1,16 @@
+node_modules/
+.npm/
+.env
+.env.*
+*.log
+.DS_Store
+
+artifacts/
+packages/extensions/foxhole/public/foxhole/assets/
+tools/foxwatch/bin/
+tools/foxwatch/obj/
+tools/foxwatch/monitor/bin/
+tools/foxwatch/monitor/obj/
+tools/foxwatch/tmp/
+tools/foxwatch/local/
+tools/foxwatch/blender/__pycache__/

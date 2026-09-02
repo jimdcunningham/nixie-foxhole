@@ -1,0 +1,32 @@
+{
+  "assets": [
+    {
+      "id": "villagewsmallg1destroyed",
+      "generateDefaultIcon": true,
+      "isDestroyed": true,
+      "iconUrl": "/foxhole/assets/icons/villagewsmallg1destroyed.png"
+    },
+    {
+      "id": "trenchintdestroyedt1",
+      "isDestroyed": true,
+      "iconUrl": "/foxhole/assets/icons/trenchintt1.png"
+    },
+    {
+      "id": "facilitymineresource1",
+      "subTypeIconUrl": "/foxhole/assets/icons/metal.png",
+      "iconUrl": "/foxhole/assets/icons/facilitymineresource1.png"
+    },
+    {
+      "id": "wood",
+      "iconUrl": "/foxhole/assets/icons/wood.png"
+    },
+    {
+      "id": "soldieruniformc",
+      "iconUrl": "/foxhole/assets/icons/soldieruniformc.png"
+    },
+    {
+      "id": "rpgammo",
+      "iconUrl": "/foxhole/assets/icons/rpgammo.png"
+    }
+  ]
+}

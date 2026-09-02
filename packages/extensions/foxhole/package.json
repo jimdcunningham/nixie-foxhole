@@ -1,0 +1,6 @@
+{
+  "name": "@nixie/extension-foxhole",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Migration target for the public Nixie Foxhole extension"
+}

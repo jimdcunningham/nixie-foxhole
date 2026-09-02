@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { foxholeManifestSchema } from '../../../packages/extensions/foxhole/app/plugins/foxhole/nixie/manifest-schema.ts';
+import { foxholeManifestSchema } from '@nixie/foxhole-schema';
 import {
     augmentTargetedOnlyPublishedStructures,
     getExplicitlyRemovedStructureIdsForTargetedPublish,
@@ -17,6 +17,11 @@ import {
     stripPublishedManifestLocalizationMetadata,
 } from './publish-manifest-normalization.mjs';
 import { isVehicleDestroyedPublishAllowlisted } from './vehicle-destroyed-allowlist.mjs';
+
+const generatedManifestUrl = new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url);
+const generatedManifestTestOptions = {
+    skip: existsSync(generatedManifestUrl) ? false : 'requires a locally generated FoxWatch manifest',
+};
 
 test('published localization compaction strips extraction metadata', () => {
     assert.deepEqual(
@@ -239,8 +244,8 @@ test('stripSyntheticFactionTextureVariants cleans merged assets but preserves ge
     });
 });
 
-test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manifests', () => {
-    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manifests', generatedManifestTestOptions, () => {
+    const rawManifest = JSON.parse(readFileSync(generatedManifestUrl, 'utf8'));
     const sourceAsset = rawManifest.assets.find(asset => asset.id === 'facilitytransfermaterial');
     assert.ok(sourceAsset?.stockpile);
 
@@ -251,8 +256,8 @@ test('foxholeManifestSchema preserves stockpile metadata from raw FoxWatch manif
     assert.ok(parsedManifest.assets.some(asset => asset.stockpile));
 });
 
-test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch manifests', () => {
-    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch manifests', generatedManifestTestOptions, () => {
+    const rawManifest = JSON.parse(readFileSync(generatedManifestUrl, 'utf8'));
     const sourceAsset = rawManifest.assets.find(asset => asset.id === 'resourcecontainer');
     assert.ok(sourceAsset?.holdProfile);
 
@@ -266,8 +271,8 @@ test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch man
     assert.ok(parsedManifest.assets.some(asset => asset.holdProfile));
 });
 
-test('raw FoxWatch manifest preserves authored connector behavior and marked cargo overlays', () => {
-    const rawManifest = JSON.parse(readFileSync(new URL('../tmp/foxwatch-manifest.v1.json', import.meta.url), 'utf8'));
+test('raw FoxWatch manifest preserves authored connector behavior and marked cargo overlays', generatedManifestTestOptions, () => {
+    const rawManifest = JSON.parse(readFileSync(generatedManifestUrl, 'utf8'));
     const tankStop = rawManifest.assets.find(asset => asset.id === 'tankstopsplinet3');
     const transferStation = rawManifest.assets.find(asset => asset.id === 'facilitytransferresource');
 

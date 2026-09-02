@@ -1,0 +1,10 @@
+{
+  "name": "@nixie/foxhole-schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/manifest-schema.ts",
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
