@@ -26,7 +26,9 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Install dependencies
         run: npm ci
@@ -36,3 +38,6 @@ jobs:
 
       - name: Build FoxWatch
         run: npm run build:foxwatch
+
+      - name: Build FoxWatch Monitor
+        run: npm run build:monitor

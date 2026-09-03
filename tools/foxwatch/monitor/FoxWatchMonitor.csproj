@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FoxWatchMonitor</AssemblyName>
     <RootNamespace>FoxWatchMonitor</RootNamespace>
-    <ApplicationIcon>..\..\..\apps\nixie-electron\build\icon.ico</ApplicationIcon>
+    <ApplicationIcon>assets\FoxWatchMonitor.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="assets\icons\clock.svg" LogicalName="FoxWatchMonitor.Assets.clock.svg" />

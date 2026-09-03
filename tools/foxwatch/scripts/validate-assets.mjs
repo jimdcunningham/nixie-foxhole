@@ -37,9 +37,12 @@ const ROOT = path.resolve(repositoryRoot, 'packages', 'extensions', 'foxhole', '
 
 // ---- CONFIG ----
 const ROOT_FOLDERS = ['types', 'shared', 'icons', 'maps', 'ui', 'localizations'];
+const ROOT_METADATA_FOLDERS = ['.git', '.github'];
+const ROOT_FILES = ['.gitignore', 'README.md', 'manifest.v1.json', 'planner-compat.json'];
 
 const TYPES = ['structures', 'items', 'vehicles'];
 const SUBTYPES = ['components', 'modifications'];
+const SHARED_SUBTYPES = ['components', 'modifications', 'packaging'];
 
 const ICON_VARIANTS = ['default', 'rendered'];
 
@@ -63,7 +66,7 @@ function isWebp(file) {
 }
 
 function isTextureSidecar(file) {
-    return /\.texture(?:\.[0-9a-f]{6})?\.json$/i.test(file)
+    return /\.texture(?:\.(?:c|w|[0-9a-f]{6}))?\.json$/i.test(file)
         || /\.destroyed\.texture\.json$/i.test(file)
         || /\.packaged\.texture\.json$/i.test(file);
 }
@@ -153,7 +156,7 @@ function parseFileName(file) {
         };
     }
 
-    const textureMatch = file.match(/^(.*?)\.texture(?:\.([0-9a-f]{6}))?\.webp$/i);
+    const textureMatch = file.match(/^(.*?)\.texture(?:\.(c|w|[0-9a-f]{6}))?\.webp$/i);
     if (textureMatch) {
         return {
             raw: file,
@@ -167,7 +170,7 @@ function parseFileName(file) {
         };
     }
 
-    const previewMatch = file.match(/^(.*?)\.preview(?:\.(ne|nw|se|sw|[0-9a-f]{6}))?\.webp$/i);
+    const previewMatch = file.match(/^(.*?)\.preview(?:\.(ne|nw|se|sw|c|w|[0-9a-f]{6}))?\.webp$/i);
     if (previewMatch) {
         const previewVariant = previewMatch[2] ? previewMatch[2].toLowerCase() : null;
         return {
@@ -182,7 +185,7 @@ function parseFileName(file) {
         };
     }
 
-    const iconMatch = file.match(/^(.*?)\.icon\.(default|rendered)(?:\.([0-9a-f]{6}))?\.webp$/i);
+    const iconMatch = file.match(/^(.*?)\.icon\.(default|rendered)(?:\.(c|w|[0-9a-f]{6}))?\.webp$/i);
     if (iconMatch) {
         return {
             raw: file,
@@ -224,7 +227,7 @@ function parseTextureSidecarName(file) {
         };
     }
 
-    const match = file.match(/^(.*?)\.texture(?:\.([0-9a-f]{6}))?\.json$/i);
+    const match = file.match(/^(.*?)\.texture(?:\.(c|w|[0-9a-f]{6}))?\.json$/i);
     if (!match) {
         return null;
     }
@@ -267,8 +270,10 @@ function validateRoot() {
     for (const entry of entries) {
         const fullPath = path.join(ROOT, entry);
 
-        if (!ROOT_FOLDERS.includes(entry) && entry !== 'manifest.v1.json') {
-            fail('Invalid root folder', fullPath);
+        if (!ROOT_FOLDERS.includes(entry)
+            && !ROOT_METADATA_FOLDERS.includes(entry)
+            && !ROOT_FILES.includes(entry)) {
+            fail('Invalid root entry', fullPath);
         }
     }
 }
@@ -335,7 +340,7 @@ function validateAssetFiles(dir, expectedId) {
             fail('Destroyed or packaged textures cannot use color suffixes', fullPath);
         }
 
-        if (parsed.role === 'preview' && parsed.previewVariant && !/^(ne|nw|se|sw|[0-9a-f]{6})$/.test(parsed.previewVariant)) {
+        if (parsed.role === 'preview' && parsed.previewVariant && !/^(ne|nw|se|sw|c|w|[0-9a-f]{6})$/.test(parsed.previewVariant)) {
             fail('Invalid preview variant', fullPath);
         }
 
@@ -351,6 +356,13 @@ function validateAssetFiles(dir, expectedId) {
     for (const textureId of textureIds) {
         if (!sidecarIds.has(textureId)) {
             const [id, variant, colorHex] = textureId.split(':');
+            const hasSiblingSidecar = [...sidecarIds]
+                .some(sidecarId => sidecarId.startsWith(`${id}:${variant}:`));
+            if (hasSiblingSidecar) {
+                // Color/faction variants share one sprite geometry. A sidecar for
+                // any sibling in the same variant group is authoritative for all.
+                continue;
+            }
             fail(`Missing texture sidecar "${formatTextureArtifactName(id, variant, colorHex === 'default' ? null : colorHex, 'json')}"`, dir);
         }
     }
@@ -367,16 +379,16 @@ function isRenderIdFolderName(value) {
     return /-[a-f0-9]{12}$/.test(String(value ?? '').toLowerCase());
 }
 
-function validateChildFolder(dir) {
+function validateChildFolder(dir, requireRenderId = false) {
     const childId = path.basename(dir);
     const parentSubtype = path.basename(path.dirname(dir));
-    if (parentSubtype === 'modifications' && !isRenderIdFolderName(childId)) {
+    if (requireRenderId && parentSubtype === 'modifications' && !isRenderIdFolderName(childId)) {
         fail('Modification folder must use renderId (variant-hash), not bare variantId', dir);
     }
     validateAssetFiles(dir, childId);
 }
 
-function validateSubtypeFolder(dir) {
+function validateSubtypeFolder(dir, requireRenderIds = false) {
     const entries = fs.readdirSync(dir);
 
     for (const entry of entries) {
@@ -387,7 +399,7 @@ function validateSubtypeFolder(dir) {
             continue;
         }
 
-        validateChildFolder(fullPath);
+        validateChildFolder(fullPath, requireRenderIds);
     }
 }
 
@@ -462,12 +474,12 @@ function validateShared(sharedDir) {
     for (const subtype of entries) {
         const subtypePath = path.join(sharedDir, subtype);
 
-        if (!SUBTYPES.includes(subtype)) {
+        if (!SHARED_SUBTYPES.includes(subtype)) {
             fail(`Invalid shared subtype "${subtype}"`, subtypePath);
             continue;
         }
 
-        validateSubtypeFolder(subtypePath);
+        validateSubtypeFolder(subtypePath, subtype === 'modifications');
     }
 }
 
