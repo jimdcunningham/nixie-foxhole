@@ -46,6 +46,7 @@ export function validateMonitorConfig(config) {
     }
     const currentConfig = { ...config };
     delete currentConfig.heartbeatHours;
+    delete currentConfig.discordEnabled;
     return {
         ...currentConfig,
         schemaVersion: FOXWATCH_MONITOR_SCHEMA_VERSION,
@@ -53,7 +54,6 @@ export function validateMonitorConfig(config) {
         intervalMinutes,
         steamUsername,
         blenderPath,
-        discordEnabled: Boolean(config.discordEnabled),
         nixieEnabled: Boolean(config.nixieEnabled),
     };
 }
@@ -200,24 +200,6 @@ export function redactSensitiveText(value, secrets) {
         }
     }
     return output;
-}
-
-export function validateDiscordWebhookUrl(value) {
-    let url;
-    try {
-        url = new URL(String(value));
-    } catch {
-        throw new Error('Discord webhook URL is not a valid URL.');
-    }
-    if (url.protocol !== 'https:' || !['discord.com', 'discordapp.com'].includes(url.hostname.toLowerCase())) {
-        throw new Error('Discord webhook URL must use HTTPS on discord.com.');
-    }
-    if (!/^\/api\/webhooks\/\d+\/[A-Za-z0-9._-]+\/?$/.test(url.pathname)) {
-        throw new Error('Discord webhook URL does not match the expected incoming webhook format.');
-    }
-    url.search = '';
-    url.hash = '';
-    return url.toString().replace(/\/$/, '');
 }
 
 export function createMonitorState(existing = null) {

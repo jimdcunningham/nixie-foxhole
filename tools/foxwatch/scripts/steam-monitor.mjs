@@ -8,9 +8,9 @@ import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
 import {
-    sendCheckpointNotifications,
+    sendCheckpointNotification,
     shouldSendCheckpointNotifications,
-} from './discord-checkpoints.mjs';
+} from './checkpoint-notifications.mjs';
 import { buildPakInventory, readJson, writeJsonAtomic } from './pipeline-core.mjs';
 import {
     FOXHOLE_APP_ID,
@@ -23,7 +23,6 @@ import {
     selectInactiveAcquisitionSlot,
     shouldAcquireSteamBuild,
     shouldRunFoxWatch,
-    validateDiscordWebhookUrl,
     validateNixieWebhookUrl,
     validateMonitorConfig,
     validateMonitorInterval,
@@ -184,19 +183,6 @@ async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger })
         encryptedSteamPassword = await promptEncryptedSecret(paths, 'Steam password');
     }
 
-    const discordDisabled = hasFlag(args, 'no-discord');
-    let encryptedDiscordWebhook = discordDisabled ? null : existingSecrets?.encryptedDiscordWebhook ?? null;
-    if (!discordDisabled && process.env.FOXWATCH_DISCORD_WEBHOOK_URL) {
-        validateDiscordWebhookUrl(process.env.FOXWATCH_DISCORD_WEBHOOK_URL);
-        encryptedDiscordWebhook = await encryptSecret(paths, process.env.FOXWATCH_DISCORD_WEBHOOK_URL);
-    } else if (!discordDisabled && !encryptedDiscordWebhook && interactive) {
-        const useDiscord = (await promptWithDefault('Configure Discord notifications? (Y/n)', 'Y')).toLowerCase() !== 'n';
-        if (useDiscord) {
-            encryptedDiscordWebhook = await promptEncryptedSecret(paths, 'Discord webhook URL');
-            validateDiscordWebhookUrl(await decryptSecret(paths, encryptedDiscordWebhook));
-        }
-    }
-
     const nixieDisabled = hasFlag(args, 'no-nixie');
     let encryptedNixieWebhook = nixieDisabled ? null : existingSecrets?.encryptedNixieWebhook ?? null;
     if (!nixieDisabled && process.env.FOXWATCH_NIXIE_WEBHOOK_URL) {
@@ -216,7 +202,6 @@ async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger })
         intervalMinutes: validateMonitorInterval(requestedInterval),
         steamUsername: requestedUsername,
         blenderPath,
-        discordEnabled: Boolean(encryptedDiscordWebhook),
         nixieEnabled: Boolean(encryptedNixieWebhook),
         minimumAvailableMemoryGiB: 12,
         steamAppId: FOXHOLE_APP_ID,
@@ -226,7 +211,6 @@ async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger })
     const secrets = {
         schemaVersion: FOXWATCH_MONITOR_SCHEMA_VERSION,
         encryptedSteamPassword,
-        encryptedDiscordWebhook,
         encryptedNixieWebhook,
     };
 
@@ -266,7 +250,6 @@ async function monitorOnce({
     const lock = await acquireMonitorLock(paths.lockPath);
     let config;
     let secrets;
-    let discordWebhookUrl = null;
     let nixieWebhookUrl = null;
     let state;
     let branchState;
@@ -277,9 +260,6 @@ async function monitorOnce({
         config = await loadMonitorConfig(paths);
         secrets = await loadMonitorSecrets(paths);
         const password = await decryptSecret(paths, secrets.encryptedSteamPassword);
-        if (notifyCheckpoints && config.discordEnabled && secrets.encryptedDiscordWebhook) {
-            discordWebhookUrl = validateDiscordWebhookUrl(await decryptSecret(paths, secrets.encryptedDiscordWebhook));
-        }
         if (notifyCheckpoints && config.nixieEnabled && secrets.encryptedNixieWebhook) {
             nixieWebhookUrl = validateNixieWebhookUrl(await decryptSecret(paths, secrets.encryptedNixieWebhook));
         }
@@ -307,10 +287,8 @@ async function monitorOnce({
             + `selected ${activeBranch} BuildID ${remoteBuildId}.`,
         );
         const foundNewBuild = branchState.lastObservedBuildId !== remoteBuildId;
-        delete branchState.discordMessageId;
         if (foundNewBuild) {
-            await sendCheckpointNotifications({
-                discordWebhookUrl,
+            await sendCheckpointNotification({
                 nixieWebhookUrl,
                 checkpoint: 'New Foxhole Build Detected',
                 description: 'An automatic Steam poll found a Foxhole build that has not been processed by this monitor yet.',
@@ -376,8 +354,7 @@ async function monitorOnce({
         }
 
         failureCheckpoint = 'FoxWatch Refresh Failed';
-        await sendCheckpointNotifications({
-            discordWebhookUrl,
+        await sendCheckpointNotification({
             nixieWebhookUrl,
             checkpoint: 'FoxWatch Refresh Started',
             description: 'The automatic poll is starting a full FoxWatch deep refresh for this build.',
@@ -414,8 +391,7 @@ async function monitorOnce({
         branchState.deferredReason = null;
         state.branches[activeBranch] = branchState;
         await writeJsonAtomic(paths.statePath, state);
-        await sendCheckpointNotifications({
-            discordWebhookUrl,
+        await sendCheckpointNotification({
             nixieWebhookUrl,
             checkpoint: 'FoxWatch Refresh Finished',
             description: `The FoxWatch refresh completed successfully in ${formatDuration(durationMs)}.`,
@@ -435,8 +411,7 @@ async function monitorOnce({
             state.branches[activeBranch] = branchState;
             await writeJsonAtomic(paths.statePath, state).catch(() => {});
         }
-        await sendCheckpointNotifications({
-            discordWebhookUrl,
+        await sendCheckpointNotification({
             nixieWebhookUrl,
             checkpoint: failureCheckpoint,
             description: message.slice(0, 1_000),
@@ -841,7 +816,6 @@ async function printMonitorStatus({ paths }) {
     }
     console.log('Branch selection: highest BuildID across public and devbranch');
     console.log(`Interval: ${config.intervalMinutes} minutes`);
-    console.log(`Discord: ${config.discordEnabled ? 'enabled' : 'disabled'}`);
     console.log(`Nixie: ${config.nixieEnabled ? 'enabled' : 'disabled'}`);
     console.log(`Last poll: ${state?.lastPollAt ?? 'never'}`);
     console.log(`Last selected branch: ${state?.selectedBranch ?? 'none'}`);

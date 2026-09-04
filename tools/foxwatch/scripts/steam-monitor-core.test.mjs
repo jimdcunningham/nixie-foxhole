@@ -12,7 +12,6 @@ import {
     selectInactiveAcquisitionSlot,
     shouldAcquireSteamBuild,
     shouldRunFoxWatch,
-    validateDiscordWebhookUrl,
     validateNixieWebhookUrl,
     validateMonitorConfig,
     verifyInstalledAppManifest,
@@ -157,25 +156,19 @@ test('validates a complete local monitor configuration', () => {
         intervalMinutes: 10,
         steamUsername: 'foxwatch-bot',
         blenderPath: 'C:/Blender/blender.exe',
-        discordEnabled: true,
+        nixieEnabled: true,
         heartbeatHours: 24,
     });
     assert.equal(config.branchMode, 'latest');
     assert.equal(config.blenderPath, 'C:/Blender/blender.exe');
+    assert.equal(config.nixieEnabled, true);
     assert.equal(Object.hasOwn(config, 'heartbeatHours'), false);
+    assert.equal(Object.hasOwn(config, 'discordEnabled'), false);
 });
 
 test('quotes Steam console values and rejects control characters', () => {
     assert.equal(quoteSteamConsoleValue('a"b\\c'), '"a\\"b\\c"');
     assert.throws(() => quoteSteamConsoleValue('line\nbreak'), /control characters/);
-});
-
-test('accepts only Discord incoming webhook URLs', () => {
-    assert.equal(
-        validateDiscordWebhookUrl('https://discord.com/api/webhooks/123/token_value?wait=true'),
-        'https://discord.com/api/webhooks/123/token_value',
-    );
-    assert.throws(() => validateDiscordWebhookUrl('https://example.com/api/webhooks/123/token'), /discord.com/);
 });
 
 test('accepts only Nixie webhook URLs', () => {

@@ -80,12 +80,11 @@ npm run foxwatch -- setup-monitor
 The first setup asks for:
 
 - the Steam username and password
-- an optional Discord incoming webhook URL
 - an optional Nixie workspace-chat incoming webhook URL
 
 For unattended setup, provide the Nixie URL through
 `FOXWATCH_NIXIE_WEBHOOK_URL`. Use `--no-nixie` to explicitly remove that
-destination while preserving the Discord configuration.
+destination.
 
 Passwords and webhook URLs are encrypted with Windows DPAPI for the current
 Windows account and are never written as plaintext configuration. SteamCMD
@@ -131,13 +130,13 @@ fails, the verified Steam installation remains reusable, but that BuildID stays
 pending and is retried on the next poll. A completed build is not marked
 successful until the deep refresh exits successfully.
 
-When Discord is configured, automatic polls post new checkpoint messages for a
+When Nixie notifications are configured, automatic polls post new checkpoint messages for a
 newly detected Foxhole build, the start of its FoxWatch refresh, successful
 refresh completion, and any SteamCMD, acquisition, or FoxWatch failure. These
-messages are append-only: the monitor never edits an earlier Discord message.
+messages are append-only: the monitor never edits an earlier system message.
 Routine successful polls, acquisition verification, memory deferrals,
 heartbeats, and in-progress pipeline stages do not post. Manual `monitor-now`
-runs and the tray app's `Run Refresh` action also stay quiet on Discord.
+runs and the tray app's `Run Refresh` action also stay quiet in Nixie.
 
 Useful monitor commands:
 
@@ -164,7 +163,7 @@ runs the same polling loop in the foreground for diagnostics.
 
 The tray app source is committed under `tools/foxwatch/monitor/`; its generated
 Windows binaries are not committed. First-time `setup-monitor` configures the
-Steam account and optional Discord webhook, downloads SteamCMD, publishes the
+Steam account and optional Nixie webhook, downloads SteamCMD, publishes the
 Release app into the ignored `tools/foxwatch/local/monitor-app/` directory,
 registers it for the current user's Windows startup, and starts it.
 
@@ -211,7 +210,7 @@ npm run foxwatch -- uninstall-monitor
 
 For unattended setup, provide `FOXWATCH_STEAM_USERNAME` and
 `FOXWATCH_STEAM_PASSWORD`, optionally
-`FOXWATCH_DISCORD_WEBHOOK_URL`, and run:
+`FOXWATCH_NIXIE_WEBHOOK_URL`, and run:
 
 ```powershell
 npm run foxwatch -- setup-monitor -- --non-interactive --interval-minutes 10
