@@ -6030,11 +6030,19 @@ function isStandaloneDestroyedOrBreachedStructureId(structureId) {
     return normalizedStructureId.includes('destroyed') || normalizedStructureId.includes('breached');
 }
 
+function isBuildSiteStructure(structure) {
+    const structureId = normalizeId(structure?.id);
+    const codeName = normalizeId(structure?.codeName);
+    return structureId.endsWith('buildsite') || codeName.endsWith('buildsite');
+}
+
 function shouldPublishStructureComponentRenderLayers(structure) {
-    // Standalone destroyed/breached structures intentionally have no component layers.
+    // Standalone destroyed/breached structures and temporary build-site visuals
+    // intentionally have no component layers.
     // Spline/connector components are render-scene derived and may not appear as authored
     // renderLayers on the source manifest — keep publishing whatever component textures exist.
-    return !isStandaloneDestroyedOrBreachedStructure(structure);
+    return !isStandaloneDestroyedOrBreachedStructure(structure)
+        && !isBuildSiteStructure(structure);
 }
 
 async function removeStaleStructureArtifactDirectories(manifest) {
@@ -6044,14 +6052,17 @@ async function removeStaleStructureArtifactDirectories(manifest) {
 
     for (const structureId of structureIds) {
         const structure = (manifest?.assets ?? []).find(asset => normalizeId(asset?.id) === structureId) ?? null;
-        if (isStandaloneDestroyedOrBreachedStructure(structure ?? { id: structureId })) {
+        if (!shouldPublishStructureComponentRenderLayers(structure ?? { id: structureId })) {
             const publishedAssetDirectory = getPublishedAssetDirectory(structureId);
-            const componentsDirectory = publishedAssetDirectory
-                ? resolve(publishedAssetDirectory, 'components')
-                : null;
-            if (componentsDirectory && await pathExists(componentsDirectory)) {
-                await rm(componentsDirectory, { recursive: true, force: true });
-                logPublishDetail(`removed stale component artifacts for ${structureId} at ${componentsDirectory}`);
+            const componentDirectories = [
+                publishedAssetDirectory ? resolve(publishedAssetDirectory, 'components') : null,
+                resolve(renderScenesDirectory, structureId, 'components'),
+            ].filter(Boolean);
+            for (const directory of componentDirectories) {
+                if (await pathExists(directory)) {
+                    await rm(directory, { recursive: true, force: true });
+                    logPublishDetail(`removed stale component artifacts for ${structureId} at ${directory}`);
+                }
             }
         }
 

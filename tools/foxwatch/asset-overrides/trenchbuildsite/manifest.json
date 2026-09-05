@@ -1,4 +1,15 @@
 {
   "categoryId": "bunker",
+  "renderNodeOverrides": {
+    "Side01": {
+      "unrealRotationDegrees": [0, 0, 0]
+    },
+    "Side02": {
+      "unrealRotationDegrees": [0, 0, 0]
+    },
+    "Side03": {
+      "unrealRotationDegrees": [0, 0, 0]
+    }
+  },
   "upgradeStructureCodeName": "TrenchT1"
 }

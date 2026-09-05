@@ -312,6 +312,7 @@ public sealed class FoxWatchRenderSceneGenerator
         var blueprintScene = await _blueprintSceneExtractor.TryExtractAsync(structure, cancellationToken);
         blueprintScene = await AppendCraneSpawnVisualsAsync(structure, blueprintScene, cancellationToken);
         blueprintScene = AppendResourceFieldNodeVisuals(structure, blueprintScene);
+        ApplyRenderNodeOverrides(structure, blueprintScene);
         if (blueprintScene?.Meshes.Count > 0)
         {
             await PopulateMeshExportsAsync(blueprintScene.Meshes, renderAssetOutputDirectory, cancellationToken, deferAssetExports);
@@ -3374,6 +3375,36 @@ public sealed class FoxWatchRenderSceneGenerator
             TransformMatrix = [.. node.TransformMatrix],
             Children = CloneNodes(node.Children),
         })];
+    }
+
+    private static void ApplyRenderNodeOverrides(
+        FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? scene)
+    {
+        if (scene == null || structure.RenderNodeOverrides is not { Count: > 0 })
+        {
+            return;
+        }
+
+        ApplyRenderNodeOverrides(scene.Roots, structure.RenderNodeOverrides);
+    }
+
+    private static void ApplyRenderNodeOverrides(
+        IEnumerable<FoxWatchRenderSceneNode> nodes,
+        IReadOnlyDictionary<string, FoxWatchManifestRenderNodeOverride> overrides)
+    {
+        foreach (var node in nodes)
+        {
+            var nodeOverride = overrides
+                .FirstOrDefault(entry => string.Equals(entry.Key, node.Name, StringComparison.OrdinalIgnoreCase))
+                .Value;
+            if (nodeOverride?.UnrealRotationDegrees is { Count: 3 } rotation)
+            {
+                node.UnrealRotationDegrees = [.. rotation];
+            }
+
+            ApplyRenderNodeOverrides(node.Children, overrides);
+        }
     }
 
     private static List<FoxWatchRenderSceneNode> ClearRenderSceneVariantIds(IEnumerable<FoxWatchRenderSceneNode> nodes)

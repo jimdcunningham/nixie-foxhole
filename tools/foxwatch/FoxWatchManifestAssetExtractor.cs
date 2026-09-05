@@ -983,7 +983,11 @@ public class FoxWatchManifestAssetExtractor
             buildSockets = CollapseLogicalBuildSocketDuplicates(buildSockets, connector);
             buildSockets = ApplyEntrenchmentSocketVisibilityTags(buildSockets);
             buildSockets = ApplyBunkerBreachFaceMetadata(buildSockets, blueprintPackagePath, breachable == true);
-            var renderLayers = ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets);
+            // Build sites are temporary construction visuals and must remain a single,
+            // floor-clipped render rather than being rebuilt from isolated components.
+            var renderLayers = codeNameText.EndsWith("BuildSite", StringComparison.OrdinalIgnoreCase)
+                ? []
+                : ExtractStructureRenderLayers(structureId, blueprintPackagePath, profileType, buildSockets);
             CombatRenderExtractionElapsed += Stopwatch.GetElapsedTime(structureStageStartedAt);
             structureStageStartedAt = Stopwatch.GetTimestamp();
 

@@ -343,6 +343,9 @@ public sealed class FoxWatchManifestStructure
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, FoxWatchManifestComponentRenderOverride>? ComponentRenderOverrides { get; set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, FoxWatchManifestRenderNodeOverride>? RenderNodeOverrides { get; set; }
+
     public List<FoxWatchManifestCraneSpawn> CraneSpawns { get; set; } = [];
 
     public List<FoxWatchManifestHitPolygon> FootprintPolygons { get; set; } = [];
@@ -747,6 +750,11 @@ public sealed class FoxWatchManifestComponentRenderOverride
     public FoxWatchManifestRepeatCropPixels? RepeatCropPixels { get; set; }
 
     public string? CalibrationBackgroundColor { get; set; }
+}
+
+public sealed class FoxWatchManifestRenderNodeOverride
+{
+    public List<double>? UnrealRotationDegrees { get; set; }
 }
 
 public sealed class FoxWatchManifestRepeatCropPixels
