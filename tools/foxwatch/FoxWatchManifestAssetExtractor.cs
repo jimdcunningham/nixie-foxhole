@@ -1802,6 +1802,11 @@ public class FoxWatchManifestAssetExtractor
                         continue;
                     }
 
+                    if (IsFortRampFloorExtensionComponent(structureId, componentReference))
+                    {
+                        continue;
+                    }
+
                     if (TryResolveFortModSlotWallRenderLayer(componentReference, out var wallLayerId, out var wallTags))
                     {
                         if (renderLayers.Any(layer =>
@@ -1828,9 +1833,11 @@ public class FoxWatchManifestAssetExtractor
                     {
                         Id = NormalizeFortEntrenchmentRenderLayerId(componentReference.ComponentName),
                         ComponentName = componentReference.ComponentName,
-                        ComponentTags = ResolveFortEntrenchmentRenderLayerComponentTags(
-                            componentReference.ComponentName,
-                            componentReference.ComponentTags),
+                        ComponentTags = IsFortCornerAngleDirtRenderComponent(componentReference)
+                            ? ResolveFortCornerAngleDirtRenderLayerTags(componentReference)
+                            : ResolveFortEntrenchmentRenderLayerComponentTags(
+                                componentReference.ComponentName,
+                                componentReference.ComponentTags),
                     });
                 }
 
@@ -1860,6 +1867,17 @@ public class FoxWatchManifestAssetExtractor
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsFortRampFloorExtensionComponent(
+            string structureId,
+            FoxWatchBlueprintComponentReference componentReference)
+        {
+            return structureId.StartsWith("fortramp", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    NormalizeComponentReferenceName(componentReference.ComponentName),
+                    "RampFront",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool IsFortEntrenchmentVisibilityComponentReference(FoxWatchBlueprintComponentReference componentReference)
         {
             if (string.IsNullOrWhiteSpace(componentReference.MeshPath))
@@ -1868,6 +1886,11 @@ public class FoxWatchManifestAssetExtractor
             }
 
             var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            if (IsFortCornerAngleDirtRenderComponent(componentReference))
+            {
+                return true;
+            }
+
             if (string.Equals(normalizedComponentName, "Floor", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalizedComponentName, "Roof", StringComparison.OrdinalIgnoreCase) ||
                 IsFortEntrenchmentRoofRenderComponent(componentReference))
@@ -2191,6 +2214,11 @@ public class FoxWatchManifestAssetExtractor
                 return null;
             }
 
+            if (context.Contains("anglemodslot", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Angle";
+            }
+
             if (context.Contains("backmodslot", StringComparison.OrdinalIgnoreCase))
             {
                 return "Back";
@@ -2256,6 +2284,30 @@ public class FoxWatchManifestAssetExtractor
                     ComponentTags = [direction],
                 });
             }
+        }
+
+        private static List<string> ResolveFortCornerAngleDirtRenderLayerTags(
+            FoxWatchBlueprintComponentReference componentReference)
+        {
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            return normalizedComponentName.Contains("roofangledirt", StringComparison.OrdinalIgnoreCase)
+                ? ["Angle", "Roof"]
+                : ["Angle", "Dirt"];
+        }
+
+        private static bool IsFortCornerAngleDirtRenderComponent(
+            FoxWatchBlueprintComponentReference componentReference)
+        {
+            var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
+            if (normalizedComponentName.Contains("roofangledirt", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return string.Equals(normalizedComponentName, "DirtTriangle", StringComparison.OrdinalIgnoreCase)
+                && componentReference.ComponentName.Contains(
+                    "FortCornerCommonDirt",
+                    StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsFortEntrenchmentDirtFillMesh(string meshPath)
@@ -2328,6 +2380,7 @@ public class FoxWatchManifestAssetExtractor
                 string.Equals(normalizedTag, "Front", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalizedTag, "Left", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalizedTag, "Right", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalizedTag, "Angle", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalizedTag, "Center", StringComparison.OrdinalIgnoreCase))
             {
                 return normalizedTag;
@@ -2419,6 +2472,11 @@ public class FoxWatchManifestAssetExtractor
             var normalizedSocketName = NormalizeComponentReferenceName(socketName);
             var normalizedComponentType = NormalizeComponentReferenceName(componentType);
             var haystack = $"{normalizedSocketName}:{normalizedComponentType}";
+
+            if (haystack.Contains("anglefort", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Angle";
+            }
 
             if (haystack.Contains("backfort", StringComparison.OrdinalIgnoreCase))
             {

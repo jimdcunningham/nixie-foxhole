@@ -1,0 +1,25 @@
+{
+  "renderNodeOverrides": {
+    "ArtilleryShelterRoof": {
+      "unrealLocationCentimeters": [
+        0,
+        0,
+        -160
+      ]
+    }
+  },
+  "selectionPolygons": [
+    {
+      "shape": [
+        -2.5,
+        -2.5,
+        2.5,
+        -2.5,
+        2.5,
+        2.5,
+        -2.5,
+        2.5
+      ]
+    }
+  ]
+}

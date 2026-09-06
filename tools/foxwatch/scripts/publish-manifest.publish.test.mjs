@@ -271,6 +271,20 @@ test('foxholeManifestSchema preserves holdProfile metadata from raw FoxWatch man
     assert.ok(parsedManifest.assets.some(asset => asset.holdProfile));
 });
 
+test('foxholeManifestSchema preserves authored selection polygons', generatedManifestTestOptions, () => {
+    const rawManifest = JSON.parse(readFileSync(generatedManifestUrl, 'utf8'));
+    const sourceAsset = rawManifest.assets.find(asset => asset.id === 'fortcornert1');
+    assert.deepEqual(sourceAsset?.selectionPolygons, [{
+        shape: [-1, 2.5, -2.5, 2.5, -2.5, -2.5, 2.5, -2.5, 2.5, -1],
+    }]);
+
+    const parsedManifest = foxholeManifestSchema.parse(rawManifest);
+    assert.deepEqual(
+        parsedManifest.assets.find(asset => asset.id === 'fortcornert1')?.selectionPolygons,
+        sourceAsset.selectionPolygons,
+    );
+});
+
 test('raw FoxWatch manifest preserves authored connector behavior and marked cargo overlays', generatedManifestTestOptions, () => {
     const rawManifest = JSON.parse(readFileSync(generatedManifestUrl, 'utf8'));
     const tankStop = rawManifest.assets.find(asset => asset.id === 'tankstopsplinet3');

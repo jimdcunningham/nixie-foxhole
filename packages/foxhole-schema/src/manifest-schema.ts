@@ -553,6 +553,7 @@ function hydrateStructurePayloadInput(value: unknown): Record<string, unknown> |
             ? source.buildSockets.filter(socket => !isLandscapeCheckSocketInput(socket)).map(hydrateBuildSocketInput)
             : source.buildSockets,
         railCouplers: Array.isArray(source.railCouplers) ? source.railCouplers.map(hydrateRailCouplerInput) : source.railCouplers,
+        selectionPolygons: source.selectionPolygons,
         lineOfSightPolygons: source.lineOfSightPolygons,
         structureVolumes: Array.isArray(source.structureVolumes) ? source.structureVolumes.map(hydrateStructureVolumeInput) : source.structureVolumes,
         vehicleSeats: Array.isArray(source.vehicleSeats) ? source.vehicleSeats.map(hydrateVehicleSeatInput) : source.vehicleSeats,
@@ -1192,6 +1193,7 @@ const sharedModificationManifestEntryObjectSchema = z.object({
     powerGridInfo: powerGridInfoSchema.nullish().transform(value => value ?? undefined),
     buildSockets: z.array(buildSocketSchema).default([]),
     footprintPolygons: z.array(hitPolygonSchema).default([]),
+    selectionPolygons: z.array(hitPolygonSchema).default([]),
     lineOfSightPolygons: z.array(hitPolygonSchema).default([]),
     fuelTanks: z.array(fuelTankSchema).default([]),
     conversionEntries: z.array(conversionEntrySchema).default([]),
@@ -1488,6 +1490,7 @@ const structureManifestSchema = z.preprocess(value => {
     connector: connectorSchema.nullish().transform(value => value ?? undefined),
     buildSockets: z.array(buildSocketSchema).default([]),
     footprintPolygons: z.array(hitPolygonSchema).default([]),
+    selectionPolygons: z.array(hitPolygonSchema).default([]),
     lineOfSightPolygons: z.array(hitPolygonSchema).default([]),
     structureVolumes: z.array(structureVolumeSchema).default([]),
     emplacementLocation: emplacementLocationSchema.nullish().transform(value => value ?? undefined),
@@ -1603,6 +1606,7 @@ function createStructureLikeAssetFromLegacyItem(value: unknown): Record<string, 
         },
         buildSockets: [],
         footprintPolygons: [],
+        selectionPolygons: [],
         lineOfSightPolygons: [],
         structureVolumes: [],
         vehicleSeats: [],
@@ -1977,6 +1981,7 @@ export type FoxholeManifestStructureRenderLayer = z.infer<typeof structureRender
 export type FoxholeManifestRange = z.infer<typeof structureRangeSchema>;
 export type FoxholeManifestSocketTag = z.infer<typeof socketTagSchema>;
 export type FoxholeManifestBuildSocket = z.infer<typeof buildSocketSchema>;
+export type FoxholeManifestHitPolygon = z.infer<typeof hitPolygonSchema>;
 export type FoxholeManifestEmplacementLocation = z.infer<typeof emplacementLocationSchema>;
 export type FoxholeManifestRailCoupler = z.infer<typeof railCouplerSchema>;
 export type FoxholeManifestStructureVolume = z.infer<typeof structureVolumeSchema>;

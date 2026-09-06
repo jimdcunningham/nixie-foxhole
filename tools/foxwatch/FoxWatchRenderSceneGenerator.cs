@@ -3398,6 +3398,11 @@ public sealed class FoxWatchRenderSceneGenerator
             var nodeOverride = overrides
                 .FirstOrDefault(entry => string.Equals(entry.Key, node.Name, StringComparison.OrdinalIgnoreCase))
                 .Value;
+            if (nodeOverride?.UnrealLocationCentimeters is { Count: 3 } location)
+            {
+                node.UnrealLocationCentimeters = [.. location];
+            }
+
             if (nodeOverride?.UnrealRotationDegrees is { Count: 3 } rotation)
             {
                 node.UnrealRotationDegrees = [.. rotation];
@@ -3931,6 +3936,19 @@ public sealed class FoxWatchRenderSceneGenerator
             && IsFortEntrenchmentPipelineInfrastructureNode(nodeName);
     }
 
+    private static bool ShouldIncludeFortRampFloorExtensionInLayer(
+        FoxWatchManifestStructure structure,
+        string layerId,
+        string? nodeName)
+    {
+        return structure.Id.StartsWith("fortramp", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(layerId, "floor", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                NormalizeRenderSceneNodeName(nodeName),
+                "RampFront",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsFortEntrenchmentPipelineInfrastructureNode(string? nodeName)
     {
         if (string.IsNullOrWhiteSpace(nodeName))
@@ -4159,6 +4177,11 @@ public sealed class FoxWatchRenderSceneGenerator
 
         if (IsFortEntrenchmentStructure(structure))
         {
+            if (ShouldIncludeFortRampFloorExtensionInLayer(structure, layerId, normalizedNodeName))
+            {
+                return true;
+            }
+
             if (ShouldIncludeFortEntrenchmentPipelineInfrastructureInLayer(structure, layerId, normalizedNodeName))
             {
                 return true;
@@ -4176,6 +4199,19 @@ public sealed class FoxWatchRenderSceneGenerator
             if (componentSeparatorIndex >= 0 && componentSeparatorIndex + 1 < normalizedComponentName.Length)
             {
                 normalizedComponentName = normalizedComponentName[(componentSeparatorIndex + 1)..];
+            }
+
+            if (componentSeparatorIndex >= 0
+                && string.Equals(normalizedComponentName, "StaticMesh", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(nodeName, renderLayer.ComponentName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.Equals(renderLayer.ComponentName, structure.CodeName, StringComparison.OrdinalIgnoreCase))
+            {
+                return !string.IsNullOrWhiteSpace(meshId)
+                    && (string.Equals(normalizedNodeName, normalizedComponentName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(nodeName, renderLayer.ComponentName, StringComparison.OrdinalIgnoreCase));
             }
 
             return string.Equals(normalizedNodeName, normalizedComponentName, StringComparison.OrdinalIgnoreCase)

@@ -1,3 +1,4 @@
 {
-  "categoryId": "world"
+  "categoryId": "world",
+  "clipFloor": false
 }

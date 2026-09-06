@@ -1,3 +1,17 @@
 {
-  "clipFloor": false
+  "clipFloor": false,
+  "selectionPolygons": [
+    {
+      "shape": [
+        -2.5,
+        -2.5,
+        2.5,
+        -2.5,
+        2.5,
+        2.5,
+        -2.5,
+        2.5
+      ]
+    }
+  ]
 }

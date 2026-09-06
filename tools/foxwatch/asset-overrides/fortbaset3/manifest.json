@@ -1,4 +1,5 @@
 {
+  "clipFloor": false,
   "lineOfSightPolygons": [
     {
       "shape": [
@@ -26,6 +27,20 @@
         8.447,
         -2.614,
         3.295
+      ]
+    }
+  ],
+  "selectionPolygons": [
+    {
+      "shape": [
+        -2.5,
+        -2.5,
+        2.5,
+        -2.5,
+        2.5,
+        2.5,
+        -2.5,
+        2.5
       ]
     }
   ]

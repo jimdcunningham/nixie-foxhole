@@ -1529,6 +1529,7 @@ function compactModificationVariant(value) {
                 buildSockets: [],
                 footprintPolygons: [],
                 lineOfSightPolygons: [],
+                selectionPolygons: [],
                 fuelTanks: [],
                 conversionEntries: [],
                 icons: undefined,
@@ -1546,6 +1547,7 @@ function compactModificationVariant(value) {
                 buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
                 footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
                 lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+                selectionPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
                 fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
                 conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
                 icons: compactIcons,
@@ -1570,6 +1572,7 @@ function compactModificationVariant(value) {
         buildSockets: [],
         footprintPolygons: [],
         lineOfSightPolygons: [],
+        selectionPolygons: [],
         fuelTanks: [],
         conversionEntries: [],
         nextRecipeId: null,
@@ -1590,6 +1593,7 @@ function compactModificationVariant(value) {
         buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+        selectionPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
         conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
         cost: compactRecipeResourceMap,
@@ -1814,6 +1818,7 @@ function compactStructure(value) {
         buildSockets: [],
         footprintPolygons: [],
         lineOfSightPolygons: [],
+        selectionPolygons: [],
         structureVolumes: [],
         vehicleSeats: [],
         spotlights: [],
@@ -1871,6 +1876,7 @@ function compactStructure(value) {
         buildSockets: entryValue => compactArray(entryValue, compactBuildSocket),
         footprintPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         lineOfSightPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
+        selectionPolygons: entryValue => compactArray(entryValue, compactHitPolygon),
         structureVolumes: entryValue => compactArray(entryValue, compactStructureVolume),
         emplacementLocation: compactEmplacementLocation,
         railCouplers: entryValue => compactArray(entryValue, compactRailCoupler),
@@ -6036,6 +6042,12 @@ function isBuildSiteStructure(structure) {
     return structureId.endsWith('buildsite') || codeName.endsWith('buildsite');
 }
 
+function isFortRampStructure(structure) {
+    const structureId = normalizeId(structure?.id);
+    const codeName = normalizeId(structure?.codeName);
+    return structureId.startsWith('fortramp') || codeName.startsWith('fortramp');
+}
+
 function shouldPublishStructureComponentRenderLayers(structure) {
     // Standalone destroyed/breached structures and temporary build-site visuals
     // intentionally have no component layers.
@@ -6062,6 +6074,36 @@ async function removeStaleStructureArtifactDirectories(manifest) {
                 if (await pathExists(directory)) {
                     await rm(directory, { recursive: true, force: true });
                     logPublishDetail(`removed stale component artifacts for ${structureId} at ${directory}`);
+                }
+            }
+        } else if (isFortRampStructure(structure)) {
+            const publishedAssetDirectory = getPublishedAssetDirectory(structureId);
+            const componentDirectories = [
+                publishedAssetDirectory ? resolve(publishedAssetDirectory, 'components') : null,
+                resolve(
+                    rawRenderedAssetTypesDirectory,
+                    resolvePublishedAssetTypeName(structureId),
+                    structureId,
+                    'components'),
+                resolve(renderScenesDirectory, structureId, 'components'),
+            ].filter(Boolean);
+            const currentLayerIds = new Set((structure?.renderLayers ?? [])
+                .map(layer => normalizeId(layer?.id))
+                .filter(Boolean));
+
+            for (const directory of componentDirectories) {
+                if (!await pathExists(directory)) {
+                    continue;
+                }
+
+                for (const entry of await readdir(directory, { withFileTypes: true })) {
+                    if (!entry.isDirectory() || currentLayerIds.has(normalizeId(entry.name))) {
+                        continue;
+                    }
+
+                    const staleDirectory = resolve(directory, entry.name);
+                    await rm(staleDirectory, { recursive: true, force: true });
+                    logPublishDetail(`removed stale fort ramp component artifacts at ${staleDirectory}`);
                 }
             }
         }
@@ -7457,6 +7499,9 @@ function applyStructureRenderUrls(
                                 ...variant,
                                 ...(sourceModification?.lineOfSightPolygons?.length > 0
                                     ? { lineOfSightPolygons: sourceModification.lineOfSightPolygons }
+                                    : {}),
+                                ...(sourceModification?.selectionPolygons?.length > 0
+                                    ? { selectionPolygons: sourceModification.selectionPolygons }
                                     : {}),
                                 ...(renderEntry?.textureUrl ? { textureUrl: renderEntry.textureUrl } : {}),
                                 ...(!variant?.iconUrl && renderEntry?.iconUrl ? { iconUrl: renderEntry.iconUrl } : {}),

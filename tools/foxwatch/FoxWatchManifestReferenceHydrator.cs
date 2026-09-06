@@ -1804,6 +1804,21 @@ public sealed class FoxWatchManifestReferenceHydrator
             }
         }
 
+        if (TryGetOverrideProperty(variantOverride, "selectionPolygons", out var selectionPolygonsElement))
+        {
+            try
+            {
+                variant.SelectionPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
+                    selectionPolygonsElement.GetRawText(),
+                    DeserializeOptions) ?? [];
+                applied = true;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Skipping selectionPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
+            }
+        }
+
         if (TryGetOverrideProperty(variantOverride, "previewDirection", out var previewDirectionElement) &&
             previewDirectionElement.ValueKind == JsonValueKind.String)
         {
@@ -1831,23 +1846,39 @@ public sealed class FoxWatchManifestReferenceHydrator
         string overridePath,
         string targetPath)
     {
-        if (!TryGetOverrideProperty(modificationOverride, "lineOfSightPolygons", out var lineOfSightPolygonsElement))
+        var applied = false;
+
+        if (TryGetOverrideProperty(modificationOverride, "lineOfSightPolygons", out var lineOfSightPolygonsElement))
         {
-            return false;
+            try
+            {
+                modification.LineOfSightPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
+                    lineOfSightPolygonsElement.GetRawText(),
+                    DeserializeOptions) ?? [];
+                applied = true;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Skipping lineOfSightPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
+            }
         }
 
-        try
+        if (TryGetOverrideProperty(modificationOverride, "selectionPolygons", out var selectionPolygonsElement))
         {
-            modification.LineOfSightPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
-                lineOfSightPolygonsElement.GetRawText(),
-                DeserializeOptions) ?? [];
-            return true;
+            try
+            {
+                modification.SelectionPolygons = JsonSerializer.Deserialize<List<FoxWatchManifestHitPolygon>>(
+                    selectionPolygonsElement.GetRawText(),
+                    DeserializeOptions) ?? [];
+                applied = true;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Skipping selectionPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
+            }
         }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(exception, "Skipping lineOfSightPolygons override for {TargetPath} from {OverridePath}", targetPath, overridePath);
-            return false;
-        }
+
+        return applied;
     }
 
     private static string NormalizeModificationVariantLookupKey(string? value)

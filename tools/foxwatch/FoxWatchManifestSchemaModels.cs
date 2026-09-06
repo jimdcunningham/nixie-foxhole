@@ -353,6 +353,9 @@ public sealed class FoxWatchManifestStructure
     /// <summary>Authored top-down occlusion polygons for planner line-of-sight.</summary>
     public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
 
+    /// <summary>Authored editor selection polygons in meters relative to the asset origin.</summary>
+    public List<FoxWatchManifestHitPolygon> SelectionPolygons { get; set; } = [];
+
     public List<FoxWatchManifestStructureVolume> StructureVolumes { get; set; } = [];
 
     public List<FoxWatchManifestVehicleSeat> VehicleSeats { get; set; } = [];
@@ -754,6 +757,8 @@ public sealed class FoxWatchManifestComponentRenderOverride
 
 public sealed class FoxWatchManifestRenderNodeOverride
 {
+    public List<double>? UnrealLocationCentimeters { get; set; }
+
     public List<double>? UnrealRotationDegrees { get; set; }
 }
 
@@ -873,6 +878,9 @@ public sealed class FoxWatchManifestModification
     /// <summary>Authored top-down occlusion polygons for this modification.</summary>
     public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
 
+    /// <summary>Authored editor selection polygons for this modification.</summary>
+    public List<FoxWatchManifestHitPolygon> SelectionPolygons { get; set; } = [];
+
     public List<FoxWatchManifestFuelTank> FuelTanks { get; set; } = [];
 
     public List<FoxWatchManifestConversionEntry> ConversionEntries { get; set; } = [];
@@ -939,6 +947,9 @@ public sealed class FoxWatchManifestModificationSlotVariant
 
     /// <summary>Authored top-down occlusion polygons for this modification variant.</summary>
     public List<FoxWatchManifestHitPolygon> LineOfSightPolygons { get; set; } = [];
+
+    /// <summary>Authored editor selection polygons for this modification variant.</summary>
+    public List<FoxWatchManifestHitPolygon> SelectionPolygons { get; set; } = [];
 
     public bool UseTemplateActor { get; set; }
 

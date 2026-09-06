@@ -454,6 +454,8 @@ Structure-specific overrides live in `tools/foxwatch/asset-overrides/<codename>/
 
 `lineOfSightPolygons` is an optional structure override for planner-only top-down occlusion. Each entry is a `{ "shape": [x0, y0, x1, y1, ...] }` polygon in meters relative to the asset origin. In the Nixie dev editor, draw hitboxes on a Foxhole asset and run **Export Foxhole Line of Sight Override**; merge the downloaded payload into that asset's override manifest, then refresh the targeted asset to publish it.
 
+`selectionPolygons` is an optional structure override for Nixie editor selection. It uses the same meter-relative polygon shape, supports multiple polygons, and remains independent from footprint and line-of-sight geometry.
+
 Modification override keys resolve with this precedence (first match wins):
 
 | Priority | Key format | Example |
