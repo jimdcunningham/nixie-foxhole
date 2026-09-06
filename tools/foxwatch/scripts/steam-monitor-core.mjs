@@ -127,6 +127,10 @@ export function shouldRunFoxWatch(branchState, remoteBuildId, { forceRefresh = f
     return forceRefresh || branchState?.successfulBuildId !== String(remoteBuildId);
 }
 
+export function shouldDeferFoxWatchForMemory(availableGiB, minimumGiB, { forceRefresh = false } = {}) {
+    return !forceRefresh && availableGiB < minimumGiB;
+}
+
 export function resolveVerifiedMonitorPakSource(state, receipt, expectedReceiptPath) {
     const selectedBranchValue = String(state?.selectedBranch ?? '').trim();
     const selectedBuildId = String(state?.selectedBuildId ?? '').trim();

@@ -22,6 +22,7 @@ import {
     selectLatestSteamBuild,
     selectInactiveAcquisitionSlot,
     shouldAcquireSteamBuild,
+    shouldDeferFoxWatchForMemory,
     shouldRunFoxWatch,
     validateNixieWebhookUrl,
     validateMonitorConfig,
@@ -344,13 +345,19 @@ async function monitorOnce({
 
         const availableGiB = os.freemem() / 1024 ** 3;
         const minimumGiB = Number(config.minimumAvailableMemoryGiB ?? 12);
-        if (availableGiB < minimumGiB) {
+        if (shouldDeferFoxWatchForMemory(availableGiB, minimumGiB, { forceRefresh })) {
             branchState.deferredAt = new Date().toISOString();
             branchState.deferredReason = `Only ${availableGiB.toFixed(1)} GiB RAM available; ${minimumGiB} GiB required.`;
             state.branches[activeBranch] = branchState;
             await writeJsonAtomic(paths.statePath, state);
             logger.info(`Deferring FoxWatch for BuildID ${remoteBuildId}: ${branchState.deferredReason}`);
             return;
+        }
+        if (forceRefresh && availableGiB < minimumGiB) {
+            logger.info(
+                `Forced refresh requested with only ${availableGiB.toFixed(1)} GiB RAM available; `
+                + `bypassing the ${minimumGiB} GiB automatic-refresh safeguard.`,
+            );
         }
 
         failureCheckpoint = 'FoxWatch Refresh Failed';

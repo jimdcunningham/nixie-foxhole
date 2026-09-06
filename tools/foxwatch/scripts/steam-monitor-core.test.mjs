@@ -11,6 +11,7 @@ import {
     selectLatestSteamBuild,
     selectInactiveAcquisitionSlot,
     shouldAcquireSteamBuild,
+    shouldDeferFoxWatchForMemory,
     shouldRunFoxWatch,
     validateNixieWebhookUrl,
     validateMonitorConfig,
@@ -121,6 +122,12 @@ test('keeps acquisition and successful pipeline state separate', () => {
     assert.equal(shouldRunFoxWatch({ ...state, successfulBuildId: '222' }, '222', { forceRefresh: true }), true);
     assert.equal(selectInactiveAcquisitionSlot('a'), 'b');
     assert.equal(selectInactiveAcquisitionSlot(null), 'a');
+});
+
+test('only automatic monitor runs defer for low available memory', () => {
+    assert.equal(shouldDeferFoxWatchForMemory(9.2, 12), true);
+    assert.equal(shouldDeferFoxWatchForMemory(12, 12), false);
+    assert.equal(shouldDeferFoxWatchForMemory(9.2, 12, { forceRefresh: true }), false);
 });
 
 test('normalizes branches and constructs a clean state', () => {
