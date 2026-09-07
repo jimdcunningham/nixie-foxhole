@@ -23,8 +23,12 @@ test('formats a FoxWatch checkpoint as a Nixie system message', () => {
         color: 0x43d9a3,
     });
 
-    assert.equal(payload.content, 'FoxWatch: FoxWatch Refresh Finished — public BuildID 24842742.');
+    assert.deepEqual(Object.keys(payload), ['embed']);
     assert.equal(payload.embed.title, 'FoxWatch Refresh Finished');
+    assert.equal(payload.embed.icon, 'status');
+    assert.equal(payload.embed.headerMeta, 'public');
+    assert.equal(payload.embed.footer, 'FoxWatch');
+    assert.equal(payload.embed.footerMeta, 'Build 24842742');
     assert.equal(payload.embed.color, '#43D9A3');
     assert.deepEqual(payload.embed.fields, [
         { name: 'Branch', value: 'public', inline: true },
@@ -48,6 +52,8 @@ test('sends a checkpoint to Nixie with an idempotency key', async () => {
     });
 
     assert.equal(sent, true);
+    assert.deepEqual(Object.keys(JSON.parse(requests[0].init.body)), ['embed']);
+    assert.equal(JSON.parse(requests[0].init.body).embed.icon, 'status');
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, 'https://api.nixiejs.com/functions/v1/webhooks/integration/secret');
     assert.equal(requests[0].init.headers['idempotency-key'], 'foxwatch:New Foxhole Build Detected:devbranch:24850000');

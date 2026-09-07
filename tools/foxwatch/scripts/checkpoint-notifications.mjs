@@ -13,9 +13,12 @@ function checkpointNotification({ checkpoint, description, branch, buildId, colo
     if (!normalizedDescription) throw new Error('Checkpoint notifications require a description.');
     return {
         checkpoint: normalizedCheckpoint,
-        content: `FoxWatch: ${normalizedCheckpoint} — ${normalizedBranch} BuildID ${normalizedBuildId}.`,
         embed: {
             title: normalizedCheckpoint,
+            icon: 'status',
+            headerMeta: normalizedBranch,
+            footer: 'FoxWatch',
+            footerMeta: `Build ${normalizedBuildId}`,
             description: normalizedDescription,
             color,
             fields: [
@@ -29,7 +32,6 @@ function checkpointNotification({ checkpoint, description, branch, buildId, colo
 
 function nixiePayload(notification) {
     return {
-        content: notification.content,
         embed: {
             ...notification.embed,
             color: `#${notification.embed.color.toString(16).padStart(6, '0').toUpperCase()}`,
