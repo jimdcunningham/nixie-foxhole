@@ -1841,7 +1841,7 @@ public class FoxWatchManifestAssetExtractor
                     });
                 }
 
-                EnsureFortSupplementalVisualRenderLayers(renderLayers, componentReferences);
+                EnsureFortSupplementalVisualRenderLayers(structureId, renderLayers, componentReferences);
                 EnsureFortModSlotWallRenderLayers(renderLayers, buildSockets, componentReferences);
                 EnsureFortEntrenchmentRoofRenderLayer(renderLayers, componentReferences);
 
@@ -1958,6 +1958,7 @@ public class FoxWatchManifestAssetExtractor
         }
 
         private static void EnsureFortSupplementalVisualRenderLayers(
+            string structureId,
             List<FoxWatchManifestStructureRenderLayer> renderLayers,
             IReadOnlyList<FoxWatchBlueprintComponentReference> componentReferences)
         {
@@ -1979,12 +1980,13 @@ public class FoxWatchManifestAssetExtractor
                 {
                     Id = layerId,
                     ComponentName = componentReference.ComponentName,
-                    ComponentTags = ResolveFortSupplementalVisualRenderLayerComponentTags(componentReference),
+                    ComponentTags = ResolveFortSupplementalVisualRenderLayerComponentTags(structureId, componentReference),
                 });
             }
         }
 
         private static List<string> ResolveFortSupplementalVisualRenderLayerComponentTags(
+            string structureId,
             FoxWatchBlueprintComponentReference componentReference)
         {
             var tags = ResolveFortEntrenchmentRenderLayerComponentTags(
@@ -1993,13 +1995,16 @@ public class FoxWatchManifestAssetExtractor
             var normalizedComponentName = NormalizeComponentReferenceName(componentReference.ComponentName);
             var meshFileName = Path.GetFileNameWithoutExtension(componentReference.MeshPath);
 
-            // These are exterior turret meshes, even when the blueprint calls the
-            // component simply "Mesh" or "SkelMesh". Treat them as roof visuals so
-            // the hide-roofs view opens the bunker interior without leaving a gun behind.
+            // Exterior turret and radar meshes sit above the bunker roof, even when
+            // the blueprint calls a turret component simply "Mesh" or "SkelMesh".
+            // Radar team flags leave small floating strips when the roof is hidden.
             if (normalizedComponentName.Contains("gunai", StringComparison.OrdinalIgnoreCase) ||
                 meshFileName.Contains("gunai", StringComparison.OrdinalIgnoreCase) ||
                 meshFileName.Contains("atgun", StringComparison.OrdinalIgnoreCase) ||
-                meshFileName.Contains("mgun", StringComparison.OrdinalIgnoreCase))
+                meshFileName.Contains("mgun", StringComparison.OrdinalIgnoreCase) ||
+                (structureId.StartsWith("fortradart", StringComparison.OrdinalIgnoreCase) &&
+                    (normalizedComponentName.Equals("RadarMesh", StringComparison.OrdinalIgnoreCase) ||
+                     normalizedComponentName.StartsWith("TeamFlagMesh", StringComparison.OrdinalIgnoreCase))))
             {
                 tags.Add("Roof");
             }

@@ -1,0 +1,10 @@
+{
+  "componentRenderOverrides": {
+    "span": {
+      "repeatCropPixels": {
+        "start": 19,
+        "end": 6
+      }
+    }
+  }
+}

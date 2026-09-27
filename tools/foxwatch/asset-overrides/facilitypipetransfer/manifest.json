@@ -1,0 +1,19 @@
+{
+  "buildSockets": [
+    {
+      "name": "BackSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "mask": 16795648, "category": 2048, "tag": "Back" }
+      ],
+      "rotation": -180
+    },
+    {
+      "name": "FrontSocket",
+      "componentType": "BuildSocketComponent",
+      "socketTags": [
+        { "tag": "Front" }
+      ]
+    }
+  ]
+}
