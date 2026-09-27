@@ -2,6 +2,15 @@ using FoxWatchService;
 
 try
 {
+	if (args.Length > 1)
+	{
+		var selectedPakPath = FoxWatchCliArguments.Parse(args[1..]).GetValueOrDefault("pak-path");
+		if (!string.IsNullOrWhiteSpace(selectedPakPath))
+		{
+			Environment.SetEnvironmentVariable("FoxWatch__PakDirectoryPath", selectedPakPath);
+		}
+	}
+
 	if (args.Length > 0 && string.Equals(args[0], "generate-map-data", StringComparison.OrdinalIgnoreCase))
 	{
 		Environment.ExitCode = await FoxWatchCli.RunGenerateMapDataAsync(args[1..]);

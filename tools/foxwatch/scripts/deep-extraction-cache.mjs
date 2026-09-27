@@ -9,7 +9,7 @@ export const DEEP_EXTRACTION_CACHE_SCHEMA_VERSION = 3;
 // output changes. Optimizations and downstream manifest/render changes must
 // not throw away decoded game assets.
 export const DECODED_ASSET_CONTRACT_VERSIONS = Object.freeze({
-    inspections: 1,
+    inspections: 2,
     geometry: 1,
     materials: 1,
     textures: 1,

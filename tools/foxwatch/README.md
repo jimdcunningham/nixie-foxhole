@@ -234,7 +234,7 @@ npm run foxwatch -- refresh -- --only trencht1
 ```
 
 ```powershell
-npm run foxwatch -- generate-manifest -- --pak-path "D:/SteamLibrary/steamapps/common/Foxhole/War/Content/Paks"
+npm run foxwatch -- generate-manifest
 ```
 
 ## Configuration
@@ -247,33 +247,14 @@ FoxWatch reads configuration from:
 
 ### Pak directory
 
-FoxWatch resolves the Foxhole pak directory in this order:
-- `--pak-path <path>`
-- `FoxWatch__PakDirectoryPath` environment variable
-- `FoxWatch:PakDirectoryPath` in `tools/foxwatch/appsettings.json`
-- the latest fully acquired and inventory-verified Steam monitor installation
-- built-in Steam install fallbacks in `FoxWatchWorkspace.cs`
+FoxWatch extraction uses the latest fully acquired and inventory-verified SteamCMD
+installation recorded by the monitor. The Node workflow validates the acquisition
+receipt and current PAK fingerprint before selecting it. Run `npm run foxwatch -- monitor-status` to inspect the selected build.
 
-The Node workflow validates the monitor acquisition receipt and current PAK
-fingerprint before selecting that installation. This keeps a manual
-`refresh --deep` on the same latest build and decoded cache as the tray monitor
-instead of silently falling back to an older normal Steam installation.
-
-PowerShell example:
-
-```powershell
-$env:FoxWatch__PakDirectoryPath = "D:/SteamLibrary/steamapps/common/Foxhole/War/Content/Paks"
-```
-
-You can also add this to `tools/foxwatch/appsettings.json`:
-
-```json
-{
-  "FoxWatch": {
-    "PakDirectoryPath": "D:/SteamLibrary/steamapps/common/Foxhole/War/Content/Paks"
-  }
-}
-```
+For an explicit diagnostic run, pass `--pak-path <path>` to the Node wrapper or
+the C# CLI. The CLI passes that path to every extractor in the command. Without
+a verified monitor installation or an explicit path, the Node wrapper stops
+instead of reading the regular Steam library.
 
 ### Blender executable
 
@@ -499,10 +480,8 @@ npm run foxwatch -- dump-matching-packages -- --query LargeCrane,FacilityCrane -
 
 ### Missing pak directory path
 
-Set one of:
-- `--pak-path <path>`
-- `FoxWatch__PakDirectoryPath`
-- `FoxWatch.PakDirectoryPath` in `tools/foxwatch/appsettings.json`
+Run `npm run foxwatch -- monitor-status` and ensure SteamCMD has a verified
+acquisition. For a diagnostic run, pass `--pak-path <path>` explicitly.
 
 ### Blender not found
 

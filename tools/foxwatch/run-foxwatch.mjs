@@ -128,7 +128,6 @@ const blueprintTargetIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp',
 const modificationRenderIndexPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'modification-render-index.v1.json');
 const foxholeIconOutputRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxhole-icons');
 const activeDecodedAssetBundlePointerPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundle.active.v1.json');
-const foxWatchAppSettingsPath = path.join(repoRoot, 'tools', 'foxwatch', 'appsettings.json');
 const monitorStatePath = path.join(repoRoot, 'tools', 'foxwatch', 'local', 'state', 'monitor-state.v1.json');
 const monitorAcquisitionsRoot = path.join(repoRoot, 'tools', 'foxwatch', 'local', 'state', 'acquisitions');
 const decodedAssetBundleRoot = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'decoded-asset-bundles', 'v1');
@@ -143,10 +142,6 @@ const runnerScriptPath = path.join(repoRoot, 'tools', 'foxwatch', 'run-foxwatch.
 const refreshLockPath = path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'foxwatch-refresh.lock.json');
 const inheritNpmConfigArguments = Boolean(process.env.npm_lifecycle_event);
 const defaultIconOverrideExtensions = ['.webp', '.png', '.jpg', '.jpeg'];
-const defaultPakDirectoryCandidates = [
-    'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
-    'C:\\Program Files\\Steam\\steamapps\\common\\Foxhole\\War\\Content\\Paks',
-];
 
 if (steamMonitorCommands.includes(command)) {
     await runSteamMonitorCommand({
@@ -291,6 +286,7 @@ if (command === 'refresh') {
         env: deepExtractionCache
             ? {
                 ...process.env,
+                FoxWatch__PakDirectoryPath: deepExtractionCache.pakDirectory,
                 FOXWATCH_DECODED_PACKAGE_SNAPSHOT: deepExtractionCache.decodedPackageSnapshotDirectory,
                 FOXWATCH_DECODED_PACKAGE_PAK_FINGERPRINT: deepExtractionCache.identity.pakFingerprint,
                 FOXWATCH_DECODED_INSPECTION_SNAPSHOT: deepExtractionCache.bundlePaths.inspectionPath,
@@ -667,42 +663,16 @@ async function runManifestSourceBenchmark(parsedArgs) {
 }
 
 async function resolveRegenPakDirectory(parsedArgs) {
-    const configuredCandidates = [
-        (parsedArgs['pak-path'] ?? []).at(-1),
-        process.env.FoxWatch__PakDirectoryPath,
-        process.env.FOXWATCH_PAK_PATH,
-    ];
-    for (const candidate of configuredCandidates) {
-        if (!candidate) {
-            continue;
+    const explicitPakDirectory = (parsedArgs['pak-path'] ?? []).at(-1);
+    if (explicitPakDirectory) {
+        const resolved = path.resolve(repoRoot, explicitPakDirectory);
+        if (!nativeFs.existsSync(resolved)) {
+            throw new Error(`FoxWatch PAK directory does not exist: ${resolved}`);
         }
-        const resolved = path.resolve(repoRoot, candidate);
-        if (nativeFs.existsSync(resolved)) {
-            return resolved;
-        }
+        return resolved;
     }
 
-    const appSettings = await readJson(foxWatchAppSettingsPath);
-    const configuredPakDirectory = appSettings?.FoxWatch?.PakDirectoryPath;
-    if (configuredPakDirectory) {
-        const resolved = path.resolve(repoRoot, configuredPakDirectory);
-        if (nativeFs.existsSync(resolved)) {
-            return resolved;
-        }
-    }
-
-    const monitorPakDirectory = await resolveMonitorManagedPakDirectory();
-    if (monitorPakDirectory) {
-        return monitorPakDirectory;
-    }
-
-    for (const candidate of defaultPakDirectoryCandidates) {
-        const resolved = path.resolve(repoRoot, candidate);
-        if (nativeFs.existsSync(resolved)) {
-            return resolved;
-        }
-    }
-    return null;
+    return resolveMonitorManagedPakDirectory();
 }
 
 async function resolveMonitorManagedPakDirectory() {
@@ -826,7 +796,7 @@ async function prepareDeepExtractionCache(parsedArgs) {
             bundlePaths.inspectionPath,
             [...invalidatedSections],
         );
-        if (invalidatedSections.has('icons')) {
+        if (invalidatedSections.has('icons') || invalidatedSections.has('inspections')) {
             await fs.rm(path.join(
                 repoRoot,
                 'tools',
@@ -1799,7 +1769,13 @@ async function buildFoxWatchArgsFromParsedArgs(parsedArgs, options = {}) {
         outputArgs.push('--verbose');
     }
 
-    for (const optionName of ['pak-path', 'base-assets-url', 'limit']) {
+    const pakDirectory = await resolveRegenPakDirectory(parsedArgs);
+    if (!pakDirectory) {
+        throw new Error('FoxWatch extraction requires a verified SteamCMD install or an explicit --pak-path.');
+    }
+    outputArgs.push('--pak-path', pakDirectory);
+
+    for (const optionName of ['base-assets-url', 'limit']) {
         const values = parsedArgs[optionName] ?? [];
         if (values.length > 0) {
             outputArgs.push(`--${optionName}`, values.at(-1));

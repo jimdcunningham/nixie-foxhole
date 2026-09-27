@@ -3,11 +3,6 @@ namespace FoxWatchService;
 public static class FoxWatchWorkspace
 {
     public static readonly string RepositoryRoot = FindRepositoryRoot();
-    private static readonly string[] DefaultPakDirectoryCandidates =
-    [
-        @"C:\Program Files (x86)\Steam\steamapps\common\Foxhole\War\Content\Paks",
-        @"C:\Program Files\Steam\steamapps\common\Foxhole\War\Content\Paks",
-    ];
 
     public static readonly string OverrideRoot = Path.Combine(RepositoryRoot, "tools", "foxwatch", "asset-overrides");
     public static readonly string SharedModificationOverrideManifestPath = Path.Combine(OverrideRoot, "modifications.json");
@@ -43,13 +38,7 @@ public static class FoxWatchWorkspace
 
     public static string? ResolvePakDirectoryPath(string? configuredPath)
     {
-        var resolvedConfiguredPath = ResolvePath(configuredPath);
-        if (!string.IsNullOrWhiteSpace(resolvedConfiguredPath))
-        {
-            return resolvedConfiguredPath;
-        }
-
-        return DefaultPakDirectoryCandidates.FirstOrDefault(Directory.Exists);
+        return ResolvePath(configuredPath);
     }
 
     private static string FindRepositoryRoot()
