@@ -1,5 +1,6 @@
 import argparse
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -21,6 +22,8 @@ from script_bootstrap import append_script_search_paths
 
 append_script_search_paths(globals().get("__file__"), bpy.data.filepath, os.getcwd())
 
+from render_cache import RenderCache  # noqa: E402
+from render_scene_common import find_material_sidecar, resolve_asset_path, resolve_exported_texture_path  # noqa: E402
 from import_render_scene import import_render_scene  # noqa: E402
 from render_scene_common import (  # noqa: E402
     PIXELS_PER_METER,
@@ -112,6 +115,20 @@ def collection_root_anchor_point(collection):
     return combined / float(len(root_objects))
 
 
+def render_sidecar_paths(output_path: str, structure_id: str, output_key: str, render_data_root=None):
+    paths = []
+    if render_data_root:
+        normalized_key = output_key.replace("/", os.sep).replace("\\", os.sep)
+        paths.append(os.path.join(render_data_root, structure_id, f"{normalized_key}.render.json"))
+    else:
+        paths.append(f"{output_path}.render.json")
+    if re.search(r"\.texture(?:\.[0-9a-f]{6})?\.webp$", output_path.lower()) or re.search(
+        r"\.texture\.flat(?:\.[0-9a-f]{6})?\.webp$", output_path.lower()
+    ):
+        paths.append(output_path[:-len(".webp")] + ".json")
+    return paths
+
+
 def write_render_sidecar(output_path: str, structure_id: str, output_key: str, render_state: dict, pixels_per_meter: float, anchor: dict):
     resolution_x, resolution_y = render_state["resolution"]
     anchor_pixel_x = float(anchor.get("pixelX", float(resolution_x) * 0.5))
@@ -141,20 +158,7 @@ def write_render_sidecar(output_path: str, structure_id: str, output_key: str, r
         "offsetX": offset_x_pixels,
         "offsetY": offset_y_pixels,
     }
-    sidecar_paths = []
-    render_data_root = render_state.get("renderDataRoot")
-    if render_data_root:
-        normalized_output_key = output_key.replace("/", os.sep).replace("\\", os.sep)
-        sidecar_paths.append(os.path.join(render_data_root, structure_id, f"{normalized_output_key}.render.json"))
-    else:
-        sidecar_paths.append(f"{output_path}.render.json")
-
-    if re.search(r"\.texture(?:\.[0-9a-f]{6})?\.webp$", output_path.lower()):
-        sidecar_paths.append(f"{output_path[:-len('.webp')]}.json")
-    elif re.search(r"\.texture\.flat(?:\.[0-9a-f]{6})?\.webp$", output_path.lower()):
-        sidecar_paths.append(f"{output_path[:-len('.webp')]}.json")
-
-    for sidecar_path in sidecar_paths:
+    for sidecar_path in render_sidecar_paths(output_path, structure_id, output_key, render_state.get("renderDataRoot")):
         ensure_directory(os.path.dirname(sidecar_path))
         with open(sidecar_path, "w", encoding="utf-8") as handle:
             json.dump(sidecar_document, handle, indent=2)
@@ -183,6 +187,8 @@ def parse_args():
     parser.add_argument("--result-journal", default=None, help="Write a machine-readable result journal")
     parser.add_argument("--metrics-journal", default=None, help="Write lightweight batch metrics and recycling state")
     parser.add_argument("--recycle-request", default=None, help="Recycle between dependency groups when this file exists")
+    parser.add_argument("--render-cache-dir", default=None, help="Reuse content-verified render groups from this cache")
+    parser.add_argument("--force-render", action="store_true", help="Render even when visual inputs and outputs match")
     return parser.parse_args(raw_args)
 
 
@@ -1465,6 +1471,78 @@ def allowed_modes_for_scene(scene_document: dict, requested_modes: list[str]) ->
     return [mode for mode in requested_modes if mode in configured_mode_set]
 
 
+def render_cache_group(entry):
+    structure_id = normalize_allowed_id(entry.get("structureId"))
+    if structure_id in {"mods", "packaged-pallets"}:
+        return f"{structure_id}:{normalize_scene_entry(entry.get('outputPath'))}"
+    return structure_id or normalize_scene_entry(entry.get("outputPath"))
+
+
+def planned_cache_outputs(args, entry, document, modes):
+    paths, images = [], []
+    structure_id = entry["structureId"]
+    asset_type = normalize_asset_type_name(document.get("structure", {}).get("assetType"))
+    allowed_variants = {variant.lower() for variant in args.scene_variant}
+    for variant in scene_variant_ids(document, allowed_variants):
+        for mode in allowed_modes_for_scene(document, modes):
+            output_path = resolve_render_output_path(args.output_dir, asset_type, structure_id,
+                                                     document["render"]["outputKey"], document, mode, variant)
+            paths.append(output_path)
+            images.append({"path": os.path.abspath(output_path), "structureId": structure_id,
+                           "sceneEntry": entry["outputPath"], "sceneVariant": variant, "renderMode": mode,
+                           "fingerprint": hashlib.sha256(json.dumps({
+                               "scene": document, "sceneVariant": variant, "renderMode": mode,
+                               "previewVariant": resolve_preview_direction(document) if mode == "preview" else None,
+                           }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()})
+            if mode == "preview" and variant is None and should_generate_default_icon(document):
+                paths.append(resolve_default_icon_output_path(output_path))
+            if mode in {"topdown", "flat"}:
+                output_key = render_file_output_key(document, mode, None, variant)
+                paths.extend(render_sidecar_paths(output_path, structure_id, output_key, args.render_data_root))
+    return list(dict.fromkeys(paths)), images
+
+
+def prepare_render_cache(args, index_document, selected_entries, modes, search_roots):
+    # Partial groups can depend on unrendered sibling wall sidecars. Render those
+    # normally; only complete groups may reuse their postprocessed output set.
+    if not args.render_cache_dir or args.debug_bounds or args.limit > 0:
+        return None, {}
+    cache = RenderCache(args.render_cache_dir, {
+        "blender": bpy.app.version_string, "buildHash": bpy.app.build_hash.decode(),
+        "modes": modes, "sceneVariants": sorted(args.scene_variant),
+        "pixelsPerMeter": args.pixels_per_meter, "previewSize": args.preview_size, "iconSize": args.icon_size,
+    }, SCRIPT_DIR, bpy.data.filepath,
+        lambda source: resolve_asset_path(source, search_roots),
+        lambda name: find_material_sidecar(name, search_roots),
+        lambda reference: resolve_exported_texture_path(reference, search_roots))
+    all_groups, selected_groups = {}, {}
+    for entry in index_document.get("scenes", []):
+        all_groups.setdefault(render_cache_group(entry), []).append(entry["outputPath"])
+    for entry in selected_entries:
+        selected_groups.setdefault(render_cache_group(entry), []).append(entry)
+    plans = {}
+    for group, entries in selected_groups.items():
+        if {entry["outputPath"] for entry in entries} != set(all_groups[group]):
+            continue
+        try:
+            scenes, paths, images = [], [], []
+            for entry in entries:
+                document = load_json(os.path.join(os.path.dirname(args.index), entry["outputPath"]))
+                scenes.append((entry["outputPath"], document))
+                output_paths, output_images = planned_cache_outputs(args, entry, document, modes)
+                paths.extend(output_paths)
+                images.extend(output_images)
+            if not paths:
+                continue
+            fingerprint = cache.fingerprint(scenes, paths)
+            plans[group] = {"fingerprint": fingerprint, "paths": paths, "images": images,
+                            "entries": {entry["outputPath"] for entry in entries},
+                            "reused": not args.force_render and cache.lookup(group, fingerprint, paths)}
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            print(f"Render cache unavailable for {group}; rendering normally: {error}")
+    return cache, plans
+
+
 def main():
     batch_started_at = time.perf_counter()
     args = parse_args()
@@ -1493,6 +1571,7 @@ def main():
 
     modes = args.mode or ["topdown", "preview"]
     rendered = 0
+    reused = 0
     pending_component_wall_miters = []
     result_outputs = [] if args.result_journal else None
     completed_scene_entries = []
@@ -1507,9 +1586,24 @@ def main():
         if should_render(entry, allowed_ids, allowed_scene_entries)
     ]
     selected_scene_entry_names = [entry.get("outputPath") for entry in selected_entries]
+    render_cache, cache_plans = prepare_render_cache(args, index_document, selected_entries, modes, search_roots)
     dependency_group_started_at = time.perf_counter()
     for entry_index, entry in enumerate(selected_entries):
         structure_id = entry["structureId"]
+        cache_plan = cache_plans.get(render_cache_group(entry))
+        if cache_plan and cache_plan["reused"]:
+            rendered += 1
+            reused += 1
+            completed_scene_entries.append(entry["outputPath"])
+            if result_outputs is not None:
+                result_outputs.extend({**item, "status": "reused"}
+                                      for item in cache_plan["images"] if item["sceneEntry"] == entry["outputPath"])
+            print("FOXWATCH_BLENDER_PROGRESS " + json.dumps({
+                "completed": len(completed_scene_entries), "total": len(selected_entries),
+                "sceneEntry": entry["outputPath"], "structureId": structure_id,
+            }, separators=(",", ":")), flush=True)
+            dependency_group_started_at = time.perf_counter()
+            continue
 
         scene_path = os.path.join(index_directory, entry["outputPath"])
         scene_document = load_json(scene_path)
@@ -1736,6 +1830,14 @@ def main():
     for output_path, structure_id, output_key, mode in pending_component_wall_miters:
         apply_component_wall_miter_mask(output_path, structure_id, output_key, mode)
 
+    completed_entries = set(completed_scene_entries)
+    for group, plan in cache_plans.items():
+        if not plan["reused"] and plan["entries"] <= completed_entries:
+            try:
+                render_cache.store(group, plan["fingerprint"], plan["paths"])
+            except OSError as error:
+                print(f"Could not record render cache for {group}: {error}")
+
     if result_outputs is not None:
         for result in result_outputs:
             output_path = result["path"]
@@ -1746,10 +1848,10 @@ def main():
                 "height": height,
                 "visible": margins is not None,
                 "contentHash": file_sha256(output_path),
-                "status": "written",
+                "status": result.get("status", "written"),
             })
 
-        write_result_journal(args.result_journal, result_outputs, rendered)
+        write_result_journal(args.result_journal, result_outputs, rendered - reused)
 
     remaining_scene_entries = selected_scene_entry_names[len(completed_scene_entries):]
     write_metrics_journal(
@@ -1757,14 +1859,16 @@ def main():
         "recycle" if recycle_requested else "complete",
         completed_scene_entries,
         remaining_scene_entries,
-        rendered,
+        rendered - reused,
         time.perf_counter() - batch_started_at,
         peak_memory,
         slow_roles,
         dependency_group_timings,
     )
 
-    print(f"render_render_scenes: rendered {rendered} structure(s) to {args.output_dir}")
+    print(f"render_render_scenes: rendered {rendered - reused} structure(s), reused {reused} from cache, to {args.output_dir}")
+    if reused:
+        print(f"FoxWatch render cache: reused {reused} scene(s) with verified visual inputs and outputs")
 
 
 if __name__ == "__main__":

@@ -171,6 +171,7 @@ appendNpmConfigArgument(args, 'skip-existing-assets');
 appendNpmConfigArgument(args, 'verbose');
 appendNpmConfigArgument(args, 'publish-concurrency');
 appendNpmConfigArgument(args, 'blender-workers');
+appendNpmConfigArgument(args, 'force-render');
 appendNpmConfigArgument(args, 'mod');
 appendNpmConfigArgument(args, 'iterations');
 appendNpmConfigArgument(args, 'snapshot-dir');
@@ -1806,6 +1807,8 @@ function buildBlenderArgs(rawArgs, options = {}) {
         renderDataRoot,
         '--foxwatch-output-root',
         foxwatchOutputRoot,
+        '--render-cache-dir',
+        path.join(repoRoot, 'tools', 'foxwatch', 'tmp', 'pipeline-cache', 'v1', 'renders'),
     ];
 
     appendRepeatedArgs(outputArgs, 'only', options.onlyIds ?? getNormalizedValues(parsedArgs, 'only'));
@@ -1839,6 +1842,9 @@ function buildBlenderArgs(rawArgs, options = {}) {
 
     if (options.purgeExistingByDefault) {
         flagOptions.add('purge-existing');
+    }
+    if (hasCliFlag(parsedArgs, 'force-render')) {
+        flagOptions.add('force-render');
     }
 
     if (hasCliFlag(parsedArgs, 'verbose')) {

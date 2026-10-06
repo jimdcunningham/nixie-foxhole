@@ -7,3 +7,24 @@ export function imageDataHasVisiblePixels(imageData) {
 
     return false;
 }
+import { readdir, unlink } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+export async function pruneRootStructureArtifactDirectory(directory, {
+    structureId,
+    isAllowedArtifact,
+    preserveProjectionSidecars = false,
+    onRemoved = () => {},
+}) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.toLowerCase().startsWith(`${structureId.toLowerCase()}.`)) continue;
+        // Blender owns these intermediate projections, and the render cache
+        // verifies them alongside images. They are not public asset deliverables.
+        if (preserveProjectionSidecars && entry.name.toLowerCase().endsWith('.render.json')) continue;
+        if (isAllowedArtifact(entry.name)) continue;
+        const outputPath = resolve(directory, entry.name);
+        await unlink(outputPath);
+        onRemoved(outputPath);
+    }
+}

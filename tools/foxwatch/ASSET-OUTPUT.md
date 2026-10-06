@@ -440,6 +440,33 @@ After publish, orphaned files under `public/foxhole/assets/` that no manifest UR
 
 Scoped (`--only`) publishes skip global pruning unless explicitly intended.
 
+## Visual-input caching
+
+Normal refreshes pass a render cache directory to Blender. Complete structure groups
+reuse their images and sidecars only when their visual inputs and every existing output
+match content hashes. Shared modification and packaged-pallet scenes cache independently.
+The key covers scene transforms/poses/variants, mesh bytes and external glTF resources,
+material sidecars and decoded textures, Blender template/code/version, and render options.
+Structure names, descriptions, categories, and balance metadata are excluded from that key.
+File sizes and timestamps alone are never sufficient for reuse.
+
+Render records are written atomically after deferred wall masks finish, and only for
+completed groups. Missing/corrupt records or output files cause a normal render. Partial
+structure groups, limited renders, and bounds-debug renders bypass reuse. `--force-render`
+bypasses reuse while replacing successful cache records with the new output hashes.
+
+Publishing preserves Blender's intermediate `.render.json` projection sidecars under
+`tmp/renders/`. They are verified render-cache outputs and must survive publication;
+they are not public asset deliverables. Cache output planning uses the same sidecar-path
+function as the writer, including faction variants that emit only projection metadata.
+
+Publishing uses separate keys for master image bytes, encoding options/library versions,
+publication code, and resolved subtype overlay bytes. Output hashes are recorded after
+all publication roles and pruning finish. Blank-preview fallback selection remains on its
+normal source-selection path; selected co-located icons can still reuse their conversions.
+Records live under `tmp/pipeline-cache/v1/renders/` and
+`tmp/pipeline-cache/v1/published-images/`; `clear-cache` removes both.
+
 ## Validation
 
 `tools/foxwatch/scripts/validate-assets.mjs` enforces the published tree shape. It should accept:

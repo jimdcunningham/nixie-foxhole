@@ -5,8 +5,9 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
-import { imageDataHasVisiblePixels } from './publish-render-utils.mjs';
+import { imageDataHasVisiblePixels, pruneRootStructureArtifactDirectory } from './publish-render-utils.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
+import { VisualOutputCache } from './visual-output-cache.mjs';
 import {
     collectStructureIdsWithDestroyedRenderScenesFromDirectory,
     getCoLocatedStructureAssetFileName,
@@ -15,6 +16,7 @@ import {
     LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS,
     LOSSY_PUBLISHED_RENDER_WEBP_OPTIONS,
     publishStructureIconsForManifest,
+    configureStructureIconOutputCache,
     resolveGeneratedIconFilePathByKey,
     resolveGeneratedIconFilePathForAssetId,
     resolveSubtypeOverlayUrl,
@@ -3961,7 +3963,68 @@ async function collectRawRenderedAssetSyncCandidates(scopedTargets = null) {
     return candidates;
 }
 
+let publicationCachePromise = null;
+
+async function getPublicationCache() {
+    if (!publicationCachePromise) {
+        publicationCachePromise = (async () => {
+            const scriptsDirectory = dirname(fileURLToPath(import.meta.url));
+            const sourceFiles = (await readdir(scriptsDirectory)).filter(name => name.endsWith('.mjs')
+                && !name.endsWith('.test.mjs')).sort().map(name => resolve(scriptsDirectory, name));
+            const cache = await VisualOutputCache.create(
+                resolve(repositoryRoot, 'tools/foxwatch/tmp/pipeline-cache/v1/published-images'),
+                sourceFiles,
+                sharp.versions,
+            );
+            configureStructureIconOutputCache(cache);
+            return cache;
+        })();
+    }
+    return publicationCachePromise;
+}
+
 async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
+    const { filePath, extension, outputPath } = candidate;
+    if (extension !== '.png') return syncRawRenderedAssetCandidateUncached(candidate, manifest);
+    const isPreview = basename(filePath).toLowerCase().endsWith('.preview.png');
+    const isDefault = basename(filePath).toLowerCase().endsWith('.icon.default.png');
+    // Blank preview fallbacks have separate source selection. Keep their existing
+    // behavior until every selected fallback can be independently verified.
+    if ((!isPreview && !isDefault) || (isPreview && !await imageFileHasVisiblePixels(filePath))) {
+        return syncRawRenderedAssetCandidateUncached(candidate, manifest);
+    }
+    let cache, identity;
+    try {
+        cache = await getPublicationCache();
+        const webpPath = outputPath.replace(/\.png$/i, '.webp');
+        const iconPath = isPreview ? webpPath.replace(/\.preview\.webp$/i, '.icon.rendered.webp') : webpPath;
+        const owner = resolveManifestOwnerForPublicRenderedAsset(manifest, iconPath);
+        const subtypeUrl = owner ? resolveSubtypeOverlayUrl({
+            structure: owner.structure, sourceStructure: owner.sourceStructure,
+            assetKind: isPreview ? resolveDerivedRenderedIconAssetKind(basename(filePath))
+                : resolveDerivedDefaultIconAssetKind(basename(filePath)),
+            defaultWreckedSubtypeUrl: defaultWreckedSubtypeIconUrl,
+        }) : null;
+        const subtype = subtypeUrl ? await readPublishedIconSourceFile(generatedIconsDirectory, subtypeUrl) : null;
+        identity = cache.identity(`raw:${resolve(filePath)}:${resolve(outputPath)}`,
+            [await readFileWithRetries(filePath), subtype?.content ?? null],
+            { subtypeUrl, maxRenderedIconEdgePx, lossyPreviewWebpOptions,
+                lossyRenderedIconWebpOptions, losslessPublishedWebpOptions },
+            isPreview ? [webpPath, iconPath] : [webpPath]);
+        if (await cache.matches(identity)) {
+            const stats = createEmptyRawRenderedAssetSyncStats();
+            stats.reused = identity.outputs.length;
+            return stats;
+        }
+    } catch (error) {
+        logPublishDetail(`image cache unavailable for ${filePath}: ${error}`);
+    }
+    const stats = await syncRawRenderedAssetCandidateUncached(candidate, manifest);
+    if (identity && stats.locked === 0) cache.schedule(identity);
+    return stats;
+}
+
+async function syncRawRenderedAssetCandidateUncached(candidate, manifest = null) {
     const stats = createEmptyRawRenderedAssetSyncStats();
     const { filePath, extension, outputPath } = candidate;
 
@@ -5985,30 +6048,18 @@ async function removeStaleRootStructureArtifacts(manifest) {
                 continue;
             }
 
-            const entries = await readdir(directory, { withFileTypes: true });
-            for (const entry of entries) {
-                if (!entry.isFile()) {
-                    continue;
-                }
-
-                if (isAllowedRootStructureArtifact(
+            await pruneRootStructureArtifactDirectory(directory, {
+                structureId,
+                preserveProjectionSidecars: directory === resolve(renderScenesDirectory, structureId),
+                isAllowedArtifact: fileName => isAllowedRootStructureArtifact(
                     structureId,
-                    entry.name,
+                    fileName,
                     structure.hasDestroyedVariant,
                     structure.hasPackagedVariant,
                     structure.colorHexes,
-                )) {
-                    continue;
-                }
-
-                if (!normalizeId(entry.name).startsWith(`${structureId}.`)) {
-                    continue;
-                }
-
-                const outputPath = resolve(directory, entry.name);
-                await unlink(outputPath);
-                logPublishDetail(`removed stale artifact ${outputPath}`);
-            }
+                ),
+                onRemoved: outputPath => logPublishDetail(`removed stale artifact ${outputPath}`),
+            });
         }
     }
 }
@@ -6126,7 +6177,8 @@ async function removeStaleStructureArtifactDirectories(manifest) {
 
     const sharedStaleDirectories = [
         resolve(sharedAssetsDirectory, 'mods', 'mods'),
-        resolve(renderScenesDirectory, 'mods', 'mods'),
+        // Blender writes shared projection sidecars under renders/mods/mods.
+        // Those files are current render-cache outputs, not legacy public assets.
     ];
 
     for (const directory of sharedStaleDirectories) {
@@ -7872,6 +7924,7 @@ async function coLocateFallbackStructureAssets(
     subtypeOverlayIconKeys = null,
     structuresWithDestroyedRenderScenes = null,
 ) {
+    await getPublicationCache();
     return publishStructureIconsForManifest({
         manifest,
         sourceManifest,
@@ -8281,6 +8334,13 @@ try {
     }
 
     sharedModificationHashDiagnosticsSummary.outputPaths = outputPaths;
+    if (publicationCachePromise) {
+        try {
+            await (await publicationCachePromise).flush();
+        } catch (error) {
+            logPublishWarn(`could not save published image cache: ${error}`);
+        }
+    }
     sharedModificationHashDiagnosticsSummary.assetCount = Array.isArray(manifest?.assets) ? manifest.assets.length : 0;
     sharedModificationHashDiagnosticsSummary.sharedModificationCount = Object.keys(manifest?.shared?.modifications ?? {}).length;
     sharedModificationHashDiagnosticsSummary.localizationBundleCount = Array.isArray(manifest?.localizations) ? manifest.localizations.length : 0;

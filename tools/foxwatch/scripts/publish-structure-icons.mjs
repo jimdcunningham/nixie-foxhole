@@ -17,6 +17,11 @@ export const LOSSY_PUBLISHED_PREVIEW_WEBP_OPTIONS = { quality: 90, alphaQuality:
 
 const OUTPUT_FILE_RETRY_DELAYS_MS = [50, 100, 250, 500, 1000, 2000, 4000];
 const generatedIconSourceIndexByDirectory = new Map();
+let structureIconOutputCache = null;
+
+export function configureStructureIconOutputCache(cache) {
+    structureIconOutputCache = cache;
+}
 
 function isRetryableOutputFileError(error) {
     const code = String(error?.code ?? '').toUpperCase();
@@ -905,16 +910,22 @@ export async function writeCoLocatedIcon({
     const webpOptions = resolvePublishedIconWebpOptions(assetKind);
     const isPencilDefaultMaster = assetKind === 'icon.default'
         && String(rawSource.sourceFilePath ?? '').toLowerCase().endsWith('.icon.default.png');
+    const subtypeOverlay = isComposableIconAssetKind(assetKind) && subtypeOverlayUrl
+        ? await readSubtypeOverlaySource(subtypeOverlayUrl, generatedIconsDirectory, publicAssetsDirectory)
+        : null;
+    const cacheIdentity = structureIconOutputCache?.identity(`icon:${resolve(outputPath)}`,
+        [rawSource.content, subtypeOverlay?.content ?? null],
+        { assetKind, webpOptions, isPencilDefaultMaster, subtypeOverlayUrl, maxDimension: MAX_PUBLISHED_ICON_DIMENSION },
+        [outputPath]);
+    if (cacheIdentity && await structureIconOutputCache.matches(cacheIdentity)) {
+        return { outputPath, wrote: false, composed: Boolean(subtypeOverlay), sourceFilePath: rawSource.sourceFilePath };
+    }
     let outputContent = await normalizeIconContentDimensions(
         rawSource.content,
         webpOptions,
         isPencilDefaultMaster ? { kernel: 'nearest' } : {},
     );
     let composed = false;
-
-    const subtypeOverlay = isComposableIconAssetKind(assetKind) && subtypeOverlayUrl
-        ? await readSubtypeOverlaySource(subtypeOverlayUrl, generatedIconsDirectory, publicAssetsDirectory)
-        : null;
 
     if (subtypeOverlay) {
         outputContent = await composeSubtypeIcon(
@@ -926,6 +937,7 @@ export async function writeCoLocatedIcon({
     }
 
     const wrote = await writeOutputFile(outputPath, outputContent);
+    if (cacheIdentity) structureIconOutputCache.schedule(cacheIdentity);
     return {
         outputPath,
         wrote,
@@ -964,15 +976,23 @@ export async function writeCoLocatedCopy({
     let outputContent = rawSource.content;
     let composed = false;
     const webpOptions = assetKind ? resolvePublishedIconWebpOptions(assetKind) : null;
+    const needsSubtype = assetKind && rawSource.fellBackToIconDefault && subtypeOverlayUrl
+        && generatedIconsDirectory && publicAssetsDirectory;
+    const subtypeOverlay = needsSubtype
+        ? await readSubtypeOverlaySource(subtypeOverlayUrl, generatedIconsDirectory, publicAssetsDirectory)
+        : null;
+    const cacheIdentity = structureIconOutputCache?.identity(`copy:${resolve(outputPath)}`,
+        [rawSource.content, subtypeOverlay?.content ?? null],
+        { assetKind, webpOptions, subtypeOverlayUrl, fellBackToIconDefault: rawSource.fellBackToIconDefault === true,
+            sourceExtension: extname(rawSource.sourceFilePath).toLowerCase(), maxDimension: MAX_PUBLISHED_ICON_DIMENSION },
+        [outputPath]);
+    if (cacheIdentity && await structureIconOutputCache.matches(cacheIdentity)) {
+        return { outputPath, wrote: false, composed: Boolean(subtypeOverlay), sourceFilePath: rawSource.sourceFilePath };
+    }
 
     if (assetKind && rawSource.fellBackToIconDefault && subtypeOverlayUrl
         && generatedIconsDirectory && publicAssetsDirectory) {
         const iconContent = await normalizeIconContentDimensions(rawSource.content, webpOptions);
-        const subtypeOverlay = await readSubtypeOverlaySource(
-            subtypeOverlayUrl,
-            generatedIconsDirectory,
-            publicAssetsDirectory,
-        );
         if (subtypeOverlay) {
             outputContent = await composeSubtypeIcon(
                 iconContent,
@@ -989,6 +1009,7 @@ export async function writeCoLocatedCopy({
     }
 
     const wrote = await writeOutputFile(outputPath, outputContent);
+    if (cacheIdentity) structureIconOutputCache.schedule(cacheIdentity);
     return {
         outputPath,
         wrote,

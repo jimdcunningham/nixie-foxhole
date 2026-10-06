@@ -416,6 +416,21 @@ npm run foxwatch -- publish-manifest -- --allow-partial-source
 
 ### Publish performance
 
+Refreshes reuse existing render bytes when the visual scene, mesh/material/texture contents,
+Blender template, rendering code/version, and render options match. Every cached image and
+sidecar must also match its recorded content hash. Changing descriptions or balance metadata
+does not invalidate renders. Missing or damaged outputs are rebuilt.
+
+Publication caches image conversion separately, including the lossless master, encoding
+options/library versions, and subtype overlay contents. An overlay change updates icons
+without requiring a new Blender render. Cache records live under
+`tools/foxwatch/tmp/pipeline-cache/v1/` and are disposable.
+
+Use `npm run foxwatch -- refresh -- --only trencht1 --force-render` to bypass render reuse.
+Use `npm run foxwatch -- clear-cache` to clear both render and publication cache records.
+Limited/debug renders and partial selections within a dependent structure group render
+normally so they cannot reuse incomplete wall-component postprocessing.
+
 The slowest publish step is usually copying/converting Blender output (`tmp/rendered-assets` → `public/foxhole/assets`), especially preview PNG → WebP and derived `icon.rendered` generation.
 
 Defaults now:
