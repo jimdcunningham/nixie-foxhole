@@ -565,6 +565,9 @@ def configure_camera_object(name: str, position: Vector, target: Vector):
     camera_object.location = position
     set_object_look_at(camera_object, target)
     bpy.context.scene.camera = camera_object
+    # Blender defers matrix_world evaluation after pose edits. Fitting against
+    # the previous asset's camera matrix makes framing depend on batch order.
+    bpy.context.view_layer.update()
     return camera_object
 
 
@@ -2141,6 +2144,9 @@ def apply_render_mode(
     else:
         raise ValueError(f"Unsupported render mode '{mode}'")
 
+    # Top-down fitting also changes camera placement. Publish projections from
+    # the evaluated pose rather than the preceding render's transform.
+    bpy.context.view_layer.update()
     anchor = project_world_point_to_render(camera_object, Vector((0.0, 0.0, 0.0)), resolution_x, resolution_y)
     boundsCenter = (min_corner + max_corner) * 0.5
     boundsCenterProjection = project_world_point_to_render(camera_object, boundsCenter, resolution_x, resolution_y)
