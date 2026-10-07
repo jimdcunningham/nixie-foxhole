@@ -1,3 +1,4 @@
+import { isMonitorLockOwnerAlive } from './monitor-lock-owner.mjs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import nativeFs from 'node:fs';
@@ -248,7 +249,7 @@ async function monitorOnce({
     forceRefresh = false,
     notifyCheckpoints = false,
 }) {
-    const lock = await acquireMonitorLock(paths.lockPath);
+    const lock = await acquireMonitorLock(paths.lockPath, runnerScriptPath);
     let config;
     let secrets;
     let nixieWebhookUrl = null;
@@ -875,7 +876,7 @@ async function createMonitorLogger(paths) {
     };
 }
 
-async function acquireMonitorLock(lockPath) {
+async function acquireMonitorLock(lockPath, runnerScriptPath) {
     await fs.mkdir(path.dirname(lockPath), { recursive: true });
     for (let attempt = 0; attempt < 2; attempt += 1) {
         const token = randomUUID();
@@ -888,7 +889,7 @@ async function acquireMonitorLock(lockPath) {
             if (error?.code !== 'EEXIST') throw error;
             const existing = await readJson(lockPath).catch(() => null);
             const startedAt = Date.parse(existing?.startedAt ?? 0);
-            if (existing?.pid && isProcessAlive(existing.pid)) {
+            if (existing?.pid && await isMonitorLockOwnerAlive(existing, runnerScriptPath)) {
                 throw new Error(`FoxWatch monitor is already running as PID ${existing.pid}.`);
             }
             if (!existing?.pid && (!Number.isFinite(startedAt) || Date.now() - startedAt < LOCK_STALE_AFTER_MS)) {
@@ -904,15 +905,6 @@ async function releaseMonitorLock(lockPath, token) {
     const existing = await readJson(lockPath).catch(() => null);
     if (existing?.token === token) {
         await fs.unlink(lockPath).catch(() => {});
-    }
-}
-
-function isProcessAlive(pid) {
-    try {
-        process.kill(Number(pid), 0);
-        return true;
-    } catch (error) {
-        return error?.code === 'EPERM';
     }
 }
 
