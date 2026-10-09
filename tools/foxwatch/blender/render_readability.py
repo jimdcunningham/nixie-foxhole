@@ -15,7 +15,8 @@ SURFACE_DISTANCE = 0.5
 SURFACE_STRENGTH = 0.15
 CONTACT_DISTANCE = 1.0
 CONTACT_STRENGTH = 0.62
-SAMPLES = 48
+SAMPLES = 12
+CONTACT_SAMPLES = 6
 _floor_bounds = {}
 
 
@@ -58,9 +59,56 @@ def _ao(nodes, links, distance, amount, normal=None):
     return strength, black
 
 
+_cycles_device = None
+
+
+def configure_cycles_device(scene):
+    global _cycles_device
+    if _cycles_device is None:
+        requested = os.environ.get('FOXWATCH_CYCLES_DEVICE', 'AUTO').strip().upper()
+        if requested not in {'AUTO', 'CPU', 'CUDA', 'OPTIX', 'HIP', 'ONEAPI', 'METAL'}:
+            raise ValueError('Unsupported FOXWATCH_CYCLES_DEVICE: ' + requested)
+        preferences = bpy.context.preferences.addons['cycles'].preferences
+        backends = ['CUDA', 'OPTIX', 'HIP', 'ONEAPI', 'METAL'] if requested == 'AUTO' else [requested]
+        _cycles_device = 'CPU'
+        if requested != 'CPU':
+            for backend in backends:
+                try:
+                    preferences.compute_device_type = backend
+                    preferences.refresh_devices()
+                    devices = [device for device in preferences.devices if device.type == backend]
+                    if not devices:
+                        continue
+                    for device in preferences.devices:
+                        device.use = device.type == backend
+                    _cycles_device = 'GPU'
+                    print('FoxWatch Cycles device: ' + backend + ' - ' + ', '.join(device.name for device in devices), flush=True)
+                    break
+                except (TypeError, ValueError, RuntimeError):
+                    continue
+        if _cycles_device == 'CPU':
+            print('FoxWatch Cycles device: CPU' + (' (no supported GPU found)' if requested != 'CPU' else ' (requested)'), flush=True)
+    scene.cycles.device = _cycles_device
+
 def configure_readability(collection):
     scene = bpy.context.scene
+    background = next(n for n in scene.world.node_tree.nodes if n.type == 'BACKGROUND')
+    sun = bpy.data.objects[common.SUN_NAME]
+    lighting = {
+        'engine': scene.render.engine,
+        'view_transform': scene.view_settings.view_transform,
+        'look': scene.view_settings.look,
+        'exposure': scene.view_settings.exposure,
+        'gamma': scene.view_settings.gamma,
+        'world_color': tuple(background.inputs['Color'].default_value),
+        'world_strength': background.inputs['Strength'].default_value,
+        'sun_energy': sun.data.energy,
+        'sun_angle': sun.data.angle,
+        'sun_color': tuple(sun.data.color),
+        'sun_rotation': tuple(sun.rotation_euler),
+    }
     scene.render.engine = 'CYCLES'
+    configure_cycles_device(scene)
     scene.cycles.samples = SAMPLES
     scene.cycles.use_denoising = True
     scene.cycles.seed = 0
@@ -76,52 +124,67 @@ def configure_readability(collection):
     sun.data.angle = 2.3579402
     sun.data.color = (1, 1, 1)
     sun.rotation_euler = (0, 0, 0)
-    originals, copies = [], {}
-    for obj in collection.all_objects:
-        if obj.type != 'MESH':
-            continue
-        for slot in obj.material_slots:
-            original = slot.material
-            if original is None or original.node_tree is None:
-                continue
-            if original not in copies:
-                mat = original.copy()
-                nodes, links = mat.node_tree.nodes, mat.node_tree.links
-                # Shade the opaque BSDF inside any clip/transparency wrappers.
-                # Wrapping the material output itself fills foliage cutouts and
-                # shader-clipped geometry with the black shading closure.
-                for shader in [node for node in nodes if node.type == 'BSDF_PRINCIPLED']:
-                    destinations = [link.to_socket for link in shader.outputs['BSDF'].links]
-                    if not destinations:
-                        continue
-                    amount, black = _ao(nodes, links, SURFACE_DISTANCE, SURFACE_STRENGTH)
-                    transparent = nodes.new('ShaderNodeBsdfTransparent')
-                    opaque_black = nodes.new('ShaderNodeMixShader')
-                    alpha = shader.inputs.get('Alpha')
-                    if alpha is not None and alpha.links:
-                        links.new(alpha.links[0].from_socket, opaque_black.inputs[0])
-                    else:
-                        opaque_black.inputs[0].default_value = alpha.default_value if alpha is not None else 1
-                    links.new(transparent.outputs[0], opaque_black.inputs[1])
-                    links.new(black.outputs[0], opaque_black.inputs[2])
-                    mix = nodes.new('ShaderNodeMixShader')
-                    links.new(amount.outputs[0], mix.inputs[0])
-                    links.new(shader.outputs['BSDF'], mix.inputs[1])
-                    links.new(opaque_black.outputs[0], mix.inputs[2])
-                    for destination in destinations:
-                        links.new(mix.outputs[0], destination)
-                copies[original] = mat
-            originals.append((slot, original))
-            slot.material = copies[original]
-    return originals, copies
+    # Snapshot every slot before writing: instances share mesh DATA slots, so
+    # reading originals while replacing them captures temporary copies.
+    originals = [(slot, slot.material) for obj in collection.all_objects
+                 if obj.type == 'MESH' for slot in obj.material_slots
+                 if slot.material is not None and slot.material.node_tree is not None]
+    copies = {}
+    for slot, original in originals:
+        if original not in copies:
+            mat = original.copy()
+            nodes, links = mat.node_tree.nodes, mat.node_tree.links
+            # Shade the opaque BSDF inside any clip/transparency wrappers.
+            # Wrapping the material output itself fills foliage cutouts and
+            # shader-clipped geometry with the black shading closure.
+            for shader in [node for node in nodes if node.type == 'BSDF_PRINCIPLED']:
+                destinations = [link.to_socket for link in shader.outputs['BSDF'].links]
+                if not destinations:
+                    continue
+                amount, black = _ao(nodes, links, SURFACE_DISTANCE, SURFACE_STRENGTH)
+                transparent = nodes.new('ShaderNodeBsdfTransparent')
+                opaque_black = nodes.new('ShaderNodeMixShader')
+                alpha = shader.inputs.get('Alpha')
+                if alpha is not None and alpha.links:
+                    links.new(alpha.links[0].from_socket, opaque_black.inputs[0])
+                else:
+                    opaque_black.inputs[0].default_value = alpha.default_value if alpha is not None else 1
+                links.new(transparent.outputs[0], opaque_black.inputs[1])
+                links.new(black.outputs[0], opaque_black.inputs[2])
+                mix = nodes.new('ShaderNodeMixShader')
+                links.new(amount.outputs[0], mix.inputs[0])
+                links.new(shader.outputs['BSDF'], mix.inputs[1])
+                links.new(opaque_black.outputs[0], mix.inputs[2])
+                for destination in destinations:
+                    links.new(mix.outputs[0], destination)
+            copies[original] = mat
+        slot.material = copies[original]
+    return originals, copies, lighting
 
 
 def restore_materials(state):
-    originals, copies = state
+    originals, copies, lighting = state
     for slot, original in originals:
         slot.material = original
     for material in copies.values():
         bpy.data.materials.remove(material)
+    # Preview/icon passes keep their legacy lighting and Eevee renderer. Restore
+    # settings not reset by configure_scene_render (notably color transform and
+    # sun angle), as well as the settings the top-down profile changed.
+    scene = bpy.context.scene
+    scene.render.engine = lighting['engine']
+    scene.view_settings.view_transform = lighting['view_transform']
+    scene.view_settings.look = lighting['look']
+    scene.view_settings.exposure = lighting['exposure']
+    scene.view_settings.gamma = lighting['gamma']
+    background = next(n for n in scene.world.node_tree.nodes if n.type == 'BACKGROUND')
+    background.inputs['Color'].default_value = lighting['world_color']
+    background.inputs['Strength'].default_value = lighting['world_strength']
+    sun = bpy.data.objects[common.SUN_NAME]
+    sun.data.energy = lighting['sun_energy']
+    sun.data.angle = lighting['sun_angle']
+    sun.data.color = lighting['sun_color']
+    sun.rotation_euler = lighting['sun_rotation']
     common._LAST_RENDER_CONFIGURATION = None
 
 
@@ -152,6 +215,7 @@ def host_floor_bounds(document, scene_path, search_roots):
 def render_contact_shadow(document, collection, bounds, output_path, render_state, pixels_per_meter, floor_bounds):
     scene = bpy.context.scene
     camera = scene.camera
+    saved_samples = scene.cycles.samples
     saved_resolution = (scene.render.resolution_x, scene.render.resolution_y)
     saved_scale = camera.data.ortho_scale
     saved_format = scene.render.image_settings.file_format
@@ -187,6 +251,7 @@ def render_contact_shadow(document, collection, bounds, output_path, render_stat
     meshes = [obj for obj in collection.all_objects if obj.type == 'MESH']
     holdouts = [obj.is_holdout for obj in meshes]
     try:
+        scene.cycles.samples = CONTACT_SAMPLES
         for obj in meshes:
             obj.is_holdout = True
         scene.render.filepath = shadow_output_path(output_path)
@@ -203,6 +268,7 @@ def render_contact_shadow(document, collection, bounds, output_path, render_stat
             'receiverZ': z,
         }
     finally:
+        scene.cycles.samples = saved_samples
         for obj, holdout in zip(meshes, holdouts):
             obj.is_holdout = holdout
         bpy.data.objects.remove(receiver, do_unlink=True)

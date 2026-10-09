@@ -3,12 +3,19 @@
 `blender/render_readability.py` owns the shared `topdown-contact-v2` profile.
 It applies to structure and vehicle board textures, including internal
 modifications. Preview renders and item icons keep their existing render path.
+The top-down pass restores its color management, world and sun lighting, and
+renderer before previews/icons run. `test_preview_profile_isolation.py` verifies
+that their pixels match a render without a preceding top-down pass.
 
-The profile uses Cycles with 48 samples, a broad overhead sun, Khronos PBR
+Cycles selects an available GPU automatically (CUDA first), disables CPU co-rendering, and logs the selected backend and devices once per worker. If no supported GPU is available it logs a CPU fallback. Set `FOXWATCH_CYCLES_DEVICE` to `CPU`, `CUDA`, `OPTIX`, `HIP`, `ONEAPI`, or `METAL` to override automatic selection. Preferences are process-local and are not saved.
+
+The profile uses Cycles with 12 samples, a broad overhead sun, Khronos PBR
 Neutral color management at +0.8 EV, and short-range ambient occlusion at 15%
 strength over 0.5 meters. These are the shared settings selected as candidate 16
 in the render comparison lab. The separate contact-shadow profile remains at
-62% strength over 1 meter. There are no per-asset strength overrides.
+62% strength over 1 meter, rendered with 6 Cycles samples and denoising. Surface
+renders use 12 samples; the shadow pass restores the prior sample count even
+if rendering fails. There are no per-asset strength overrides.
 
 Surface shading is inserted inside the material's clip and transparency
 wrappers. The shading closure also preserves Principled Alpha, including
