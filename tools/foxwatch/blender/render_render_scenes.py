@@ -23,6 +23,8 @@ from script_bootstrap import append_script_search_paths
 append_script_search_paths(globals().get("__file__"), bpy.data.filepath, os.getcwd())
 
 from render_cache import RenderCache  # noqa: E402
+from render_readability import (uses_readability_profile, has_contact_shadow, configure_readability,
+    restore_materials, host_floor_bounds, render_contact_shadow, shadow_output_path)  # noqa: E402
 from render_scene_common import find_material_sidecar, resolve_asset_path, resolve_exported_texture_path  # noqa: E402
 from import_render_scene import import_render_scene  # noqa: E402
 from render_scene_common import (  # noqa: E402
@@ -158,6 +160,8 @@ def write_render_sidecar(output_path: str, structure_id: str, output_key: str, r
         "offsetX": offset_x_pixels,
         "offsetY": offset_y_pixels,
     }
+    if render_state.get("contactShadow"):
+        sidecar_document["contactShadow"] = render_state["contactShadow"]
     for sidecar_path in render_sidecar_paths(output_path, structure_id, output_key, render_state.get("renderDataRoot")):
         ensure_directory(os.path.dirname(sidecar_path))
         with open(sidecar_path, "w", encoding="utf-8") as handle:
@@ -1488,6 +1492,8 @@ def planned_cache_outputs(args, entry, document, modes):
             output_path = resolve_render_output_path(args.output_dir, asset_type, structure_id,
                                                      document["render"]["outputKey"], document, mode, variant)
             paths.append(output_path)
+            if has_contact_shadow(document, mode):
+                paths.append(shadow_output_path(output_path))
             images.append({"path": os.path.abspath(output_path), "structureId": structure_id,
                            "sceneEntry": entry["outputPath"], "sceneVariant": variant, "renderMode": mode,
                            "fingerprint": hashlib.sha256(json.dumps({
@@ -1652,6 +1658,7 @@ def main():
                     )
                     ensure_directory(os.path.dirname(output_path))
                     bpy.context.scene.render.filepath = output_path
+                    readability_state = configure_readability(collection) if uses_readability_profile(scene_document, mode) else None
                     render_margins = None
                     if mode == "flat":
                         source_file = tempfile.NamedTemporaryFile(suffix=".flat-source.webp", delete=False)
@@ -1685,6 +1692,13 @@ def main():
                         )
                     else:
                         bpy.ops.render.render(write_still=True)
+                    if readability_state is not None:
+                        try:
+                            if has_contact_shadow(scene_document, mode):
+                                render_contact_shadow(scene_document, collection, collection_bounds, output_path,
+                                    render_state, args.pixels_per_meter, host_floor_bounds(scene_document, scene_path, search_roots))
+                        finally:
+                            restore_materials(readability_state)
                     apply_readability_grade(
                         output_path,
                         trench_readability_profile(structure_id, output_key, render_state["mode"]),

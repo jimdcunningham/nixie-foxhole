@@ -14,6 +14,8 @@ Current status:
 - Blender does **not** run a separate `icon` mode. Publish derives `icon.rendered` from the preview PNG master.
 - When no blueprint default icon exists, Blender may emit `icon.default.png` (pencil fallback) for publish to convert to lossless WebP.
 
+Board textures use the shared [top-down readability profile](./readability-profile.md), including geometry-derived contact shadows and preserved material cutouts.
+
 ## Generate render bundles
 
 From the repo root:

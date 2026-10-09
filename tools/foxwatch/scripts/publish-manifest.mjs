@@ -5991,7 +5991,8 @@ function isAllowedRootStructureArtifact(structureId, fileName, hasDestroyedVaria
         || normalizedFileName === `${normalizedStructureId}.preview.${faction}.webp`
         || normalizedFileName === `${normalizedStructureId}.icon.rendered.${faction}.webp`);
 
-    return normalizedFileName === `${normalizedStructureId}.texture.webp`
+    return normalizedFileName.endsWith(".shadow.webp")
+        || normalizedFileName === `${normalizedStructureId}.texture.webp`
         || normalizedFileName === `${normalizedStructureId}.icon.default.webp`
         || normalizedFileName === `${normalizedStructureId}.icon.rendered.webp`
         || normalizedFileName === `${normalizedStructureId}.preview.webp`

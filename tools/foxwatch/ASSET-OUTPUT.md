@@ -39,6 +39,8 @@ packages/extensions/foxhole/public/foxhole/assets/
 
 Subtype overlays are applied **only in publish**, never in Blender. That keeps lossless masters clean and lets preview stay unbadged while default/rendered icons carry subtype badges. Publish applies overlays both when co-locating blueprint/default icons (`publish-structure-icons`) and when deriving WebP icons from Blender PNG masters during raw sync (`preview.png` → `icon.rendered`, pencil `icon.default.png` → `icon.default`).
 
+Top-down structure/vehicle projections may include an optional `contactShadow` in the adjacent `*.texture.json`. It references a sibling `*.shadow.webp` with its own padded frame and root projection; the main surface footprint remains unchanged. See [the readability profile](./blender/readability-profile.md) for the contract and review workflow.
+
 ## Intermediate workspace (`tools/foxwatch/tmp/`)
 
 These paths are **not** served to the planner. They are inputs to publish.
