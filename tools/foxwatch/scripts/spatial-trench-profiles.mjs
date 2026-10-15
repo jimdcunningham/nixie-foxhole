@@ -1,6 +1,10 @@
 /** Export one canonical native prototype per authored component. Placement remains runtime-derived. */
 export async function prepareSpatialTrenchScene(asset,input,load){
  if(!/^trenchconnectort[123]$/.test(asset.id))return input;
+ const sourceNodes=[];const visit=node=>{sourceNodes.push(node);(node.children??[]).forEach(visit);};input.scene.roots.forEach(visit);
+ const height=name=>sourceNodes.find(node=>node.name?.split(':').at(-1)===name)?.unrealLocationCentimeters?.[2];
+ const floorZ=height('FloorQuadrilateralCover');if(!Number.isFinite(floorZ))throw Error('Missing authored trench floor height: '+asset.id);
+ const roofZ=height('BPTrenchConnectorRoofModSlot')??floorZ,defenseZ=height('LeftDefenseModSlot');
  const result=structuredClone(input);result.scene.roots=[];result.assets={meshes:[],materials:[]};
  delete result.spatialLayerGroups;delete result.spatialModifications;result.spatialTrenchParts={};
  const layers=[...(asset.renderLayers??[]).map(layer=>[layer.i,asset.id+'/components/'+layer.i+'.scene.json']),['floor','trencht'+asset.id.at(-1)+'/components/floor.scene.json']];
@@ -9,7 +13,9 @@ export async function prepareSpatialTrenchScene(asset,input,load){
   for(const mesh of copy.assets.meshes){const qualified=key+':'+mesh.id;ids.set(mesh.id,qualified);mesh.id=qualified;result.assets.meshes.push(mesh);}
   result.assets.materials.push(...copy.assets.materials??[]);
   const qualify=node=>{node.id=key+':'+node.id;delete node.spatialGroup;if(node.meshId)node.meshId=ids.get(node.meshId);(node.children??[]).forEach(qualify);};copy.scene.roots.forEach(qualify);
-  result.scene.roots.push({id:key,name:key,visible:true,spatialGroup:key,children:copy.scene.roots});result.spatialTrenchParts[id]=key;
+  const z=id.startsWith('piece-') ? /^piece-trench(?:connector|barbed)/.test(id) ? defenseZ : /^piece-trencht3roof/.test(id) ? roofZ : floorZ : 0;
+  if(!Number.isFinite(z))throw Error('Missing authored trench prototype height: '+id);
+  result.scene.roots.push({id:key,name:key,visible:true,spatialGroup:key,unrealLocationCentimeters:[0,0,z],children:copy.scene.roots});result.spatialTrenchParts[id]=key;
  }
  return result;
 }
