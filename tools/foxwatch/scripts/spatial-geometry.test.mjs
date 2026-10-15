@@ -184,3 +184,41 @@ test('unknown packing profiles reject before mutation', async () => {
     await assert.rejects(optimizeSpatialGeometry(doc, binary, 'simplify25'), /Unknown geometry profile/);
     assert.deepEqual(doc, original);
 });
+
+test('simplification preserves original extrema on every axis within the position grid', () => {
+    for (const axis of [0, 1, 2]) for (const sign of [-1, 1]) {
+        const positions = [], normals = [], uvs = [], indices = [];
+        const otherAxes = [0, 1, 2].filter(value => value !== axis);
+        for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+            const point = [0, 0, 0], normal = [0, 0, 0];
+            point[otherAxes[0]] = x - 1; point[otherAxes[1]] = y - 1;
+            point[axis] = x === 1 && y === 1 ? sign * .0006 : 0;
+            normal[axis] = 1;
+            positions.push(...point); normals.push(...normal); uvs.push(x / 2, y / 2);
+        }
+        for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
+            const first = y * 3 + x;
+            indices.push(first, first + 1, first + 3, first + 1, first + 4, first + 3);
+        }
+        const views = [new Float32Array(positions), new Float32Array(normals), new Float32Array(uvs), new Uint16Array(indices)]
+            .map(array => Buffer.from(array.buffer));
+        const min = [0, 1, 2].map(k => Math.min(...positions.filter((_, i) => i % 3 === k)));
+        const max = [0, 1, 2].map(k => Math.max(...positions.filter((_, i) => i % 3 === k)));
+        const doc = { buffers: [], bufferViews: views.map(data => ({ byteLength: data.length })), images: [], nodes: [{ mesh: 0 }],
+            accessors: [
+                { bufferView: 0, count: 9, componentType: 5126, type: 'VEC3', min, max },
+                { bufferView: 1, count: 9, componentType: 5126, type: 'VEC3' },
+                { bufferView: 2, count: 9, componentType: 5126, type: 'VEC2' },
+                { bufferView: 3, count: indices.length, componentType: 5123, type: 'SCALAR' },
+            ], meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1, TEXCOORD_0: 2 }, indices: 3 }] }] };
+        const result = optimize({ doc, views }, { positionBits: 16, vectorBits: 12, uvBits: 16,
+            simplify: .5, protectCurves: true, attributeWeight: 1 });
+        const packed = result.doc.accessors[result.doc.meshes[0].primitives[0].attributes.POSITION];
+        for (const k of [0, 1, 2]) {
+            assert.ok(Math.abs(packed.min[k] - min[k]) <= result.stats.positionStepMetres,
+                'simplification must retain minimum bounds on axis ' + axis + ' sign ' + sign);
+            assert.ok(Math.abs(packed.max[k] - max[k]) <= result.stats.positionStepMetres,
+                'simplification must retain maximum bounds on axis ' + axis + ' sign ' + sign);
+        }
+    }
+});

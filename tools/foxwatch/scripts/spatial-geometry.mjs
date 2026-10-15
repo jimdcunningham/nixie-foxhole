@@ -29,19 +29,27 @@ function floatArray(data) {
 
 function bounds(source) {
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    const minKeys = [], maxKeys = [];
     for (const mesh of source.doc.meshes) {
         for (const p of mesh.primitives) {
             const { data, accessor } = accessorData(source, p.attributes.POSITION);
             assert.equal(accessor.componentType, 5126);
             const f = floatArray(data);
             for (let i = 0; i < f.length; i++) {
-                min[i % 3] = Math.min(min[i % 3], f[i]);
-                max[i % 3] = Math.max(max[i % 3], f[i]);
+                const axis = i % 3;
+                if (f[i] < min[axis]) {
+                    min[axis] = f[i];
+                    minKeys[axis] = data.subarray(Math.floor(i / 3) * 12, Math.floor(i / 3) * 12 + 12).toString('base64');
+                }
+                if (f[i] > max[axis]) {
+                    max[axis] = f[i];
+                    maxKeys[axis] = data.subarray(Math.floor(i / 3) * 12, Math.floor(i / 3) * 12 + 12).toString('base64');
+                }
             }
         }
     }
     // One power-of-two grid across the whole asset preserves coincident boundaries.
-    return { min, max, extent: Math.max(...max.map((v, i) => v - min[i])) };
+    return { min, max, extrema: new Set([...minKeys, ...maxKeys]), extent: Math.max(...max.map((v, i) => v - min[i])) };
 }
 
 function indicesFrom(stream) {
@@ -205,7 +213,7 @@ function optimize(source, profile) {
     const contents = [], configurations = [], viewKeys = new Map();
     const stats = { triangles: 0, sourceVertices: 0, vertices: 0, maxPositionErrorMetres: 0,
         maxNormalAngleDegrees: 0, maxTangentAngleDegrees: 0, maxUvErrorTexelsAt512: 0, maxSimplifierErrorMetres: 0,
-        newCollapsedTriangles: 0, newReversedTriangles: 0, emptyPrimitiveFallbacks: 0, curvatureLockedVertices: 0 };
+        newCollapsedTriangles: 0, newReversedTriangles: 0, emptyPrimitiveFallbacks: 0, curvatureLockedVertices: 0, boundsLockedVertices: 0 };
     const assetBounds = bounds(source);
     const positionStep = profile.positionBits ? 2 ** Math.floor(Math.log2(assetBounds.extent / (2 ** profile.positionBits - 1))) : 0;
     stats.positionStepMetres = positionStep;
@@ -325,11 +333,16 @@ function optimize(source, profile) {
                 const names = Object.keys(streams).filter(n => n !== 'POSITION');
                 const width = names.reduce((sum, n) => sum + components[streams[n].accessor.type], 0);
                 const attributes = new Float32Array(representatives.length * width);
-                const vertexLocks = profile.protectCurves
-                    ? Uint8Array.from(representatives, old =>
-                        curvedKeys.has(Buffer.from(originalPositions.buffer, old * 12, 12).toString('base64')) ? 1 : 0)
-                    : null;
-                stats.curvatureLockedVertices += vertexLocks?.reduce((sum, value) => sum + value, 0) ?? 0;
+                // Keep one original extremum per bound, including its coincident seam
+                // vertices. Bounds drive native model sizing and must not shrink when
+                // simplification removes a shallow bump or a small outer feature.
+                const vertexLocks = Uint8Array.from(representatives, old => {
+                    const key = Buffer.from(originalPositions.buffer, old * 12, 12).toString('base64');
+                    const curve = curvedKeys.has(key), bound = assetBounds.extrema.has(key);
+                    stats.curvatureLockedVertices += Number(curve);
+                    stats.boundsLockedVertices += Number(bound);
+                    return curve || bound ? 1 : 0;
+                });
                 const weights = names.flatMap(n => Array(components[streams[n].accessor.type]).fill(n.startsWith('TEXCOORD') ? (profile.uvWeight ?? 1) : (profile.attributeWeight ?? 0.25)));
                 for (let i = 0; i < representatives.length; i++) {
                     let offset = i * width;
