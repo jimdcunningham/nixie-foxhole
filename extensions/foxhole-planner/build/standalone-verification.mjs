@@ -28,6 +28,20 @@ export async function prepareStandalone({ repositoryRoot, fixtureRoot }) {
         }
         await fs.copyFile(join(foxholeAssetsRoot, model.path), join(fixtureInputRoot, model.path));
     }
+    // The live watcher may intentionally declare only a development model selection.
+    // The detached fixture consumes its complete model input, so derive declarations from that input too.
+    const { isFoxholeSceneV2ModelAllowed, getFoxholeSceneV2PackagedModelPath } = await import(
+        pathToFileURL(join(fixtureRoot, 'src', 'scene-v2-models.ts')).href);
+    const manifestPath = join(fixtureRoot, 'nixie.extension.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    manifest.contributes.experimentalResources = [
+        ...manifest.contributes.experimentalResources.filter(resource => resource.kind !== 'model'),
+        ...Object.entries({ ...modelInput.assets, ...modelInput.resources })
+            .filter(([id, model]) => isFoxholeSceneV2ModelAllowed(model.assetId ?? id))
+            .map(([id, model]) => ({ contractVersion: 1, id: model.resourceId, kind: 'model',
+                path: 'dist/assets/scene-v2/' + getFoxholeSceneV2PackagedModelPath({ id, assetId: model.assetId ?? id, path: model.path }) })),
+    ];
+    await fs.writeFile(manifestPath, JSON.stringify(manifest) + '\n', 'utf8');
     const nodeAssetsPath = join(fixtureRoot, 'src', 'scene-v2-assets-node.ts');
     const nodeAssetsSource = await fs.readFile(nodeAssetsPath, 'utf8');
     await fs.writeFile(
