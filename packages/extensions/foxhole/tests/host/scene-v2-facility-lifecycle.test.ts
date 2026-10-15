@@ -107,9 +107,11 @@ for (const sameEntity of [false, true]) {
         const expectedLinks = merged.entities.map(entity => entity.components.filter(value => value.componentId === 'socket-attachments'));
         assert.equal(local.editor.undo(), true);
         sync();
+        assert.equal(local.runtime.actionError, '', 'owned Undo must leave a loadable scene');
         assert.equal(component(local.runtime.entities.find(entity => entity.entityId === factoryA.entityId)!, 'transform').x, 0);
         assert.equal((component(local.runtime.entities.find(entity => entity.entityId === productionEntityId)!, 'production-order').orders as { cycles: number; }[])[0]!.cycles, 4);
         assert.equal(local.editor.canUndo.value, false, 'remote work is never an owned Undo step');
+        assert.deepEqual(first.getSceneV2Content(scene.id)!.entities.map(entity => entity.components.filter(value => value.componentId === 'socket-attachments')), expectedLinks);
         assert.equal(local.editor.redo(), true);
         sync();
         assert.deepEqual(first.getSceneV2Content(scene.id), merged);
