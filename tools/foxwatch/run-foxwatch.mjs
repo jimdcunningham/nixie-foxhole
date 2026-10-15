@@ -2325,6 +2325,7 @@ async function buildPublishArgsFromParsedArgs(parsedArgs, options = {}) {
 }
 
 function appendPublishCliPassthroughArgs(outputArgs, parsedArgs) {
+    if (hasCliFlag(parsedArgs, 'force-render')) outputArgs.push('--force-render');
     if (hasCliFlag(parsedArgs, 'deep')) {
         outputArgs.push('--deep');
     }

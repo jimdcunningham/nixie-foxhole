@@ -61,3 +61,24 @@ node tools/foxwatch/scripts/publish-spatial-models.mjs --only=facilitytransferli
 The implementation is integrated locally. No broad catalog generation, shipping asset refresh, commit, or publication was run. The Nixie integration verifier reconstructs decoded input from the same three packed originals and requires identical document values, binary data, and sizes against the accepted viewer files. Only JSON property ordering differs for the combined profile; the precision-only profile remains byte-identical. It also checks that the source implementation and workbench mirror are byte-identical. Regression tests cover curved tiny-face protection, tangent handedness, shared vector/position views, and invalid profiles, in addition to the precision-only regressions. This is packing-helper integration evidence, not a rerun of the complete Blender/game extraction pipeline.
 
 After approval as the default, the actual publisher was exercised without a geometry-profile override for the resource and liquid transfer stations using existing Blender exports. It produced 447,652 and 968,056-byte GLBs in scratch. Nixie's installed loader verifies their materials, authored anchors, and uploaded geometry buffers match the accepted comparisons. No new full Blender/game extraction or broad model generation was run. Packing does not select scene lighting, bake runtime shadows, or establish in-game material fidelity; those need separate material/pixel and renderer comparisons.
+
+## Spatial Cache and Timing
+
+Normal Monitor refreshes reuse complete model groups from `tmp/pipeline-cache/v1/spatial-models/`.
+A group includes the base, default part, all selected upgrade parts, and their manifest metadata.
+Reuse verifies every output hash. Missing, corrupt, or partial output regenerates the group.
+Fingerprints cover scene documents, source meshes and external glTF buffers/images, material
+sidecars and their referenced textures, placement/assembly settings, packing settings, exporter
+sources, Blender version, Sharp versions, and meshoptimizer version. Content is checked even
+when file timestamps are unchanged. Missing and ambiguous optional sidecars are fingerprinted
+as unresolved, so later availability invalidates reuse.
+
+`--force-render` bypasses spatial reuse as well as 2D render reuse. The standalone publisher
+also accepts `--force-spatial`. Monitor Clear Cache removes the shared pipeline-cache tree.
+`--repack-existing` uses a distinct cache identity and verifies the existing raw GLBs and
+metadata; it cannot bless an unverified full-export cache hit.
+
+Each asset logs check, Blender export, packing, and total wall time. The final summary reports
+exported/reused/failed counts. `tmp/spatial-timing-last.v1.json` saves the latest run, including
+per-asset timings and failure details. `--timing-report=<path>` chooses another report location.
+Timings describe the additional spatial publication stage, not the entire FoxWatch refresh.

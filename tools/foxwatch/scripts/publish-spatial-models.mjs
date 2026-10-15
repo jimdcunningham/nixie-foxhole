@@ -1,7 +1,11 @@
-import { readFile, writeFile, mkdir, realpath } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, realpath, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { performance } from 'node:perf_hooks';
+import { SpatialDependencies, SpatialModelCache } from './spatial-model-cache.mjs';
+import { writeJsonAtomic } from './pipeline-core.mjs';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { pruneUnusedStaticGltfUvs } from './spatial-gltf-geometry.mjs';
@@ -18,17 +22,19 @@ const option = name => {
     const index = args.indexOf(`--${name}`);
     return index < 0 ? undefined : args[index + 1];
 };
-const sourceRoot = await realpath(option('asset-root') ?? resolve(foxwatchRoot, 'tmp/assets'));
+const sourceRoot = await realpath(option('asset-root') ?? option('foxwatch-output-root') ?? resolve(foxwatchRoot, 'tmp/assets'));
+const sceneRoot = option('scene-root') ?? resolve(foxwatchRoot, 'tmp/renders');
 const outputRoot = option('output-root') ?? resolve(repositoryRoot, 'packages/extensions/foxhole/public/foxhole/assets');
 const config = JSON.parse(await readFile(resolve(foxwatchRoot, 'asset-overrides/spatial-models.json'), 'utf8'));
 const catalog = JSON.parse(await readFile(resolve(outputRoot, 'manifest.v1.json'), 'utf8'));
-const only = option('only')?.split(',').map(value => value.trim().toLowerCase());
-const policy = resolveSpatialExportPolicy(config, catalog, { only, geometryProfile: option('geometry-profile') });
+const only = args.flatMap((arg, index) => arg.startsWith('--only=') ? arg.slice(7).split(',')
+    : arg === '--only' ? (args[index + 1] ?? '').split(',') : []).map(value => value.trim().toLowerCase()).filter(Boolean);
+const policy = resolveSpatialExportPolicy(config, catalog, { only: only.length ? only : undefined, geometryProfile: option('geometry-profile') });
 const { geometryProfile, targets } = policy;
 if (policy.skipped.length) console.log(`Skipping spatial assets outside the intact asset allowlist: ${policy.skipped.join(', ')}`);
 if (config.unitsPerMetre !== 32 || ![512, 1024].includes(config.maxTextureSize)) throw new Error('Invalid authored spatial export profile');
 const modelRoot = resolve(outputRoot, 'models');
-const temporaryRoot = resolve(foxwatchRoot, 'tmp/spatial-models');
+const temporaryRoot = option('temporary-root') ?? resolve(foxwatchRoot, 'tmp/spatial-models');
 await mkdir(modelRoot, { recursive: true });
 await mkdir(temporaryRoot, { recursive: true });
 let manifest = { schemaVersion: 1, assets: {}, resources: {} };
@@ -38,6 +44,25 @@ manifest.resources ??= {};
 manifest = filterSpatialModelManifest(manifest, policy.allowedIds);
 manifest.packingPolicy = { categoryIds: config.categoryIds, assets: config.assets,
     defaultGeometryProfile: config.geometryProfile ?? 'curved50-compact16' };
+
+const startedAt = performance.now();
+const timings = [];
+const timingReportPath = option('timing-report') ?? resolve(foxwatchRoot, 'tmp/spatial-timing-last.v1.json');
+const blender = option('blender') ?? process.env.BLENDER_PATH ?? 'blender';
+const repack = args.includes('--repack-existing');
+const force = args.includes('--force-render') || args.includes('--force-spatial');
+const blenderVersion = repack || !targets.length ? 'repack-existing'
+    : (await promisify(execFile)(blender, ['--version'], { windowsHide: true })).stdout.trim();
+const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
+    .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
+    .map(name => resolve(foxwatchRoot, 'blender', name));
+sourceFiles.push(...['publish-spatial-models.mjs', 'spatial-model-cache.mjs', 'visual-output-cache.mjs',
+    'spatial-export-policy.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
+    .map(name => resolve(foxwatchRoot, 'scripts', name)));
+const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(foxwatchRoot, 'tmp/pipeline-cache/v1/spatial-models'),
+    sourceFiles, { blender: blenderVersion, sharp: sharp.versions,
+        meshoptimizer: JSON.parse(await readFile(resolve(repositoryRoot, 'node_modules/meshoptimizer/package.json'), 'utf8')).version });
+const dependencies = new SpatialDependencies(sourceRoot);
 
 function filteredScene(document, mode) {
     const copy = structuredClone(document);
@@ -68,7 +93,7 @@ function coreSignature(document) {
 
 async function exportRaw(id, scenePath, slice) {
     const path = resolve(temporaryRoot, `${id}.glb`);
-    if (!args.includes('--repack-existing')) await run(option('blender') ?? process.env.BLENDER_PATH ?? 'blender', ['--background', '--python-exit-code', '1', '--python',
+    if (!args.includes('--repack-existing')) await run(blender, ['--background', '--python-exit-code', '1', '--python',
         resolve(foxwatchRoot, 'blender/export_scene_model.py'), '--', '--foxwatch-root', foxwatchRoot, '--asset-root', sourceRoot,
         '--scene', scenePath, '--slice', slice, '--max-texture-size', String(config.maxTextureSize), '--output', path, '--temp-dir', temporaryRoot]);
     return { bytes: await readFile(path), exported: JSON.parse(await readFile(`${path}.json`, 'utf8')) };
@@ -131,18 +156,54 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
 }
 const descriptor = metadata => Object.fromEntries(['resourceId', 'width', 'height', 'depth', 'offsetX', 'offsetY', 'offsetZ'].map(key => [key, metadata[key]]));
 
+try {
 for (const id of targets) {
+    const assetStartedAt = performance.now();
+    const timing = { id, status: 'failed', checkMs: 0, exportMs: 0, packMs: 0, models: 0 };
+    timings.push(timing);
+    try {
     if (!/^[a-z0-9-]+$/.test(id) || /destroyed|breached/i.test(id)) throw new Error(`Excluded spatial asset: ${id}`);
     const asset = catalog.assets.find(entry => entry.id === id);
     if (!asset) throw new Error(`Missing real catalog entry: ${id}`);
-    const scenePath = resolve(foxwatchRoot, 'tmp/renders', id, 'scene.json');
+    const scenePath = resolve(sceneRoot, id, 'scene.json');
     const scene = JSON.parse(await readFile(scenePath, 'utf8'));
     const upgrades = (asset.modifications ?? []).flatMap(slot => Object.entries(slot.variants ?? {})
         .filter(([variantId, variant]) => variant.isUpgrade && !/destroyed|breached/i.test(variantId))
         .map(([variantId]) => ({ slotId: slot.name, variantId })));
     const useAssembly = config.includeUpgrades && upgrades.length > 0;
     const hasCore = meshCount(scene, 'base') > 0;
-    const raw = await exportRaw(id, scenePath, useAssembly && hasCore ? 'base' : 'whole');
+    const scenes = [[scenePath, scene]];
+    if (useAssembly) for (const upgrade of upgrades) {
+        const path = resolve(sceneRoot, id, 'modifications', `${upgrade.variantId}.scene.json`);
+        scenes.push([path, JSON.parse(await readFile(path, 'utf8'))]);
+    }
+    const partIds = useAssembly ? [
+        ...(hasCore && meshCount(scene, 'upgrade') ? [`${id}.default`] : []),
+        ...upgrades.map(upgrade => `${id}.upgrade.${upgrade.variantId}`),
+    ] : [];
+    const outputIds = [id, ...partIds];
+    const inputs = [];
+    for (const [path, document] of scenes) inputs.push({ path, document, dependencies: await dependencies.scene(document) });
+    if (repack) for (const outputId of outputIds) for (const suffix of ['.glb', '.glb.json']) {
+        const path = resolve(temporaryRoot, outputId + suffix);
+        inputs.push({ path, hash: createHash('sha256').update(await readFile(path)).digest('hex') });
+    }
+    const identity = cache.identity(id, inputs, { geometryProfile, unitsPerMetre: config.unitsPerMetre,
+        maxTextureSize: config.maxTextureSize, webpQuality: config.webpQuality, includeUpgrades: config.includeUpgrades,
+        grounded: config.groundedVehicles?.includes(id) ?? false, groundReference: config.placementGroundReferences?.[id],
+        codeName: asset.codeName, upgrades, repack }, outputIds.map(outputId => resolve(modelRoot, `${outputId}.glb`)));
+    const cached = force ? null : await cache.lookup(identity);
+    timing.checkMs = performance.now() - assetStartedAt;
+    timing.models = outputIds.length;
+    if (cached) {
+        for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
+        manifest.assets[id] = cached.asset;
+        Object.assign(manifest.resources, cached.resources);
+        await writeJsonAtomic(resolve(modelRoot, 'manifest.v1.json'), manifest);
+        timing.status = 'reused';
+        continue;
+    }
+    const raw = await timedExport(id, scenePath, useAssembly && hasCore ? 'base' : 'whole');
     let groundReference = config.placementGroundReferences?.[id];
     if (config.groundedVehicles?.includes(id)) groundReference = { zMetres: raw.exported.boundsMinMeters[2], basis: 'static-vehicle-contact' };
     for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
@@ -154,23 +215,51 @@ for (const id of targets) {
         const slot = { id: 'upgrade', componentId: 'modification', field: 'selections', options: [] };
         if (hasCore && meshCount(scene, 'upgrade')) {
             const partId = `${id}.default`;
-            const part = await publish(partId, asset, scenePath, await exportRaw(partId, scenePath, 'upgrade'), groundReference);
+            const part = await timedPublish(partId, asset, scenePath, await timedExport(partId, scenePath, 'upgrade'), groundReference);
             manifest.resources[partId] = part;
             slot.default = descriptor(part);
         }
         for (const upgrade of upgrades) {
-            const path = resolve(foxwatchRoot, 'tmp/renders', id, 'modifications', `${upgrade.variantId}.scene.json`);
+            const path = resolve(sceneRoot, id, 'modifications', `${upgrade.variantId}.scene.json`);
             const upgraded = JSON.parse(await readFile(path, 'utf8'));
             const replacesBase = !hasCore || coreSignature(scene) !== coreSignature(upgraded) || !meshCount(upgraded, 'upgrade');
             const partId = `${id}.upgrade.${upgrade.variantId}`;
-            const part = await publish(partId, asset, path, await exportRaw(partId, path, replacesBase ? 'whole' : 'upgrade'), groundReference);
+            const part = await timedPublish(partId, asset, path, await timedExport(partId, path, replacesBase ? 'whole' : 'upgrade'), groundReference);
             manifest.resources[partId] = part;
             slot.options.push({ match: { slotId: upgrade.slotId, variantId: upgrade.variantId }, part: { ...descriptor(part), replacesBase } });
         }
         assembly.slots.push(slot);
     }
-    manifest.assets[id] = await publish(id, asset, scenePath, raw, groundReference, assembly);
-    await writeFile(resolve(modelRoot, 'manifest.v1.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    manifest.assets[id] = await timedPublish(id, asset, scenePath, raw, groundReference, assembly);
+    await writeJsonAtomic(resolve(modelRoot, 'manifest.v1.json'), manifest);
+    await cache.record(identity, { asset: manifest.assets[id], resources: Object.fromEntries(
+        Object.entries(manifest.resources).filter(([, value]) => value.assetId === id)) });
+    timing.status = 'exported';
+
+    async function timedExport(...parameters) {
+        const start = performance.now();
+        try { return await exportRaw(...parameters); } finally { timing.exportMs += performance.now() - start; }
+    }
+    async function timedPublish(...parameters) {
+        const start = performance.now();
+        try { return await publish(...parameters); } finally { timing.packMs += performance.now() - start; }
+    }
+    } catch (error) {
+        timing.error = error.message;
+        throw error;
+    } finally {
+        timing.totalMs = performance.now() - assetStartedAt;
+        console.log(`Spatial ${id}: ${timing.status}, ${(timing.totalMs / 1000).toFixed(2)}s (check ${(timing.checkMs / 1000).toFixed(2)}s, export ${(timing.exportMs / 1000).toFixed(2)}s, pack ${(timing.packMs / 1000).toFixed(2)}s)`);
+    }
+}
+await writeJsonAtomic(resolve(modelRoot, 'manifest.v1.json'), manifest);
+} finally {
+    const report = { schemaVersion: 1, createdAt: new Date().toISOString(), totalMs: performance.now() - startedAt,
+        exported: timings.filter(row => row.status === 'exported').length,
+        reused: timings.filter(row => row.status === 'reused').length,
+        failed: timings.filter(row => row.status === 'failed').length, assets: timings };
+    await writeJsonAtomic(timingReportPath, report);
+    console.log(`Spatial models: ${report.exported} exported, ${report.reused} reused, ${report.failed} failed; ${(report.totalMs / 1000).toFixed(2)}s. Timings: ${timingReportPath}`);
 }
 
 function run(command, arguments_) {
