@@ -34,6 +34,8 @@ export function spatialConnectorProfile(id, document, exported, scene) {
         profile.parts.post = part(['BarbedWirePillar']);
     } else if (id === 'barbedwirewallspline') {
         profile.parts.wire = part(['BarbedWireFence02']);
+        profile.parts.startWire = part(['BarbedWireFence01']);
+        profile.parts.endWire = part(['BarbedWireFence03']);
         profile.parts.post = part(['BarbedWireFencePillar03']);
         profile.parts.middle = part(['BarbedWireFencePillar01']);
     } else return undefined;

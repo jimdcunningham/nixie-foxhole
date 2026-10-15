@@ -169,22 +169,22 @@ test('upgrade filtering exposes owner-local modification products without duplic
         .some(item => item.product.id.startsWith('upgrade.')), false);
 });
 
-test('3D-ready filtering exposes only products with packaged model bindings', () => {
-    const result = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({
-        contractVersion: 1,
-        query: '',
-        offset: 0,
-        limit: 1_000,
-        settings: {
-            'foxhole.assets.filter.3dReady': true,
-            'foxhole.assets.filter.showPreviousTiers': true,
-            'foxhole.assets.filter.upgrades': true,
-        },
-    }));
-    assert.ok(result.items.length > 0);
-    assert.ok(result.items.every(item => item.product.components.some(component => component.componentId === 'model')));
-    assert.ok(result.items.some(item => item.product.id === 'asset.facilitypowerdiesel'));
-    assert.equal(result.items.some(item => item.product.id === 'asset.crane'), false);
+test('3D-ready filtering pages every product with a packaged model binding', () => {
+    const query = { contractVersion: 1 as const, query: '', offset: 0, limit: 100,
+        settings: { 'foxhole.assets.filter.3dReady': true, 'foxhole.assets.filter.showPreviousTiers': true,
+            'foxhole.assets.filter.upgrades': true } };
+    const first = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products(query));
+    const items = [...first.items];
+    for (let offset = first.items.length; offset < first.total!; offset += query.limit) {
+        const page = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ ...query, offset }));
+        assert.ok(page.items.length > 0 && page.items.length <= query.limit);
+        items.push(...page.items);
+    }
+    assert.equal(items.length, first.total);
+    assert.equal(new Set(items.map(item => item.product.id)).size, items.length);
+    assert.ok(items.every(item => item.product.components.some(component => component.componentId === 'model')));
+    assert.ok(items.some(item => item.product.id === 'asset.facilitypowerdiesel'));
+    assert.equal(items.some(item => item.product.id === 'asset.crane'), false);
 });
 
 test('facility structural tiers do not hide standalone assets or bypass technology and lineage gates', () => {

@@ -389,6 +389,14 @@ Use this to work on pose overrides in Blender for a single asset:
 npm run foxwatch -- open-pose-editor -- --only trencht1
 ```
 
+## 3D connector profiles
+
+The model publisher emits a versioned `pathProfile` beside each supported model in `models/manifest.v1.json`. Roles refer to exported geometry indices and pre-bake mesh origins; runtime code does not depend on Blender object order. The model cache includes the profile recipe and prepared scene dependencies.
+
+Overhead pipelines use native start/end supports, a repeatable connecting span, and the insulation upgrade's own profile. Normal and small-gauge rail variants reuse native rails, sleepers, and the trackbed where one is authored. Barbed wire repeats two coil rows and endpoint posts. Barbed-wire fences keep three straight panel sections, corner posts, and intermediate posts. These presentations use the existing connector path and interval rules, including endpoint elevation and attachment previews. Profiles remain resource metadata; saved connector and model components do not persist them.
+
+`spatial-connector-profiles.mjs` prepares export-only scenes: it removes the sample span's axial stretch and adds the fence middle-post prototype when the minimum-length sample has no instance. Canonical 2D scenes remain unchanged. A subsequent deep refresh through FoxWatch Monitor rebuilds these profiles automatically; no separate render command or full batch is required to wire support.
+
 ## Publish safety
 
 `publish-manifest` protects against accidentally publishing a targeted source manifest as though it were a full manifest.

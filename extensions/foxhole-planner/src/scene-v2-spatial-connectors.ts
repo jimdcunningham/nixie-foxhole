@@ -1,3 +1,4 @@
+import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalSpatialEndpointBindingsV1,
     NixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
@@ -30,7 +31,8 @@ export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponent
             motion: { kind: 'spring-sway', amplitude: Math.max(2, Math.min(12, distance * 0.025)), frequency: 0.42, phase },
             ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) }] };
     }
-    if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey) || !asset?.model) return undefined;
+    if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey)) return renderFoxholeSpatialRepeats(data, asset);
+    if (!asset?.model) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
     if (path.totalLength < 1e-8) return undefined;
     const points = path.points.flatMap((point, i) => [point.x, point.y,
