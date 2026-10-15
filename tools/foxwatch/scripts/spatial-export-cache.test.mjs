@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
+import {VisualOutputCache} from './visual-output-cache.mjs';
+import {SpatialModelCache} from './spatial-model-cache.mjs';
+import {legacySpatialCache,relocateLegacySpatialCache} from './spatial-export-cache.mjs';
+
+test('legacy relocation verifies old provenance and bytes, then installs a valid new cache group',async t=>{
+ const root=await mkdtemp(resolve(tmpdir(),'foxwatch-relocate-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const directory=resolve(root,'cache'),outputRoot=resolve(root,'output'),source=resolve(root,'engine.mjs'),compatibility=resolve(root,'compat.json');
+ await mkdir(resolve(outputRoot,'models'),{recursive:true});await writeFile(source,'current exporter');
+ const currentSources=[['engine.mjs',createHash('sha256').update('current exporter').digest('hex')]],legacySources=[['old-exporter.mjs','reviewed hash']],versions={blender:'fixture'};
+ await writeFile(compatibility,JSON.stringify({currentSources,legacySources}));
+ const cache=await SpatialModelCache.create(directory,[source],versions),legacy=new VisualOutputCache(directory,{sources:legacySources,versions});
+ const id='factory',inputs=[{scene:'unchanged'}],settings={quality:512},asset={id},metadataPath=resolve(directory,id+'.metadata.json');
+ const metadata={asset:{path:'models/factory.glb',codeName:'Factory'},resources:{}};
+ await mkdir(directory,{recursive:true});await writeFile(metadataPath,JSON.stringify(metadata));await writeFile(resolve(outputRoot,'models/factory.glb'),'original glb');
+ const oldIdentity=legacy.identity(id,[Buffer.from(JSON.stringify(inputs))],settings,[resolve(outputRoot,'models/factory.glb'),metadataPath]);await legacy.record(oldIdentity);
+ const enabled=await legacySpatialCache(directory,[source],versions,compatibility);assert.ok(enabled);
+ const identity=cache.identity(id,inputs,settings,[resolve(outputRoot,'types/structures/factory/factory.glb')]);
+ const args={cache,legacy:enabled,id,inputs,settings,outputIds:[id],outputRoot,asset,identity};
+ assert.equal(await relocateLegacySpatialCache({...args,settings:{quality:1024}}),null);
+ await writeFile(resolve(outputRoot,'models/factory.glb'),'corrupt');assert.equal(await relocateLegacySpatialCache(args),null);
+ await writeFile(resolve(outputRoot,'models/factory.glb'),'original glb');
+ const result=await relocateLegacySpatialCache(args);assert.equal(result.asset.path,'types/structures/factory/factory.glb');
+ assert.equal(await readFile(resolve(outputRoot,result.asset.path),'utf8'),'original glb');assert.deepEqual(await cache.lookup(identity),result);
+ await writeFile(source,'different exporter');assert.equal(await legacySpatialCache(directory,[source],versions,compatibility),null);
+});

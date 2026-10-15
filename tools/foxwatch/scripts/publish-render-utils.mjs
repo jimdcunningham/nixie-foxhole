@@ -22,6 +22,8 @@ export async function pruneRootStructureArtifactDirectory(directory, {
         // Blender owns these intermediate projections, and the render cache
         // verifies them alongside images. They are not public asset deliverables.
         if (preserveProjectionSidecars && entry.name.toLowerCase().endsWith('.render.json')) continue;
+        // 3D export owns its co-located files independently of 2D sprite cleanup.
+        if (entry.name.toLowerCase().endsWith('.glb')) continue;
         if (isAllowedArtifact(entry.name)) continue;
         const outputPath = resolve(directory, entry.name);
         await unlink(outputPath);

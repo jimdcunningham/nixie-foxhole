@@ -10,7 +10,7 @@ test('publication keeps cached intermediate projections while pruning public and
     t.after(() => rm(root, { recursive: true, force: true }));
     const intermediate = join(root, 'renders', 'fixture');
     const published = join(root, 'public', 'fixture');
-    const names = ['fixture.render.json', 'fixture.c.render.json', 'fixture.preview.webp', 'fixture.stale.webp', 'scene.json'];
+    const names = ['fixture.render.json', 'fixture.c.render.json', 'fixture.preview.webp', 'fixture.stale.webp', 'fixture.glb', 'fixture.upgrade.lamp.glb', 'scene.json'];
     for (const directory of [intermediate, published]) {
         await mkdir(directory, { recursive: true });
         for (const name of names) await writeFile(join(directory, name), name);
@@ -20,7 +20,7 @@ test('publication keeps cached intermediate projections while pruning public and
             isAllowedArtifact: name => name === 'fixture.preview.webp',
         });
     }
-    assert.deepEqual((await readdir(intermediate)).sort(), ['fixture.c.render.json', 'fixture.preview.webp', 'fixture.render.json', 'scene.json']);
+    assert.deepEqual((await readdir(intermediate)).sort(), ['fixture.c.render.json', 'fixture.glb', 'fixture.preview.webp', 'fixture.render.json', 'fixture.upgrade.lamp.glb', 'scene.json']);
     assert.equal(await readFile(join(intermediate, 'fixture.render.json'), 'utf8'), 'fixture.render.json');
-    assert.deepEqual((await readdir(published)).sort(), ['fixture.preview.webp', 'scene.json']);
+    assert.deepEqual((await readdir(published)).sort(), ['fixture.glb', 'fixture.preview.webp', 'fixture.upgrade.lamp.glb', 'scene.json']);
 });
