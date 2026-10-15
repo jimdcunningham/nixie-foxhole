@@ -1,3 +1,4 @@
+import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
 import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts';
@@ -435,8 +436,11 @@ export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieExp
                 x: centerX + px! * cos - py! * sin, y: centerY + px! * sin + py! * cos,
             }));
         })();
-    return { contractVersion: 1 as const, localBounds: { minX: Math.min(...points.map(point => point.x)), minY: Math.min(...points.map(point => point.y)),
-        maxX: Math.max(...points.map(point => point.x)), maxY: Math.max(...points.map(point => point.y)) }, transformOrigin: { x: 0, y: 0 }, showTransformGizmo: true };
+    const spriteBounds = { minX: Math.min(...points.map(point => point.x)), minY: Math.min(...points.map(point => point.y)),
+        maxX: Math.max(...points.map(point => point.x)), maxY: Math.max(...points.map(point => point.y)) };
+    const trenchBounds = !shapes.length && !appearance.destroyed && !appearance.packaged && !replacement && /^trencht[12]$/i.test(assetMetadata.codeName)
+        ? resolveFoxholeTrenchSelectionBounds(spriteBounds, Object.values(assetMetadata.renderLayers)) : null;
+    return { contractVersion: 1 as const, localBounds: trenchBounds ?? spriteBounds, transformOrigin: { x: 0, y: 0 }, showTransformGizmo: true };
 }
 
 export function renderFoxholeSceneV2Entity(

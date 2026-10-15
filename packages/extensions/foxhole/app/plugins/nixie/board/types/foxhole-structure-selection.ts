@@ -1,3 +1,4 @@
+import { resolveFoxholeTrenchSelectionBounds } from '../../../../../../../../extensions/foxhole-planner/src/structure-selection-bounds.ts';
 import type { FoxholeManifestStructure } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import { FOXHOLE_BOARD_SPRITE_SCALE } from '#foxhole/plugins/foxhole/nixie/structure-dimensions.ts';
 import { resolveFoxholeBuildSocketPosition } from '#foxhole/plugins/foxhole/nixie/structure-socket-resolution.ts';
@@ -190,25 +191,14 @@ function getSpriteHitBox(input: FoxholeStructureSelectionGeometryInput): Foxhole
 
 function getRenderLayerHitBox(input: FoxholeStructureSelectionGeometryInput): FoxholeSelectionHitBox | null {
     const spriteBounds = getSpriteHitBox(input)?.bounds;
-    const layerBounds = unionBounds((input.renderLayers ?? []).map(layer => {
-        const width = Number(layer.width ?? NaN) * FOXHOLE_BOARD_SPRITE_SCALE;
-        const height = Number(layer.height ?? NaN) * FOXHOLE_BOARD_SPRITE_SCALE;
-        if (!(width > 0) || !(height > 0)) return null;
-        const centerX = Number(layer.offsetX ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE;
-        const centerY = Number(layer.offsetY ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE;
-        if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
-        return { minX: centerX - width / 2, minY: centerY - height / 2,
-            maxX: centerX + width / 2, maxY: centerY + height / 2 };
-    }));
-    if (!spriteBounds || !layerBounds) return null;
-    // Trench dirt and optional berms extend beyond the component crops at the
-    // ends. Keep that width while trimming transparent padding around the layers.
-    const bounds = {
-        ...spriteBounds,
-        maxX: spriteBounds.maxX + 6,
-        minY: layerBounds.minY + 8,
-        maxY: layerBounds.maxY - 8,
-    };
+    if (!spriteBounds) return null;
+    const bounds = resolveFoxholeTrenchSelectionBounds(spriteBounds, (input.renderLayers ?? []).map(layer => ({
+        width: Number(layer.width ?? NaN) * FOXHOLE_BOARD_SPRITE_SCALE,
+        height: Number(layer.height ?? NaN) * FOXHOLE_BOARD_SPRITE_SCALE,
+        offsetX: Number(layer.offsetX ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE,
+        offsetY: Number(layer.offsetY ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE,
+    })));
+    if (!bounds) return null;
     return { centerX: (bounds.minX + bounds.maxX) / 2, centerY: (bounds.minY + bounds.maxY) / 2,
         halfWidth: (bounds.maxX - bounds.minX) / 2, halfHeight: (bounds.maxY - bounds.minY) / 2,
         rotationRadians: 0, bounds };
