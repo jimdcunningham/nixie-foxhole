@@ -95,13 +95,13 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     const run = extra => promisify(execFile)(process.execPath, [...args, ...extra ?? []], { windowsHide: true });
     const result = async () => JSON.parse(await readFile(report, 'utf8'));
     await run(); assert.equal((await result()).exported, 1);
-    const packed = await readFile(resolve(root, `output/models/${id}.glb`));
+    const packed = await readFile(resolve(root, `output/types/structures/${id}/${id}.glb`));
     await put('output/models/manifest.v1.json', { schemaVersion: 1, assets: {}, resources: {} });
     await run(); assert.equal((await result()).reused, 1);
     assert.ok(JSON.parse(await readFile(resolve(root, 'output/models/manifest.v1.json'), 'utf8')).assets[id]);
-    assert.deepEqual(await readFile(resolve(root, `output/models/${id}.glb`)), packed);
+    assert.deepEqual(await readFile(resolve(root, `output/types/structures/${id}/${id}.glb`)), packed);
     await run(['--force-render']); assert.equal((await result()).exported, 1);
-    await put(`output/models/${id}.glb`, 'corrupt'); await run(); assert.equal((await result()).exported, 1);
+    await put(`output/types/structures/${id}/${id}.glb`, 'corrupt'); await run(); assert.equal((await result()).exported, 1);
     await rm(resolve(root, `raw/${id}.glb`)); await assert.rejects(run()); assert.equal((await result()).failed, 1);
     assert.ok((await result()).assets[0].error);
     assert.ok((await result()).totalMs > 0);

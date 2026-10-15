@@ -64,6 +64,14 @@ export interface FoxholeSceneV2ModelSource {
     path: string;
 }
 
+/** Accept existing generated output while new exports move beside their owning asset. */
+export function isFoxholeGeneratedModelPath(model: FoxholeSceneV2ModelSource): boolean {
+    if (!/^[a-z0-9-]+$/.test(model.assetId) || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(model.id)
+        || (model.id !== model.assetId && !model.id.startsWith(model.assetId + '.'))) return false;
+    return model.path === 'models/' + model.id + '.glb' || ['items', 'structures', 'vehicles'].some(type =>
+        model.path === 'types/' + type + '/' + model.assetId + '/' + model.id + '.glb');
+}
+
 /** Keep every packaged model and model part beside its owning asset resources. */
 export function getFoxholeSceneV2PackagedModelPath(model: FoxholeSceneV2ModelSource): string {
     if (!/^[a-z0-9-]+$/.test(model.assetId)
@@ -88,7 +96,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
     const models = Object.entries(document.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id)).map(([assetId, model]) => {
         const asset = assets[assetId];
         if (!asset || (spatialPolicy.assetSelection !== 'catalog' && !allowedCategories.has(asset.category))
-            || asset.codeName !== model.codeName || model.path !== `models/${assetId}.glb`
+            || asset.codeName !== model.codeName || !isFoxholeGeneratedModelPath({ id: assetId, assetId, path: model.path })
             || model.resourceId !== `foxhole.model.${assetId}`
             || !['width', 'height', 'depth'].every(key => Number.isFinite(model[key as 'width']) && Number(model[key as 'width']) > 0)
             || !Number.isFinite(model.offsetX) || !Number.isFinite(model.offsetY) || !Number.isFinite(model.offsetZ)) {
@@ -104,7 +112,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             continue;
         }
         if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(id) || !assets[resource.assetId] || !id.startsWith(`${resource.assetId}.`)
-            || resource.resourceId !== `foxhole.model.${id}` || resource.path !== `models/${id}.glb`
+            || resource.resourceId !== `foxhole.model.${id}` || !isFoxholeGeneratedModelPath({ id, assetId: resource.assetId, path: resource.path })
             || !['width', 'height', 'depth'].every(key => Number.isFinite(resource[key as 'width']) && resource[key as 'width'] > 0)
             || !['offsetX', 'offsetY', 'offsetZ'].every(key => Number.isFinite(resource[key as 'offsetX']))) {
             throw new Error(`Invalid Foxhole model-part binding: ${id}`);

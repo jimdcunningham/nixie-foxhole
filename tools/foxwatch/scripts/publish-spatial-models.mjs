@@ -1,3 +1,4 @@
+import { spatialModelPath } from './spatial-model-paths.mjs';
 import { attachSpatialBlueprintLights } from './spatial-blueprint-lights.mjs';
 import { prepareSpatialTrenchScene, spatialTrenchProfile } from './spatial-trench-profiles.mjs';
 import { readFile, writeFile, mkdir, realpath, readdir } from 'node:fs/promises';
@@ -64,7 +65,7 @@ const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
     .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
     .map(name => resolve(foxwatchRoot, 'blender', name));
 sourceFiles.push(...['publish-spatial-models.mjs', 'spatial-model-cache.mjs', 'visual-output-cache.mjs',
-    'spatial-export-policy.mjs', 'spatial-blueprint-lights.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
+    'spatial-export-policy.mjs', 'spatial-model-paths.mjs', 'spatial-blueprint-lights.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
     .map(name => resolve(foxwatchRoot, 'scripts', name)));
 const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(foxwatchRoot, 'tmp/pipeline-cache/v1/spatial-models'),
     sourceFiles, { blender: blenderVersion, sharp: sharp.versions,
@@ -162,9 +163,11 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     const binHeader = Buffer.alloc(8); binHeader.writeUInt32LE(packed.length); binHeader.writeUInt32LE(0x004e4942, 4);
     const glb = Buffer.concat([header, json, binHeader, packed]);
     if (glb.length > 32 * 1024 * 1024 || compression.decodedGeometryBytes > 128 * 1024 * 1024) throw new Error(`Model exceeds bounded resource limits: ${id} (${glb.length} bytes)`);
-    await writeFile(resolve(modelRoot, `${id}.glb`), glb);
+    const outputPath = resolve(outputRoot, spatialModelPath(asset, id));
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, glb);
     console.log(`Published ${id}: ${glb.length} bytes; meshopt saved ${compression.bytesSaved}`);
-    return { ...(structuralProfile ? { structuralProfile } : {}), ...(pathProfile ? { pathProfile } : {}), assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: `models/${id}.glb`,
+    return { ...(structuralProfile ? { structuralProfile } : {}), ...(pathProfile ? { pathProfile } : {}), assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: spatialModelPath(asset, id),
         ...exported.sceneDimensions, offsetX: anchor.offsetX, offsetY: anchor.offsetY, offsetZ: anchor.offsetZ,
         blueprintOrigin: { x: 0, y: 0, z: -groundZ * 32 }, groundReference: groundReference ?? { zMetres: 0, basis: 'blueprint-origin' },
         lightCount, triangles: compression.precisionOptimization?.triangles ?? exported.triangles, ...geometryOptimization, meshoptBytesSaved: compression.bytesSaved,
@@ -232,7 +235,7 @@ for (const id of targets) {
     const identity = cache.identity(id, inputs, { geometryProfile, unitsPerMetre: config.unitsPerMetre,
         maxTextureSize: config.maxTextureSize, webpQuality: config.webpQuality, includeUpgrades: config.includeUpgrades,
         grounded: !!(config.groundAllVehicles && asset.isVehicle || config.groundedVehicles?.includes(id)), groundReference: config.placementGroundReferences?.[id],
-        codeName: asset.codeName, upgrades, repack }, outputIds.map(outputId => resolve(modelRoot, `${outputId}.glb`)));
+        codeName: asset.codeName, upgrades, repack }, outputIds.map(outputId => resolve(outputRoot, spatialModelPath(asset, outputId))));
     const cached = force ? null : await cache.lookup(identity);
     timing.checkMs = performance.now() - assetStartedAt;
     timing.models = outputIds.length;

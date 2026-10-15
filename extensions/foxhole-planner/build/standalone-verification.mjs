@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { isFoxholeGeneratedModelPath } from '../src/scene-v2-models.ts';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -14,9 +15,10 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     const modelInput = JSON.parse(await fs.readFile(join(fixtureInputRoot, 'models.v1.json'), 'utf8'));
     await fs.mkdir(join(fixtureInputRoot, 'models'), { recursive: true });
     for (const [assetId, model] of Object.entries({ ...modelInput.assets, ...modelInput.resources })) {
-        if (!/^[a-z0-9.-]+$/.test(assetId) || model.path !== `models/${assetId}.glb`) {
+        if (!/^[a-z0-9.-]+$/.test(assetId) || !isFoxholeGeneratedModelPath({ id: assetId, assetId: model.assetId ?? assetId, path: model.path })) {
             throw new Error(`Invalid standalone model input: ${assetId}`);
         }
+        await fs.mkdir(join(fixtureInputRoot, model.path, '..'), { recursive: true });
         await fs.copyFile(join(foxholeAssetsRoot, model.path), join(fixtureInputRoot, model.path));
     }
     // The live watcher may intentionally declare only a development model selection.
