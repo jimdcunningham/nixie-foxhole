@@ -18,7 +18,7 @@ export function renderSpatialTrench(entity: NixieExperimentalComponentEntitySnap
     const dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
     if (length < 1e-6)
         return undefined;
-    const angle = Math.atan2(dy, dx), c = Math.cos(angle), s = Math.sin(angle), height = (data.endZ ?? 0) - (data.startZ ?? 0), length3 = Math.hypot(length, height);
+    const angle = Math.atan2(dy, dx), c = Math.cos(angle), s = Math.sin(angle), height = (data.endZ ?? 0) - (data.startZ ?? 0), length3 = Math.hypot(dx, dy, height);
     const layers = Object.entries(asset.renderLayers).map(([id, v]) => ({ id, textureUrl: id, width: v.width * 2, height: v.height * 2, offsetX: v.offsetX * 2, offsetY: v.offsetY * 2, anchorX: v.anchorX, anchorY: v.anchorY }));
     const back = !!(data.startAttachmentNodeId || (data.startSocketName && data.socketAttachments?.[data.startSocketName]));
     const front = !!(data.endAttachmentNodeId || (data.endSocketName && data.socketAttachments?.[data.endSocketName]));
@@ -122,7 +122,11 @@ export function renderSpatialTrench(entity: NixieExperimentalComponentEntitySnap
             points: [start.x - c * buffer, start.y - s * buffer, (data.startZ ?? 0) - ratio * buffer, end.x + c * buffer, end.y + s * buffer, (data.endZ ?? 0) + ratio * buffer],
             deformationAnchors: [buffer * length3 / length, (buffer + length) * length3 / length], clipPolygons: [trenchFloorPolygon(start, end, layers, back, front).flatMap(p => [p.x, p.y])] });
     }
-    return { contractVersion: 1, nodes };
+    const deformationPathId = nodes.find(node => node.kind === 'model-path' && node.id !== 'trench-floor')?.id;
+    return { contractVersion: 1, nodes, groundCutouts: [{
+        polygon: trenchFloorPolygon(start, end, layers, back, front).flatMap(p => [p.x, p.y]),
+        minZ: -64, maxZ: 0, ...(deformationPathId ? { deformationPathId } : {}),
+    }] };
 }
 function roofPieces(layers: readonly TrenchPieceFrame[], id: string, start: TrenchEndpoint, end: TrenchEndpoint, alpha: number): TrenchPiece[] {
     const panel = pieceFrame(layers, 'TrenchT3RoofSurface') ?? pieceFrame(layers, 'TrenchT3Roof01');

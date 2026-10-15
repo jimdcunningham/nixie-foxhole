@@ -2,6 +2,7 @@ import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bound
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
 import { structuralModelClips } from './scene-v2-structural-clips.ts';
+import { structuralGroundCutouts } from './scene-v2-ground-cutouts.ts';
 import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
@@ -666,6 +667,8 @@ export function renderFoxholeSceneV2Entity(
     const modelClips = structuralModelClips(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
     if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
         ...placementSpatial, modelClips };
+    const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
+    if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
     const rotation = entity.components.find(component => (
