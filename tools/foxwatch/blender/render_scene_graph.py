@@ -276,6 +276,8 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
 
     node_object = bpy.data.objects.new(node_document["name"] or node_document["id"], None)
     node_object.empty_display_type = "PLAIN_AXES"
+    if node_document.get("spatialGroup"):
+        node_object["foxwatchSpatialGroup"] = node_document["spatialGroup"]
     collection.objects.link(node_object)
     apply_node_transform(node_object, node_document, parent_object, node_document.get("attachBoneName"))
     node_object.hide_render = not node_document.get("visible", True)

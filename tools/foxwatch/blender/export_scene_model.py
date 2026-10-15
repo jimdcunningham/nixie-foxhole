@@ -52,8 +52,27 @@ if not meshes:
 mesh_parts = [{"name": obj.name, "origin": [obj.matrix_world.translation.x * 32,
     -obj.matrix_world.translation.y * 32, obj.matrix_world.translation.z * 32]} for obj in meshes]
 
+# Snapshot semantic ancestry before baking removes the source hierarchy.
+semantic_members = {}
+for obj in meshes:
+    ancestor = obj.parent
+    while ancestor is not None:
+        group = ancestor.get("foxwatchSpatialGroup")
+        if group:
+            semantic_members.setdefault(group, []).append(obj)
+            break
+        ancestor = ancestor.parent
+
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
+semantic_groups = {}
+for key, members in semantic_members.items():
+    group = bpy.data.objects.new(key, None)
+    collection.objects.link(group)
+    group.select_set(True)
+    semantic_groups[key] = group.name
+    for obj in members:
+        obj.parent = group
 
 # Keep this experiment reasonably small without changing source textures.
 for image in bpy.data.images:
@@ -77,6 +96,7 @@ metadata = {
     "sceneDimensions": {"width": max(dimensions.x, 0.001) * 32, "height": max(dimensions.z, 0.001) * 32, "depth": max(dimensions.y, 0.001) * 32},
     "meshCount": len(meshes),
     "meshParts": mesh_parts,
+    "semanticGroups": semantic_groups,
     "bakedMeshCount": baked_mesh_count,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),

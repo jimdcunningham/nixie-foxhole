@@ -25,7 +25,21 @@ export interface FoxholeSpatialPathProfile {
     endOrigin?: [number, number, number];
 }
 
+export interface FoxholeStructuralModelProfile {
+    version: 1;
+    layers: Record<string,string[]>;
+    modifications?: Array<{slotId:string;variantId:string;nodeNames:string[];replacesLayers:string[]}>;
+}
+export function readFoxholeStructuralModelProfile(value: unknown): FoxholeStructuralModelProfile | undefined {
+    if(value===undefined)return undefined;
+    const profile=value as FoxholeStructuralModelProfile;
+    const names=(value:unknown): value is string[]=>Array.isArray(value)&&value.length<=256&&value.every(name=>typeof name==='string'&&name.length>0&&name.length<=256&&!/[\u0000-\u001f]/.test(name));
+    if(!profile||profile.version!==1||!profile.layers||Array.isArray(profile.layers)||Object.keys(profile.layers).length>128
+        ||!Object.values(profile.layers).every(names))throw Error('Invalid Foxhole structural profile');
+    return structuredClone(profile);
+}
 export interface FoxholeSceneV2ModelMetadata {
+    structuralProfile?: FoxholeStructuralModelProfile;
     pathProfile?: FoxholeSpatialPathProfile;
     insulatedPathProfile?: FoxholeSpatialPathProfile;
     resourceId: string;
@@ -54,8 +68,8 @@ export function getFoxholeSceneV2PackagedModelPath(model: FoxholeSceneV2ModelSou
 
 /** Join generated spatial output to the real catalog identity, never a preview product. */
 export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2AssetMetadata>,
-    document: { schemaVersion: number; assets: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile'> & { pathProfile?: unknown; } & { path: string; codeName: string; }>;
-        resources?: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile'> & { pathProfile?: unknown; } & { path: string; assetId: string; }>; }) {
+    document: { schemaVersion: number; assets: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; } & { path: string; codeName: string; }>;
+        resources?: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; } & { path: string; assetId: string; }>; }) {
     if (document.schemaVersion !== 1) {
         throw new Error('Unsupported Foxhole model bundle version.');
     }
@@ -73,8 +87,9 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             || !Number.isFinite(model.offsetX) || !Number.isFinite(model.offsetY) || !Number.isFinite(model.offsetZ)) {
             throw new Error(`Invalid Foxhole model binding: ${assetId}`);
         }
-        asset.model = { ...(model.pathProfile ? { pathProfile: readFoxholeSpatialPathProfile(model.pathProfile) } : {}), resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
+        asset.model = { ...(model.structuralProfile ? { structuralProfile: readFoxholeStructuralModelProfile(model.structuralProfile) } : {}), ...(model.pathProfile ? { pathProfile: readFoxholeSpatialPathProfile(model.pathProfile) } : {}), resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
             offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ };
+        if (asset.model.structuralProfile) (asset as FoxholeSceneV2AssetMetadata & {modelLayerNodes?:Record<string,string[]>}).modelLayerNodes = asset.model.structuralProfile.layers;
         return { id: assetId, assetId, path: model.path };
     });
     for (const [id, resource] of Object.entries(document.resources ?? {})) {

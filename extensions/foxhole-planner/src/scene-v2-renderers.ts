@@ -646,8 +646,11 @@ export function renderFoxholeSceneV2Entity(
     const selectionGeometry = resolveFoxholeSceneV2StructureSelectionGeometry(entity, assetMetadata);
     const appearance = readFoxholeSceneV2Appearance(entity);
     const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, context.settings, context.entities);
-    const renderedLayers = new Set(rendered.map(node => node.id));
-    const hiddenModelNodes = renderedLayers.has('building-texture') ? [] : Object.entries((assetMetadata as FoxholeModelLayerMetadata).modelLayerNodes ?? {})
+    const structural = assetMetadata.model?.structuralProfile;
+    const spatialRendered = structural ? renderFoxholeSceneV2Asset(entity, assetId, assetMetadata,
+        {...context.settings, 'foxhole.structure.useStaticRender': false}, context.entities) : rendered;
+    const renderedLayers = new Set(spatialRendered.map(node => node.id));
+    const hiddenModelNodes = !structural && renderedLayers.has('building-texture') ? [] : Object.entries((assetMetadata as FoxholeModelLayerMetadata).modelLayerNodes ?? {})
         .flatMap(([layerId, names]) => renderedLayers.has(`structure-layer-${layerId}`) ? [] : names);
     const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint);
     const placement = resolveFoxholeStructurePlacement(entity, context, assetMetadataById);

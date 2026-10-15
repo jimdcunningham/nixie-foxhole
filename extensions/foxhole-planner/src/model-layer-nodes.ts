@@ -9,6 +9,18 @@ export function bindFoxholeModelLayerNodes(asset: FoxholeModelLayerMetadata, byt
     if (!asset.model || !/^Foundation/i.test(asset.codeName)) return;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const document = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + view.getUint32(12, true))));
+    if(asset.model.structuralProfile){
+        asset.modelLayerNodes=structuredClone(asset.model.structuralProfile.layers);
+        const floorNames=new Set(asset.modelLayerNodes.floor??[]);
+        const heights:number[]=[];
+        const visit=(index:number,inside=false)=>{const node=document.nodes[index];inside ||= floorNames.has(node.name);
+            if(inside&&node.mesh!==undefined)for(const primitive of document.meshes[node.mesh].primitives){
+                const height=document.accessors[primitive.attributes.POSITION].max?.[1];if(Number.isFinite(height))heights.push(height*32+asset.model!.offsetZ);
+            }for(const child of node.children??[])visit(child,inside);};
+        for(const scene of document.scenes??[])for(const index of scene.nodes??[])visit(index);
+        if(heights.length)asset.foundationSurfaceZ=Math.round(Math.max(...heights)*1000)/1000;
+        return;
+    }
     const result: Record<string, string[]> = {};
     for (const node of document.nodes ?? []) {
         if (typeof node.name !== 'string' || node.mesh === undefined || node.matrix || node.translation || node.rotation || node.scale) continue;
