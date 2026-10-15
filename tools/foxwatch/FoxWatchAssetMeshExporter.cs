@@ -1625,12 +1625,16 @@ public sealed class FoxWatchAssetMeshExporter
             case USkeletalMeshComponent skeletalMeshComponent:
             {
                 var meshIndex = skeletalMeshComponent.GetSkeletalMesh();
-                if (meshIndex.IsNull)
+                var meshSource = ResolveSkeletalRenderPropertySource(component, "SkeletalMesh");
+                var inheritedMeshPath = !meshIndex.IsNull || ReferenceEquals(meshSource, component) ? string.Empty : GetReferencedPackagePath(meshSource, "SkeletalMesh");
+                if (meshIndex.IsNull && string.IsNullOrWhiteSpace(inheritedMeshPath))
                 {
                     return null;
                 }
 
-                if (!TryResolvePackageIndexReference(meshIndex, out var meshName, out var meshPath))
+                var meshName = GetObjectNameFromPackagePath(inheritedMeshPath);
+                var meshPath = inheritedMeshPath;
+                if (string.IsNullOrWhiteSpace(meshPath) && !TryResolvePackageIndexReference(meshIndex, out meshName, out meshPath))
                 {
                     return null;
                 }
@@ -1641,7 +1645,7 @@ public sealed class FoxWatchAssetMeshExporter
                     ComponentName = componentName,
                     ComponentType = component.ExportType,
                     DataClassPath = GetReferencedPackagePath(component, "DataClass"),
-                    AnimationClassPath = GetReferencedPackagePath(component, "AnimClass"),
+                    AnimationClassPath = GetReferencedPackagePath(ResolveSkeletalRenderPropertySource(component, "AnimClass"), "AnimClass"),
                     MeshType = "skeletal",
                     MeshName = meshName,
                     MeshPath = meshPath,
@@ -1718,11 +1722,11 @@ public sealed class FoxWatchAssetMeshExporter
         var hasRelativeRotation = TryReadRotator(export, "RelativeRotation", out var relativeRotation);
 
         var staticMeshPath = GetReferencedPackagePath(export, "StaticMesh");
-        var skeletalMeshPath = GetReferencedPackagePath(export, "SkeletalMesh");
+        var skeletalMeshPath = GetReferencedPackagePath(ResolveSkeletalRenderPropertySource(export, "SkeletalMesh"), "SkeletalMesh");
         var genericMeshPath = GetReferencedPackagePath(export, "Mesh");
         var itemMeshPath = GetReferencedPackagePath(export, "ItemMesh");
         var attachedItemMeshPath = GetReferencedPackagePath(export, "AttachedItemMesh");
-        var animationClassPath = GetReferencedPackagePath(export, "AnimClass");
+        var animationClassPath = GetReferencedPackagePath(ResolveSkeletalRenderPropertySource(export, "AnimClass"), "AnimClass");
         var meshPath = !string.IsNullOrWhiteSpace(staticMeshPath)
             ? staticMeshPath
             : !string.IsNullOrWhiteSpace(skeletalMeshPath)
@@ -1800,6 +1804,7 @@ public sealed class FoxWatchAssetMeshExporter
             ComponentName = componentName,
             ComponentType = export.ExportType,
             DataClassPath = GetReferencedPackagePath(export, "DataClass"),
+            AnimationClassPath = animationClassPath,
             MeshType = meshType,
             MeshName = GetObjectNameFromPackagePath(meshPath),
             MeshPath = meshPath,
@@ -1818,6 +1823,67 @@ public sealed class FoxWatchAssetMeshExporter
         ApplyComponentMetadata(componentReference, export);
         ApplyClassDefaultTransformFallback(componentReference, export);
         return componentReference;
+    }
+
+    // Serialized component instances contain overrides only. A present null is an
+    // explicit clear and must not fall through to a class default.
+    private static UObject ResolveSkeletalRenderPropertySource(UObject component, string propertyName)
+    {
+        static bool HasProperty(UObject value, string name) => value.Properties.Any(
+            property => string.Equals(property.Name.Text, name, StringComparison.OrdinalIgnoreCase));
+
+        if (HasProperty(component, propertyName))
+        {
+            return component;
+        }
+
+        try
+        {
+            var currentClass = component.Class?.TryLoad<UClass>(out var loadedClass) == true ? loadedClass : null;
+            var visited = new HashSet<UClass>();
+            UObject? nearestDefault = null;
+            var isSkeletalComponent = false;
+            while (currentClass != null && visited.Add(currentClass) && visited.Count <= 128)
+            {
+                isSkeletalComponent |= string.Equals(currentClass.Name, "SkeletalMeshComponent", StringComparison.Ordinal)
+                    || string.Equals(currentClass.Name, "SkinnedMeshComponent", StringComparison.Ordinal);
+                if (nearestDefault == null)
+                {
+                    var defaultReference = currentClass.ClassDefaultObject;
+                    if (defaultReference != null && !defaultReference.IsNull)
+                    {
+                        if (!defaultReference.TryLoad<UObject>(out var defaultObject))
+                        {
+                            return component;
+                        }
+                        if (HasProperty(defaultObject, propertyName))
+                        {
+                            nearestDefault = defaultObject;
+                        }
+                    }
+                }
+                var parentReference = currentClass.SuperStruct;
+                if (parentReference == null || parentReference.IsNull)
+                {
+                    currentClass = null;
+                }
+                else if (parentReference.TryLoad<UClass>(out var parentClass))
+                {
+                    currentClass = parentClass;
+                }
+                else
+                {
+                    return component;
+                }
+            }
+            // A cyclic/truncated hierarchy is not evidence of valid inheritance.
+            return currentClass == null && isSkeletalComponent && nearestDefault != null ? nearestDefault : component;
+        }
+        catch
+        {
+            // An unresolved class must retain the instance's existing behavior.
+            return component;
+        }
     }
 
     private void ApplyClassDefaultTransformFallback(FoxWatchBlueprintComponentReference targetReference, UObject export)
@@ -2028,9 +2094,47 @@ public sealed class FoxWatchAssetMeshExporter
     {
         ApplyBuildSocketMetadata(targetReference, export);
         ApplyComponentTagsMetadata(targetReference, export);
+        ApplyAuthoredFlagMaterialOverrideMetadata(targetReference, export);
+        ApplyAuthoredLightBeamMaterialOverrideMetadata(targetReference, export);
         ApplyFactionMaterialOverrideMetadata(targetReference, export);
         ApplySplineConnectorMetadata(targetReference, export);
         ApplyStaticMeshOverrideMetadata(targetReference, export);
+    }
+
+    private static void ApplyAuthoredFlagMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
+    {
+        // These authored one-slot Flag planes replace Measurement/Plane's debug
+        // material; retain the actual cloth sidecar rather than its emissive fallback.
+        if (!string.Equals(targetReference.ComponentName, "Flag", StringComparison.OrdinalIgnoreCase)
+            || !targetReference.MeshPath.EndsWith("/Meshes/Measurement/Plane.uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var material = export.GetOrDefault<ResolvedObject?[]>("OverrideMaterials", []).FirstOrDefault();
+        var materialPath = ConvertObjectPathToPackagePath(material?.GetPathName()) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(materialPath))
+        {
+            targetReference.MaterialSidecarNameOverride = Path.GetFileNameWithoutExtension(materialPath);
+            targetReference.DefaultMaterialPackagePath = materialPath;
+        }
+    }
+
+    private static void ApplyAuthoredLightBeamMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
+    {
+        if (!targetReference.MeshPath.EndsWith("/FX/Mesh/LightBeamMesh.uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        var material = export.GetOrDefault<ResolvedObject?[]>("OverrideMaterials", []).FirstOrDefault();
+        var materialPath = ConvertObjectPathToPackagePath(material?.GetPathName()) ?? string.Empty;
+        if (!materialPath.EndsWith("/FX/Materials/LightBeam.uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        // Keep the authored translucent shader instead of the GLB's WorldGridMaterial.
+        targetReference.MaterialSidecarNameOverride = "LightBeam";
+        targetReference.DefaultMaterialPackagePath = materialPath;
     }
 
     private static void ApplyFactionMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
@@ -2244,6 +2348,9 @@ public sealed class FoxWatchAssetMeshExporter
         List<double>? relativeScale = TryReadStructTransformScale(fallback, "RelativeTransform", out var scale)
             ? [scale.X, scale.Y, scale.Z]
             : null;
+        List<double>? relativeRotation = TryReadStructTransformRotationDegrees(fallback, "RelativeTransform", out var rotation)
+            ? [rotation.Pitch, rotation.Yaw, rotation.Roll]
+            : null;
         var splineMeshAxis = ReadFallbackString(fallback, "SplineMeshAxis");
         var nativeMeshLengthCentimeters = ResolveMeshAxisLengthCentimeters(meshPaths.FirstOrDefault(), NormalizeSplineMeshAxis(splineMeshAxis));
 
@@ -2255,6 +2362,7 @@ public sealed class FoxWatchAssetMeshExporter
             SplineMeshAxis = splineMeshAxis,
             NativeMeshLengthCentimeters = nativeMeshLengthCentimeters,
             Interval = fallback.GetOrDefault<float>("Interval"),
+            MaxInstances = fallback.GetOrDefault<int>("MaxInstances"),
             StartOffset = fallback.GetOrDefault<float>("StartOffset"),
             EndOffset = fallback.GetOrDefault<float>("EndOffset"),
             FillRemainder = fallback.GetOrDefault<bool?>("bFillRemainder"),
@@ -2265,12 +2373,18 @@ public sealed class FoxWatchAssetMeshExporter
             SplineBoundaryMax = fallback.GetOrDefault<float?>("SplineBoundaryMax"),
             SplineMaterialScaling = TryReadVector2(fallback, "SplineMaterialScaling"),
             RelativeLocation = relativeLocation,
+            RelativeRotation = relativeRotation,
             RelativeScale = relativeScale,
         };
     }
 
     private static List<double>? TryReadVector2(FStructFallback fallback, string propertyName)
     {
+        if (fallback.TryGetValue(out FVector2D vector, propertyName))
+        {
+            return [vector.X, vector.Y];
+        }
+
         if (!fallback.TryGetValue(out FStructFallback vectorFallback, propertyName))
         {
             return null;
@@ -2447,24 +2561,32 @@ public sealed class FoxWatchAssetMeshExporter
             return false;
         }
 
-        if (TryReadRotator(transformFallback, "Rotation", out value))
+        if (transformFallback.TryGetValue(out FQuat typedQuaternion, "Rotation"))
         {
+            value = typedQuaternion.Rotator();
             return true;
         }
 
-        if (!transformFallback.TryGetValue(out FStructFallback rotationFallback, "Rotation"))
+        // Decoded snapshots retain quaternion components as a fallback struct.
+        // Read it before the Euler fallback, which otherwise defaults to zero.
+        if (transformFallback.TryGetValue(out FStructFallback rotationFallback, "Rotation") &&
+            rotationFallback.Properties.Any(property => property.Name.Text == "W"))
         {
-            value = default;
-            return false;
+            static float ReadComponent(FStructFallback rotation, string name) =>
+                rotation.TryGetValue(out float component, name)
+                    ? component
+                    : (float)rotation.GetOrDefault<double>(name);
+
+            var quaternion = new FQuat(
+                ReadComponent(rotationFallback, "X"),
+                ReadComponent(rotationFallback, "Y"),
+                ReadComponent(rotationFallback, "Z"),
+                ReadComponent(rotationFallback, "W"));
+            value = quaternion.Rotator();
+            return true;
         }
 
-        var quaternion = new FQuat(
-            (float)rotationFallback.GetOrDefault<double>("X"),
-            (float)rotationFallback.GetOrDefault<double>("Y"),
-            (float)rotationFallback.GetOrDefault<double>("Z"),
-            (float)rotationFallback.GetOrDefault<double>("W"));
-        value = quaternion.Rotator();
-        return true;
+        return TryReadRotator(transformFallback, "Rotation", out value);
     }
 
     private static string GetObjectNameFromPackagePath(string packagePath)
@@ -3033,6 +3155,7 @@ public sealed class FoxWatchAssetMeshExporter
                 SplineMeshAxis = config.SplineMeshAxis,
                 NativeMeshLengthCentimeters = config.NativeMeshLengthCentimeters,
                 Interval = config.Interval,
+                MaxInstances = config.MaxInstances,
                 StartOffset = config.StartOffset,
                 EndOffset = config.EndOffset,
                 FillRemainder = config.FillRemainder,
@@ -3043,6 +3166,7 @@ public sealed class FoxWatchAssetMeshExporter
                 SplineBoundaryMax = config.SplineBoundaryMax,
                 SplineMaterialScaling = config.SplineMaterialScaling == null ? null : [.. config.SplineMaterialScaling],
                 RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
+                RelativeRotation = config.RelativeRotation == null ? null : [.. config.RelativeRotation],
                 RelativeScale = config.RelativeScale == null ? null : [.. config.RelativeScale],
             })],
             SplineComponentConfigs = [.. reference.SplineComponentConfigs.Select(config => new FoxWatchSplineConnectorComponentConfigReference
@@ -3200,6 +3324,7 @@ public sealed class FoxWatchAssetMeshExporter
                     SplineMeshAxis = config.SplineMeshAxis,
                     NativeMeshLengthCentimeters = config.NativeMeshLengthCentimeters,
                     Interval = config.Interval,
+                    MaxInstances = config.MaxInstances,
                     StartOffset = config.StartOffset,
                     EndOffset = config.EndOffset,
                     FillRemainder = config.FillRemainder,
@@ -3210,6 +3335,7 @@ public sealed class FoxWatchAssetMeshExporter
                     SplineBoundaryMax = config.SplineBoundaryMax,
                     SplineMaterialScaling = config.SplineMaterialScaling == null ? null : [.. config.SplineMaterialScaling],
                     RelativeLocation = config.RelativeLocation == null ? null : [.. config.RelativeLocation],
+                    RelativeRotation = config.RelativeRotation == null ? null : [.. config.RelativeRotation],
                     RelativeScale = config.RelativeScale == null ? null : [.. config.RelativeScale],
                 })
             ];
@@ -3468,7 +3594,7 @@ public sealed class FoxWatchAssetMeshExporter
 
     private static ScsNodeOverride CreateScsNodeOverride(USCS_Node node, string? inferredParentName)
     {
-        var parentComponentName = node.GetOrDefault<FName>("ParentComponentOrVariableName", new FName()).Text;
+        var parentComponentName = NormalizeOptionalAttachmentReference(node.GetOrDefault<FName>("ParentComponentOrVariableName", new FName()).Text);
         if (string.IsNullOrWhiteSpace(parentComponentName))
         {
             parentComponentName = inferredParentName ?? string.Empty;
@@ -3607,7 +3733,31 @@ public sealed class FoxWatchAssetMeshExporter
 
     private static bool IsComponentVisible(UObject export)
     {
-        return !export.TryGetValue(out bool isVisible, "bVisible") || isVisible;
+        // Component instances serialize only overrides. A custom component's
+        // hidden class default (for example weather puddles) still applies.
+        if (export.TryGetValue(out bool isVisible, "bVisible"))
+        {
+            return isVisible;
+        }
+
+        var currentClass = export.Class?.TryLoad<UClass>(out var componentClass) == true
+            ? componentClass
+            : null;
+        var visitedClasses = new HashSet<UClass>();
+        while (currentClass != null && visitedClasses.Add(currentClass))
+        {
+            if (currentClass.ClassDefaultObject?.TryLoad<UObject>(out var defaultObject) == true &&
+                defaultObject.TryGetValue(out isVisible, "bVisible"))
+            {
+                return isVisible;
+            }
+
+            currentClass = currentClass.SuperStruct?.TryLoad<UClass>(out var parentClass) == true
+                ? parentClass
+                : null;
+        }
+
+        return true;
     }
 
     private static bool IsComponentHiddenInGame(UObject export)
@@ -3700,7 +3850,7 @@ public sealed class FoxWatchAssetMeshExporter
 
     private sealed class FoxWatchPackageInspectionSnapshot
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -3817,6 +3967,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public List<FoxWatchSplineConnectorMeshConfigReference> SplineConnectorMeshConfigs { get; set; } = [];
     public List<FoxWatchSplineConnectorComponentConfigReference> SplineComponentConfigs { get; set; } = [];
     public string MaterialSidecarNameOverride { get; set; } = string.Empty;
+    public string DefaultMaterialPackagePath { get; set; } = string.Empty;
     public Dictionary<string, List<FoxWatchMaterialOverrideReference>> MaterialOverridesByVariant { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string MaterialOverrideTargetMeshPath { get; set; } = string.Empty;
     public bool IsVisible { get; set; } = true;
@@ -3855,6 +4006,7 @@ public sealed class FoxWatchSplineConnectorMeshConfigReference
     public string SplineMeshAxis { get; set; } = string.Empty;
     public double? NativeMeshLengthCentimeters { get; set; }
     public double Interval { get; set; }
+    public int MaxInstances { get; set; }
     public double StartOffset { get; set; }
     public double EndOffset { get; set; }
     public bool? FillRemainder { get; set; }
@@ -3866,6 +4018,7 @@ public sealed class FoxWatchSplineConnectorMeshConfigReference
     public List<double>? SplineMaterialScaling { get; set; }
     public List<double>? RelativeLocation { get; set; }
     public List<double>? RelativeScale { get; set; }
+    public List<double>? RelativeRotation { get; set; }
 }
 
 public sealed class FoxWatchSplineConnectorComponentConfigReference

@@ -1,0 +1,54 @@
+{
+    "settings": {
+        "version": 2,
+        "enableGrid": true,
+        "enableSnapRotation": false,
+        "enablePasteSnapToCursor": true,
+        "trackpad": true,
+        "smoothNavigation": true,
+        "showToolbelt": true,
+        "autoShowSidebarWhenSelection": false,
+        "showBuildingListFilters": true,
+        "showBuildingCategories": false,
+        "showSelectedTierOnly": false,
+        "showUpgradesAsBuildings": true,
+        "selectedFaction": "c",
+        "selectedTier": 2,
+        "projectBrowserView": "list",
+        "projectBrowserIconScale": 3,
+        "selectedToolbelt": 2,
+        "toolbeltPosition": "top",
+        "toolbeltMode": 2,
+        "buildingListFilters": {
+            "bunkers": true,
+            "facilities": false,
+            "vehicles": true,
+            "world": true,
+            "items": false
+        },
+        "toolbelts": {
+            "0": {
+                "0": { "type": "building", "subtype": "fortt1", "icon": "/legacy/fortt1.webp" },
+                "1": { "type": "building", "subtype": "crane", "icon": "/legacy/crane.webp" },
+                "2": { "type": "icon", "subtype": "metal", "icon": "/legacy/metal.webp" },
+                "3": { "type": "blueprint", "subtype": "my-blueprint.json", "icon": "data:image/png;base64,ignored" },
+                "4": { "type": "clipboard", "eData": "{\"entities\":[]}", "icon": "data:image/png;base64,ignored" },
+                "5": { "type": "mode", "subtype": "text", "eData": "{\"labelStyle\":{\"size\":32}}", "icon": "data:image/png;base64,ignored" },
+                "6": { "type": "building", "subtype": "removed-building" },
+                "7": { "type": "icon", "subtype": "fortt1" }
+            },
+            "2": {
+                "9": { "type": "building", "subtype": "worldroad", "icon": "/legacy/road.webp" }
+            }
+        },
+        "gridSize": 16,
+        "snapRotationDegrees": 15,
+        "keySnapRotationDegrees": 45,
+        "zoomSpeed": 3,
+        "toolbeltFilters": { "selectedTier": 3, "showSelectedTierOnly": true },
+        "bindings": { "rotateCW": { "primary": { "key": "e" } } },
+        "styles": { "text": { "fontSize": 32 } },
+        "assetsBrowserFavorites": { "fortt1": true },
+        "boardColorMode": "dark"
+    }
+}

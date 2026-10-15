@@ -1,0 +1,179 @@
+{
+  "clipFloor": false,
+  "renderLayers": [
+    {
+      "id": "wallback",
+      "componentName": "WallBack"
+    },
+    {
+      "id": "wallfront",
+      "componentName": "WallFront"
+    },
+    {
+      "id": "wallleft",
+      "componentName": "WallLeft"
+    },
+    {
+      "id": "wallright",
+      "componentName": "WallRight"
+    },
+    {
+      "id": "cornerbackleft",
+      "componentName": "CornerBackLeft"
+    },
+    {
+      "id": "cornerbackright",
+      "componentName": "CornerBackRight"
+    },
+    {
+      "id": "cornerfrontleft",
+      "componentName": "CornerFrontLeft"
+    },
+    {
+      "id": "cornerfrontright",
+      "componentName": "CornerFrontRight"
+    },
+    {
+      "id": "dirtcornerbackleft",
+      "componentName": "DirtCornerBackLeft"
+    },
+    {
+      "id": "dirtcornerbackright",
+      "componentName": "DirtCornerBackRight"
+    },
+    {
+      "id": "dirtcornerfrontleft",
+      "componentName": "DirtCornerFrontLeft"
+    },
+    {
+      "id": "dirtcornerfrontright",
+      "componentName": "DirtCornerFrontRight"
+    },
+    {
+      "id": "dirtback",
+      "componentName": "DirtBack"
+    },
+    {
+      "id": "dirtfront",
+      "componentName": "DirtFront"
+    },
+    {
+      "id": "floorsplineconnector",
+      "componentName": "FloorSplineConnector"
+    },
+    {
+      "id": "dirtsplineleft",
+      "componentName": "DirtSplineLeft"
+    },
+    {
+      "id": "dirtsplineright",
+      "componentName": "DirtSplineRight"
+    },
+    {
+      "id": "visualsplineleft",
+      "componentName": "VisualSplineLeft"
+    },
+    {
+      "id": "visualsplineright",
+      "componentName": "VisualSplineRight"
+    },
+    {
+      "id": "piece-trencht2shortspline01",
+      "componentName": "mesh:TrenchT2ShortSpline01"
+    },
+    {
+      "id": "piece-trencht1shortdirtspline01",
+      "componentName": "mesh:TrenchT1ShortDirtSpline01"
+    },
+    {
+      "id": "piece-trencht2shortspline02",
+      "componentName": "mesh:TrenchT2ShortSpline02"
+    },
+    {
+      "id": "piece-trencht2shortspline03",
+      "componentName": "mesh:TrenchT2ShortSpline03"
+    },
+    {
+      "id": "piece-trencht2shortspline04",
+      "componentName": "mesh:TrenchT2ShortSpline04"
+    },
+    {
+      "id": "piece-trencht2shortspline05",
+      "componentName": "mesh:TrenchT2ShortSpline05"
+    },
+    {
+      "id": "piece-trencht2shortspline06",
+      "componentName": "mesh:TrenchT2ShortSpline06"
+    },
+    {
+      "id": "piece-trencht2shortspline07",
+      "componentName": "mesh:TrenchT2ShortSpline07"
+    },
+    {
+      "id": "piece-trencht2shortspline08",
+      "componentName": "mesh:TrenchT2ShortSpline08"
+    },
+    {
+      "id": "piece-trencht2shortspline09",
+      "componentName": "mesh:TrenchT2ShortSpline09"
+    },
+    {
+      "id": "piece-trencht2shortspline10",
+      "componentName": "mesh:TrenchT2ShortSpline10"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline01",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline01"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline02",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline02"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline03",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline03"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline04",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline04"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledsplineend",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSplineEnd"
+    },
+    {
+      "id": "piece-trenchbarbedwirepillart2",
+      "componentName": "mesh:TrenchBarbedWirePillarT2"
+    },
+    {
+      "id": "piece-trenchbarbedwiret2",
+      "componentName": "mesh:TrenchBarbedWireT2"
+    },
+    {
+      "id": "piece-trencht2floorcover01",
+      "componentName": "mesh:TrenchT2FloorCover01"
+    },
+    {
+      "id": "piece-trencht2floorcover02",
+      "componentName": "mesh:TrenchT2FloorCover02"
+    },
+    {
+      "id": "piece-trencht2floorcover03",
+      "componentName": "mesh:TrenchT2FloorCover03"
+    },
+    {
+      "id": "piece-trencht2floorcover04",
+      "componentName": "mesh:TrenchT2FloorCover04"
+    },
+    {
+      "id": "piece-trencht2floorcover05",
+      "componentName": "mesh:TrenchT2FloorCover05"
+    }
+  ],
+  "connector": {
+    "minLengthCm": 250,
+    "maxLengthCm": 800,
+    "backSocketName": "BackSocket",
+    "frontSocketName": "FrontSocket"
+  }
+}

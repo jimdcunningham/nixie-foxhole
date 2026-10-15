@@ -1,5 +1,9 @@
 {
   "clipFloor": false,
+  "renderLayers": [
+    { "id": "base", "componentName": "Mesh" },
+    { "id": "roof", "componentName": "FortRoofModSlot" }
+  ],
   "lineOfSightPolygons": [
     {
       "shape": [

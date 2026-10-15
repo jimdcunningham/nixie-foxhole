@@ -940,6 +940,7 @@ public class FoxWatchManifestAssetExtractor
                 iconOutputDirectory,
                 englishStrings,
                 localizationReferencesById);
+            FilterModificationSlotsForTier(modificationSlots, tier);
             var vehicleBuildType = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("VehicleBuildType")));
             var profileType = NullIfWhiteSpace(NormalizeEnumValue(inheritedProperty("ProfileType")));
             var isVehicle = HasBlueprintOwnedComponentType(objects, blueprint, "VehicleSeatComponent")
@@ -1073,6 +1074,7 @@ public class FoxWatchManifestAssetExtractor
                 Decays = ResolveDecays(codeNameText, constructionDynamicData),
                 LiquidCapacity = ExtractDouble(inheritedProperty("MaxLiquidAmount")),
                 Stockpile = stockpile,
+                Stockpiles = ExtractStockpileGroups(objects, blueprint),
                 HoldProfile = BuildHoldProfile(stockpile, fuelTanks, constructionDynamicData, codeNameText),
                 MaxHealth = ExtractNullableInt(inheritedProperty("MaxHealth")),
                 MaxOrders = ExtractNullableInt(inheritedProperty("MaxOrders")) ?? specializedFactoryMetadata.MaxQueueSize,
@@ -1203,7 +1205,7 @@ public class FoxWatchManifestAssetExtractor
 
             if (string.Equals(profileType, "Trench", StringComparison.OrdinalIgnoreCase))
             {
-                return ExtractTrenchStructureRenderLayers(blueprintPackagePath);
+                return ExtractTrenchStructureRenderLayers(structureId, blueprintPackagePath);
             }
 
             if (!ShouldExtractFortEntrenchmentRenderLayers(profileType, buildSockets, blueprintPackagePath))
@@ -1219,7 +1221,7 @@ public class FoxWatchManifestAssetExtractor
             return string.Equals(structureId, "facilitycatwalkplatform", StringComparison.OrdinalIgnoreCase);
         }
 
-        private List<FoxWatchManifestStructureRenderLayer>? ExtractTrenchStructureRenderLayers(string? blueprintPackagePath)
+        private List<FoxWatchManifestStructureRenderLayer>? ExtractTrenchStructureRenderLayers(string structureId, string? blueprintPackagePath)
         {
             if (string.IsNullOrWhiteSpace(blueprintPackagePath) || _meshAssetExporter == null)
             {
@@ -1249,6 +1251,21 @@ public class FoxWatchManifestAssetExtractor
                             });
                         }
 
+                        continue;
+                    }
+
+                    if (TryResolveTrenchEmplacementRenderLayer(structureId, componentReference,
+                            out var emplacementLayerId, out var emplacementTags))
+                    {
+                        if (!renderLayers.Any(layer => layer.Id == emplacementLayerId))
+                        {
+                            renderLayers.Add(new FoxWatchManifestStructureRenderLayer
+                            {
+                                Id = emplacementLayerId,
+                                ComponentName = componentReference.ComponentName,
+                                ComponentTags = emplacementTags,
+                            });
+                        }
                         continue;
                     }
 
@@ -1300,6 +1317,57 @@ public class FoxWatchManifestAssetExtractor
             }
         }
 
+        private static bool TryResolveTrenchEmplacementRenderLayer(
+            string structureId,
+            FoxWatchBlueprintComponentReference componentReference,
+            out string layerId,
+            out List<string> componentTags)
+        {
+            layerId = string.Empty;
+            componentTags = [];
+            if (structureId is not ("trenchempt1" or "trenchempt2" or "trenchempt3")
+                || string.IsNullOrWhiteSpace(componentReference.MeshPath))
+            {
+                return false;
+            }
+            var name = GetTrenchComponentShortName(componentReference.ComponentName);
+            string[] directions = ["Front", "FrontRight", "Right", "BackRight", "Back", "BackLeft", "Left", "FrontLeft"];
+            foreach (var direction in directions)
+            {
+                if (string.Equals(name, direction, StringComparison.OrdinalIgnoreCase))
+                {
+                    layerId = direction.ToLowerInvariant() + "wall";
+                    componentTags = [direction];
+                    return true;
+                }
+                if (string.Equals(name, "Dirt" + direction, StringComparison.OrdinalIgnoreCase))
+                {
+                    layerId = "dirt" + direction.ToLowerInvariant();
+                    componentTags = [direction];
+                    return true;
+                }
+            }
+            string[] postNames = ["BackCornerR", "BackCornerL", "FrontCornerR", "FrontCornerL",
+                "RightCornerR", "RightCornerL", "LeftCornerR", "LeftCornerL"];
+            var postIndex = Array.FindIndex(postNames, post => string.Equals(name, post, StringComparison.OrdinalIgnoreCase));
+            if (postIndex >= 0)
+            {
+                layerId = "corner" + (postIndex + 1);
+                return true;
+            }
+            // The eight corner posts frame the openings and remain when walls open.
+            var cornerName = name.StartsWith("DirtCorner", StringComparison.OrdinalIgnoreCase)
+                ? name[4..] : name;
+            if (cornerName.StartsWith("Corner", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(cornerName[6..], out var corner) && corner is >= 1 and <= 8)
+            {
+                layerId = structureId == "trenchempt3" || name == cornerName
+                    ? "corner" + corner : "dirtcorner" + corner;
+                return true;
+            }
+            return false;
+        }
+
         private static bool IsTrenchFloorComponentReference(FoxWatchBlueprintComponentReference componentReference)
         {
             if (string.IsNullOrWhiteSpace(componentReference.MeshPath) ||
@@ -1343,6 +1411,24 @@ public class FoxWatchManifestAssetExtractor
             }
 
             var shortName = GetTrenchComponentShortName(componentReference.ComponentName);
+            // Intersection approach caps are shown by the socket's Dirt*Connect tag.
+            // Their numbered component names are not ordinary closed walls.
+            var connectionTag = componentReference.ComponentTags.FirstOrDefault(tag =>
+                tag.StartsWith("Dirt", StringComparison.OrdinalIgnoreCase)
+                && tag.EndsWith("Connect", StringComparison.OrdinalIgnoreCase));
+            if (shortName.StartsWith("Wall", StringComparison.OrdinalIgnoreCase) && connectionTag != null)
+            {
+                var directions = DeriveDirectionalTagsFromComponentName(connectionTag);
+                if (directions.Count == 1)
+                {
+                    var otherDirection = DeriveDirectionalTagsFromComponentName(shortName)
+                        .FirstOrDefault(direction => direction != directions[0]);
+                    layerId = $"openwall{directions[0].ToLowerInvariant()}{otherDirection?.ToLowerInvariant()}";
+                    componentTags = directions;
+                    return true;
+                }
+            }
+
             switch (shortName)
             {
                 case "WallBack":
@@ -1388,6 +1474,13 @@ public class FoxWatchManifestAssetExtractor
             }
 
             var shortName = GetTrenchComponentShortName(componentReference.ComponentName);
+            // Concrete intersections name their corner meshes WallCorner*, while
+            // the lower tiers and straight trenches use Corner*. Keep one layer ID.
+            if (shortName.StartsWith("WallCorner", StringComparison.OrdinalIgnoreCase))
+            {
+                shortName = shortName["Wall".Length..];
+            }
+
             if (!shortName.StartsWith("Corner", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
@@ -2547,7 +2640,7 @@ public class FoxWatchManifestAssetExtractor
 
         private static bool ComputeIsBreachedStructure(string codeName, string? upgradeStructureCodeName)
         {
-            return codeName.EndsWith("Breached", StringComparison.OrdinalIgnoreCase)
+            return Regex.IsMatch(codeName, @"Breached(?:T[0-9]+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
                 && !string.IsNullOrWhiteSpace(upgradeStructureCodeName);
         }
 
@@ -4136,6 +4229,12 @@ public class FoxWatchManifestAssetExtractor
                 Name = slot.Name,
                 ComponentType = slot.ComponentType,
                 DataClassPath = slot.DataClassPath,
+                AuthoredSplineTarget = slot.AuthoredSplineTarget == null ? null : new()
+                {
+                    SlotComponentName = slot.AuthoredSplineTarget.SlotComponentName,
+                    TargetComponentName = slot.AuthoredSplineTarget.TargetComponentName,
+                    LocalTargetCentimeters = [.. slot.AuthoredSplineTarget.LocalTargetCentimeters],
+                },
                 X = slot.X,
                 Y = slot.Y,
                 Z = slot.Z,
@@ -4600,40 +4699,77 @@ public class FoxWatchManifestAssetExtractor
             IEnumerable<dynamic> objects,
             UBlueprintGeneratedClass blueprint)
         {
-            if (!HasBlueprintOwnedComponentType(objects, blueprint, "SpotLightComponent"))
-            {
-                return [];
-            }
-
-            var scopes = EnumerateBlueprintComponentScopes(objects, blueprint).ToArray();
-            var componentLookup = BuildComponentLookup(scopes.SelectMany(scope => scope.Objects));
             var spotlights = new List<FoxWatchManifestSpotlight>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            ExtractSpotlightsFromTemplateScopes(objects, blueprint,
+                new ManifestComponentTransform(0, 0, 0, Quaternion.Identity), string.Empty,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase), spotlights, seen);
+            return NormalizeVehicleSpotlights(blueprint, spotlights);
+        }
 
-            foreach (var scope in scopes)
+        private void ExtractSpotlightsFromTemplateScopes(
+            IEnumerable<dynamic> objects,
+            UBlueprintGeneratedClass blueprint,
+            ManifestComponentTransform parentTransform,
+            string componentPrefix,
+            HashSet<string> ancestry,
+            List<FoxWatchManifestSpotlight> spotlights,
+            HashSet<string> seen)
+        {
+            var packagePath = GetPackagePath(blueprint) ?? GetObjectName(blueprint);
+            if (ancestry.Count >= 16 || !ancestry.Add(packagePath))
             {
-                foreach (var item in scope.Objects)
+                return;
+            }
+            try
+            {
+                var scopes = EnumerateBlueprintComponentScopes(objects, blueprint).ToArray();
+                var componentLookup = BuildComponentLookup(scopes.SelectMany(scope => scope.Objects));
+                var seenTemplates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var scope in scopes)
                 {
-                    if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName))
+                    foreach (var item in scope.Objects)
                     {
-                        continue;
-                    }
+                        if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName))
+                        {
+                            continue;
+                        }
 
-                    var spotlight = ExtractSpotlight(objects, blueprint, item, componentLookup);
-                    if (spotlight == null)
-                    {
-                        continue;
-                    }
+                        var spotlight = ExtractSpotlight(objects, blueprint, item, componentLookup, parentTransform, !string.IsNullOrEmpty(componentPrefix));
+                        if (spotlight != null)
+                        {
+                            spotlight.Name = componentPrefix + spotlight.Name;
+                            if (seen.Add(BuildSpotlightKey(spotlight))) spotlights.Add(spotlight);
+                        }
 
-                    var key = BuildSpotlightKey(spotlight);
-                    if (seen.Add(key))
-                    {
-                        spotlights.Add(spotlight);
+                        if (!GetObjectTypeName(item).Contains("TemplateComponent", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+                        var componentName = NormalizeTemplateComponentName(ExtractText(GetNamedValue(item, "Name")));
+                        var templatePath = GetReferencedPackagePath(item, "TemplateActor");
+                        if (string.IsNullOrWhiteSpace(templatePath) || string.IsNullOrWhiteSpace(componentName)
+                            || !seenTemplates.Add(componentName) || ancestry.Contains(templatePath))
+                        {
+                            continue;
+                        }
+                        var templateObjects = LoadPackageExports(templatePath);
+                        var templateBlueprint = FindBlueprintGeneratedClass(templateObjects);
+                        if (templateBlueprint == null) continue;
+                        var localTransform = string.IsNullOrEmpty(componentPrefix)
+                            ? ResolveBlueprintComponentTransform(objects, blueprint, item, componentLookup)
+                            : ResolveSpotlightTemplateTransform(objects, blueprint, item, componentLookup);
+                        ExtractSpotlightsFromTemplateScopes(templateObjects, templateBlueprint,
+                            ComposeComponentTransforms(parentTransform, localTransform),
+                            componentPrefix + componentName + ":", ancestry, spotlights, seen);
                     }
                 }
             }
-
-            return NormalizeVehicleSpotlights(blueprint, spotlights);
+            finally
+            {
+                ancestry.Remove(packagePath);
+            }
         }
 
         private List<FoxWatchManifestSpotlight> NormalizeVehicleSpotlights(
@@ -4728,7 +4864,9 @@ public class FoxWatchManifestAssetExtractor
             IEnumerable<dynamic> rootObjects,
             UBlueprintGeneratedClass blueprint,
             object component,
-            IReadOnlyDictionary<string, object> componentLookup)
+            IReadOnlyDictionary<string, object> componentLookup,
+            ManifestComponentTransform parentTransform,
+            bool fromTemplate)
         {
             var componentType = GetObjectTypeName(component);
             if (!componentType.Contains("SpotLightComponent", StringComparison.OrdinalIgnoreCase))
@@ -4742,7 +4880,10 @@ public class FoxWatchManifestAssetExtractor
                 return null;
             }
 
-            var transform = ResolveBlueprintComponentTransform(rootObjects, blueprint, component, componentLookup);
+            var localTransform = fromTemplate
+                ? ResolveSpotlightTemplateTransform(rootObjects, blueprint, component, componentLookup)
+                : ResolveBlueprintComponentTransform(rootObjects, blueprint, component, componentLookup);
+            var transform = ComposeComponentTransforms(parentTransform, localTransform);
             var spotlightPlanarHeading = ResolveSpotlightPlanarHeading(transform.Rotation);
             var spotlightYawDegrees = ResolveVehicleSpotlightFacingYawDegrees(
                 blueprint,
@@ -4765,12 +4906,50 @@ public class FoxWatchManifestAssetExtractor
                 OuterConeAngle = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "OuterConeAngle")),
                 InnerConeAngle = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "InnerConeAngle")),
                 AttenuationRadius = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "AttenuationRadius")),
+                LightFalloffExponent = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "LightFalloffExponent")),
+                UseInverseSquaredFalloff = ExtractBoolValue(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "bUseInverseSquaredFalloff")),
                 Intensity = intensity,
                 LightColor = string.IsNullOrWhiteSpace(lightColor) ? null : lightColor,
                 SourceRadius = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "SourceRadius")),
                 SoftSourceRadius = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "SoftSourceRadius")),
                 SourceLength = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "SourceLength")),
             };
+        }
+
+        private ManifestComponentTransform ResolveSpotlightTemplateTransform(
+            IEnumerable<dynamic> rootObjects,
+            UBlueprintGeneratedClass blueprint,
+            object component,
+            IReadOnlyDictionary<string, object> componentLookup)
+        {
+            var constructionParents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var scope in EnumerateBlueprintComponentScopes(rootObjects, blueprint))
+            {
+                foreach (var node in scope.Objects.Where(item => GetObjectTypeName(item).Contains("SCS_Node", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var parentName = ResolveAttachParentName(GetNamedValue(node, "ComponentTemplate"), defaultToDirectValue: true);
+                    if (string.IsNullOrWhiteSpace(parentName)) continue;
+                    foreach (var child in AsEnumerable(GetNamedValue(node, "ChildNodes")))
+                    {
+                        var nodeName = ResolveAttachParentName(child, defaultToDirectValue: true);
+                        if (string.IsNullOrWhiteSpace(nodeName) || !componentLookup.TryGetValue(nodeName, out var childNode)) continue;
+                        var childName = ResolveAttachParentName(GetNamedValue(childNode, "ComponentTemplate"), defaultToDirectValue: true);
+                        if (!string.IsNullOrWhiteSpace(childName)) constructionParents.TryAdd(childName, parentName);
+                    }
+                }
+            }
+            var ancestry = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            ManifestComponentTransform Resolve(object current)
+            {
+                var local = ExtractLocalComponentTransform(current);
+                var name = GetComponentLookupKeys(current).FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(name) || ancestry.Count >= 64 || !ancestry.Add(name)) return local;
+                var parentName = ResolveAttachParentName(current);
+                if (string.IsNullOrWhiteSpace(parentName)) constructionParents.TryGetValue(name, out parentName);
+                return !string.IsNullOrWhiteSpace(parentName) && componentLookup.TryGetValue(parentName, out var parent)
+                    ? ComposeComponentTransforms(Resolve(parent), local) : local;
+            }
+            return Resolve(component);
         }
 
         private double? ResolveVehicleSpotlightFacingYawDegrees(
@@ -7702,6 +7881,7 @@ public class FoxWatchManifestAssetExtractor
                     resolvedScopes.Add(CreateBlueprintComponentScope(
                         currentBlueprintName,
                         $"Default__{currentBlueprintName}",
+                        packagePath,
                         scopeObjects));
                 }
 
@@ -7735,6 +7915,7 @@ public class FoxWatchManifestAssetExtractor
         private static BlueprintComponentScope CreateBlueprintComponentScope(
             string blueprintName,
             string defaultObjectName,
+            string packagePath,
             IReadOnlyList<object> objects)
         {
             var firstObjectByNormalizedName = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -7752,6 +7933,7 @@ public class FoxWatchManifestAssetExtractor
             return new BlueprintComponentScope(
                 blueprintName,
                 defaultObjectName,
+                packagePath,
                 objects,
                 firstObjectByNormalizedName);
         }
@@ -9264,6 +9446,87 @@ public class FoxWatchManifestAssetExtractor
             ];
         }
 
+        private List<FoxWatchManifestStockpileGroup>? ExtractStockpileGroups(
+            IEnumerable<dynamic> rootObjects, UBlueprintGeneratedClass blueprint)
+        {
+            var groups = new List<FoxWatchManifestStockpileGroup>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var scopes = EnumerateBlueprintComponentScopes(rootObjects, blueprint);
+            var references = new List<FoxWatchManifestStockpileReference>();
+            foreach (var scope in scopes)
+            foreach (var item in scope.Objects)
+            {
+                if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName)) continue;
+                var type = GetObjectTypeName(item);
+                if (!type.Contains("VehicleAccessBox", StringComparison.OrdinalIgnoreCase)
+                    && !type.Contains("ResourceGroupRenderComponent", StringComparison.OrdinalIgnoreCase)) continue;
+                var index = ExtractNullableInt(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "StockpileIndex"));
+                if (index == null) continue;
+                references.Add(new()
+                {
+                    ComponentName = GetObjectName(item), ComponentType = type, StockpileIndex = index.Value,
+                    InventoryIndex = ExtractNullableInt(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "InventoryIndex")),
+                });
+            }
+            foreach (var scope in scopes)
+            foreach (var item in scope.Objects)
+            {
+                if (!IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName)) continue;
+                var type = GetObjectTypeName(item);
+                if (!type.Contains("GenericStockpileComponent", StringComparison.OrdinalIgnoreCase)
+                    && !type.Contains("GenericCrateStockpileComponent", StringComparison.OrdinalIgnoreCase)) continue;
+                var name = GetObjectName(item);
+                if (string.IsNullOrWhiteSpace(name) || !seen.Add(name)) continue;
+                // An explicit empty array overrides inherited configs. The inherited property
+                // resolver returns an empty array intact rather than falling through to a parent.
+                var configs = GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "Configs");
+                if (configs == null) continue;
+                // These are the named native stockpile fields, not arbitrary export order.
+                var match = Regex.Match(name, @"^GenericStockpileComponent(\d*)$", RegexOptions.CultureInvariant);
+                int? stockpileIndex = match.Success
+                    ? (match.Groups[1].Value.Length == 0 ? 0 : int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+                    : null;
+                var group = new FoxWatchManifestStockpileGroup
+                {
+                    ComponentName = name, StockpileIndex = stockpileIndex,
+                    AllowContainerSubmission = ExtractBoolValue(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "bAllowContainerSubmission")),
+                    Replicates = ExtractBoolValue(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "bReplicates")),
+                    RetrieveDurationModifier = GetInheritedBlueprintComponentProperty(rootObjects, blueprint, item, "RetrieveDurationModifier") is { } duration ? ExtractDouble(duration) : null,
+                    References = references.Where(reference => reference.StockpileIndex == stockpileIndex).ToList(),
+                };
+                foreach (var config in AsEnumerable(configs))
+                {
+                    group.Configs.Add(new()
+                    {
+                        EntryType = NormalizeString(ExtractText(GetNamedValue(config, "Type"))).Split("::").Last(),
+                        ListType = NormalizeString(ExtractText(GetNamedValue(config, "ListType"))).Split("::").Last(),
+                        QuantityLimit = ExtractNullableInt(GetNamedValue(config, "QuantityLimit")),
+                        TotalQuantityLimit = ExtractNullableInt(GetNamedValue(config, "TotalQuantityLimit")),
+                        ItemCategoryFilter = ExtractNullableInt(GetNamedValue(config, "ItemCategoryFilter")),
+                        ValidEntriesOverride = GetNamedValue(config, "ValidEntriesOverride") == null ? null
+                            : AsEnumerable(GetNamedValue(config, "ValidEntriesOverride")).Select(ExtractText).Select(NormalizeString).ToList(),
+                        QuantityOverrides = ExtractStockpileEntryRecords(GetNamedValue(config, "QuantityOverrides")),
+                        TotalQuantityOverrides = ExtractStockpileEntryRecords(GetNamedValue(config, "TotalQuantityOverrides")),
+                        PreStockedEntries = ExtractStockpileEntryRecords(GetNamedValue(config, "PreStockedEntries")),
+                        RetrieveDurationModifiers = ExtractStockpileEntryRecords(GetNamedValue(config, "RetrieveDurationModifiers")),
+                    });
+                }
+                groups.Add(group);
+            }
+            return groups.Count > 0 ? groups : null;
+        }
+
+        private static List<System.Text.Json.JsonElement>? ExtractStockpileEntryRecords(object? value)
+        {
+            if (value == null) return null;
+            return AsEnumerable(value).Select(entry =>
+            {
+                var json = entry is JToken token ? token.ToString(Formatting.None) : JsonConvert.SerializeObject(entry);
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.Clone();
+            }).ToList();
+        }
+
         private FoxWatchManifestStockpile? ExtractStockpile(
             IEnumerable<dynamic> rootObjects,
             UBlueprintGeneratedClass blueprint)
@@ -10669,6 +10932,13 @@ public class FoxWatchManifestAssetExtractor
                         Name = name,
                         ComponentType = NormalizeComponentTypeName(componentType),
                         DataClassPath = NullIfWhiteSpace(dataClassPath),
+                        AuthoredSplineTarget = ExtractBoolValue(GetNamedValue(item, "bOverrideSplineTarget")) == true
+                            ? FoxWatchNativeModificationSplineTarget.Resolve(
+                                true, name,
+                                ExtractText(GetNamedValue(item, "SplineTargetComponentNameOverride")),
+                                _meshAssetExporter?.InspectBlueprintComponentsAsync(scope.PackagePath).GetAwaiter().GetResult()
+                                    ?? throw new InvalidOperationException("Native spline overrides require component inspection."))
+                            : null,
                         X = transform.X,
                         Y = transform.Y,
                         Z = transform.Z,
@@ -11245,6 +11515,16 @@ public class FoxWatchManifestAssetExtractor
                 .FirstOrDefault(token => token.Value<string>("Name")?.StartsWith("Default__", StringComparison.OrdinalIgnoreCase) == true);
             _modificationDataDefaultObjectsByPackagePath[packagePath] = defaultObjectToken;
             return defaultObjectToken;
+        }
+
+        private static void FilterModificationSlotsForTier(List<FoxWatchManifestModificationSlot> slots, int? tier)
+        {
+            // Infrastructure starts at T2; T3 legitimately reuses the T2 visuals.
+            // A shared template component does not make a T1 host eligible.
+            if (tier is not (2 or 3))
+            {
+                slots.RemoveAll(slot => string.Equals(slot.ComponentType, "BPFortInfraModSlot_C", StringComparison.OrdinalIgnoreCase));
+            }
         }
 
         private static JObject? ResolveModificationTierValueToken(JObject? valueToken, int? preferredTier)
@@ -13603,10 +13883,12 @@ public class FoxWatchManifestAssetExtractor
             public BlueprintComponentScope(
                 string blueprintName,
                 string defaultObjectName,
+                string packagePath,
                 IReadOnlyList<object> objects,
                 IReadOnlyDictionary<string, object> firstObjectByNormalizedName)
             {
                 BlueprintName = blueprintName;
+                PackagePath = packagePath;
                 DefaultObjectName = defaultObjectName;
                 NormalizedDefaultObjectName = NormalizeString(defaultObjectName);
                 Objects = objects;
@@ -13614,6 +13896,8 @@ public class FoxWatchManifestAssetExtractor
             }
 
             public string BlueprintName { get; }
+
+            public string PackagePath { get; }
 
             public string DefaultObjectName { get; }
 

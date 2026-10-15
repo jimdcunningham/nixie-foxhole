@@ -288,13 +288,13 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
     imported_armature = None
     if mesh_id and mesh_id in mesh_assets_by_id:
         mesh_asset = mesh_assets_by_id[mesh_id]
-        material_sidecar_name_overrides = None
         overrides_by_variant = mesh_asset.get("materialSidecarNameOverridesByVariant") or {}
+        material_sidecar_name_overrides = dict(overrides_by_variant.get("default") or {})
         if scene_variant:
-            material_sidecar_name_overrides = next(
+            material_sidecar_name_overrides.update(next(
                 (value for key, value in overrides_by_variant.items() if (key or "").lower() == scene_variant.lower()),
-                None,
-            )
+                {},
+            ))
         mesh_path = resolve_asset_path(mesh_asset.get("exportUrl") or mesh_asset.get("sourcePath"), search_roots)
         if mesh_path and os.path.exists(mesh_path):
             debug_color = node_document.get("debugColor")

@@ -1,0 +1,36 @@
+{
+  "renderLayers": [
+    {
+      "componentName": "Floor",
+      "id": "floor"
+    },
+    {
+      "componentName": "Destroyed",
+      "id": "destroyed"
+    },
+    {
+      "componentName": "DirtBack",
+      "id": "dirtback"
+    },
+    {
+      "componentName": "VisualDirtBack",
+      "id": "visualdirtback"
+    },
+    {
+      "componentName": "DirtFront",
+      "id": "dirtfront"
+    },
+    {
+      "componentName": "VisualDirtFront",
+      "id": "visualdirtfront"
+    },
+    {
+      "componentName": "mesh:TrenchT1ShortDirtSpline01",
+      "id": "piece-trencht1shortdirtspline01"
+    },
+    {
+      "componentName": "mesh:TrenchT1ShortDirtSplineDestroyed01",
+      "id": "piece-trencht1shortdirtsplinedestroyed01"
+    }
+  ]
+}

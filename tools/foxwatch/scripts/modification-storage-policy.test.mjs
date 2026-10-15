@@ -9,6 +9,8 @@ import {
     hasStandaloneModificationContentHashSuffix,
     isHashedHostLocalModificationDirectoryName,
     isSharedModificationRenderSceneEntry,
+    isExactSlotContextModificationRenderEntry,
+    resolveSlotContextModificationDefaultIconUrl,
     isUpgradeModificationVariant,
     planModificationStorageForRenderIdGroup,
     resolveAssetScopedModificationRenderEntry,
@@ -307,4 +309,56 @@ describe('host-local modification publish path helpers', () => {
 
         assert.equal(entry, hashed);
     });
+});
+
+it('uses exact slot context before ordinary and shared variants without changing identity',()=>{
+  const shared={textureUrl:'shared330'},front={textureUrl:'front150'},angle={textureUrl:'angle482'};
+  const assets={sandbags:shared,'sandbags--slot-frontdefensemodslot':front,'sandbags--slot-angledefensemodslot':angle};
+  const variant={renderId:'sandbags-9a10a4553be5',sharedModificationId:'sandbags-9a10a4553be5'};
+  assert.equal(resolveAssetScopedModificationRenderEntry(assets,{}, {variantId:'sandbags',variant,slotName:'FrontDefenseModSlot'}),front);
+  assert.equal(resolveAssetScopedModificationRenderEntry(assets,{}, {variantId:'sandbags',variant,slotName:'AngleDefenseModSlot'}),angle);
+  assert.equal(resolveAssetScopedModificationRenderEntry(assets,{}, {variantId:'sandbags',variant,slotName:'UnchangedSlot'}),shared);
+  assert.equal(variant.renderId,'sandbags-9a10a4553be5');
+});
+it('retains existing unqualified and shared fallbacks',()=>{
+  const shared={textureUrl:'shared330'};
+  assert.equal(resolveAssetScopedModificationRenderEntry({}, {sandbags:shared},{variantId:'sandbags',slotName:'Front'}),shared);
+  assert.deepEqual(buildHostLocalModificationRenderLookupKeys({variantId:'ladder'}),['ladder']);
+});
+it('does not sanitize unsafe slot names into another slot key',()=>{
+  assert.deepEqual(buildHostLocalModificationRenderLookupKeys({variantId:'sandbags',slotName:'Front/Defense'}),['sandbags']);
+});
+
+it('keeps ordinary host-local resolution outside the new contextual shared-precedence guard', () => {
+    const ordinary = { textureUrl: '/foxhole/assets/types/structures/fortt2/modifications/sandbags/sandbags.texture.webp' };
+    const entries = { sandbags: ordinary };
+    const options = { variantId: 'sandbags', slotName: 'FrontDefenseModSlot' };
+    const resolved = resolveAssetScopedModificationRenderEntry(entries, {}, options);
+    assert.equal(resolved, ordinary);
+    assert.equal(isExactSlotContextModificationRenderEntry(entries, resolved, options), false);
+});
+it('limits new shared-precedence guard to the exact resolved asset and slot context', () => {
+    const front = { textureUrl: 'front' }, back = { textureUrl: 'back' };
+    const entries = { 'sandbags--slot-frontdefensemodslot': front, 'sandbags--slot-backdefensemodslot': back };
+    const options = { variantId: 'sandbags', slotName: 'FrontDefenseModSlot' };
+    assert.equal(isExactSlotContextModificationRenderEntry(entries, resolveAssetScopedModificationRenderEntry(entries, {}, options), options), true);
+    assert.equal(isExactSlotContextModificationRenderEntry(entries, back, options), false);
+    assert.equal(isExactSlotContextModificationRenderEntry({}, front, options), false);
+});
+
+it('retains the published shared blueprint glyph when contextual visuals replace the shared payload', () => {
+    const context = { textureUrl: 'host/front.texture.webp', renderedIconUrl: 'host/front.icon.rendered.webp' };
+    const shared = { defaultIconUrl: '/foxhole/assets/shared/modifications/sandbags-9a10a4553be5/sandbags-9a10a4553be5.icon.default.webp' };
+    const options = { variantId: 'sandbags', slotName: 'FrontDefenseModSlot', variant: { renderId: 'sandbags-9a10a4553be5' } };
+    assert.equal(resolveSlotContextModificationDefaultIconUrl({ 'sandbags--slot-frontdefensemodslot': context }, { 'sandbags-9a10a4553be5': shared }, options), shared.defaultIconUrl);
+    assert.equal(context.defaultIconUrl, undefined);
+});
+it('does not replace default icons for ordinary host-local or unmatched slot visuals', () => {
+    const shared = { sandbags: { defaultIconUrl: 'shared.webp' } };
+    const options = { variantId: 'sandbags', slotName: 'FrontDefenseModSlot' };
+    assert.equal(resolveSlotContextModificationDefaultIconUrl({ sandbags: { textureUrl: 'ordinary' } }, shared, options), null);
+    assert.equal(resolveSlotContextModificationDefaultIconUrl({ 'sandbags--slot-backdefensemodslot': {} }, shared, options), null);
+});
+it('does not invent a default icon when no published shared glyph is available', () => {
+    assert.equal(resolveSlotContextModificationDefaultIconUrl({ 'sandbags--slot-front': {} }, {}, { variantId: 'sandbags', slotName: 'Front' }), null);
 });

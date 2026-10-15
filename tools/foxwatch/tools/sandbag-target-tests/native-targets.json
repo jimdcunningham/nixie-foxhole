@@ -1,0 +1,322 @@
+[
+  {
+    "package": "BPFortCommonDefenseMods.json",
+    "slots": [
+      {
+        "slot": "BackDefenseModSlot",
+        "targetName": "BackDefenseModSlotTarget",
+        "startLocal": {
+          "X": -230.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -230.0,
+          "Y": 250.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -270.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -270.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 480.0
+      },
+      {
+        "slot": "FrontDefenseModSlot",
+        "targetName": "FrontDefenseModSlotTarget",
+        "startLocal": {
+          "X": 230.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": 230.0,
+          "Y": -250.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -90.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -89.999985,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 480.0
+      },
+      {
+        "slot": "LeftDefenseModSlot",
+        "targetName": "LeftDefenseModSlotTarget",
+        "startLocal": {
+          "X": 230.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -250.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -180.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -180.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 480.0
+      },
+      {
+        "slot": "RightDefenseModSlot",
+        "targetName": "RightDefenseModSlotTarget",
+        "startLocal": {
+          "X": -230.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": 250.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "startRotation": null,
+        "endRotation": null,
+        "lengthLocalCm": 480.0
+      }
+    ]
+  },
+  {
+    "package": "BPFortCornerCommonDefenseMods.json",
+    "slots": [
+      {
+        "slot": "AngleDefenseModSlot",
+        "targetName": "AngleDefenseModSlotTarget",
+        "startLocal": {
+          "X": -90.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": 251.2,
+          "Y": -111.1,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -45.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -45.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 482.4589619853693
+      },
+      {
+        "slot": "BackDefenseModSlot",
+        "targetName": "BackDefenseModSlotTarget",
+        "startLocal": {
+          "X": -230.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -230.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": 90.0,
+          "Roll": 0.0
+        },
+        "endRotation": null,
+        "lengthLocalCm": 460.0
+      },
+      {
+        "slot": "FrontDefenseModSlot",
+        "targetName": "FrontDefenseModSlotTarget",
+        "startLocal": {
+          "X": 230.0,
+          "Y": -90.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": 230.0,
+          "Y": -240.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -90.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -90.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 150.0
+      },
+      {
+        "slot": "LeftDefenseModSlot",
+        "targetName": "LeftDefenseModSlotTarget",
+        "startLocal": {
+          "X": 230.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -250.0,
+          "Y": -230.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -180.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -180.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 480.0
+      },
+      {
+        "slot": "RightDefenseModSlot",
+        "targetName": "RightDefenseModSlotTarget",
+        "startLocal": {
+          "X": -230.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -80.0,
+          "Y": 230.0,
+          "Z": 150.0
+        },
+        "startRotation": null,
+        "endRotation": null,
+        "lengthLocalCm": 150.0
+      }
+    ]
+  },
+  {
+    "package": "BPFortRampCommonDefenseMods.json",
+    "slots": [
+      {
+        "slot": "BackDefenseModSlot",
+        "targetName": "RightDefenseModSlot",
+        "startLocal": {
+          "X": -220.0,
+          "Y": -220.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -220.0,
+          "Y": 220.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": 135.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": 44.999992,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 440.0
+      },
+      {
+        "slot": "FrontDefenseModSlot",
+        "targetName": "LeftDefenseModSlot",
+        "startLocal": {
+          "X": -30.0,
+          "Y": 220.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -30.0,
+          "Y": -220.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -44.999992,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -135.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 440.0
+      },
+      {
+        "slot": "LeftDefenseModSlot",
+        "targetName": "BackDefenseModSlot",
+        "startLocal": {
+          "X": -30.0,
+          "Y": -220.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -220.0,
+          "Y": -220.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": -135.0,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": 135.0,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 190.0
+      },
+      {
+        "slot": "RightDefenseModSlot",
+        "targetName": "FrontDefenseModSlot",
+        "startLocal": {
+          "X": -220.0,
+          "Y": 220.0,
+          "Z": 150.0
+        },
+        "endLocal": {
+          "X": -30.0,
+          "Y": 220.0,
+          "Z": 150.0
+        },
+        "startRotation": {
+          "Pitch": 0.0,
+          "Yaw": 44.999992,
+          "Roll": 0.0
+        },
+        "endRotation": {
+          "Pitch": 0.0,
+          "Yaw": -44.999992,
+          "Roll": 0.0
+        },
+        "lengthLocalCm": 190.0
+      }
+    ]
+  }
+]

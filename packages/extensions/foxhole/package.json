@@ -1,6 +1,51 @@
 {
   "name": "@nixie/extension-foxhole",
   "version": "4.0.0",
+  "productName": "Foxhole Planner",
+  "description": "Create blueprints for a bunker, facility, and more using this fan-made tool for the video game Foxhole.",
+  "homepage": "https://foxholeplanner.com/app",
   "private": true,
-  "description": "Migration target for the public Nixie Foxhole extension"
+  "imports": {
+    "#foxhole/*": "./app/*"
+  },
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "test": "node --import ./tools/legacy-plans/register-nixie-imports.mjs --test --test-isolation=none ./tests/**/*.test.ts ./server/**/*.test.mjs",
+    "test:host": "node ./tools/test-host.mjs",
+    "test:legacy-plans": "node ./tools/legacy-plans/run-fixture-tests.mjs",
+    "legacy:download-presets": "node ./tools/legacy-plans/download-presets.mjs",
+    "legacy:download-blueprints": "node ./tools/legacy-plans/download-presets.mjs --source all",
+    "legacy:generate-building-key-map": "node ./tools/legacy-plans/generate-building-key-map.mjs",
+    "legacy:generate-orientation-map": "node ./tools/legacy-plans/generate-orientation-map.mjs",
+    "legacy:generate-position-map": "node ./tools/legacy-plans/generate-position-map.mjs",
+    "legacy:generate-clipboard-snapshots": "node ./tools/legacy-plans/generate-clipboard-snapshots.mjs",
+    "legacy:exfil-sockets": "node ./tools/legacy-plans/exfil-legacy-sockets.mjs",
+    "legacy:generate-socket-id-map": "node --import ./tools/legacy-plans/register-nixie-imports.mjs ./tools/legacy-plans/generate-socket-id-map.mjs",
+    "legacy:generate-upgrade-data": "node ./tools/legacy-plans/generate-upgrade-data.mjs",
+    "legacy:migration-status": "node --import ./tools/legacy-plans/register-nixie-imports.mjs ./tools/legacy-plans/migration-status.mjs",
+    "map-mod:harness": "node ./tools/map-mod/run-map-mod-harness.mjs",
+    "postinstall": "nuxt prepare"
+  },
+  "devDependencies": {
+    "nuxt": "4.5.2"
+  },
+  "dependencies": {
+    "@nixie/platform": "file:../../nixie",
+    "@supabase/supabase-js": "2.112.3",
+    "@turf/helpers": "7.4.0",
+    "@turf/intersect": "7.4.0",
+    "fflate": "0.8.3",
+    "fuse.js": "7.5.0",
+    "h3": "1.15.11",
+    "jszip": "^3.10.1",
+    "localforage": "1.10.0",
+    "pixi-viewport": "5.0.3",
+    "pixi.js": "8.22.0",
+    "voronoi": "1.0.0",
+    "vue": "3.5.41",
+    "zod": "4.4.3"
+  }
 }

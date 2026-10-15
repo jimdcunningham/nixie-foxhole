@@ -1,0 +1,152 @@
+{
+  "type": "foxhole-bone-pose",
+  "profile": "drydock-authored-idle",
+  "parameters": {
+    "nativeFrame": 0,
+    "yawDegrees": 0,
+    "horizontalDistanceCm": 855,
+    "pulleyLengthCm": 0
+  },
+  "bones": [
+    {
+      "name": "root",
+      "parentIndex": -1,
+      "location": [
+        0,
+        0,
+        0
+      ],
+      "rotationQuaternion": [
+        -8.132244033731695E-08,
+        -0,
+        -0,
+        0.9983071684837341
+      ],
+      "scale": [
+        1.0000009536743164,
+        1.0000009536743164,
+        1.0000009536743164
+      ]
+    },
+    {
+      "name": "DryDockCrane_PIVOT",
+      "parentIndex": 0,
+      "location": [
+        0,
+        0,
+        -1.5258774510584772E-07
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "DryDockCraneArmPivot",
+      "parentIndex": 1,
+      "location": [
+        0,
+        6.713867151120212E-06,
+        2.91038298062124E-13
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "DryDockCrane_Hook1",
+      "parentIndex": 2,
+      "location": [
+        -1.3732909565078444E-06,
+        2.7465819130156888E-06,
+        7.275957180502557E-13
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "DryDockCrane_HookEnd1",
+      "parentIndex": 3,
+      "location": [
+        0,
+        -1.220703097715159E-06,
+        -1.8189913957673484E-14
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "DryDockCrane_Hook2",
+      "parentIndex": 2,
+      "location": [
+        -8.544921911379788E-06,
+        2.7465819130156888E-06,
+        7.275957180502557E-13
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "DryDockCrane_HookEnd2",
+      "parentIndex": 5,
+      "location": [
+        0,
+        -1.220703097715159E-06,
+        -1.8189913957673484E-14
+      ],
+      "rotationQuaternion": [
+        -0,
+        0,
+        -0,
+        -0.9983071684837341
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  ]
+}

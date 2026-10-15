@@ -1,0 +1,35 @@
+{
+  "renderLayers": [
+    {
+      "id": "backtrim",
+      "componentName": "mesh:BarbedWireFencePillar03"
+    },
+    {
+      "id": "span",
+      "componentName": "mesh:BarbedWireFence01"
+    },
+    {
+      "id": "middlepillars",
+      "componentName": "mesh:BarbedWireFencePillar01"
+    },
+    {
+      "id": "fronttrim",
+      "componentName": "mesh:BarbedWireFencePillar03"
+    }
+  ],
+  "connector": {
+    "behavior": {
+      "trimSpan": true,
+      "socketSnapping": true,
+      "pipeCurveScale": true
+    }
+  },
+  "componentRenderOverrides": {
+    "span": {
+      "repeatCropPixels": {
+        "start": 7,
+        "end": 7
+      }
+    }
+  }
+}

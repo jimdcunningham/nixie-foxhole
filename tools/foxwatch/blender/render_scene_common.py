@@ -1,3 +1,5 @@
+from render_light_beam import build_light_beam_material
+from render_material_identity import resolve_material_sidecar_identity
 import json
 import hashlib
 import math
@@ -398,22 +400,9 @@ def uses_color_change_workflow(material_name: str, textures: dict, parameters: d
 
 
 def find_material_sidecar(material_name: str, search_roots: Iterable[str]) -> Optional[str]:
-    target_name = f"{normalize_material_name(material_name)}.json"
-    target_key = os.path.normcase(target_name)
-    for root in search_roots:
-        if not root or not os.path.isdir(root):
-            continue
-        cache_key = (root, target_name)
-        if cache_key in _MATERIAL_SIDECAR_CACHE:
-            cached = _MATERIAL_SIDECAR_CACHE[cache_key]
-            if cached is not None:
-                return cached
-            continue
-        for candidate in file_name_index_for_root(root).get(target_key, []):
-            _MATERIAL_SIDECAR_CACHE[cache_key] = candidate
-            return candidate
-        _MATERIAL_SIDECAR_CACHE[cache_key] = None
-    return None
+    return resolve_material_sidecar_identity(
+        normalize_material_name(material_name), search_roots, file_name_index_for_root,
+    )
 
 
 def first_texture_reference(textures: dict, *keys: str) -> Optional[str]:
@@ -1478,6 +1467,18 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
     parameters = material_document.get("Parameters", {})
     property_overrides = parameters.get("Properties", {}).get("BasePropertyOverrides", {})
 
+    if name == "LightBeam":
+        noise_path = resolve_exported_texture_path(textures.get("NoiseMask"), search_roots)
+        if not noise_path:
+            raise ValueError("LightBeam is missing its authored NoiseMask texture")
+        colors = parameters.get("Colors", {})
+        color = colors["Light Color"]
+        return build_light_beam_material(
+            material, bpy.data.images.load(noise_path, check_existing=True),
+            [color["R"], color["G"], color["B"]],
+            float(parameters.get("Scalars", {})["Opacity"]),
+        )
+
     # Some Foxhole sidecars export light cards as parameter-only "null" materials with no texture
     # payload. We synthesize a warm emissive translucent fallback from the authored color params
     # so fixtures like LanternOn-Off stay readable instead of degrading into flat gray geometry.
@@ -1524,7 +1525,8 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
     roughness_channels = None
     roughness_texture_key = None
     normal_path = resolve_exported_texture_path(
-        first_texture_reference(textures, "Normal", "PM_Normals", "N-Base", "N-2", "N-3"),
+        # Roof PM_Normals is the inherited snow overlay, not its base surface.
+        textures.get("N-Base") if name == "TrenchT3Roof" else first_texture_reference(textures, "Normal", "PM_Normals", "N-Base", "N-2", "N-3"),
         search_roots,
     )
     if normal_path:
@@ -1656,6 +1658,18 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
             material.alpha_threshold = float(property_overrides.get("OpacityMaskClipValue", 0.3333) or 0.3333)
             if hasattr(material, "shadow_method"):
                 material.shadow_method = "CLIP"
+
+    if name == "TrenchT3Roof":
+        # This material inherits WorldSpaceProps: Tile-Base is in centimetres.
+        # Mesh UVs on the narrow spline section repeat the same dirt swatch.
+        position = nodes.new(type="ShaderNodeNewGeometry")
+        scale = nodes.new(type="ShaderNodeVectorMath")
+        scale.operation = "SCALE"
+        scale.inputs["Scale"].default_value = 100.0 / max(float(parameters.get("Scalars", {}).get("Tile-Base", 700.0)), 1.0)
+        links.new(position.outputs["Position"], scale.inputs[0])
+        for texture_node in list(nodes):
+            if texture_node.type == "TEX_IMAGE":
+                links.new(scale.outputs["Vector"], texture_node.inputs["Vector"])
 
     shader.inputs["Specular IOR Level"].default_value = 0.35
     shader.inputs["Roughness"].default_value = 0.65 if roughness_path is None else shader.inputs["Roughness"].default_value

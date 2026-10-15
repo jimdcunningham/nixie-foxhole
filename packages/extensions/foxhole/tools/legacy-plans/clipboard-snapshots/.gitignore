@@ -1,0 +1,4 @@
+# Generated clipboard payloads (regenerate with npm run legacy:generate-clipboard-snapshots)
+*.txt
+*.json
+!README.md

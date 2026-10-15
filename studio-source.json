@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    "extensions/foxhole-planner",
+    "packages/extensions/foxhole"
+  ],
+  "description": "Planner SDK runtime and trusted Studio integration. Nixie materializes these packages before npm ci; generated game assets are supplied separately."
+}

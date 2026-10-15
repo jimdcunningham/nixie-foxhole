@@ -173,6 +173,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
     public Task<FoxWatchBlueprintSceneExtraction?> TryExtractPackagedAsync(
         FoxWatchManifestStructure structure,
+        FoxWatchBlueprintSceneExtraction? intactScene,
         CancellationToken cancellationToken = default)
     {
         var packagedMeshPackagePath = structure.Packaged?.MeshPackagePath;
@@ -181,10 +182,32 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             return Task.FromResult<FoxWatchBlueprintSceneExtraction?>(null);
         }
 
-        return Task.FromResult<FoxWatchBlueprintSceneExtraction?>(CreateStandaloneMeshExtraction(
+        var extraction = CreateStandaloneMeshExtraction(
             $"{structure.Id}:packaged",
             structure.CodeName,
-            new[] { packagedMeshPackagePath }));
+            new[] { packagedMeshPackagePath });
+        if (extraction != null && intactScene != null
+            && FoxWatchPackagedBodyFrameResolver.TryResolveBlenderYawDegrees(intactScene.Roots, out var yawDegrees))
+        {
+            if (Math.Abs(yawDegrees) > 0.000001)
+            {
+                extraction.Roots =
+                [
+                    new FoxWatchRenderSceneNode
+                    {
+                        Id = $"{structure.Id}:packaged:body-frame",
+                        Name = "PackagedBodyFrame",
+                        RotationEulerDegrees = [0, 0, yawDegrees],
+                        Children = extraction.Roots,
+                    },
+                ];
+            }
+        }
+        else if (extraction != null)
+        {
+            _logger.LogWarning("Cannot establish a coherent planar body frame for packaged asset {StructureId}; preserving its standalone mesh orientation", structure.Id);
+        }
+        return Task.FromResult<FoxWatchBlueprintSceneExtraction?>(extraction);
     }
 
     public FoxWatchBlueprintSceneExtraction? CreateSharedPackagedPalletExtraction(string shippableType)
@@ -509,6 +532,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
         var meshIdBySourcePath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var materialSidecarOverrideByMeshId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var scopedMaterialSourcePathsByMeshId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var materialSidecarOverridesByVariantByMeshId = new Dictionary<string, Dictionary<string, Dictionary<int, string>>>(StringComparer.OrdinalIgnoreCase);
         var materialPackagePathsByVariantByMeshId = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.OrdinalIgnoreCase);
         var poseAnimationPackagePathsBySourcePath = BuildPoseAnimationPackagePathsBySourcePath(deduplicatedComponentReferences);
@@ -534,6 +558,16 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             }
 
             var node = CreateNode(nodeIdPrefix, componentReference, meshIdBySourcePath);
+            if (!string.IsNullOrWhiteSpace(componentReference.DefaultMaterialPackagePath)
+                && !string.IsNullOrWhiteSpace(node.MeshId))
+            {
+                // A component override must not recolor other instances of the
+                // same shared mesh, nor rewrite the canonical GLB's materials.
+                var originalMeshId = node.MeshId;
+                var sourcePath = meshIdBySourcePath.First(entry => entry.Value == originalMeshId).Key;
+                node.MeshId = $"{originalMeshId}-material-{NormalizeReferenceName(componentReference.ComponentName)}";
+                scopedMaterialSourcePathsByMeshId[node.MeshId] = sourcePath;
+            }
             if (!string.IsNullOrWhiteSpace(componentReference.MaterialSidecarNameOverride) &&
                 !string.IsNullOrWhiteSpace(node.MeshId))
             {
@@ -552,6 +586,17 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                         entry => entry.Key,
                         entry => entry.Value.Select(materialOverride => materialOverride.MaterialPath).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                         StringComparer.OrdinalIgnoreCase);
+            }
+
+            if (!string.IsNullOrWhiteSpace(componentReference.DefaultMaterialPackagePath)
+                && !string.IsNullOrWhiteSpace(node.MeshId))
+            {
+                if (!materialPackagePathsByVariantByMeshId.TryGetValue(node.MeshId, out var materialPaths))
+                {
+                    materialPaths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                    materialPackagePathsByVariantByMeshId[node.MeshId] = materialPaths;
+                }
+                materialPaths["default"] = [componentReference.DefaultMaterialPackagePath];
             }
 
             nodesByComponentName[componentReference.ComponentName] = node;
@@ -579,6 +624,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         RepairKnownHospitalCurtainHierarchy(nodeIdPrefix, deduplicatedComponentReferences, nodesByComponentName, rootNode);
 
         var meshAssets = meshIdBySourcePath
+            .Concat(scopedMaterialSourcePathsByMeshId.Select(entry => new KeyValuePair<string, string>(entry.Value, entry.Key)))
             .OrderBy(entry => entry.Value, StringComparer.Ordinal)
             .Select(entry =>
             {
@@ -866,6 +912,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             var duplicateIndex = deduplicated.FindIndex(existing =>
                 !string.IsNullOrWhiteSpace(existing.MeshPath) &&
                 string.Equals(existing.MeshPath, componentReference.MeshPath, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.MaterialSidecarNameOverride, componentReference.MaterialSidecarNameOverride, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(existing.AttachParentName, componentReference.AttachParentName, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(existing.AttachSocketName, componentReference.AttachSocketName, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(existing.RelativeLocation, componentReference.RelativeLocation, StringComparison.OrdinalIgnoreCase) &&
@@ -1403,7 +1450,11 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             foreach (var modificationVariant in modificationVariants)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var variantExtraction = await TryBuildModificationVariantExtractionAsync(structureId, modificationVariant, extraction, attachNode, cancellationToken);
+                var nativeTarget = string.Equals(modificationVariant.Id, "sandbags", StringComparison.OrdinalIgnoreCase)
+                    ? structure.ModificationSlots?.SingleOrDefault(slot =>
+                        string.Equals(slot.Name, slotCandidate.ComponentName?.Split(':').Last(), StringComparison.OrdinalIgnoreCase))?.AuthoredSplineTarget
+                    : null;
+                var variantExtraction = await TryBuildModificationVariantExtractionAsync(structureId, modificationVariant, extraction, attachNode, cancellationToken, nativeTarget);
                 if (variantExtraction == null)
                 {
                     // Default slot variants are the base host meshes — no overlay/icons/renders expected.
@@ -1428,6 +1479,14 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
                     });
                 }
 
+                if (nativeTarget != null)
+                {
+                    var renderVariant = renderVariants.Single(variant => string.Equals(variant.Id, modificationVariant.Id, StringComparison.OrdinalIgnoreCase));
+                    renderVariant.ContextualSlotNames ??= [];
+                    var slotName = nativeTarget.SlotComponentName.Split(':').Last();
+                    if (!renderVariant.ContextualSlotNames.Contains(slotName, StringComparer.OrdinalIgnoreCase))
+                        renderVariant.ContextualSlotNames.Add(slotName);
+                }
                 MergeMeshAssets(extraction, variantExtraction);
                 foreach (var variantRoot in variantExtraction.Roots)
                 {
@@ -1480,7 +1539,8 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         FoxWatchModificationVariantReference modificationVariant,
         FoxWatchBlueprintSceneExtraction baseExtraction,
         FoxWatchRenderSceneNode attachNode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        FoxWatchManifestModificationSplineTarget? nativeTarget = null)
     {
         var variantNodeIdPrefix = $"{structureId}:upgrade:{modificationVariant.Id}";
         if (modificationVariant.UseTemplateActor && !string.IsNullOrWhiteSpace(modificationVariant.TemplateActorPath))
@@ -1503,7 +1563,9 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
             // Modification template actors (e.g. insulated pipe) often omit sockets / default
             // spline targets. Inherit the host span length so BuildExtraction can emit span meshes.
-            var mutableComponentReferences = componentReferences.ToList();
+            var mutableComponentReferences = nativeTarget == null
+                ? componentReferences.ToList()
+                : FoxWatchNativeModificationSplineTarget.CloneTemplateWithTarget(componentReferences, nativeTarget);
             InheritHostSplineConnectorTargets(baseExtraction, mutableComponentReferences);
 
             var blueprintExtraction = BuildExtraction(
@@ -1835,6 +1897,38 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         var yawDegrees = Math.Atan2(forward.Y, forward.X) * 180.0 / Math.PI;
         var pitchDegrees = Math.Atan2(forward.Z, Math.Sqrt((forward.X * forward.X) + (forward.Y * forward.Y))) * 180.0 / Math.PI;
 
+        // The fence uses four point posts around two rigid end sections.
+        // Generic interval expansion repeats its three section configs over
+        // the same span and omits the unsupported Points config entirely.
+        if (nodeIdPrefix.StartsWith("barbedwirewallspline", StringComparison.OrdinalIgnoreCase))
+        {
+            var body = componentReference.SplineConnectorMeshConfigs.FirstOrDefault(config =>
+                config.MeshPaths.Any(path => Path.GetFileNameWithoutExtension(path) == "BarbedWireFence01"));
+            var brace = componentReference.SplineConnectorMeshConfigs.FirstOrDefault(config =>
+                config.MeshPaths.Any(path => Path.GetFileNameWithoutExtension(path) == "BarbedWireFencePillar03"));
+            if (body != null && brace != null)
+            {
+                var bend = Math.Min(100f, targetLength * 0.45f);
+                float[] points = [0, bend, targetLength - bend, targetLength];
+                var fenceIndex = 0;
+                for (var section = 0; section < 3; section++)
+                {
+                    var length = points[section + 1] - points[section];
+                    AppendSplineMeshNode(parentNode, nodeIdPrefix, componentReference.ComponentName,
+                        body.MeshPaths[section % body.MeshPaths.Count], (points[section] + points[section + 1]) / 2,
+                        body, meshIdBySourcePath, forward, right, up, yawDegrees, pitchDegrees, ref fenceIndex,
+                        [length / (body.NativeMeshLengthCentimeters ?? 242.009), 1.0, 1.0]);
+                }
+                var postPath = brace.MeshPaths.First(path => Path.GetFileNameWithoutExtension(path) == "BarbedWireFencePillar03");
+                foreach (var distance in points)
+                {
+                    AppendSplineMeshNode(parentNode, nodeIdPrefix, componentReference.ComponentName, postPath,
+                        distance, brace, meshIdBySourcePath, forward, right, up, yawDegrees, pitchDegrees, ref fenceIndex);
+                }
+                return;
+            }
+        }
+
         var generatedIndex = 0;
         foreach (var config in componentReference.SplineConnectorMeshConfigs)
         {
@@ -1924,11 +2018,23 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             return;
         }
 
+        // The berm's negative-offset terminal piece is attached to the far
+        // spline point, not repeated from the origin along the whole span.
+        if (config.StartOffset < 0 && config.MeshPaths.All(path =>
+            string.Equals(Path.GetFileNameWithoutExtension(path), "TrenchConnectorSandbagsAngledSplineEnd", StringComparison.OrdinalIgnoreCase)))
+        {
+            AppendSplineMeshNode(parentNode, nodeIdPrefix, componentName, config.MeshPaths[0],
+                Math.Max(0, targetLength + (float)config.StartOffset), config, meshIdBySourcePath,
+                forward, right, up, yawDegrees, pitchDegrees, ref generatedIndex);
+            return;
+        }
+
         var interval = config.Interval > 0.01 ? (float)config.Interval : targetLength;
         var startDistance = (float)Math.Max(0, config.StartOffset);
         var endDistance = Math.Max(startDistance, targetLength - (float)Math.Max(0, config.EndOffset));
         var meshIndex = 0;
-        for (var distance = startDistance; distance <= endDistance + 0.001f; distance += interval)
+        for (var distance = startDistance; distance <= endDistance + 0.001f
+            && (config.MaxInstances <= 0 || meshIndex < config.MaxInstances); distance += interval)
         {
             AppendSplineMeshNode(parentNode, nodeIdPrefix, componentName, config.MeshPaths[meshIndex % config.MeshPaths.Count], distance, config, meshIdBySourcePath, forward, right, up, yawDegrees, pitchDegrees, ref generatedIndex);
             meshIndex += 1;
@@ -2049,19 +2155,36 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
         var offset = (forward * localOffset.X) + (right * localOffset.Y) + (up * localOffset.Z);
         var position = (forward * distanceAlongSpline) + offset;
 
-        parentNode.Children.Add(new FoxWatchRenderSceneNode
+        var node = new FoxWatchRenderSceneNode
         {
             Id = $"{nodeIdPrefix}:{NormalizeReferenceName(componentName)}:spline-mesh-{generatedIndex}",
             Name = meshFileName,
             MeshId = GetOrAddMeshId(meshIdBySourcePath, meshSourcePath),
             UnrealLocationCentimeters = [position.X, position.Y, position.Z],
-            UnrealRotationDegrees = [pitchDegrees, yawDegrees, 0.0],
+            UnrealRotationDegrees = [pitchDegrees + (config.RelativeRotation?.ElementAtOrDefault(0) ?? 0),
+                yawDegrees + (config.RelativeRotation?.ElementAtOrDefault(1) ?? 0),
+                config.RelativeRotation?.ElementAtOrDefault(2) ?? 0],
             Scale = scaleOverride == null
                 ? UsesUnitSplineMeshScale(meshPath)
                     ? [1.0d, 1.0d, 1.0d]
                     : config.RelativeScale == null ? null : [.. config.RelativeScale]
                 : [.. scaleOverride],
-        });
+        };
+
+        // The road's valid and invalid-path configs bake the same mesh at the
+        // same transform. Rendering both coplanar copies creates triangle-shaped
+        // self-shadow artifacts. Keep the authored cap and every distinct placement.
+        if (string.Equals(nodeIdPrefix, "facilityroad", StringComparison.OrdinalIgnoreCase)
+            && parentNode.Children.Any(existing => existing.MeshId == node.MeshId
+                && Enumerable.SequenceEqual(existing.UnrealLocationCentimeters ?? [], node.UnrealLocationCentimeters ?? [])
+                && Enumerable.SequenceEqual(existing.UnrealRotationDegrees ?? [], node.UnrealRotationDegrees ?? [])
+                && Enumerable.SequenceEqual(existing.Scale ?? [], node.Scale ?? [])))
+        {
+            generatedIndex += 1;
+            return;
+        }
+
+        parentNode.Children.Add(node);
 
         generatedIndex += 1;
     }

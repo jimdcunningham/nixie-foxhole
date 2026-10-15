@@ -1,0 +1,16 @@
+export const FOXHOLE_NIXIE_CONTRIBUTION_SOURCE_IDS = {
+    debug: 'layer:foxhole:nixie:debug',
+    chatMap: 'layer:foxhole:nixie:chat-map',
+    map: 'layer:foxhole:nixie:map',
+    structures: 'layer:foxhole:nixie:structures',
+    tacticalLines: 'layer:foxhole:nixie:tactical-lines',
+    binocularLines: 'layer:foxhole:nixie:binocular-lines',
+    ranges: 'layer:foxhole:nixie:ranges',
+    triangulation: 'layer:foxhole:nixie:triangulation',
+    connectors: 'layer:foxhole:nixie:connectors',
+    splineConnectors: 'layer:foxhole:nixie:spline-connectors',
+    settingsPageSections: 'layer:foxhole:nixie:settings-page-sections',
+    componentExamples: 'layer:foxhole:nixie:component-examples',
+    toolbar: 'layer:foxhole:nixie:toolbar',
+    assistantTools: 'layer:foxhole:nixie:assistant-tools',
+} as const;

@@ -4,8 +4,15 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { hasAuthoredDestroyedTrenchConnectorLayers, isDestroyedTrenchConnectorId } from './authored-destroyed-connector-layers.mjs';
 
 import { imageDataHasVisiblePixels, pruneRootStructureArtifactDirectory } from './publish-render-utils.mjs';
+import {
+    bleedFoundationFloorSidecar,
+    bleedFoundationFloorTexture,
+    isFoundationFloorPublishedAsset,
+} from './publish-foundation-floor-bleed.mjs';
+import { clipBunkerFloorTexture, cropBunkerFloorSidecar, getBunkerFloorClipKind } from './publish-bunker-floor-clip.mjs';
 import { composeSubtypeIcon } from './publish-icon-utils.mjs';
 import { VisualOutputCache } from './visual-output-cache.mjs';
 import {
@@ -37,6 +44,8 @@ import {
     hasStandaloneModificationContentHashSuffix,
     isHashedHostLocalModificationDirectoryName,
     isSharedModificationRenderSceneEntry,
+    isExactSlotContextModificationRenderEntry,
+    resolveSlotContextModificationDefaultIconUrl,
     resolveAssetScopedModificationRenderEntry,
 } from './modification-storage-policy.mjs';
 import {
@@ -1069,6 +1078,8 @@ function compactSpotlight(value) {
         o: compactJsonValue(value.outerConeAngle),
         i: compactJsonValue(value.innerConeAngle),
         a: compactJsonValue(value.attenuationRadius),
+        fe: compactJsonValue(value.lightFalloffExponent),
+        isf: compactJsonValue(value.useInverseSquaredFalloff),
         v: compactJsonValue(value.intensity),
         lc: compactJsonValue(value.lightColor),
         sr: compactJsonValue(value.sourceRadius),
@@ -1086,6 +1097,8 @@ function compactSpotlight(value) {
         o: null,
         i: null,
         a: null,
+        fe: null,
+        isf: null,
         v: null,
         lc: null,
         sr: null,
@@ -1240,7 +1253,7 @@ function compactConnectorMeshConfig(value) {
         splineEnd: compactJsonValue(value.splineEndOffset),
         boundaryMin: compactJsonValue(value.splineBoundaryMin),
         boundaryMax: compactJsonValue(value.splineBoundaryMax),
-        materialScale: compactJsonValue(value.splineMaterialScaling),
+        materialScale: value.splineMaterialScaling,
         loc: compactJsonValue(value.relativeLocation),
         scale: compactJsonValue(value.relativeScale),
     }, {
@@ -1259,7 +1272,7 @@ function compactConnectorMeshConfig(value) {
         materialScale: null,
         loc: [0, 0, 0],
         scale: [1, 1, 1],
-    });
+    }, { materialScale: entry => entry });
 }
 
 function compactSplineComponentConfig(value) {
@@ -1373,6 +1386,7 @@ function compactStructureRenderLayer(value) {
         oy: compactJsonValue(value.offsetY),
         cn: value.componentName,
         ct: compactArray(value.componentTags, compactJsonValue),
+        ns: value.nativeSurface,
     }, {
         w: null,
         h: null,
@@ -1382,7 +1396,7 @@ function compactStructureRenderLayer(value) {
         oy: 0,
         cn: null,
         ct: [],
-    });
+    }, { ns: entry => entry });
 }
 
 function compactDestroyedStructure(value, asset) {
@@ -1840,6 +1854,7 @@ function compactStructure(value) {
         decays: null,
         liquidCapacity: null,
         stockpile: null,
+        stockpiles: null,
         holdProfile: null,
         markedCargoOverlay: null,
         maxHealth: null,
@@ -1886,6 +1901,7 @@ function compactStructure(value) {
         spotlights: entryValue => compactArray(entryValue, compactSpotlight),
         fuelTanks: entryValue => compactArray(entryValue, compactFuelTank),
         stockpile: compactStockpile,
+        stockpiles: entryValue => compactArray(entryValue, compactJsonValue),
         holdProfile: compactHoldProfile,
         markedCargoOverlay: compactMarkedCargoOverlay,
         conversionEntries: entryValue => compactArray(entryValue, compactConversionEntry),
@@ -2771,7 +2787,8 @@ function matchesScopedRawRenderedAssetTargets(scopedTargets, outputPath) {
         return false;
     }
 
-    if (location.scope === 'component' && isStandaloneDestroyedOrBreachedStructureId(location.assetId)) {
+    if (location.scope === 'component' && isStandaloneDestroyedOrBreachedStructureId(location.assetId)
+        && !(scopedTargets ? scopedTargets.assetIdsEligibleForComponentPublish.has(location.assetId) : isDestroyedTrenchConnectorId(location.assetId))) {
         return false;
     }
 
@@ -4027,6 +4044,7 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
 async function syncRawRenderedAssetCandidateUncached(candidate, manifest = null) {
     const stats = createEmptyRawRenderedAssetSyncStats();
     const { filePath, extension, outputPath } = candidate;
+    const bunkerFloorClipKind = getBunkerFloorClipKind(outputPath);
 
     if (extension === '.png') {
         const previewWebpPath = outputPath.replace(/\.png$/i, '.webp');
@@ -4155,13 +4173,30 @@ async function syncRawRenderedAssetCandidateUncached(candidate, manifest = null)
     await mkdir(dirname(outputPath), { recursive: true });
     try {
         if (extension === '.json') {
-            if (await writeFileIfChanged(outputPath, await readFileWithRetries(filePath))) {
+            const sourceContent = await readFileWithRetries(filePath);
+            const content = isFoundationFloorPublishedAsset(outputPath)
+                ? bleedFoundationFloorSidecar(sourceContent)
+                : bunkerFloorClipKind
+                    ? cropBunkerFloorSidecar(sourceContent, bunkerFloorClipKind)
+                    : sourceContent;
+            if (await writeFileIfChanged(outputPath, content)) {
                 stats.rawSynced += 1;
                 logPublishDetail(`synced raw render ${filePath} -> ${outputPath}`);
             } else {
                 stats.reused += 1;
             }
-        } else if (await writeFileIfChanged(outputPath, await readImageContentAsWebp(filePath, resolveRawRenderedAssetWebpOptions(outputPath)))) {
+        } else if (await writeFileIfChanged(
+            outputPath,
+            isFoundationFloorPublishedAsset(outputPath)
+                ? await bleedFoundationFloorTexture(await readFileWithRetries(filePath))
+                : bunkerFloorClipKind
+                    ? await clipBunkerFloorTexture(
+                        await readFileWithRetries(filePath),
+                        await readFileWithRetries(filePath.replace(/\.webp$/i, '.json')),
+                        bunkerFloorClipKind,
+                    )
+                    : await readImageContentAsWebp(filePath, resolveRawRenderedAssetWebpOptions(outputPath)),
+        )) {
             stats.rawSynced += 1;
             logPublishDetail(`synced raw render ${filePath} -> ${outputPath}`);
         } else {
@@ -5051,6 +5086,7 @@ async function readRenderSidecar(filePath) {
                 : null,
             offsetX: Number.isFinite(offsetX) ? offsetX : null,
             offsetY: Number.isFinite(offsetY) ? offsetY : null,
+            ...(parsed.nativeSurface ? { nativeSurface: parsed.nativeSurface } : {}),
         };
     } catch {
         return null;
@@ -5060,6 +5096,7 @@ async function readRenderSidecar(filePath) {
 async function applyTextureMetadata(entry, filePath, widthKey = 'textureWidth', heightKey = 'textureHeight') {
     const sidecar = await readRenderSidecar(filePath);
     if (sidecar) {
+        if (sidecar.nativeSurface) entry.nativeSurface = sidecar.nativeSurface;
         if (Number.isFinite(sidecar.width) && sidecar.width > 0) {
             entry[widthKey] = sidecar.width;
         }
@@ -5146,7 +5183,8 @@ async function collectStructureComponentRenderEntries(structureLayerEntriesByStr
 
     const layerId = normalizeId(componentId);
     const normalizedStructureId = normalizeId(structureId);
-    if (!layerId || !normalizedStructureId || isStandaloneDestroyedOrBreachedStructureId(normalizedStructureId)) {
+    if (!layerId || !normalizedStructureId
+        || (isStandaloneDestroyedOrBreachedStructureId(normalizedStructureId) && !isDestroyedTrenchConnectorId(normalizedStructureId))) {
         return;
     }
 
@@ -5910,6 +5948,30 @@ async function buildStructureRenderEntries(manifest, scopedTargets = null) {
         ),
     );
 
+    // Scoped contextual scenes still reuse the published shared blueprint glyph.
+    // Index that exact file even when the shared scene is outside this refresh.
+    const contextualIconIds = new Set();
+    for (const structure of manifest.assets ?? []) {
+        const scoped = modificationEntriesByAssetId[normalizeId(structure.id)] ?? {};
+        for (const slot of structure.modificationSlots ?? []) {
+            for (const [variantId, variant] of Object.entries(slot.variants ?? {})) {
+                const options = { variantId, variant, slotName: slot.name };
+                const entry = resolveAssetScopedModificationRenderEntry(scoped, modificationEntriesByKey, options);
+                if (!isExactSlotContextModificationRenderEntry(scoped, entry, options)) continue;
+                const id = resolveSeededSharedModificationId(variant?.sharedModificationId, variant?.renderId);
+                if (id && /^[a-z0-9_-]+$/.test(id)) contextualIconIds.add(id);
+            }
+        }
+    }
+    for (const id of contextualIconIds) {
+        const fileName = `${id}.icon.default.webp`;
+        const filePath = resolve(sharedAssetsDirectory, 'modifications', id, fileName);
+        if (await pathExists(filePath)) {
+            await collectModificationRenderEntries(modificationEntriesByKey, id, fileName,
+                `/foxhole/assets/shared/modifications/${id}/${fileName}`, filePath);
+        }
+    }
+
     const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
     logPublishSummary(
         `publish-manifest: indexed ${candidatePaths.length} published render assets`
@@ -6102,10 +6164,11 @@ function isFortRampStructure(structure) {
 
 function shouldPublishStructureComponentRenderLayers(structure) {
     // Standalone destroyed/breached structures and temporary build-site visuals
-    // intentionally have no component layers.
+    // retain static visuals unless the destroyed connector has authored pieces.
     // Spline/connector components are render-scene derived and may not appear as authored
     // renderLayers on the source manifest — keep publishing whatever component textures exist.
-    return !isStandaloneDestroyedOrBreachedStructure(structure)
+    return (hasAuthoredDestroyedTrenchConnectorLayers(structure)
+        || !isStandaloneDestroyedOrBreachedStructure(structure))
         && !isBuildSiteStructure(structure);
 }
 
@@ -7423,6 +7486,7 @@ function applyStructureRenderUrls(
                             return {
                                 id: entry.id,
                                 textureUrl: entry.textureUrl,
+                                ...(entry.nativeSurface ? { nativeSurface: entry.nativeSurface } : {}),
                                 ...(entry?.width ? { width: entry.width } : {}),
                                 ...(entry?.height ? { height: entry.height } : {}),
                                 ...(entry?.anchorX !== null && typeof entry?.anchorX !== 'undefined' ? { anchorX: entry.anchorX } : {}),
@@ -7507,6 +7571,7 @@ function applyStructureRenderUrls(
                                 {
                                     variantId,
                                     variant,
+                                    slotName: slot.name,
                                 },
                             );
                             const isUpgradeVariant = resolvePublishedUpgradeVariantContext(
@@ -7516,6 +7581,7 @@ function applyStructureRenderUrls(
                                 sourceModification,
                             ).isUpgrade === true;
                             const preferredSharedModificationId = normalizeId(variantId) === 'default'
+                                || isExactSlotContextModificationRenderEntry(assetScopedEntries, renderEntry, { variantId, slotName: slot.name })
                                 || isUpgradeVariant
                                 ? null
                                 : resolveSeededSharedModificationId(
@@ -7526,6 +7592,7 @@ function applyStructureRenderUrls(
                             const modificationLayerLookupKeys = buildHostLocalModificationRenderLookupKeys({
                                 variantId,
                                 variant,
+                                slotName: slot.name,
                                 extraKeys: [preferredSharedModificationId],
                             });
                             const assetModificationLayerEntries = modificationLayerEntriesByAssetId?.[normalizeId(structure.id)] ?? {};
@@ -7548,8 +7615,12 @@ function applyStructureRenderUrls(
                                         ...(entry?.offsetY !== null && typeof entry?.offsetY !== 'undefined' ? { offsetY: entry.offsetY } : {}),
                                     }))
                                 : [];
+                            const contextDefaultIconUrl = resolveSlotContextModificationDefaultIconUrl(
+                                assetScopedEntries, modificationEntriesByKey, { variantId, variant, slotName: slot.name },
+                            );
                             const nextVariant = {
                                 ...variant,
+                                ...(contextDefaultIconUrl ? { icons: { ...(variant.icons ?? {}), default: contextDefaultIconUrl } } : {}),
                                 ...(sourceModification?.lineOfSightPolygons?.length > 0
                                     ? { lineOfSightPolygons: sourceModification.lineOfSightPolygons }
                                     : {}),
@@ -7595,6 +7666,7 @@ function stripPublishedModificationSlotNoise(
 ) {
     const localizedStrings = new Map();
     const assetsById = new Map((manifest?.assets ?? [])
+        .filter(asset => asset?.isItem !== true)
         .map(asset => {
             const assetId = normalizeId(asset?.id);
             return assetId ? [assetId, asset] : null;
@@ -7707,6 +7779,7 @@ function stripPublishedModificationSlotNoise(
                         {
                             variantId,
                             variant,
+                            slotName: slot.name,
                             extraKeys: [sourceModificationId],
                         },
                     );

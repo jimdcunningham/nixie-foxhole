@@ -1,0 +1,17 @@
+{
+    "emplacedaircraftc": "emplacedaac",
+    "emplacedaircraftw": "emplacedaaw",
+	"_comment": "Manual legacy → Nixie structure id overrides. Applied last by generate-building-key-map.mjs.",
+	"resourcefield": "salvagefield",
+	"resourcefield_component": "componentsfield",
+	"resourcefield_coal": "coalfield",
+	"resourcefield_sulfur": "sulfurfield",
+	"shippingcrate": "structurecrate",
+	"garrisonstation1": "garrisonstation",
+	"garrisonbarn1": "garrisonbarn2",
+	"garrisonfishhut1": "garrisonfishhut2",
+	"garrisonstation2": "garrisonstation",
+	"landingdock": "shipyard",
+	"rail_small_gauge": "smallrailtracksplinefoundation",
+	"rail_large_gauge": "railtracksplinefoundation"
+}

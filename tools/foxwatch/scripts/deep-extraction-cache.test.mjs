@@ -65,6 +65,21 @@ describe('FoxWatch deep extraction cache identity', () => {
         );
     });
 
+    it('rebuilds pre-inheritance visibility inspections without discarding decoded meshes or textures', () => {
+        const expected = createDeepExtractionCacheIdentity({
+            pakInventory: { fingerprint: 'current-pak' },
+            extractorFingerprint: 'visibility-aware-extractor',
+            assetOutputRoot: 'assets',
+            iconOutputRoot: 'icons',
+        });
+        const cachedBeforeVisibilityInheritance = {
+            ...expected,
+            assetContractVersions: { ...expected.assetContractVersions, inspections: 2 },
+        };
+        assert.equal(deepExtractionCacheMatches(cachedBeforeVisibilityInheritance, expected), false);
+        assert.deepEqual(resolveInvalidatedDecodedAssetSections(cachedBeforeVisibilityInheritance, expected), ['inspections']);
+    });
+
     it('keys raw manifest reuse to both the PAK and complete extractor implementation', () => {
         const first = createRawManifestCacheKey({
             pakInventory: { fingerprint: 'pak-a' },

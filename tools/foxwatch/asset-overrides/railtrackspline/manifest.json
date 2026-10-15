@@ -7,12 +7,6 @@
         "start": 19,
         "end": 6
       }
-    },
-    "underlay": {
-      "repeatCropPixels": {
-        "start": 24,
-        "end": 0
-      }
     }
   },
   "connector": {

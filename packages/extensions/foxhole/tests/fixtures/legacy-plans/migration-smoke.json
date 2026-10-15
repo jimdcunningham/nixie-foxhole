@@ -1,0 +1,71 @@
+{
+    "version": "1.0.5",
+    "name": "Migration Smoke",
+    "description": "Representative legacy plan import coverage",
+    "authors": "Nixie",
+    "tags": ["smoke", "migration"],
+    "projectSettings": {
+        "shardId": "live-2",
+        "regionKeys": ["DeadLands"],
+        "showWorldRegion": true
+    },
+    "layers": [
+        { "id": 0, "name": "Base", "visible": true, "locked": false, "zIndex": 0 }
+    ],
+    "entities": [
+        {
+            "id": 1,
+            "key": "fortt1",
+            "x": 100,
+            "y": 200,
+            "z": 20,
+            "rotation": 90,
+            "connections": { "0": { "2": 2 } }
+        },
+        {
+            "id": 2,
+            "key": "fortt1",
+            "x": 350,
+            "y": 200,
+            "z": 20,
+            "rotation": 90,
+            "connections": { "2": { "1": 0 } }
+        },
+        {
+            "id": 3,
+            "key": "pipeline",
+            "x": 150,
+            "y": 250,
+            "rotation": 0,
+            "bezier": [
+                { "x": 0, "y": 0, "rotation": 180 },
+                { "x": 120, "y": 0, "rotation": 0 }
+            ]
+        },
+        {
+            "id": 4,
+            "key": "materials_factory_forge",
+            "x": 400,
+            "y": 400,
+            "rotation": 45,
+            "blueprint": true
+        },
+        {
+            "id": 5,
+            "key": "resource_transfer_station",
+            "x": 500,
+            "y": 500,
+            "rotation": 0,
+            "stockpileItems": ["coal", "metal", "excavation"]
+        },
+        {
+            "id": 6,
+            "type": "locomotive",
+            "key": "trainlrartillery",
+            "x": 600,
+            "y": 600,
+            "z": 15,
+            "rotation": 45
+        }
+    ]
+}

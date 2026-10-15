@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { foxholeStockpileGroupSchema } from './stockpile-groups-schema.ts';
+export type { FoxholeManifestStockpileGroup } from './stockpile-groups-schema.ts';
 import { normalizeFoxholeFaction } from './types.ts';
 import type { FoxholeFaction } from './types.ts';
 
@@ -393,6 +395,8 @@ function hydrateSpotlightInput(value: unknown): unknown {
         outerConeAngle: source.outerConeAngle ?? source.o,
         innerConeAngle: source.innerConeAngle ?? source.i,
         attenuationRadius: source.attenuationRadius ?? source.a,
+        lightFalloffExponent: source.lightFalloffExponent ?? source.fe,
+        useInverseSquaredFalloff: source.useInverseSquaredFalloff ?? source.isf,
         intensity: source.intensity ?? source.v,
         lightColor: source.lightColor ?? source.lc,
         sourceRadius: source.sourceRadius ?? source.sr,
@@ -512,6 +516,7 @@ function hydrateStructureRenderLayerInput(value: unknown): unknown {
         offsetX: source.offsetX ?? source.ox,
         offsetY: source.offsetY ?? source.oy,
         componentName: source.componentName ?? source.cn,
+        nativeSurface: source.nativeSurface ?? source.ns,
         componentTags: Array.isArray(source.componentTags)
             ? source.componentTags
             : (Array.isArray(source.ct) ? source.ct : []),
@@ -884,7 +889,20 @@ const spriteSchema = z.object({
     offsetY: z.number().default(0),
 });
 
+const nativeSurfaceMeshSchema = z.object({
+    lengthCm: z.number().positive().max(100_000),
+    positions: z.array(z.number().finite()).min(9).max(6000),
+    uvs: z.array(z.number().finite()).min(6).max(4000),
+    indices: z.array(z.number().int().nonnegative()).min(3).max(12000),
+}).refine(mesh => mesh.positions.length % 3 === 0 && mesh.uvs.length === mesh.positions.length / 3 * 2
+    && mesh.indices.length % 3 === 0 && mesh.indices.every(i => i < mesh.positions.length / 3));
+const nativeSurfaceSchema = z.object({
+    version: z.literal(1), verticalOffsetCm: z.number().finite(), groundHeightCm: z.number().finite(),
+    body: nativeSurfaceMeshSchema,
+});
+
 const structureRenderLayerSchema = z.object({
+    nativeSurface: nativeSurfaceSchema.optional(),
     id: z.string().min(1),
     textureUrl: optionalStringSchema,
     width: optionalNumberSchema,
@@ -1066,6 +1084,8 @@ const spotlightSchema = z.object({
     outerConeAngle: optionalNumberSchema,
     innerConeAngle: optionalNumberSchema,
     attenuationRadius: optionalNumberSchema,
+    lightFalloffExponent: optionalNumberSchema,
+    useInverseSquaredFalloff: z.boolean().nullish().transform(value => value ?? undefined),
     intensity: optionalNumberSchema,
     lightColor: optionalStringSchema,
     sourceRadius: optionalNumberSchema,
@@ -1516,6 +1536,7 @@ const structureManifestSchema = z.preprocess(value => {
     decays: optionalBooleanSchema,
     liquidCapacity: optionalNumberSchema,
     stockpile: stockpileSchema.nullish().transform(value => value ?? undefined),
+    stockpiles: z.array(foxholeStockpileGroupSchema).nullish().transform(value => value ?? undefined),
     holdProfile: holdProfileSchema.nullish().transform(value => value ?? undefined),
     markedCargoOverlay: markedCargoOverlaySchema.nullish().transform(value => value ?? undefined),
     maxHealth: optionalNumberSchema,

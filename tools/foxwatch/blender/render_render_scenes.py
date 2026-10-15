@@ -23,6 +23,7 @@ from script_bootstrap import append_script_search_paths
 append_script_search_paths(globals().get("__file__"), bpy.data.filepath, os.getcwd())
 
 from render_cache import RenderCache  # noqa: E402
+from road_native_surface import publish_road_surface  # noqa: E402
 from render_readability import (uses_readability_profile, has_contact_shadow, configure_readability,
     restore_materials, host_floor_bounds, render_contact_shadow, shadow_output_path)  # noqa: E402
 from render_scene_common import find_material_sidecar, resolve_asset_path, resolve_exported_texture_path  # noqa: E402
@@ -407,7 +408,7 @@ def alpha_edge_distances(width: int, height: int, pixels: list[float], alpha_thr
     return distances
 
 
-def apply_readability_grade(output_path: str, profile):
+def apply_readability_grade(output_path: str, profile, lossless_webp: bool = False):
     if profile is None or not os.path.exists(output_path):
         return
 
@@ -447,14 +448,35 @@ def apply_readability_grade(output_path: str, profile):
             pixels[index + 2] = max(0.0, min(1.0, pixels[index + 2] * blue_scale * shadow_factor * center_factor))
 
         image.pixels.foreach_set(pixels)
-        image.filepath_raw = output_path
-        image.file_format = "WEBP"
-        image.save()
+        if lossless_webp:
+            previous_view_state = set_neutral_view_transform(bpy.context.scene)
+            image_settings = bpy.context.scene.render.image_settings
+            previous_file_format = getattr(image_settings, "file_format", None)
+            previous_color_mode = getattr(image_settings, "color_mode", None)
+            previous_quality = getattr(image_settings, "quality", None)
+            previous_webp_lossless = getattr(image_settings, "webp_lossless", None)
+            set_webp_lossless(image_settings)
+            try:
+                image.save_render(output_path, scene=bpy.context.scene)
+            finally:
+                restore_view_transform(bpy.context.scene, previous_view_state)
+                if previous_file_format is not None:
+                    image_settings.file_format = previous_file_format
+                if previous_color_mode is not None:
+                    image_settings.color_mode = previous_color_mode
+                if previous_quality is not None:
+                    image_settings.quality = previous_quality
+                if previous_webp_lossless is not None and hasattr(image_settings, "webp_lossless"):
+                    image_settings.webp_lossless = previous_webp_lossless
+        else:
+            image.filepath_raw = output_path
+            image.file_format = "WEBP"
+            image.save()
     finally:
         bpy.data.images.remove(image)
 
 
-def apply_repeat_axis_edge_wrap(output_path: str, repeat_axis: str, mode: str):
+def apply_repeat_axis_edge_wrap(output_path: str, repeat_axis: str, mode: str, repeat_region=None):
     normalized_axis = str(repeat_axis or "").strip().lower()
     if mode != "topdown" or normalized_axis not in {"x", "y"} or not os.path.exists(output_path):
         return
@@ -467,13 +489,22 @@ def apply_repeat_axis_edge_wrap(output_path: str, repeat_axis: str, mode: str):
 
         pixels = list(image.pixels[:])
         pair_count = height if normalized_axis == "x" else width
+        extent = width if normalized_axis == "x" else height
+        first_index, last_index = 0, extent - 1
+        if repeat_region is not None:
+            if (len(repeat_region) != 2 or not 0 <= repeat_region[0] < repeat_region[1] <= 1):
+                raise ValueError("repeatRegion must bound one nonempty normalized texture region")
+            first_index = round(extent * repeat_region[0])
+            last_index = round(extent * repeat_region[1]) - 1
+        if last_index <= first_index:
+            return
         for pair_index in range(pair_count):
             if normalized_axis == "x":
-                first_offset = (pair_index * width) * 4
-                last_offset = ((pair_index * width) + width - 1) * 4
+                first_offset = ((pair_index * width) + first_index) * 4
+                last_offset = ((pair_index * width) + last_index) * 4
             else:
-                first_offset = pair_index * 4
-                last_offset = (((height - 1) * width) + pair_index) * 4
+                first_offset = ((first_index * width) + pair_index) * 4
+                last_offset = ((last_index * width) + pair_index) * 4
 
             # Rasterization treats the far edge as half-open, so its last column
             # can retain antialiased alpha even when the native mesh fills the
@@ -761,14 +792,43 @@ def ensure_flat_lineart_material():
     return material
 
 
+FOUNDATION_FLOOR_IDS = {
+    "foundation011x2t1", "foundation011x2t3",
+    "foundation012x2t1", "foundation012x2t3",
+    "foundation01t1", "foundation01t3",
+    "foundation02t1", "foundation02t3",
+}
+
+
+def is_foundation_floor_render(structure_id: str, output_key: str, mode: str) -> bool:
+    normalized_key = str(output_key or "").replace("\\", "/").strip("/").lower()
+    return mode == "topdown" and str(structure_id or "").lower() in FOUNDATION_FLOOR_IDS and normalized_key == "components/floor"
+
+
+def is_bunker_floor_render(structure_id: str, output_key: str, mode: str) -> bool:
+    if mode != "topdown":
+        return False
+    normalized_id = str(structure_id or "").lower()
+    normalized_key = str(output_key or "").replace("\\", "/").strip("/").lower()
+    if normalized_id == "weatherstation":
+        return normalized_key == "components/floormesh"
+    return normalized_key == "components/floor" and re.fullmatch(
+        r"(?:fort(?:corner)?t[123]|ammoroomt[23]|artilleryait[123]|atgunait[123]|engineroomt[23]|"
+        r"fortflamet[23]|fortradart[123]|fortrampt[123]|medicalroomt[123]|mgait[123]|"
+        r"observationbunkert[123]|rifleait[123]|fortfirepitt[123]|fortartillerysheltert[123]|trench(?:int)?t[123])",
+        normalized_id,
+    ) is not None
+
+
 def set_webp_lossless(image_settings):
     image_settings.file_format = "WEBP"
     if hasattr(image_settings, "color_mode"):
         image_settings.color_mode = "RGBA"
     if hasattr(image_settings, "quality"):
         image_settings.quality = 100
-    if hasattr(image_settings, "webp_lossless"):
-        image_settings.webp_lossless = True
+    for property_name in ("webp_lossless", "use_webp_lossless", "use_lossless"):
+        if hasattr(image_settings, property_name):
+            setattr(image_settings, property_name, True)
 
 
 def set_webp_lossy(image_settings, quality: int = 90):
@@ -1691,7 +1751,14 @@ def main():
                             render_state["resolution"][1],
                         )
                     else:
-                        bpy.ops.render.render(write_still=True)
+                        lossless_floor = is_foundation_floor_render(structure_id, output_key, mode) or is_bunker_floor_render(structure_id, output_key, mode)
+                        if lossless_floor:
+                            set_webp_lossless(bpy.context.scene.render.image_settings)
+                        try:
+                            bpy.ops.render.render(write_still=True)
+                        finally:
+                            if lossless_floor:
+                                set_webp_lossy(bpy.context.scene.render.image_settings)
                     if readability_state is not None:
                         try:
                             if has_contact_shadow(scene_document, mode):
@@ -1702,11 +1769,13 @@ def main():
                     apply_readability_grade(
                         output_path,
                         trench_readability_profile(structure_id, output_key, render_state["mode"]),
+                        lossless_webp=is_bunker_floor_render(structure_id, output_key, mode),
                     )
                     apply_repeat_axis_edge_wrap(
                         output_path,
                         (scene_document.get("render") or {}).get("repeatAxis"),
                         render_state["mode"],
+                        (scene_document.get("render") or {}).get("repeatRegion"),
                     )
                     apply_calibration_background(
                         output_path,
@@ -1749,6 +1818,9 @@ def main():
                             args.pixels_per_meter,
                             anchor_projection,
                         )
+                    if mode == "topdown" and (scene_document.get("render") or {}).get("nativeSplineSurface"):
+                        publish_road_surface(collection, output_path,
+                            render_sidecar_paths(output_path, structure_id, output_key, args.render_data_root))
                     pending_component_wall_miters.append((
                         output_path,
                         structure_id,

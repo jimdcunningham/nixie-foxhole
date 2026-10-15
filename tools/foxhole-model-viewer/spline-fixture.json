@@ -1,0 +1,28 @@
+{
+  "label": "Pipeline",
+  "connector": {
+    "pathStyle": "spline",
+    "spline": true,
+    "backSocketName": "BackSocket",
+    "frontSocketName": "FrontSocket",
+    "minLengthCm": 300,
+    "maxLengthCm": 2000,
+    "minRadiusCm": 50,
+    "maxRadiusCm": 300,
+    "maxBufferCm": 300,
+    "behavior": {
+      "pipeCurveScale": true,
+      "pipeExtension": true,
+      "socketSnapping": true
+    },
+    "enforceSplineModeCornerRadius": true,
+    "meshConfigs": [
+      {
+        "mode": "spline",
+        "interval": 0,
+        "startOffset": 0,
+        "endOffset": 0
+      }
+    ]
+  }
+}

@@ -47,14 +47,27 @@ export function isHashedHostLocalModificationDirectoryName(directoryName) {
 /**
  * Prefer plain variantId before hashed renderId so stale hashed sibling folders lose.
  */
+function slotContextKey(variantId, slotName) {
+    return slotName && /^[a-z0-9_-]+$/.test(normalizeId(variantId)) && /^[a-z0-9_]+$/.test(normalizeId(slotName))
+        ? `${normalizeId(variantId)}--slot-${normalizeId(slotName)}` : null;
+}
+
+export function isExactSlotContextModificationRenderEntry(assetScopedEntries, renderEntry, { variantId, slotName } = {}) {
+    const key = slotContextKey(variantId, slotName);
+    return Boolean(key && renderEntry && assetScopedEntries?.[key] === renderEntry);
+}
+
 export function buildHostLocalModificationRenderLookupKeys({
     variantId,
     variant = null,
+    slotName = null,
     extraKeys = [],
 } = {}) {
     const keys = [];
     const seen = new Set();
+    const contextKey = slotContextKey(variantId, slotName);
     for (const candidate of [
+        contextKey,
         variantId,
         variant?.id,
         variant?.appliedModificationId,
@@ -280,4 +293,12 @@ export function summarizeModificationStoragePlan(groups) {
         sharedRenderIds: shared.map(entry => entry.renderId),
         hostStructureIds: host.map(entry => entry.structureId),
     };
+}
+
+/** Contextual textures retain the already-published shared blueprint glyph. */
+export function resolveSlotContextModificationDefaultIconUrl(assetScopedEntries, sharedEntries, options = {}) {
+    const contextual = resolveAssetScopedModificationRenderEntry(assetScopedEntries, sharedEntries, options);
+    if (!isExactSlotContextModificationRenderEntry(assetScopedEntries, contextual, options)) return null;
+    const shared = resolveAssetScopedModificationRenderEntry({}, sharedEntries, options);
+    return shared?.defaultIconUrl ?? null;
 }

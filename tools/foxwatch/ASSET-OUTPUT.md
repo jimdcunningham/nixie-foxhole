@@ -98,6 +98,25 @@ repeating texture with the runtime spline UV axis without changing their preview
 published without endpoint caps; the standalone Great March endpoint mesh is excluded because
 its alignment and material do not match the repeating road span.
 
+Provisional Road's planner span deliberately omits native end caps. It
+exports the original body XYZ vertices and UV0 into the span sidecar's
+`nativeSurface` metadata (published as `ns`). A separate opaque UV material tile
+uses PlayerBuildRoad's existing albedo/normal bindings. The body deforms once
+from endpoint to endpoint; only the material repeats, at the native typed
+`SplineMaterialScaling` density. No cap insets, constant-width rectification,
+silhouette stitching or RGB seam paint is applied.
+
+The native body includes a wide skirt below the terrain. The top-down renderer
+intersects the original triangles with a flat ground plane at zero, using the
+authored mesh offset (5cm for this road). It retains UV interpolation at the
+cut and keeps the original vertices in metadata. Additional bend tessellation
+stays inside the public mesh vertex/index budgets without changing UV density.
+Variable terrain, native shader weather/depth effects and randomized decals
+remain separate fidelity work. The selected path, socket locations and saved
+scene geometry are never rewritten by the surface renderer. Native cap meshes
+remain available in the original game data and isolated catalog reference;
+they are not instantiated along planner roads.
+
 Authored item overrides may set `renderRotationDegrees: [x, y, z]` in
 `tools/foxwatch/asset-overrides/<id>/manifest.json`. The generator wraps the complete
 scene in that Euler rotation before every render mode, so preview, rendered icon, and
@@ -184,6 +203,18 @@ Color variants (when present) use a hex suffix: `<codename>.texture.<rrggbb>.web
 Faction material variants use a faction suffix: `<codename>.texture.c.webp` and `<codename>.texture.w.webp`. Raw previews use the same `c` / `w` suffix; publish keeps the Colonial preview as the canonical asset preview while both board textures remain available through `variants.c` and `variants.w`.
 
 Packaged variants use a `packaged.` infix: `<codename>.packaged.texture.webp`, etc.
+
+Dedicated packaged meshes inherit the intact blueprint's coherent planar body frame
+before rendering. This retains the asset's canonical heading when the planner swaps
+between intact and packaged visuals, while leaving the placed node's rotation unchanged.
+The packaged projection and contact shadow are regenerated from that oriented scene.
+Assets without a dedicated packaged mesh continue to use their intact board texture.
+
+Shared pallets keep their canonical vehicle/structure heading defaults and authored
+`packaged.palletOffset` overrides. Pallet offsets remain local to the placed asset;
+changing the packaged body frame does not rewrite an authored pallet offset. Ambiguous,
+non-planar, or unsupported body frames produce a scoped warning and retain the standalone
+mesh orientation for further review.
 
 ## Image roles
 
@@ -286,6 +317,13 @@ renderId = {variantId}-{sha256(identity)[0:12]}
 
 Host-local paths deliberately omit the render hash: `types/structures/<host>/modifications/<variantId>/`. Generation and publish fail if one `(host, variantId)` resolves to multiple `renderId` values, because that would make the host-local path ambiguous. Shared paths retain `renderId`.
 
+An explicitly authored native spline endpoint is a slot context, not a new global modification identity. Owned slots retain a source-only `authoredSplineTarget` with the exact native slot/target component identities and the target in slot-local centimeters. The extractor resolves this from the existing full native component transforms, clones the cached template, and changes only that clone's connector endpoint. Sandbags then use the existing rigid interval mesh placement (30cm start/end offsets and 90cm spacing); no bitmap stretch or native mesh scaling is introduced.
+
+These context scenes stay host-local at `modifications/<variantId>--slot-<lowercaseNativeSlotName>.scene.json`, and publish under the matching host-local folder. Slot lookup prefers this exact context before the ordinary variant/shared fallback. `renderId = hash(variantId | templatePath)` and the existing shared sample remain unchanged; neither sharing by global identity nor another slot may overwrite a contextual output. The final manifest uses the existing per-slot variant sprite fields, so this adds no planner state or runtime geometry contract.
+
+The catalog bake represents the explicit authored target. Native Sandbags `Random` mesh selection/jitter and the runtime precedence of `MaxTargetDistance=330cm` versus a longer explicit slot target are not established by this static representation.
+
+
 Fingerprint validates the detached global visual. It is **not** the public identity. Fingerprint divergence after detachment means the global assets genuinely differ.
 
 Publish treats a render-scene entry as shared **only** when `structureId === "mods"`. Host-local modification scenes still list consumers; consumers alone must not mark them shared, or host-local Blender outputs are skipped during sync.
@@ -386,6 +424,12 @@ Overlay scale is ~28% of base icon in the top-left corner. Subtype source icons 
 
 **Never** bake subtype into Blender output or preview masters. If publish copies or converts an icon with sharp into a public composable icon path, subtype must be applied in that write.
 
+## Grouped stockpiles
+
+Assets may publish additive `stockpiles[]` beside the unchanged legacy `stockpile` and `holdProfile` projection. Each store retains its native component name and known stockpile index, all typed configs in native order, component flags, retrieval modifier, and indexed access/render references. Configs retain entry domain, list type, quantity limit, total quantity limit, valid-entry overrides, and all quantity/total/pre-stock/retrieval override records. Absent configs inherit; an explicitly empty array overrides inheritance.
+
+Bowhead has three stores and five configs: Hold 1 has Vehicles (10 / 0), Structures (20 / 0), and Items (30,000 / 30,000); Holds 2 and 3 each have Items (32,500 / 32,500). These are native quantity/total-limit pairs. Preserve zero verbatim; do not infer unlimited capacity or sum separate stores. Planner cargo markers use a component/config key and retain the legacy `markedItemCodenames` selection when a group has no explicit override. Markers identify cargo types; they do not simulate quantities.
+
 ## Component layers and splines
 
 Some assets render extra top-down layers (pipe spans, barbed wire splines, trench upgrades):
@@ -396,6 +440,15 @@ types/structures/<codename>/modifications/<variantId>/components/<layerId>/<laye
 ```
 
 Component layers are **texture-only** in the published tree unless a separate preview/icon spec is added later.
+
+Dragon's Teeth (`tankstopsplinet3`) publishes one isolated marker layer for each native interval mesh: `span`, `spanalt`, `spanalt2`, and `spanalt3` in native mesh order. Export every variant independently of the minimum-length preview, which instantiates only two markers. These are discrete blocks at the native 375cm interval, not a continuous strip. Preserve the existing base, preview, packaging, and marker frames when adding missing variants.
+The three `trenchconnectordestroyedt1` / `trenchconnectordestroyedt2` /
+`trenchconnectordestroyedt3` assets may author component layers for their decoded
+centre floor/rubble, endpoint dirt, and native side spline pieces. These authored
+layers are generated, synced, and indexed even though the asset is destroyed.
+Other standalone destroyed/breached assets retain their static publication policy.
+The planner keeps the intact connector identity and endpoint geometry when selecting
+these pieces; it does not stretch the whole fixed-length wreck sprite over the connector.
 
 Spline component layers named `span` are emitted with `render.repeatAxis: "x"`. Blender keeps that
 horizontal repeat axis at the fixed top-down pixel density and snaps near-integer floating-point bounds
@@ -411,6 +464,47 @@ fixed-density pixel insets into camera bounds before rendering, so the final ima
 its width is the authoritative runtime repeat period. A temporary `calibrationBackgroundColor` may be
 authored on the same component override to composite transparent pixels over a high-contrast background
 while measuring the crop. Remove the calibration color before publishing production assets.
+
+Small Gauge Railway Track (`smallrailtrackspline` and `smallrailtracksplinebiarc`) publishes the planar Trackbed01 as
+`underlay`. Its source selects that bed at zero surface delta. Conditional raised beds
+and their copied-placement supports remain separately published as `underlay02` and
+`underlay03`; they must not be overlaid with the planar bed. The native end-cap mesh is
+retained as non-repeating `underlaytransition`. Terrain-range evaluation, support
+selection, and native endpoint transition placement remain unsupported by the planar
+planner; retaining those layers does not claim those behaviors are implemented.
+The planar bed uses its complete fixed-density profile without the former combined-bed
+crop, while the independent rail/tie span retains its authored repeat crop.
+
+Standard Gauge Railway Track (`railtrackspline` and inspected `railtracksplinebiarc`) applies the same separation
+using native `Railway_Trackbed_01` for the planar `underlay`, `_02`/`02_side`
+and `_03`/`03_side` for their respective raised layers, and
+`Railway_TrackbedTransition` as non-repeating retained endpoint art. The previous
+24px combined-bed crop is removed; the independent 19px/6px rail/tie span crop
+and fork/endcap flags stay unchanged. Other standard-gauge IDs are unaffected. Biarc inherits the same native bed configurations,
+with MaxArcAngle=0; its fork/endcap/socket flags and span crop remain unchanged.
+Native terrain-range and endpoint-transition behavior remain unclaimed.
+
+Native material bindings in internal render-scene `materialSidecarNameOverridesByVariant`
+may use package-qualified paths (`War/Content/.../Ivy.uasset`). `default` slot bindings
+apply before selected-variant overrides. Exact paths never fall back to a basename;
+ambiguous basename matches are refused instead of selecting another native package.
+`townwmedg1` carries authored default slot paths for Ivy03/05/06, preserving the distinct
+Environment/IVy and Environment/Props/Ivy materials. This corrects package identity only;
+the cooked MasterFoliage opacity graph remains incomplete, so exact native mask/lighting
+fidelity is unclaimed. Meshes, UVs, transforms, geometry and opacity constants are retained.
+
+`uniquewwatermillg1destroyed` additionally carries the same qualified Props/Ivy
+native slot for its Ivy06/09/10/11/14Corner/15 resources. This route is limited to
+the inspected destroyed asset; the normal watermill and other candidates remain unchanged.
+
+`uniquewwindmillg1destroyed` similarly binds only its inspected Ivy06/Ivy10/Ivy14Corner
+resources to native Props/Ivy. Its material-only publication preserves pre-task
+scene geometry/settings; normal windmill and uninspected candidates are excluded.
+
+`uniquecchurchg1` binds inspected Ivy11/Ivy12/Ivy14Corner resources to their native
+Props/Ivy identity. HouseMesh structural trim and every baseline world vertex remain
+preserved in its material-only publication. The separate duplicate native CodeName
+ambiguity for the destroyed Warden/Colonial church definitions remains open and unchanged.
 
 ## Compression summary
 

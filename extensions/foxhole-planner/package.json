@@ -1,0 +1,26 @@
+{
+  "name": "@nixie/foxhole-planner-sdk",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#foxhole-scene-v2-maps": "./src/scene-v2-map-data-node.ts",
+    "#foxhole-scene-v2-assets": "./src/scene-v2-assets-node.ts"
+  },
+  "description": "Foxhole Planner implemented against the public Nixie extension SDK",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types ./tests/*.test.ts"
+  },
+  "dependencies": {
+    "@nixie/extension-sdk": "0.1.0-preview.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "sharp": "0.35.3",
+    "typescript": "6.0.3",
+    "vite": "7.3.6"
+  }
+}

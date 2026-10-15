@@ -326,6 +326,8 @@ public sealed class FoxWatchManifestStructure
 
     public FoxWatchManifestStockpile? Stockpile { get; set; }
 
+    public List<FoxWatchManifestStockpileGroup>? Stockpiles { get; set; }
+
     public FoxWatchManifestHoldProfile? HoldProfile { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -561,6 +563,40 @@ public sealed class FoxWatchManifestPowerGridInfo
     public int? MaxConnections { get; set; }
 }
 
+public sealed class FoxWatchManifestStockpileGroup
+{
+    public string ComponentName { get; set; } = string.Empty;
+    public int? StockpileIndex { get; set; }
+    public bool? AllowContainerSubmission { get; set; }
+    public bool? Replicates { get; set; }
+    public double? RetrieveDurationModifier { get; set; }
+    public List<FoxWatchManifestStockpileConfig> Configs { get; set; } = [];
+    public List<FoxWatchManifestStockpileReference> References { get; set; } = [];
+}
+
+public sealed class FoxWatchManifestStockpileReference
+{
+    public string ComponentName { get; set; } = string.Empty;
+    public string ComponentType { get; set; } = string.Empty;
+    public int StockpileIndex { get; set; }
+    public int? InventoryIndex { get; set; }
+}
+
+public sealed class FoxWatchManifestStockpileConfig
+{
+    public string EntryType { get; set; } = string.Empty;
+    public string? ListType { get; set; }
+    public int? QuantityLimit { get; set; }
+    public int? TotalQuantityLimit { get; set; }
+    public int? ItemCategoryFilter { get; set; }
+    public List<string>? ValidEntriesOverride { get; set; }
+    // Keep native entry records verbatim; quantity and total overrides are distinct.
+    public List<System.Text.Json.JsonElement>? QuantityOverrides { get; set; }
+    public List<System.Text.Json.JsonElement>? TotalQuantityOverrides { get; set; }
+    public List<System.Text.Json.JsonElement>? PreStockedEntries { get; set; }
+    public List<System.Text.Json.JsonElement>? RetrieveDurationModifiers { get; set; }
+}
+
 public sealed class FoxWatchManifestStockpile
 {
     public int? TotalItemCapacity { get; set; }
@@ -679,6 +715,10 @@ public sealed class FoxWatchManifestSpotlight
     public double? InnerConeAngle { get; set; }
 
     public double? AttenuationRadius { get; set; }
+
+    public double? LightFalloffExponent { get; set; }
+
+    public bool? UseInverseSquaredFalloff { get; set; }
 
     public double? Intensity { get; set; }
 
@@ -898,8 +938,19 @@ public sealed class FoxWatchManifestModification
     public string? AppliedModificationId { get; set; }
 }
 
+public sealed class FoxWatchManifestModificationSplineTarget
+{
+    public string SlotComponentName { get; set; } = string.Empty;
+    public string TargetComponentName { get; set; } = string.Empty;
+    public List<double> LocalTargetCentimeters { get; set; } = [];
+}
+
 public sealed class FoxWatchManifestModificationSlot
 {
+    // Source render contract only; the publisher consumes this via contextual sprite routing.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FoxWatchManifestModificationSplineTarget? AuthoredSplineTarget { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string ComponentType { get; set; } = string.Empty;

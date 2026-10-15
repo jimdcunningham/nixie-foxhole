@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-08-18",
+  "scope": "Legacy game-kitchen Foxhole Planner surfaces that must be preserved or deliberately retired when importing into Nixie.",
+  "corpus": {
+    "command": "npm run legacy:migration-status",
+    "fixtures": 1282,
+    "entities": 198643,
+    "boardSnapshots": 198465,
+    "snapshotYieldPercent": 99.9,
+    "importErrors": 0,
+    "usableWithoutCriticalIssuesPercent": 99.0
+  },
+  "surfaces": [
+    {
+      "id": "plan-archive-and-clipboard",
+      "status": "verified",
+      "evidence": ["app/plugins/foxhole/legacy/plan-archive.ts", "app/plugins/foxhole/legacy/plan-clipboard-import.ts", "tests/legacy/plan-archive.test.ts", "tests/legacy/plan-clipboard.test.ts"],
+      "nextAction": "Keep the fixture corpus as the regression gate."
+    },
+    {
+      "id": "project-identity-and-layers",
+      "status": "verified",
+      "evidence": ["app/plugins/foxhole/legacy/plan-importer.ts", "app/plugins/foxhole/legacy/plan-identity-settings.ts", "tests/legacy/plan-identity-settings.test.ts"],
+      "nextAction": "Preserve description, credits, tags, layers, positions, rotations, and height in fixture assertions."
+    },
+    {
+      "id": "project-settings",
+      "status": "partial",
+      "evidence": ["app/plugins/foxhole/legacy/plan-project-settings.ts", "tools/legacy-plans/migration-status.mjs"],
+      "gaps": ["regionCrop is deliberately deferred", "legacy range, map, network, and icon preferences remain user preferences", "project custom properties are known but not mapped"],
+      "nextAction": "Decide which settings are project semantics rather than user preferences, then add focused import coverage."
+    },
+    {
+      "id": "asset-resolution",
+      "status": "partial",
+      "evidence": ["app/plugins/foxhole/legacy/plan-building-key-map.ts", "tools/legacy-plans/migration-status.mjs"],
+      "gaps": ["tankmine cargo key"],
+      "nextAction": "Keep static-road sockets intentionally ignored and decide whether legacy tank-mine cargo should resolve or be intentionally ignored."
+    },
+    {
+      "id": "sockets-and-bunker-unions",
+      "status": "partial",
+      "evidence": ["app/plugins/foxhole/nixie/structure-socket-*.ts", "tests/structure-socket-*.test.ts", "tools/legacy-plans/socket-qa.json"],
+      "gaps": ["only 8 socket visual confirmations"],
+      "nextAction": "Run a bunker/trench visual QA sweep before changing socket behavior."
+    },
+    {
+      "id": "production-cargo-and-stats",
+      "status": "verified",
+      "evidence": ["app/components/nixie/foxhole/FoxholeSceneStatsSidebarPanel.vue", "app/components/nixie/foxhole/FoxholeStructureCargoInspectorCard.vue", "tests/marked-cargo-overlay.test.ts"],
+      "nextAction": "Keep separate follow-up issues for liquid capacity and bunker-stat correctness rather than treating the whole surface as missing."
+    },
+    {
+      "id": "ranges-and-line-of-sight",
+      "status": "partial",
+      "evidence": ["app/plugins/nixie/contributions/foxhole/range.contrib.ts", "app/plugins/nixie/board/types/foxhole-range.ts", "app/plugins/nixie/board/types/foxhole-structure-selection.ts"],
+      "gaps": ["manual and manifest ranges exist", "selection hitboxes exist", "no structure-hitbox line-of-sight intersection system or legacy LOS overlay was found"],
+      "nextAction": "Treat LOS as a separate feature project with data-model, collision, and rendering design."
+    },
+    {
+      "id": "map-and-overlay-preferences",
+      "status": "partial",
+      "evidence": ["app/plugins/nixie/contributions/foxhole/map.contrib.ts", "app/plugins/foxhole/nixie/map-settings.ts", "app/plugins/foxhole/nixie/structure-overlay-sync.ts"],
+      "gaps": ["legacy map, range, and network toggles are not imported", "garrison supply radius remains absent"],
+      "nextAction": "Decide which legacy overlays are still product requirements; preserve only project-scoped settings."
+    },
+    {
+      "id": "trains",
+      "status": "deferred",
+      "evidence": ["tools/legacy-plans/migration-status.mjs", "app/plugins/foxhole/legacy/plan-importer.ts"],
+      "gaps": ["34 locomotive_undercarriage entities skipped by the corpus run"],
+      "nextAction": "Do not implement until static-train policy changes."
+    },
+    {
+      "id": "tech-tree-and-legacy-presets",
+      "status": "missing",
+      "evidence": ["MIGRATION.md", "BLUEPRINT-MIGRATION.md"],
+      "gaps": ["no tech-tree browser", "no legacy preset deep-link migration", "blueprint migration is design-only"],
+      "nextAction": "Product decision required before implementation."
+    }
+  ]
+}

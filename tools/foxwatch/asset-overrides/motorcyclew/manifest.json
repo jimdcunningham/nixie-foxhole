@@ -1,4 +1,10 @@
 {
   "categoryId": "vehicles",
-  "previewDirection": "sw"
+  "previewDirection": "sw",
+  "packaged": {
+    "palletOffset": {
+      "x": 18.79449310898781,
+      "y": -61.387660600245
+    }
+  }
 }

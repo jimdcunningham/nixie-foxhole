@@ -1,0 +1,56 @@
+{
+  "renderLayers": [
+    {
+      "componentName": "Floor",
+      "id": "floor"
+    },
+    {
+      "componentName": "Destroyed",
+      "id": "destroyed"
+    },
+    {
+      "componentName": "DirtBack",
+      "id": "dirtback"
+    },
+    {
+      "componentName": "DirtBackLeft",
+      "id": "dirtcornerbackleft"
+    },
+    {
+      "componentName": "DirtBackRight",
+      "id": "dirtcornerbackright"
+    },
+    {
+      "componentName": "DirtFront",
+      "id": "dirtfront"
+    },
+    {
+      "componentName": "DirtFrontLeft",
+      "id": "dirtcornerfrontleft"
+    },
+    {
+      "componentName": "DirtFrontRight",
+      "id": "dirtcornerfrontright"
+    },
+    {
+      "componentName": "mesh:TrenchT3Short02",
+      "id": "piece-trencht3short02"
+    },
+    {
+      "componentName": "mesh:TrenchT3ShortSpline01",
+      "id": "piece-trencht3shortspline01"
+    },
+    {
+      "componentName": "mesh:TrenchT3ShortSpline02",
+      "id": "piece-trencht3shortspline02"
+    },
+    {
+      "componentName": "mesh:TrenchT3ShortSpline03",
+      "id": "piece-trencht3shortspline03"
+    },
+    {
+      "componentName": "mesh:TrenchT3ShortSpline04",
+      "id": "piece-trencht3shortspline04"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+/* Trusted compiled UI compatibility. These selectors are not part of the public SDK. */
+.nx-assistant-chat__md :is(.foxhole-assistant-item-chip--link, .foxhole-assistant-recipe-chip--link, .foxhole-assistant-place-chip--link) {
+  color: var(--nx-accent-text); background: transparent; border: none; box-shadow: none;
+  text-decoration: none !important; text-decoration-line: none !important;
+  font: inherit; font-weight: inherit; cursor: default;
+}
+.nx-assistant-chat__md :is(.foxhole-assistant-item-chip--link, .foxhole-assistant-recipe-chip--link, .foxhole-assistant-place-chip--link):is(:hover, :focus-visible) {
+  color: var(--nx-accent-hover); text-decoration: none !important; text-decoration-line: none !important;
+}
+.nixie-sidebar-asset-hover.has-masthead-preview .nixie-sidebar-asset-hover__body:has(.foxhole-asset-hover-card__production-hint) { padding-bottom: 0; }

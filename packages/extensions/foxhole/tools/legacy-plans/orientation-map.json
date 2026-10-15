@@ -1,0 +1,1080 @@
+{
+	"generatedAt": "2026-07-22T01:45:04.659Z",
+	"count": 382,
+	"histogram": {
+		"0": 314,
+		"90": 45,
+		"180": 8,
+		"-90": 15
+	},
+	"byMethod": {
+		"alpha-sample+dimension-fit": 245,
+		"alpha-sample": 10,
+		"alpha-sample+dimension-fit+qa-confirmed": 19,
+		"manual-override": 29,
+		"alpha-sample+qa-confirmed": 24,
+		"spline-connector": 10,
+		"alpha-sample+socket-agree+qa-confirmed": 20,
+		"alpha-sample+socket-agree": 16,
+		"aspect-default+qa-confirmed": 2,
+		"socket-frame+alpha-ambiguous+qa-confirmed": 3,
+		"socket-frame+qa-confirmed": 2,
+		"range-facing+alpha-ambiguous": 2
+	},
+	"byConfidence": {
+		"high": 371,
+		"skip": 10,
+		"low": 1
+	},
+	"nonZeroSample": [
+		[
+			"artilleryait1",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"artilleryait2",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"artilleryait3",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"atgunait1",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"atgunait2",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"atgunait3",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"coastalgun",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9967,
+				"alphaIoU": 0.9958,
+				"alphaDice": 0.9979,
+				"alphaMargin": 0.5949,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9967,
+						"iou": 0.9958
+					},
+					{
+						"offset": 90,
+						"score": 0.4018,
+						"iou": 0.3272
+					}
+				],
+				"spriteOffsetX": 174.131,
+				"spriteOffsetY": -1.966,
+				"dimensionFitScore": 0.9949,
+				"dimensionFitMargin": 0.8116
+			}
+		],
+		[
+			"concretemixer",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit+qa-confirmed",
+				"alphaScore": 0.9985,
+				"alphaIoU": 0.9981,
+				"alphaDice": 0.999,
+				"alphaMargin": 0.002,
+				"legacyAspect": "landscape",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9985,
+						"iou": 0.9981
+					},
+					{
+						"offset": 90,
+						"score": 0.9965,
+						"iou": 0.9955
+					}
+				],
+				"spriteOffsetX": 0,
+				"spriteOffsetY": -4.434,
+				"dimensionFitScore": 0.9712,
+				"dimensionFitMargin": 0.8787
+			}
+		],
+		[
+			"constructionequipment",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "manual-override",
+				"alphaScore": 0.6338,
+				"alphaIoU": 0.5795,
+				"alphaDice": 0.7337,
+				"alphaMargin": 0.0002,
+				"legacyAspect": "landscape",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.6338,
+						"iou": 0.5795
+					},
+					{
+						"offset": 90,
+						"score": 0.6336,
+						"iou": 0.5792
+					}
+				],
+				"spriteOffsetX": 0,
+				"spriteOffsetY": -14.362
+			}
+		],
+		[
+			"facilitymineresource1",
+			{
+				"textureBakeDeltaDeg": 180,
+				"rotationOffsetDeg": 180,
+				"confidence": "high",
+				"method": "alpha-sample+socket-agree",
+				"alphaScore": 0.93,
+				"alphaIoU": 0.9108,
+				"alphaDice": 0.9533,
+				"alphaMargin": 0.2696,
+				"legacyAspect": "portrait",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": 180,
+						"score": 0.93,
+						"iou": 0.9108
+					},
+					{
+						"offset": 0,
+						"score": 0.6603,
+						"iou": 0.5921
+					}
+				],
+				"spriteOffsetX": 0.735,
+				"spriteOffsetY": -22.71,
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 6
+			}
+		],
+		[
+			"facilitymineresource2",
+			{
+				"textureBakeDeltaDeg": 180,
+				"rotationOffsetDeg": 180,
+				"confidence": "high",
+				"method": "alpha-sample+socket-agree",
+				"alphaScore": 0.9295,
+				"alphaIoU": 0.9103,
+				"alphaDice": 0.9531,
+				"alphaMargin": 0.2688,
+				"legacyAspect": "portrait",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": 180,
+						"score": 0.9295,
+						"iou": 0.9103
+					},
+					{
+						"offset": 0,
+						"score": 0.6607,
+						"iou": 0.5925
+					}
+				],
+				"spriteOffsetX": 0.735,
+				"spriteOffsetY": -22.71,
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 6
+			}
+		],
+		[
+			"facilitymineresource3",
+			{
+				"textureBakeDeltaDeg": 180,
+				"rotationOffsetDeg": 180,
+				"confidence": "high",
+				"method": "alpha-sample+socket-agree",
+				"alphaScore": 0.9298,
+				"alphaIoU": 0.9108,
+				"alphaDice": 0.9533,
+				"alphaMargin": 0.2686,
+				"legacyAspect": "portrait",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": 180,
+						"score": 0.9298,
+						"iou": 0.9108
+					},
+					{
+						"offset": 0,
+						"score": 0.6613,
+						"iou": 0.5931
+					}
+				],
+				"spriteOffsetX": 0.735,
+				"spriteOffsetY": -22.71,
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 6
+			}
+		],
+		[
+			"facilitymineresource4",
+			{
+				"textureBakeDeltaDeg": 180,
+				"rotationOffsetDeg": 180,
+				"confidence": "high",
+				"method": "alpha-sample+socket-agree",
+				"alphaScore": 0.8843,
+				"alphaIoU": 0.8543,
+				"alphaDice": 0.9214,
+				"alphaMargin": 0.2287,
+				"legacyAspect": "portrait",
+				"nixieAspect": "portrait",
+				"candidateScores": [
+					{
+						"offset": 180,
+						"score": 0.8843,
+						"iou": 0.8543
+					},
+					{
+						"offset": 0,
+						"score": 0.6556,
+						"iou": 0.587
+					}
+				],
+				"spriteOffsetX": 6.076,
+				"spriteOffsetY": -22.71,
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 6
+			}
+		],
+		[
+			"facilitymodificationcenter",
+			{
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "socket-frame+alpha-ambiguous+qa-confirmed",
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 4.2,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"spriteOffsetX": 0,
+				"spriteOffsetY": 0,
+				"alphaScore": 0.999,
+				"alphaMargin": 0,
+				"textureBakeDeltaDeg": 90
+			}
+		],
+		[
+			"facilitypowerdiesel",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9664,
+				"alphaIoU": 0.9569,
+				"alphaDice": 0.978,
+				"alphaMargin": 0.243,
+				"legacyAspect": "square",
+				"nixieAspect": "square",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 0.9664,
+						"iou": 0.9569
+					},
+					{
+						"offset": 0,
+						"score": 0.7234,
+						"iou": 0.663
+					},
+					{
+						"offset": 180,
+						"score": 0.7259,
+						"iou": 0.6658
+					},
+					{
+						"offset": -90,
+						"score": 0.7095,
+						"iou": 0.6471
+					}
+				],
+				"spriteOffsetX": -0.674,
+				"spriteOffsetY": 34.908,
+				"dimensionFitScore": 0.9935,
+				"dimensionFitMargin": 0.3018
+			}
+		],
+		[
+			"facilitypoweroil",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8963,
+				"alphaIoU": 0.8695,
+				"alphaDice": 0.9302,
+				"alphaMargin": 0.4022,
+				"legacyAspect": "square",
+				"nixieAspect": "square",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8963,
+						"iou": 0.8695
+					},
+					{
+						"offset": 0,
+						"score": 0.4941,
+						"iou": 0.4172
+					},
+					{
+						"offset": 180,
+						"score": 0.5207,
+						"iou": 0.4441
+					},
+					{
+						"offset": 90,
+						"score": 0.3971,
+						"iou": 0.323
+					}
+				],
+				"spriteOffsetX": -41.647,
+				"spriteOffsetY": -5.046,
+				"dimensionFitScore": 0.9238,
+				"dimensionFitMargin": 0.2648
+			}
+		],
+		[
+			"facilitytransfercrate",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9996,
+				"alphaIoU": 0.9995,
+				"alphaDice": 0.9997,
+				"alphaMargin": 0.173,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 0.9996,
+						"iou": 0.9995
+					},
+					{
+						"offset": -90,
+						"score": 0.8266,
+						"iou": 0.7838
+					}
+				],
+				"spriteOffsetX": 63.429,
+				"spriteOffsetY": -2.82,
+				"dimensionFitScore": 0.9957,
+				"dimensionFitMargin": 0.7752
+			}
+		],
+		[
+			"facilitytransferliquid",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9917,
+				"alphaIoU": 0.9899,
+				"alphaDice": 0.9949,
+				"alphaMargin": 0.0375,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 0.9917,
+						"iou": 0.9899
+					},
+					{
+						"offset": -90,
+						"score": 0.9542,
+						"iou": 0.9419
+					}
+				],
+				"spriteOffsetX": 8.514,
+				"spriteOffsetY": 4.184,
+				"dimensionFitScore": 0.9988,
+				"dimensionFitMargin": 0.7748
+			}
+		],
+		[
+			"facilitytransfermaterial",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit+qa-confirmed",
+				"alphaScore": 0.9854,
+				"alphaIoU": 0.9809,
+				"alphaDice": 0.9904,
+				"alphaMargin": 0.0058,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 0.9854,
+						"iou": 0.9809
+					},
+					{
+						"offset": -90,
+						"score": 0.9796,
+						"iou": 0.9735
+					}
+				],
+				"spriteOffsetX": -6.957,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9889,
+				"dimensionFitMargin": 0.8667
+			}
+		],
+		[
+			"facilitytransferresource",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 1,
+				"alphaIoU": 1,
+				"alphaDice": 1,
+				"alphaMargin": 0.0134,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 1,
+						"iou": 1
+					},
+					{
+						"offset": -90,
+						"score": 0.9866,
+						"iou": 0.9828
+					}
+				],
+				"spriteOffsetX": -3.597,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.996,
+				"dimensionFitMargin": 0.8108
+			}
+		],
+		[
+			"facilityvehiclefactory1",
+			{
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "socket-frame+alpha-ambiguous+qa-confirmed",
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 41,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"spriteOffsetX": 4.961,
+				"spriteOffsetY": 2.936,
+				"alphaScore": 0.9993,
+				"alphaMargin": 0.0161,
+				"textureBakeDeltaDeg": -90
+			}
+		],
+		[
+			"facilityvehiclefactory2",
+			{
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "socket-frame+alpha-ambiguous+qa-confirmed",
+				"matchedSockets": 1,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 6.4,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"spriteOffsetX": 69.609,
+				"spriteOffsetY": 0,
+				"alphaScore": 0.9998,
+				"alphaMargin": 0.0174,
+				"textureBakeDeltaDeg": -90
+			}
+		],
+		[
+			"facilityvehiclefactory3",
+			{
+				"textureBakeDeltaDeg": 0,
+				"rotationOffsetDeg": 180,
+				"confidence": "high",
+				"method": "manual-override",
+				"alphaScore": 0.7611,
+				"alphaIoU": 0.7069,
+				"alphaDice": 0.8283,
+				"alphaMargin": 0.2366,
+				"legacyAspect": "landscape",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": 0,
+						"score": 0.7611,
+						"iou": 0.7069
+					},
+					{
+						"offset": 180,
+						"score": 0.5246,
+						"iou": 0.448
+					}
+				],
+				"spriteOffsetX": 0,
+				"spriteOffsetY": -220.394,
+				"matchedSockets": 1,
+				"meanResidualDeg": 90,
+				"meanAngleResidualDeg": 33
+			}
+		],
+		[
+			"fieldat2c",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8986,
+				"alphaIoU": 0.8717,
+				"alphaDice": 0.9314,
+				"alphaMargin": 0.4758,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8986,
+						"iou": 0.8717
+					},
+					{
+						"offset": 90,
+						"score": 0.4228,
+						"iou": 0.3471
+					}
+				],
+				"spriteOffsetX": -9.881,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9864,
+				"dimensionFitMargin": 0.8424
+			}
+		],
+		[
+			"fieldat2w",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8629,
+				"alphaIoU": 0.8274,
+				"alphaDice": 0.9055,
+				"alphaMargin": 0.2944,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8629,
+						"iou": 0.8274
+					},
+					{
+						"offset": 90,
+						"score": 0.5685,
+						"iou": 0.4929
+					}
+				],
+				"spriteOffsetX": 28.445,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9748,
+				"dimensionFitMargin": 0.868
+			}
+		],
+		[
+			"fieldatc",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9973,
+				"alphaIoU": 0.9963,
+				"alphaDice": 0.9982,
+				"alphaMargin": 0.5722,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9973,
+						"iou": 0.9963
+					},
+					{
+						"offset": 90,
+						"score": 0.4251,
+						"iou": 0.3492
+					}
+				],
+				"spriteOffsetX": 44.136,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9847,
+				"dimensionFitMargin": 0.8875
+			}
+		],
+		[
+			"fieldatdamagew",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8728,
+				"alphaIoU": 0.8396,
+				"alphaDice": 0.9128,
+				"alphaMargin": 0.5966,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8728,
+						"iou": 0.8396
+					},
+					{
+						"offset": 90,
+						"score": 0.2762,
+						"iou": 0.2138
+					}
+				],
+				"spriteOffsetX": 56.208,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9809,
+				"dimensionFitMargin": 0.8902
+			}
+		],
+		[
+			"fieldatw",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9967,
+				"alphaIoU": 0.9958,
+				"alphaDice": 0.9979,
+				"alphaMargin": 0.5605,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9967,
+						"iou": 0.9958
+					},
+					{
+						"offset": 90,
+						"score": 0.4362,
+						"iou": 0.36
+					}
+				],
+				"spriteOffsetX": 43.464,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9751,
+				"dimensionFitMargin": 0.8784
+			}
+		],
+		[
+			"fieldcannondamagec",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9463,
+				"alphaIoU": 0.9324,
+				"alphaDice": 0.965,
+				"alphaMargin": 0.2672,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9463,
+						"iou": 0.9324
+					},
+					{
+						"offset": 90,
+						"score": 0.6792,
+						"iou": 0.6136
+					}
+				],
+				"spriteOffsetX": 23.706,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9924,
+				"dimensionFitMargin": 0.847
+			}
+		],
+		[
+			"fieldcannonw",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9959,
+				"alphaIoU": 0.9945,
+				"alphaDice": 0.9972,
+				"alphaMargin": 0.5953,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9959,
+						"iou": 0.9945
+					},
+					{
+						"offset": 90,
+						"score": 0.4005,
+						"iou": 0.3259
+					}
+				],
+				"spriteOffsetX": -4.759,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.976,
+				"dimensionFitMargin": 0.8411
+			}
+		],
+		[
+			"fieldmgc",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9882,
+				"alphaIoU": 0.9853,
+				"alphaDice": 0.9926,
+				"alphaMargin": 0.8174,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9882,
+						"iou": 0.9853
+					},
+					{
+						"offset": 90,
+						"score": 0.1709,
+						"iou": 0.1268
+					}
+				],
+				"spriteOffsetX": -10.074,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9904,
+				"dimensionFitMargin": 0.8498
+			}
+		],
+		[
+			"fieldmgw",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8502,
+				"alphaIoU": 0.8123,
+				"alphaDice": 0.8964,
+				"alphaMargin": 0.6657,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8502,
+						"iou": 0.8123
+					},
+					{
+						"offset": 90,
+						"score": 0.1845,
+						"iou": 0.1376
+					}
+				],
+				"spriteOffsetX": -5.105,
+				"spriteOffsetY": -0.169,
+				"dimensionFitScore": 0.9937,
+				"dimensionFitMargin": 0.8562
+			}
+		],
+		[
+			"fieldmortarc",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.8844,
+				"alphaIoU": 0.8548,
+				"alphaDice": 0.9217,
+				"alphaMargin": 0.564,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.8844,
+						"iou": 0.8548
+					},
+					{
+						"offset": 90,
+						"score": 0.3204,
+						"iou": 0.2528
+					}
+				],
+				"spriteOffsetX": -41.564,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9848,
+				"dimensionFitMargin": 0.7502
+			}
+		],
+		[
+			"fieldmortarw",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9255,
+				"alphaIoU": 0.9056,
+				"alphaDice": 0.9505,
+				"alphaMargin": 0.6448,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9255,
+						"iou": 0.9056
+					},
+					{
+						"offset": 90,
+						"score": 0.2808,
+						"iou": 0.2179
+					}
+				],
+				"spriteOffsetX": -45.268,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.988,
+				"dimensionFitMargin": 0.7409
+			}
+		],
+		[
+			"fortgarrisonstation",
+			{
+				"textureBakeDeltaDeg": 90,
+				"rotationOffsetDeg": -90,
+				"confidence": "high",
+				"method": "alpha-sample+qa-confirmed",
+				"alphaScore": 0.8938,
+				"alphaIoU": 0.8713,
+				"alphaDice": 0.9312,
+				"alphaMargin": 0,
+				"legacyAspect": "square",
+				"nixieAspect": "square",
+				"candidateScores": [
+					{
+						"offset": 90,
+						"score": 0.8938,
+						"iou": 0.8713
+					},
+					{
+						"offset": -90,
+						"score": 0.8938,
+						"iou": 0.8713
+					},
+					{
+						"offset": 0,
+						"score": 0.8934,
+						"iou": 0.8708
+					},
+					{
+						"offset": 180,
+						"score": 0.8934,
+						"iou": 0.8708
+					}
+				],
+				"spriteOffsetX": 0,
+				"spriteOffsetY": 0
+			}
+		],
+		[
+			"fortlargeradar",
+			{
+				"textureBakeDeltaDeg": -90,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "alpha-sample+dimension-fit",
+				"alphaScore": 0.9727,
+				"alphaIoU": 0.9628,
+				"alphaDice": 0.981,
+				"alphaMargin": 0.454,
+				"legacyAspect": "square",
+				"nixieAspect": "square",
+				"candidateScores": [
+					{
+						"offset": -90,
+						"score": 0.9727,
+						"iou": 0.9628
+					},
+					{
+						"offset": 0,
+						"score": 0.5187,
+						"iou": 0.4406
+					},
+					{
+						"offset": 180,
+						"score": 0.5187,
+						"iou": 0.4406
+					},
+					{
+						"offset": 90,
+						"score": 0.5017,
+						"iou": 0.4235
+					}
+				],
+				"spriteOffsetX": -63.398,
+				"spriteOffsetY": 0,
+				"dimensionFitScore": 0.9984,
+				"dimensionFitMargin": 0.3279
+			}
+		],
+		[
+			"fortrampt1",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"fortrampt2",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"fortrampt3",
+			{
+				"matchedSockets": 0,
+				"meanResidualDeg": 0,
+				"meanAngleResidualDeg": 0,
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "manual-override"
+			}
+		],
+		[
+			"foundation011x2t1",
+			{
+				"rotationOffsetDeg": 90,
+				"confidence": "high",
+				"method": "socket-frame+qa-confirmed",
+				"matchedSockets": 5,
+				"meanResidualDeg": 72,
+				"meanAngleResidualDeg": 58.2,
+				"legacyAspect": "portrait",
+				"nixieAspect": "landscape",
+				"spriteOffsetX": 0,
+				"spriteOffsetY": 0,
+				"alphaScore": 0.9629,
+				"alphaMargin": 0,
+				"textureBakeDeltaDeg": 90
+			}
+		]
+	]
+}

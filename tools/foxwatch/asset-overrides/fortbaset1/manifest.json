@@ -1,5 +1,21 @@
 {
   "clipFloor": false,
+  "renderLayers": [
+    { "id": "base", "componentName": "Mesh" },
+    { "id": "floor", "componentName": "Floor" },
+    { "id": "floordoor", "componentName": "FloorDoor" },
+    { "id": "roof", "componentName": "Roof" },
+    { "id": "cornerbackleft", "componentName": "CornerBackLeft" },
+    { "id": "cornerbackright", "componentName": "CornerBackRight" },
+    { "id": "cornerfrontleft", "componentName": "CornerFrontLeft" },
+    { "id": "cornerfrontright", "componentName": "CornerFrontRight" },
+    { "id": "sideback", "componentName": "SideBack" },
+    { "id": "sidebackstatic", "componentName": "SideBackStatic" },
+    { "id": "sidefront", "componentName": "SideFront" },
+    { "id": "sidefrontstatic", "componentName": "SideFrontStatic" },
+    { "id": "sideleft", "componentName": "SideLeft" },
+    { "id": "sideleftstatic", "componentName": "SideLeftStatic" }
+  ],
   "lineOfSightPolygons": [
     {
       "shape": [

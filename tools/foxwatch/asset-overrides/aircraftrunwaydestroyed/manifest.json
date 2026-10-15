@@ -1,3 +1,6 @@
 {
-  "categoryId": "logistics"
+  "categoryId": "logistics",
+  "name": {
+    "fallback": "Destroyed Aircraft Runway"
+  }
 }

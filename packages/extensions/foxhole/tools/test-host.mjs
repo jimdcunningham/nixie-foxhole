@@ -1,0 +1,9 @@
+import { spawnSync } from 'node:child_process';
+import { basename, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+const root = resolve(fileURLToPath(new URL('../../../..', import.meta.url)));
+const studio = resolve(process.env.NIXIE_STUDIO_ROOT || (basename(root) === 'nixie-foxhole' ? resolve(root, '../nixie') : root));
+const extension = resolve(studio, 'packages/extensions/foxhole');
+const result = spawnSync(process.execPath, ['--experimental-transform-types', '--import', pathToFileURL(resolve(extension, 'tests/host-hooks.mjs')).href, '--import', pathToFileURL(resolve(studio, 'packages/nixie/tests/nixie/node-test-hooks.mjs')).href, '--test', '--test-concurrency=2', ...process.argv.slice(2).length ? process.argv.slice(2) : [resolve(extension, 'tests/host/*.test.ts')]], { cwd: extension, stdio: 'inherit', windowsHide: true });
+if (result.error) throw result.error;
+process.exitCode = result.status ?? 1;

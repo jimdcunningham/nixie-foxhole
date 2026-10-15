@@ -1,0 +1,694 @@
+{
+	"generatedAt": "2026-08-19T09:18:19.875Z",
+	"count": 267,
+	"upgradeMapped": 46,
+	"byConfidence": {
+		"high": 190,
+		"low": 47,
+		"medium": 30
+	},
+	"byMethod": {
+		"fort-cardinal+foxhole-alias": 15,
+		"position-frame": 84,
+		"manual-override": 91,
+		"cap-frame": 19,
+		"position-frame+flow-name": 12,
+		"cap-frame+foxhole-alias": 6,
+		"position-frame+foxhole-alias": 26,
+		"flow-name+foxhole-alias": 2,
+		"position-frame+flow-name+foxhole-alias": 2,
+		"fort-cardinal+flow-name+foxhole-alias": 2,
+		"position-frame+qa-confirmed": 2,
+		"position-frame+foxhole-alias+qa-confirmed": 2,
+		"flow-name": 3,
+		"cap-frame+qa-confirmed": 1
+	},
+	"lowConfidence": [
+		{
+			"legacyKey": "ammunition_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_large_shell_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_rocket_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_tripod_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "bms_foreman_stacker",
+			"foxholeKey": "facilitycrane",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 168.5
+		},
+		{
+			"legacyKey": "coal_refinery",
+			"foxholeKey": "facilityrefinerycoal",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 402.24
+		},
+		{
+			"legacyKey": "coal_refinery_coke_furnace",
+			"foxholeKey": "facilityrefinerycoal",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 402.24
+		},
+		{
+			"legacyKey": "coal_refinery_liquifier",
+			"foxholeKey": "facilityrefinerycoal",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 3,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 110.8
+		},
+		{
+			"legacyKey": "facilitycrane",
+			"foxholeKey": "facilitycrane",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 168.5
+		},
+		{
+			"legacyKey": "facilityfactoryaircraft",
+			"foxholeKey": "facilityfactoryaircraft",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 597.2
+		},
+		{
+			"legacyKey": "facilityfactoryaircraft_aircraftstrategic",
+			"foxholeKey": "facilityfactoryaircraft",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 597.2
+		},
+		{
+			"legacyKey": "facilityfactoryammo",
+			"foxholeKey": "facilityfactoryammo",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "facilityfactorysmallarms",
+			"foxholeKey": "facilityfactorysmallarms",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 898.97
+		},
+		{
+			"legacyKey": "facilityfactorysmallarms_heavyammo",
+			"foxholeKey": "facilityfactorysmallarms",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 898.97
+		},
+		{
+			"legacyKey": "facilityfactorysmallarms_infantryammo",
+			"foxholeKey": "facilityfactorysmallarms",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 898.97
+		},
+		{
+			"legacyKey": "facilityfactorysmallarms_specialweapons",
+			"foxholeKey": "facilityfactorysmallarms",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 898.97
+		},
+		{
+			"legacyKey": "facilitymineoil",
+			"foxholeKey": "facilitymineoil",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 1,
+			"meanResidualCm": 338.78
+		},
+		{
+			"legacyKey": "facilitymodificationcenter",
+			"foxholeKey": "facilitymodificationcenter",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 718.68
+		},
+		{
+			"legacyKey": "facilityrefinery1",
+			"foxholeKey": "facilityrefinery1",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 490.6
+		},
+		{
+			"legacyKey": "facilityrefinery2",
+			"foxholeKey": "facilityrefinery2",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 669.67
+		},
+		{
+			"legacyKey": "facilityrefinerycoal",
+			"foxholeKey": "facilityrefinerycoal",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 402.24
+		},
+		{
+			"legacyKey": "facilityrefineryoil",
+			"foxholeKey": "facilityrefineryoil",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 3,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 101.18
+		},
+		{
+			"legacyKey": "facilityvehiclefactory1",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "facilityvehiclefactory2",
+			"foxholeKey": "facilityvehiclefactory2",
+			"confidence": "low",
+			"method": "position-frame+foxhole-alias",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 911.04
+		},
+		{
+			"legacyKey": "facilityvehiclefactory3",
+			"foxholeKey": "facilityvehiclefactory3",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 4135.89
+		},
+		{
+			"legacyKey": "field_modification_center",
+			"foxholeKey": "facilitymodificationcenter",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 718.68
+		},
+		{
+			"legacyKey": "large_assembly_factory",
+			"foxholeKey": "facilityvehiclefactory2",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 911.04
+		},
+		{
+			"legacyKey": "large_assembly_factory_aircraftassembly",
+			"foxholeKey": "facilityvehiclefactory2",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 911.04
+		},
+		{
+			"legacyKey": "large_assembly_factory_heavy_tank_assembly",
+			"foxholeKey": "facilityvehiclefactory2",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 911.04
+		},
+		{
+			"legacyKey": "large_assembly_factory_train_assembly",
+			"foxholeKey": "facilityvehiclefactory2",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 911.04
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_field_station",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_motor_pool",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_rocket_factory",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_rocketassembly",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_shipassembly",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_tank_factory",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "light_vehicle_assembly_station_weapons_platform",
+			"foxholeKey": "facilityvehiclefactory1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 750.16
+		},
+		{
+			"legacyKey": "materials_factory",
+			"foxholeKey": "facilityrefinery1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 490.6
+		},
+		{
+			"legacyKey": "materials_factory_forge",
+			"foxholeKey": "facilityrefinery1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 2,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 106.88
+		},
+		{
+			"legacyKey": "materials_factory_recycler",
+			"foxholeKey": "facilityrefinery1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 490.6
+		},
+		{
+			"legacyKey": "materials_factory_smelter",
+			"foxholeKey": "facilityrefinery1",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 490.6
+		},
+		{
+			"legacyKey": "metalworks_factory",
+			"foxholeKey": "facilityrefinery2",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 669.67
+		},
+		{
+			"legacyKey": "oil_refinery",
+			"foxholeKey": "facilityrefineryoil",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 3,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 101.18
+		},
+		{
+			"legacyKey": "oil_refinery_cracking_unit",
+			"foxholeKey": "facilityrefineryoil",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 3,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 101.18
+		},
+		{
+			"legacyKey": "oil_refinery_petro_plant",
+			"foxholeKey": "facilityrefineryoil",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 3,
+			"unmatchedLegacy": 0,
+			"meanResidualCm": 101.18
+		},
+		{
+			"legacyKey": "oil_well",
+			"foxholeKey": "facilitymineoil",
+			"confidence": "low",
+			"method": "position-frame",
+			"matchedSockets": 1,
+			"unmatchedLegacy": 1,
+			"meanResidualCm": 338.78
+		}
+	],
+	"sample": [
+		{
+			"legacyKey": "ammoroomt2",
+			"foxholeKey": "ammoroomt2",
+			"mapping": {
+				"0": "FrontFortSocket",
+				"1": "RightFortSocket",
+				"2": "BackFortSocket",
+				"3": "LeftFortSocket"
+			},
+			"confidence": "high",
+			"method": "fort-cardinal+foxhole-alias",
+			"meanResidualCm": 0
+		},
+		{
+			"legacyKey": "ammoroomt3",
+			"foxholeKey": "ammoroomt3",
+			"mapping": {
+				"0": "FrontFortSocket",
+				"1": "RightFortSocket",
+				"2": "BackFortSocket",
+				"3": "LeftFortSocket"
+			},
+			"confidence": "high",
+			"method": "fort-cardinal+foxhole-alias",
+			"meanResidualCm": 0
+		},
+		{
+			"legacyKey": "ammunition_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_large_shell_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_rocket_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "ammunition_factory_tripod_factory",
+			"foxholeKey": "facilityfactoryammo",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 300.96
+		},
+		{
+			"legacyKey": "artilleryait1",
+			"foxholeKey": "artilleryait1",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "artilleryait2",
+			"foxholeKey": "artilleryait2",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "artilleryait3",
+			"foxholeKey": "artilleryait3",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "atgunait1",
+			"foxholeKey": "atgunait1",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "atgunait2",
+			"foxholeKey": "atgunait2",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "atgunait3",
+			"foxholeKey": "atgunait3",
+			"mapping": {
+				"0": "BackFortSocket",
+				"1": "LeftFortSocket",
+				"2": "FrontFortSocket",
+				"3": "RightFortSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "barbedwirespline",
+			"foxholeKey": "barbedwirespline",
+			"mapping": {
+				"0": "FrontSocket",
+				"1": "BackSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "barbedwirewallspline",
+			"foxholeKey": "barbedwirewallspline",
+			"mapping": {
+				"0": "BackSocket",
+				"1": "FrontSocket"
+			},
+			"confidence": "high",
+			"method": "manual-override"
+		},
+		{
+			"legacyKey": "bms_foreman_stacker",
+			"foxholeKey": "facilitycrane",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 168.5
+		},
+		{
+			"legacyKey": "catwalk_bridge",
+			"foxholeKey": "facilitycatwalkbridge",
+			"mapping": {
+				"0": "FrontSocket",
+				"1": "BackSocket"
+			},
+			"confidence": "high",
+			"method": "cap-frame",
+			"meanResidualCm": 0
+		},
+		{
+			"legacyKey": "catwalk_platform",
+			"foxholeKey": "facilitycatwalkplatform",
+			"mapping": {
+				"0": "BackSocket",
+				"1": "LeftSocket",
+				"2": "FrontSocket",
+				"3": "RightSocket"
+			},
+			"confidence": "high",
+			"method": "position-frame",
+			"meanResidualCm": 14
+		},
+		{
+			"legacyKey": "catwalk_stairs",
+			"foxholeKey": "facilitycatwalkstairs",
+			"mapping": {
+				"0": "FrontSocket"
+			},
+			"confidence": "high",
+			"method": "position-frame",
+			"meanResidualCm": 0
+		},
+		{
+			"legacyKey": "coal_refinery",
+			"foxholeKey": "facilityrefinerycoal",
+			"mapping": {
+				"0": "PowerSocket"
+			},
+			"confidence": "low",
+			"method": "position-frame",
+			"meanResidualCm": 402.24
+		},
+		{
+			"legacyKey": "coal_refinery_adv_liquifier",
+			"foxholeKey": "facilityrefinerycoal",
+			"mapping": {
+				"0": "PowerSocket",
+				"1": "PipeOutput0",
+				"3": "PipeInput0"
+			},
+			"confidence": "medium",
+			"method": "position-frame+flow-name",
+			"meanResidualCm": 55.21
+		}
+	],
+	"waterPumpElectric": {
+		"mapping": {
+			"0": "PipeOutput0",
+			"1": "PowerSocket"
+		},
+		"confidence": "high",
+		"method": "manual-override",
+		"matchedSockets": 2,
+		"unmatchedLegacy": 0,
+		"unmatchedNixie": 0,
+		"orientationOffsetDeg": 0,
+		"foxholeKey": "facilityminewater",
+		"modificationVariantIds": {
+			"UpgradeSlotComponent": "electric"
+		},
+		"kind": "structure+mod"
+	}
+}

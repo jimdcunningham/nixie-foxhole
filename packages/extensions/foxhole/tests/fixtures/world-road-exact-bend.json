@@ -1,0 +1,83 @@
+{
+  "evidence": "world-road-exact-prefixed-bend.project.zip; only this node changed among903",
+  "before": {
+    "id": "foxhole-spline-connector-15abf827-2b23-4d3e-8a6c-4066053a3600",
+    "type": "foxholeSplineConnector",
+    "state": {
+      "foxholeKey": "greatmarchroad",
+      "x": -80680,
+      "y": -562,
+      "rotation": 0,
+      "visible": true,
+      "alpha": 1,
+      "scaleX": 1,
+      "scaleY": 1,
+      "locked": false,
+      "start": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0
+      },
+      "end": {
+        "x": 160,
+        "y": 0,
+        "rotation": 0
+      },
+      "minLength": 160,
+      "maxLength": 1536,
+      "minRadius": 160,
+      "maxRadius": 1536,
+      "maxBuffer": 64,
+      "curveT": 0,
+      "startSocketName": "BackSocket",
+      "endSocketName": "FrontSocket",
+      "socketAttachments": {},
+      "modificationVariantIds": {},
+      "destroyed": false,
+      "blueprint": false,
+      "z": 0
+    },
+    "children": [],
+    "key": "Great March Cobble Road"
+  },
+  "after": {
+    "id": "foxhole-spline-connector-15abf827-2b23-4d3e-8a6c-4066053a3600",
+    "type": "foxholeSplineConnector",
+    "state": {
+      "foxholeKey": "greatmarchroad",
+      "x": -80680,
+      "y": -562,
+      "rotation": 0,
+      "visible": true,
+      "alpha": 1,
+      "scaleX": 1,
+      "scaleY": 1,
+      "locked": false,
+      "start": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0
+      },
+      "end": {
+        "x": 160,
+        "y": 0,
+        "rotation": -1.047
+      },
+      "minLength": 160,
+      "maxLength": 1536,
+      "minRadius": 160,
+      "maxRadius": 1536,
+      "maxBuffer": 64,
+      "curveT": 0,
+      "startSocketName": "BackSocket",
+      "endSocketName": "FrontSocket",
+      "socketAttachments": {},
+      "modificationVariantIds": {},
+      "destroyed": false,
+      "blueprint": false,
+      "z": 0
+    },
+    "children": [],
+    "key": "Great March Cobble Road"
+  }
+}

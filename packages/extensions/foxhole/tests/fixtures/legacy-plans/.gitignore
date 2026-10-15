@@ -1,0 +1,5 @@
+raw/
+extracted/
+manifest.json
+*.zip
+!sample-uncompressed.plan.zip

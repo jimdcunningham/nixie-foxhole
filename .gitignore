@@ -1,4 +1,14 @@
 node_modules/
+.nuxt/
+.output/
+.data/
+.cache/
+dist/
+.nixie-build/
+.nixie-previous/
+.nixie-building
+.model-build-selection
+tmp/
 .npm/
 .env
 .env.*
@@ -16,3 +26,22 @@ tools/foxwatch/monitor/obj/
 tools/foxwatch/tmp/
 tools/foxwatch/local/
 tools/foxwatch/blender/__pycache__/
+
+# Portable FoxWatch regression harness output
+tools/foxwatch/tools/*/bin/
+tools/foxwatch/tools/*/obj/
+
+# Generated verification evidence and editor backups are never source.
+output/
+outputs/
+screenshots/
+test-results/
+playwright-report/
+coverage/
+*.bak
+*.blend[0-9]*
+
+packages/extensions/foxhole/app/assets/legacy-scene-v2/
+packages/extensions/foxhole/app/assets/images/screenshots/
+packages/extensions/foxhole/tools/legacy-plans/position-map-report.json
+packages/extensions/foxhole/tools/legacy-plans/recipe-id-seed-report.json

@@ -10,7 +10,8 @@ SCHEMA_VERSION = 1
 RENDER_SOURCE_FILES = (
     "render_render_scenes.py", "import_render_scene.py", "render_scene_common.py",
     "render_scene_graph.py", "render_scene_transforms.py", "script_bootstrap.py",
-    "render_cache.py", "render_readability.py",
+    "render_cache.py", "render_readability.py", "render_material_identity.py",
+    "road_native_surface.py",
 )
 
 def content_hash(file_path):

@@ -1,0 +1,135 @@
+{
+  "clipFloor": false,
+  "renderLayers": [
+    {
+      "id": "wallback",
+      "componentName": "WallBack"
+    },
+    {
+      "id": "wallfront",
+      "componentName": "WallFront"
+    },
+    {
+      "id": "wallleft",
+      "componentName": "WallLeft"
+    },
+    {
+      "id": "wallright",
+      "componentName": "WallRight"
+    },
+    {
+      "id": "cornerbackleft",
+      "componentName": "CornerBackLeft"
+    },
+    {
+      "id": "cornerbackright",
+      "componentName": "CornerBackRight"
+    },
+    {
+      "id": "cornerfrontleft",
+      "componentName": "CornerFrontLeft"
+    },
+    {
+      "id": "cornerfrontright",
+      "componentName": "CornerFrontRight"
+    },
+    {
+      "id": "dirtcornerbackleft",
+      "componentName": "DirtCornerBackLeft"
+    },
+    {
+      "id": "dirtcornerbackright",
+      "componentName": "DirtCornerBackRight"
+    },
+    {
+      "id": "dirtcornerfrontleft",
+      "componentName": "DirtCornerFrontLeft"
+    },
+    {
+      "id": "dirtcornerfrontright",
+      "componentName": "DirtCornerFrontRight"
+    },
+    {
+      "id": "dirtback",
+      "componentName": "DirtBack"
+    },
+    {
+      "id": "dirtfront",
+      "componentName": "DirtFront"
+    },
+    {
+      "id": "dirtsplineleft",
+      "componentName": "DirtSplineLeft"
+    },
+    {
+      "id": "dirtsplineright",
+      "componentName": "DirtSplineRight"
+    },
+    {
+      "id": "visualsplineleft",
+      "componentName": "VisualSplineLeft"
+    },
+    {
+      "id": "visualsplineright",
+      "componentName": "VisualSplineRight"
+    },
+    {
+      "id": "piece-trencht1short01",
+      "componentName": "mesh:TrenchT1Short01"
+    },
+    {
+      "id": "piece-trencht1shortdirtspline01",
+      "componentName": "mesh:TrenchT1ShortDirtSpline01"
+    },
+    {
+      "id": "piece-trencht1shortspline02",
+      "componentName": "mesh:TrenchT1ShortSpline02"
+    },
+    {
+      "id": "piece-trencht1shortspline03",
+      "componentName": "mesh:TrenchT1ShortSpline03"
+    },
+    {
+      "id": "piece-trencht1shortspline04",
+      "componentName": "mesh:TrenchT1ShortSpline04"
+    },
+    {
+      "id": "piece-trencht1shortspline05",
+      "componentName": "mesh:TrenchT1ShortSpline05"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline01",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline01"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline02",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline02"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline03",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline03"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledspline04",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSpline04"
+    },
+    {
+      "id": "piece-trenchconnectorsandbagsangledsplineend",
+      "componentName": "mesh:TrenchConnectorSandbagsAngledSplineEnd"
+    },
+    {
+      "id": "piece-trenchbarbedwirepillart1",
+      "componentName": "mesh:TrenchBarbedWirePillarT1"
+    },
+    {
+      "id": "piece-trenchbarbedwiret1",
+      "componentName": "mesh:TrenchBarbedWireT1"
+    }
+  ],
+  "connector": {
+    "minLengthCm": 250,
+    "maxLengthCm": 800,
+    "backSocketName": "BackSocket",
+    "frontSocketName": "FrontSocket"
+  }
+}

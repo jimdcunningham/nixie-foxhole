@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "forbiddenPrefixes": [
+    "packages/extensions/foxhole/public/foxhole/assets/",
+    "packages/extensions/foxhole/app/assets/legacy-scene-v2/",
+    "packages/extensions/foxhole/app/assets/images/screenshots/",
+    "extensions/foxhole-planner/dist/",
+    "tools/foxwatch/tmp/",
+    "output/"
+  ],
+  "forbiddenFiles": [
+    "packages/extensions/foxhole/tools/legacy-plans/position-map-report.json",
+    "packages/extensions/foxhole/tools/legacy-plans/recipe-id-seed-report.json"
+  ],
+  "files": {
+    "tests/fixtures/foxhole/icon-publish/blank-render-256.webp": {
+      "sha256": "8eff5d6bcd0fe68d06288bc4e29ecf7e220ce0234ff9fe1a09d8b29a871b8f7b",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/blueprint-100.png": {
+      "sha256": "ed4e6909d90d70963ca301152e1d9b52ad40d6a92bc4f19fb67f9daccd5789d8",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/blueprint-128.png": {
+      "sha256": "2cd0bcd023a56623a45faf8b5e4958d293ef711ce9f13982d7064d3dfb8bc1a4",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/preview-copy.webp": {
+      "sha256": "6d681ad08fc21e0bbf43e19d1d86be38c1e5c63d1d14d6ee41353499eb245043",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/subtype-salvage-32.png": {
+      "sha256": "e01f72661a0399518063e051d076a40cde6c644b8381a05966c1e0f74a4f366c",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/subtype-wrecked-32.png": {
+      "sha256": "71a3a0b0532a76b1b3124c231c2812da0cb01ab9bad3885621670ea6c866c7d0",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/visible-render-256.png": {
+      "sha256": "3a3d67798f6358b32044b926bed26989239e923aeec4584ee93e21fcf574992b",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tests/fixtures/foxhole/icon-publish/visible-render-256.webp": {
+      "sha256": "6f138a5363e5896944db8fac49a5231385e72d573928ab82ea13ee5feafae0b0",
+      "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
+    },
+    "tools/foxwatch/blender/render-template.blend": {
+      "sha256": "ca62f86eec79461ba2daced4879c49779e3d62c9dc32bf2669b2e8f3cc76aadb",
+      "provenance": "FoxWatch authored camera/light rig; headless Blender audit: four cameras/light objects, no meshes, materials or packed images."
+    },
+    "tools/foxwatch/monitor/assets/FoxWatchMonitor.ico": {
+      "sha256": "7c101c31de6a35d13d2d19c0deeea57becf854898f340e5807457d17f05e9bd5",
+      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
+    },
+    "tools/foxwatch/monitor/assets/icons/clock.svg": {
+      "sha256": "2e87fe65f296cc86c177e4a15b067d3dd9c1ef2856ec16c0838cae91d57653fc",
+      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
+    },
+    "tools/foxwatch/monitor/assets/icons/hourglass.svg": {
+      "sha256": "d1a54f1f7a0fac2b2cce17dcb13464e65bd9b0fdf4147e5347f277218ff6d275",
+      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
+    },
+    "tools/foxwatch/scripts/RegionMask.png": {
+      "sha256": "c814511f3153a432c57aa0fc7b480a4469e05c037ca07ce7e140474dd18c39ff",
+      "provenance": "Plain geometric hexagon alpha mask; no map or game artwork."
+    }
+  }
+}

@@ -193,6 +193,7 @@ if (command === 'benchmark-manifest-source') {
 if (command === 'publish-manifest') {
     const parsedArgs = parseCliArgs(args);
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...args]);
+    await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, ...args]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(
         resolveSourceManifestPath(parsedArgs),
@@ -326,6 +327,7 @@ if (command === 'refresh') {
         overallPercent: 92,
     });
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...refreshExecution.publishArgs]);
+    await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, ...refreshExecution.publishArgs]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
         skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),
@@ -372,6 +374,7 @@ if (command === 'open-pose-editor') {
         await run('dotnet', [dllPath, 'generate-render-scenes', ...refreshArgs]);
         await run(blenderExecutable, buildBlenderArgs(args));
         await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...await buildPublishArgs(args)]);
+        await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, '--only', structureId]);
         await publishPlannerCompat();
         await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, [structureId], {
             skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),

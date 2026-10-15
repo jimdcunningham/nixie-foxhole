@@ -30,6 +30,9 @@ jobs:
             8.0.x
             9.0.x
 
+      - name: Check source media boundary
+        run: node ./tools/check-source-media.mjs
+
       - name: Install dependencies
         run: npm ci
 

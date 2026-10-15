@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLB Compression Comparison</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui;color:#e9edf1;background:#171b21}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;border-bottom:1px solid #39424c}h1{font-size:21px;margin:0 0 6px;font-weight:600}p{margin:0;color:#b4bec9;font-size:14px}nav{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-top:16px}label{display:flex;flex-direction:column;gap:5px;font-size:13px}select,button{font:inherit;border:1px solid #536172;border-radius:5px;background:#252d37;color:inherit;padding:8px 12px}button{cursor:pointer}button:hover{background:#354153}.panels{display:grid;grid-template-columns:1fr 1fr;height:calc(100dvh - 205px);min-height:400px}.panel{display:flex;flex-direction:column;min-width:0;border-right:1px solid #39424c}.caption{height:70px;padding:14px 20px;background:#20262e}.caption strong{font-size:16px;display:block}.caption span{color:#b4bec9;font-size:13px}.viewport{flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;cursor:grab}.viewport:active{cursor:grabbing}.viewport canvas{display:block}.loading{position:absolute;left:20px;top:15px;pointer-events:none;background:#171b21db;padding:7px 12px;border-radius:5px;font-size:14px}footer{padding:10px 24px;border-top:1px solid #39424c;color:#b4bec9;font-size:13px}a{color:#a4caff}#status{color:#c7d7e9}#fullscreen{margin-left:auto}body.single .panels{grid-template-columns:1fr}body.single #original-panel{display:none}@media(max-width:750px){.panels{height:70vh}header{padding:12px}.caption{height:90px;padding:10px}.caption strong{font-size:14px}select{max-width:240px}}
+.caption{height:auto;min-height:96px;flex-shrink:0}.caption span{display:block;line-height:1.4}
+</style>
+<header>
+<h1>Facility Model Comparison</h1>
+<p><a href="/spline.html">3D Spline Feasibility</a></p>
+<p>Review the allowlisted models and their upgrades. The new exports have full-triangle controls with matching textures; cameras stay synchronized.</p>
+<nav>
+<label>Asset<select id="asset"></select></label>
+<label>Assembly<select id="assembly"></select></label>
+<label>Reference Version<select id="reference"></select></label>
+<label>Model Version<select id="variant"></select></label>
+<label>Left Lighting<select id="left-lighting"><option value="studio">Studio Lights</option><option value="soft">Soft Diagnostic</option><option value="direct">Directional Only</option></select></label>
+<label>Right Lighting<select id="right-lighting"><option value="studio">Studio Lights</option><option value="soft">Soft Diagnostic</option><option value="direct">Directional Only</option></select></label>
+<label>Ground & Shadows<input id="shadows" type="checkbox" checked></label>
+<button id="reset">Reset View</button><button id="zoom-in">Zoom In</button><button id="zoom-out">Zoom Out</button><button id="top">Top View</button><button id="side">Side View</button>
+<button id="fullscreen">Enlarge Compressed View</button>
+</nav>
+</header>
+<main class="panels">
+<section class="panel" id="original-panel"><div class="caption"><strong id="reference-title">Reference</strong><span id="original-stats">Loading…</span></div><div class="viewport" id="original"><span class="loading">Loading model…</span></div></section>
+<section class="panel"><div class="caption"><strong id="candidate-title">Compressed</strong><span id="candidate-stats">Loading…</span></div><div class="viewport" id="candidate"><span class="loading">Loading model…</span></div></section>
+</main>
+<footer>Drag either model to orbit · Scroll to zoom · Shift-drag or right-drag to pan · <a id="download" href="#">Download Base GLB</a> · <span id="status">Starting viewer…</span></footer>
+<script type="module" src="/main.mjs"></script>
+</html>

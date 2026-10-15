@@ -1,0 +1,564 @@
+{
+	"_comment": "Manual foxholeKey → { legacySocketId: nixieSocketName }. Applied last by generate-socket-id-map.mjs when scoring cannot decide (cap-only connectors with Front/Back swaps, assets without legacy socket sources, etc.).",
+	"facilitypipe": {
+		"0": "BackSocket",
+		"2": "FrontSocket",
+		"3": "LeftSocket"
+	},
+	"pipeline": {
+		"0": "BackSocket",
+		"1": "RightSocket",
+		"2": "LeftSocket",
+		"3": "FrontSocket"
+	},
+	"pipeline_insulation": {
+		"0": "BackSocket",
+		"1": "RightSocket",
+		"2": "LeftSocket",
+		"3": "FrontSocket"
+	},
+	"pipeline_overhead": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"pipeline_overhead_insulation": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"pipeline_underground": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"pipeline_underground_insulation": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"stationary_harvester_coal": {
+		"0": "PipeInput0"
+	},
+	"stationary_harvester_coal_excavator": {
+		"0": "PipeInput0"
+	},
+	"facilitymineresource4": {
+		"0": "PipeInput0"
+	},
+	"fortt1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortbuildsite": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt1_fortfirepitt1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt1_medicalroomt1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt1_observationbunkert1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt1_rifleait1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt1_mgait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"mgait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt1_fortrampt1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortrampt1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt2_ammoroomt2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_engineroomt2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_fortartillerysheltert2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_fortfirepitt2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_fortflamet2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_medicalroomt2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_mgait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"mgait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt2_observationbunkert2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_rifleait2": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt2_fortrampt2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortrampt2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt3_ammoroomt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_fortartillerysheltert3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_fortfirepitt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_fortflamet3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_medicalroomt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_mgait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"mgait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt3_fortrampt3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortrampt3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"rifleait3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_rifleait3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"engineroomt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_engineroomt3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"observationbunkert3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"fortt3_observationbunkert3": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"2": "RightFortSocket",
+		"3": "BackFortSocket"
+	},
+	"artilleryait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"artilleryait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"artilleryait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt1_artilleryait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt2_artilleryait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt3_artilleryait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"atgunait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"atgunait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"atgunait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt1_atgunait1": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt2_atgunait2": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"fortt3_atgunait3": {
+		"0": "BackFortSocket",
+		"1": "LeftFortSocket",
+		"2": "FrontFortSocket",
+		"3": "RightFortSocket"
+	},
+	"water_pump_electric_water": {
+		"0": "PipeOutput0",
+		"1": "PowerSocket"
+	},
+	"powerline": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"power_line": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"power_box": {
+		"0": "PowerSocket"
+	},
+	"powerbox": {
+		"0": "PowerSocket"
+	},
+	"barbedwirespline": {
+		"0": "FrontSocket",
+		"1": "BackSocket"
+	},
+	"barbedwirewallspline": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"cranerailtrackspline": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"sandbagfullspline": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"sandbaghalfspline": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"railtracksplinebiarc": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"smallrailtracksplinebiarc": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"railtracksplinefoundation": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"smallrailtracksplinefoundation": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"rail_large_gauge": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"rail_small_gauge": {
+		"0": "BackSocket",
+		"1": "FrontSocket"
+	},
+	"foundation_1x2": {
+		"0": "RightSocket1",
+		"1": "BackSocket",
+		"2": "LeftSocket0",
+		"3": "LeftSocket1",
+		"4": "FrontSocket",
+		"5": "RightSocket0"
+	},
+	"foundation011x2t1": {
+		"0": "RightSocket1",
+		"1": "BackSocket",
+		"2": "LeftSocket0",
+		"3": "LeftSocket1",
+		"4": "FrontSocket",
+		"5": "RightSocket0"
+	},
+	"foundation_1x2_foundation011x2t3": {
+		"0": "RightSocket1",
+		"1": "BackSocket",
+		"2": "LeftSocket0",
+		"3": "LeftSocket1",
+		"4": "FrontSocket",
+		"5": "RightSocket0"
+	},
+	"foundation011x2t3": {
+		"0": "RightSocket1",
+		"1": "BackSocket",
+		"2": "LeftSocket0",
+		"3": "LeftSocket1",
+		"4": "FrontSocket",
+		"5": "RightSocket0"
+	},
+	"foundation02t1": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "CenterSocket"
+	},
+	"foundation02t3": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "CenterSocket"
+	},
+	"foundation_corner": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "CenterSocket"
+	},
+	"foundation_corner_foundation02t3": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "CenterSocket"
+	},
+	"fortbaset1": {
+		"0": "LeftFortSocket",
+		"1": "FrontFortSocket",
+		"3": "BackFortSocket",
+		"4": "FrontWallSocket",
+		"5": "BackWallSocket"
+	},
+	"fortbaset2": {
+		"0": "LeftSocket",
+		"1": "FrontSocket",
+		"3": "BackSocket",
+		"4": "FrontWallSocket",
+		"5": "BackWallSocket"
+	},
+	"fortbaset3": {
+		"0": "LeftSocket",
+		"1": "FrontSocket",
+		"3": "BackSocket",
+		"4": "FrontWallSocket",
+		"5": "BackWallSocket"
+	},
+	"fortlargeradar": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortempt3": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"lrartillery": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"intelcenter": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"weatherstation": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortt3_fortempt3": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortt3_lrartillery": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortt3_intelcenter": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortt3_weatherstation": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"fortt3_fortlargeradar": {
+		"0": "FrontFortSocket",
+		"1": "RightFortSocket",
+		"2": "BackFortSocket",
+		"3": "LeftFortSocket"
+	},
+	"trenchintbuildsite": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "FrontSocket",
+		"3": "RightSocket"
+	},
+	"trenchintt2": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "FrontSocket",
+		"3": "RightSocket"
+	},
+	"trenchintt3": {
+		"0": "BackSocket",
+		"1": "LeftSocket",
+		"2": "FrontSocket",
+		"3": "RightSocket"
+	}
+}

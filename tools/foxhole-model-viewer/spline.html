@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Spline Feasibility</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui;background:#171b21;color:#e9edf1}header{padding:16px 22px}h1{font-size:21px;margin:0 0 6px}p{margin:0;color:#b4bec9}a{color:#a4caff}.controls{display:flex;flex-wrap:wrap;gap:18px;margin-top:16px;align-items:center}label{display:flex;flex-direction:column;gap:4px}button,select{background:#252d37;border:1px solid #536172;color:inherit;padding:7px;border-radius:4px}#view{height:calc(100dvh - 255px);min-height:400px;touch-action:none}canvas{display:block}footer{padding:12px 22px}#path{width:160px;height:75px;background:#20262e;border:1px solid #536172}#status{margin-top:6px}output{font-variant-numeric:tabular-nums}
+</style>
+<header><h1>3D Spline Feasibility</h1><p>Real planner path sampling → generated 3D mesh → installed PixiJS 3D beta. Diagnostic tube; game fittings and textures are not implemented here.</p>
+<div class="controls">
+<label>Length <output id="length-value"></output><input id="length" type="range" min="3" max="15" step="0.1" value="10"></label>
+<label>Side Offset <output id="offset-value"></output><input id="offset" type="range" min="-6" max="6" step="0.1" value="3"></label>
+<label>Curve Blend <output id="bend-value"></output><input id="bend" type="range" min="0" max="1" step="0.02" value="1"></label>
+<label>End Elevation <output id="rise-value"></output><input id="rise" type="range" min="0" max="6" step="0.1" value="0"></label>
+<label>End Direction <output id="angle-value"></output><input id="angle" type="range" min="90" max="270" step="5" value="180"></label>
+<label>End Caps<input id="caps" type="checkbox" checked></label><button id="reset">Reset View</button>
+<label>Planner Path<svg id="path" viewBox="-1 -7 17 14"><polyline id="path-line" fill="none" stroke="#52c7e8" stroke-width=".12"/></svg></label>
+</div></header><main id="view"></main><footer>Drag to orbit · Scroll to zoom · <a href="/">Asset Comparison</a><p id="status">Starting…</p></footer>
+<script type="module" src="/spline.mjs"></script></html>

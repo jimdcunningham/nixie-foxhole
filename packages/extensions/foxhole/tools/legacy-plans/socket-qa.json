@@ -1,0 +1,13 @@
+{
+	"_comment": "Visual QA notes for legacy socket id maps. `confirmed` keys keep their mapping but are promoted to high confidence.",
+	"confirmed": [
+		"facilitypipe",
+		"fortt1",
+		"fortt2",
+		"fortt3",
+		"foundation011x2t1",
+		"foundation012x2t1",
+		"foundation01t1",
+		"powerline"
+	]
+}

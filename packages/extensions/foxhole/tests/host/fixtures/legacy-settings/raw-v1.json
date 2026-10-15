@@ -1,0 +1,19 @@
+{
+    "version": 1,
+    "enableGrid": false,
+    "selectedFaction": null,
+    "toolbelts": [
+        [
+            { "type": "building", "subtype": "fortt1" },
+            {},
+            { "type": "icon", "subtype": "metal" },
+            null,
+            {},
+            {},
+            {},
+            {},
+            {},
+            { "type": "building", "subtype": "crane" }
+        ]
+    ]
+}

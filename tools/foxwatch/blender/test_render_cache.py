@@ -80,8 +80,10 @@ class RenderCacheTests(unittest.TestCase):
     def test_renderer_template_and_settings_invalidate(self):
         before = self.key()
         self.assertNotEqual(before, self.key(self.cache({"previewSize": 256})))
-        (self.root / "render_scene_common.py").write_text("new rendering code")
-        self.assertNotEqual(before, self.key())
+        for name in ("render_scene_common.py", "road_native_surface.py"):
+            before = self.key()
+            (self.root / name).write_text("new rendering code")
+            self.assertNotEqual(before, self.key(), name)
         before = self.key()
         (self.root / "template.blend").write_text("new lights")
         self.assertNotEqual(before, self.key())

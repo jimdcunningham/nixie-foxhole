@@ -1,0 +1,40 @@
+{
+	"version": "1.0.5",
+	"name": "Sample Legacy Plan",
+	"layers": [
+		{
+			"id": 0,
+			"name": "Base Layer",
+			"visible": true,
+			"locked": false,
+			"zIndex": 0
+		}
+	],
+	"entities": [
+		{
+			"id": 1,
+			"key": "fortt1",
+			"x": 100,
+			"y": 200,
+			"rotation": 90,
+			"sortOffset": 0,
+			"connections": {
+				"0": {
+					"2": 1
+				}
+			}
+		},
+		{
+			"id": 2,
+			"type": "text",
+			"x": 10,
+			"y": 20,
+			"rotation": 0,
+			"label": "Ammo",
+			"labelStyle": {
+				"fontSize": 64
+			},
+			"sortOffset": 0
+		}
+	]
+}

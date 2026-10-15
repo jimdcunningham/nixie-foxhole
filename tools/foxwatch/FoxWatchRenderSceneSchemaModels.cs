@@ -57,6 +57,10 @@ public sealed class FoxWatchRenderSceneRenderSettings
 
     public string? RepeatAxis { get; set; }
 
+    public List<double>? RepeatRegion { get; set; }
+
+    public bool? NativeSplineSurface { get; set; }
+
     public FoxWatchRenderSceneRepeatCrop? RepeatCrop { get; set; }
 
     public string? CalibrationBackgroundColor { get; set; }
@@ -167,6 +171,9 @@ public sealed class FoxWatchRenderSceneBonePose
 
 public sealed class FoxWatchRenderSceneVariant
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? ContextualSlotNames { get; set; }
+
     public string Id { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
@@ -199,6 +206,8 @@ public sealed class FoxWatchRenderSceneMeshAsset
 
     public string? MaterialSidecarNameOverride { get; set; }
 
+    // Internal renderer bindings accept an unambiguous basename or a native package
+    // path. "default" slots apply before any selected variant slot overrides.
     public Dictionary<string, Dictionary<int, string>>? MaterialSidecarNameOverridesByVariant { get; set; }
 
     [JsonIgnore]
