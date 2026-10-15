@@ -50,10 +50,12 @@ def unreal_rotator_degrees_to_blender_matrix(rotation):
     yaw = math.radians(float(rotation[1]))
     roll = math.radians(float(rotation[2]))
 
+    # Unreal FRotator uses negative right-handed pitch/roll, positive yaw.
+    # Convert that native rotation before reflecting Y into Blender space.
     unreal_rotation = (
         Matrix.Rotation(yaw, 4, "Z")
-        @ Matrix.Rotation(pitch, 4, "Y")
-        @ Matrix.Rotation(roll, 4, "X")
+        @ Matrix.Rotation(-pitch, 4, "Y")
+        @ Matrix.Rotation(-roll, 4, "X")
     )
     return UNREAL_TO_BLENDER_BASIS @ unreal_rotation @ UNREAL_TO_BLENDER_BASIS
 
