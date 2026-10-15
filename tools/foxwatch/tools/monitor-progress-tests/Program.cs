@@ -1,0 +1,10 @@
+using System.Text.Json;
+using FoxWatchMonitor;
+var progress = new MonitorSpatialExportProgress();
+using (var row = JsonDocument.Parse("""{"kind":"spatial-asset","assetTotal":100,"completedAssets":50,"exported":40,"reused":8,"skipped":1,"failed":1,"workerCount":2,"active":{"1":"factory · Packing","2":"truck · Blender Export"}}""")) progress.Apply(row.RootElement);
+if (progress.Fraction != .5 || progress.OverallPercent(25, 100) != 59 || !progress.Summary.Contains("50/100") || !progress.Activity.Contains("CPU 2")) throw new Exception("Parallel generation progress is incorrect");
+using (var row = JsonDocument.Parse("""{"kind":"spatial-complete","assetTotal":100,"completedAssets":100,"exported":90,"reused":8,"skipped":1,"failed":1,"workerCount":2,"active":{}}""")) progress.Apply(row.RootElement);
+if (!progress.Finished || progress.OverallPercent(100, 100) != 90 || progress.Activity != string.Empty) throw new Exception("Completion progress is incorrect");
+progress.Reset();
+if (progress.Total != 0 || progress.Completed != 0 || progress.Finished) throw new Exception("Reset retained a prior run");
+Console.WriteLine("Monitor 2D/3D progress tests passed");

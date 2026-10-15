@@ -1,3 +1,4 @@
+import { runAssetGenerationStages } from './scripts/asset-generation-stages.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import nativeFs from 'node:fs';
@@ -68,6 +69,7 @@ const workflowCommands = [
     'refresh',
     'refresh-modifications',
     'publish-manifest',
+    'export-3d',
     'clear-cache',
     'open-asset-manifest',
     'open-pose-editor',
@@ -153,7 +155,7 @@ if (steamMonitorCommands.includes(command)) {
     process.exit(0);
 }
 
-if (['publish-manifest', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
+if (['publish-manifest', 'export-3d', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
     const releaseRefreshLock = acquireProcessLock(refreshLockPath, 'FoxWatch refresh/publish pipeline');
     process.on('exit', releaseRefreshLock);
 }
@@ -171,6 +173,7 @@ appendNpmConfigArgument(args, 'skip-existing-assets');
 appendNpmConfigArgument(args, 'verbose');
 appendNpmConfigArgument(args, 'publish-concurrency');
 appendNpmConfigArgument(args, 'blender-workers');
+appendNpmConfigArgument(args, 'spatial-workers');
 appendNpmConfigArgument(args, 'force-render');
 appendNpmConfigArgument(args, 'mod');
 appendNpmConfigArgument(args, 'iterations');
@@ -190,10 +193,14 @@ if (command === 'benchmark-manifest-source') {
     process.exit(0);
 }
 
+if (command === 'export-3d') {
+    await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, ...args]);
+    process.exit(0);
+}
+
 if (command === 'publish-manifest') {
     const parsedArgs = parseCliArgs(args);
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...args]);
-    await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, ...args]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(
         resolveSourceManifestPath(parsedArgs),
@@ -306,20 +313,26 @@ if (command === 'refresh') {
         await runDeepAssetCacheExport(assetExportRun, deepExtractionCache, parsedArgs);
         await commitDeepExtractionCache(deepExtractionCache);
     }
-    if (refreshExecution.onlyIds === null && !hasCliFlag(parsedArgs, 'limit')) {
-        await runDeepRefreshBlenderBatches(args);
-    } else {
-        emitFoxWatchProgress({
-            kind: 'pipeline',
-            stage: 'Rendering',
-            detail: 'Rendering the requested FoxWatch scenes in Blender.',
-            overallPercent: 50,
-        });
-        await run(blenderExecutable, buildBlenderArgs(args, {
-            purgeExistingByDefault: true,
-            onlyIds: refreshExecution.onlyIds,
-        }));
-    }
+    await runAssetGenerationStages({
+        export3D: () => run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'),
+            '--blender', blenderExecutable, '--catalog', rawFoxWatchManifestPath, '--background', ...refreshExecution.publishArgs]),
+        render2D: async () => {
+            if (refreshExecution.onlyIds === null && !hasCliFlag(parsedArgs, 'limit')) {
+                await runDeepRefreshBlenderBatches(args);
+            } else {
+                emitFoxWatchProgress({
+                    kind: 'pipeline',
+                    stage: 'Rendering',
+                    detail: 'Rendering the requested FoxWatch scenes in Blender.',
+                    overallPercent: 50,
+                });
+                await run(blenderExecutable, buildBlenderArgs(args, {
+                    purgeExistingByDefault: true,
+                    onlyIds: refreshExecution.onlyIds,
+                }));
+            }
+        },
+    });
     emitFoxWatchProgress({
         kind: 'pipeline',
         stage: 'Publishing',
@@ -327,7 +340,6 @@ if (command === 'refresh') {
         overallPercent: 92,
     });
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...refreshExecution.publishArgs]);
-    await run('node', [path.join(repoRoot, 'tools/foxwatch/scripts/publish-spatial-models.mjs'), '--blender', blenderExecutable, ...refreshExecution.publishArgs]);
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
         skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),
@@ -2325,6 +2337,8 @@ async function buildPublishArgsFromParsedArgs(parsedArgs, options = {}) {
 }
 
 function appendPublishCliPassthroughArgs(outputArgs, parsedArgs) {
+    const spatialWorkers = (parsedArgs['spatial-workers'] ?? []).at(-1);
+    if (spatialWorkers) outputArgs.push('--spatial-workers', spatialWorkers);
     if (hasCliFlag(parsedArgs, 'force-render')) outputArgs.push('--force-render');
     if (hasCliFlag(parsedArgs, 'deep')) {
         outputArgs.push('--deep');

@@ -22,7 +22,7 @@ const values = name => args.flatMap((arg, index) => arg.startsWith('--' + name +
 const only = values('only'), categories = values('category');
 const policy = resolveSpatialExportPolicy(config, catalog, { only: only.length ? only : undefined, geometryProfile: option('geometry-profile') });
 const ids = policy.targets.filter(id => !categories?.length || categories.includes(catalog.assets.find(asset => asset.id === id).categoryId));
-const count = spatialWorkerCount(option('spatial-workers'));
+const count = Math.min(ids.length, spatialWorkerCount(option('spatial-workers')));
 const blender = option('blender') ?? process.env.BLENDER_PATH ?? 'blender';
 const blenderVersion = args.includes('--repack-existing') || !ids.length ? 'repack-existing'
     : (await promisify(execFile)(blender, ['--version'], { windowsHide: true })).stdout.trim();

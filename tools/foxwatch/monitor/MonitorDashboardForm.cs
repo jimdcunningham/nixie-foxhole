@@ -37,6 +37,8 @@ internal sealed class MonitorForm : Form
     private readonly Label _timingSeparator;
     private readonly Label _remainingValue;
     private readonly NxProgressBar _overallProgress;
+    private readonly NxProgressBar _spatialProgress;
+    private readonly Label _spatialDetail;
     private readonly Label _batchSummary;
     private readonly TableLayoutPanel _workerSection;
     private readonly Label[] _workerStateLabels;
@@ -141,13 +143,13 @@ internal sealed class MonitorForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 6,
             BackColor = Surface,
             Padding = new Padding(16, 14, 16, 14),
             Margin = new Padding(0, 0, 0, 12),
         };
         ApplyRoundedCorners(pipelineCard, () => Border, radius: 6);
-        for (var index = 0; index < 4; index += 1)
+        for (var index = 0; index < 6; index += 1)
             pipelineCard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var stageHeader = new TableLayoutPanel
@@ -252,6 +254,18 @@ internal sealed class MonitorForm : Form
         };
         timingRow.Controls.Add(_remainingValue, 4, 0);
         pipelineCard.Controls.Add(timingRow, 0, 3);
+        _spatialDetail = CreateDetail(string.Empty);
+        _spatialDetail.Dock = DockStyle.Top;
+        _spatialDetail.MaximumSize = new Size(580, 0);
+        _spatialDetail.Margin = new Padding(0, 12, 0, 5);
+        _spatialDetail.Visible = false;
+        _spatialProgress = new NxProgressBar
+        {
+            Dock = DockStyle.Top, Height = 8, Margin = Padding.Empty, Visible = false,
+            TrackColor = Color.FromArgb(49, 58, 69), StartColor = Color.FromArgb(63, 190, 182), EndColor = Color.FromArgb(96, 213, 112),
+        };
+        pipelineCard.Controls.Add(_spatialDetail, 0, 4);
+        pipelineCard.Controls.Add(_spatialProgress, 0, 5);
         content.Controls.Add(pipelineCard, 0, 0);
 
         _workerSection = new TableLayoutPanel
@@ -467,6 +481,21 @@ internal sealed class MonitorForm : Form
         _overallProgress.Value = normalized;
         _overallValue.Text = $"{normalized}%";
         _workerSection.Visible = showWorkers;
+    }
+
+    public void ResetSpatialProgress()
+    {
+        _spatialDetail.Visible = false;
+        _spatialProgress.Visible = false;
+        _spatialProgress.Value = 0;
+    }
+
+    public void SetSpatialProgress(string summary, string activity, int percent)
+    {
+        _spatialDetail.Text = string.IsNullOrWhiteSpace(activity) ? summary : summary + "\n" + activity;
+        _spatialDetail.Visible = true;
+        _spatialProgress.Visible = true;
+        _spatialProgress.Value = Math.Clamp(percent, 0, 100);
     }
 
     public void SetRenderSummary(int completedBatches, int totalBatches, int sceneTotal)

@@ -27,6 +27,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
     private DateTimeOffset _nextPollAt;
     private DateTimeOffset _lastStateReadAt = DateTimeOffset.MinValue;
     private int _pipelinePercent;
+    private readonly MonitorSpatialExportProgress _spatialExport = new();
     private int _renderSceneTotal;
     private int _renderCompletedScenes;
     private int _renderWorkerCount;
@@ -237,6 +238,8 @@ internal sealed class MonitorApplicationContext : ApplicationContext
     {
         if (_activeProcess is not null || _shuttingDown) return;
         _pipelinePercent = 0;
+        _spatialExport.Reset();
+        _form.ResetSpatialProgress();
         _renderSceneTotal = 0;
         _renderCompletedScenes = 0;
         _renderWorkerCount = 0;
@@ -494,7 +497,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         else if (line.Contains("Deep asset cache", StringComparison.OrdinalIgnoreCase))
             SetPipelineStage("Preparing Render Assets", "Preparing decoded assets for rendering.", 40);
         else if (line.Contains("Deep refresh: rendering", StringComparison.OrdinalIgnoreCase))
-            SetPipelineStage("Rendering", "Rendering FoxWatch scenes in Blender.", 50, showWorkers: true);
+            SetPipelineStage("Rendering", "Rendering FoxWatch scenes in Blender.", _spatialExport.Total > 0 ? 40 : 50, showWorkers: true);
         else if (line.Contains("publish-manifest:", StringComparison.OrdinalIgnoreCase))
             SetPipelineStage("Publishing", "Publishing the generated FoxWatch assets and manifest.", 92);
         else if (line.Contains("completed successfully", StringComparison.OrdinalIgnoreCase))
@@ -514,6 +517,16 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             var stage = GetString(root, "stage") ?? "Running";
             var detail = GetString(root, "detail") ?? string.Empty;
             var percent = GetInt32(root, "overallPercent", _pipelinePercent);
+            if (kind.StartsWith("spatial-", StringComparison.Ordinal))
+            {
+                _spatialExport.Apply(root);
+                _form.SetSpatialProgress(_spatialExport.Summary, _spatialExport.Activity, (int)Math.Round(_spatialExport.Fraction * 100));
+                var rendering = _renderSceneTotal > _renderCompletedScenes;
+                var generationStage = rendering && !_spatialExport.Finished ? "Rendering 2D & Exporting 3D"
+                    : rendering ? "Rendering 2D Assets" : "Exporting 3D Models";
+                SetPipelineStage(generationStage, _spatialExport.Summary, _spatialExport.OverallPercent(_renderCompletedScenes, _renderSceneTotal), showWorkers: rendering);
+                return true;
+            }
             if (kind == "pipeline")
             {
                 SetPipelineStage(stage, detail, percent);
@@ -526,7 +539,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
                 _renderWorkerCount = GetInt32(root, "workerCount", 1);
                 _renderStartedAt = DateTimeOffset.Now;
                 _form.ResetWorkerProgress();
-                SetPipelineStage(stage, detail, percent, showWorkers: true);
+                SetPipelineStage(stage, detail, _spatialExport.Total > 0 ? _spatialExport.OverallPercent(0, _renderSceneTotal) : percent, showWorkers: true);
                 _form.SetRenderSummary(0, GetInt32(root, "batchTotal", 0), _renderSceneTotal);
                 return true;
             }
@@ -561,7 +574,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
                     _ => FormatSceneLabel(sceneEntry, structureId),
                 };
                 var workerLabel = _renderWorkerCount == 1 ? "One Blender worker is" : $"{_renderWorkerCount} Blender workers are";
-                SetPipelineStage("Rendering", $"{workerLabel} rendering FoxWatch scenes.", percent, showWorkers: true);
+                var generationStage = _spatialExport.Total > 0 && !_spatialExport.Finished ? "Rendering 2D & Exporting 3D" : "Rendering 2D Assets";
+                SetPipelineStage(generationStage, $"{workerLabel} rendering FoxWatch scenes.",
+                    _spatialExport.Total > 0 ? _spatialExport.OverallPercent(_renderCompletedScenes, _renderSceneTotal) : percent, showWorkers: true);
                 _form.SetRenderSummary(completedBatches, batchTotal, _renderSceneTotal);
                 _form.SetWorkerProgress(worker, batch, scene, sceneTotal, sceneLabel);
                 return true;
@@ -576,7 +591,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
 
     private void SetPipelineStage(string stage, string detail, int percent, bool showWorkers = false)
     {
-        _pipelinePercent = Math.Clamp(percent, 0, 100);
+        _pipelinePercent = Math.Max(_pipelinePercent, Math.Clamp(percent, 0, 100));
         UpdateStatus("Running", $"{stage} — {detail}");
         _form.SetPipelineProgress(stage, detail, _pipelinePercent, showWorkers);
     }
@@ -607,6 +622,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         var elapsed = (_pipelineCompletedAt ?? DateTimeOffset.Now) - _pipelineStartedAt.Value;
         string? remaining = null;
         if (_activeProcess is not null
+            && (_spatialExport.Total == 0 || _spatialExport.Finished)
             && _renderStartedAt is not null
             && _renderCompletedScenes > 0
             && _renderCompletedScenes < _renderSceneTotal)
