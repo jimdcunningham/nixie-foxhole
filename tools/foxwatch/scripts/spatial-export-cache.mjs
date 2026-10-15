@@ -20,7 +20,24 @@ export async function relocateLegacySpatialCache({ cache, legacy, id, inputs, se
     const metadataPath = resolve(cache.directory, `${id}.metadata.json`);
     const paths = outputIds.map(id => resolve(outputRoot, 'models', id + '.glb'));
     const previous = legacy.identity(id, [Buffer.from(JSON.stringify(inputs))], settings, [...paths, metadataPath]);
-    if (!await legacy.matches(previous)) return null;
+    if (!await legacy.matches(previous)) {
+        // The generated asset checkout may have moved independently of FoxWatch.
+        // Reconstruct the old identity, then verify bytes at the current location;
+        // recorded paths are identity data only, never paths to read or delete.
+        try {
+            const record = JSON.parse(await readFile(previous.recordPath, 'utf8'));
+            if (record.schemaVersion !== 1 || record.outputs?.length !== paths.length + 1) return null;
+            const recordedPaths = record.outputs.map(output => output.path);
+            if (recordedPaths.some(path => typeof path !== 'string')) return null;
+            for (let index = 0; index < outputIds.length; index++)
+                if (!recordedPaths[index].replaceAll('\\', '/').endsWith('/models/' + outputIds[index] + '.glb')) return null;
+            if (!recordedPaths.at(-1).replaceAll('\\', '/').endsWith('/' + id + '.metadata.json')) return null;
+            const relocated = legacy.identity(id, [Buffer.from(JSON.stringify(inputs))], settings, recordedPaths);
+            if (record.fingerprint !== relocated.fingerprint) return null;
+            for (const [index, path] of [...paths, metadataPath].entries())
+                if (record.outputs[index].hash !== createHash('sha256').update(await readFile(path)).digest('hex')) return null;
+        } catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+    }
     const metadata = JSON.parse(await readFile(metadataPath, 'utf8'));
     for (const [modelId, model] of [[id, metadata.asset], ...Object.entries(metadata.resources ?? {})]) {
         if (!model || !outputIds.includes(modelId) || model.path !== `models/${modelId}.glb`) return null;

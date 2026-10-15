@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,rename} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -28,4 +28,23 @@ test('legacy relocation verifies old provenance and bytes, then installs a valid
  const result=await relocateLegacySpatialCache(args);assert.equal(result.asset.path,'types/structures/factory/factory.glb');
  assert.equal(await readFile(resolve(outputRoot,result.asset.path),'utf8'),'original glb');assert.deepEqual(await cache.lookup(identity),result);
  await writeFile(source,'different exporter');assert.equal(await legacySpatialCache(directory,[source],versions,compatibility),null);
+});
+
+test('a moved generated checkout reuses only byte-verified legacy output',async t=>{
+ const root=await mkdtemp(resolve(tmpdir(),'foxwatch-moved-cache-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const directory=resolve(root,'cache'),oldRoot=resolve(root,'old'),outputRoot=resolve(root,'new');
+ await mkdir(directory,{recursive:true});await mkdir(resolve(oldRoot,'models'),{recursive:true});await mkdir(resolve(outputRoot,'models'),{recursive:true});
+ const id='factory',inputs=[{scene:'unchanged'}],settings={quality:512},asset={id};
+ const metadataPath=resolve(directory,id+'.metadata.json'),oldModel=resolve(oldRoot,'models/factory.glb'),newModel=resolve(outputRoot,'models/factory.glb');
+ await writeFile(metadataPath,JSON.stringify({asset:{path:'models/factory.glb'},resources:{}}));await writeFile(oldModel,'verified output');
+ const legacy=new VisualOutputCache(directory,{version:'legacy'}),cache=await SpatialModelCache.create(directory,[],{version:'new'});
+ await legacy.record(legacy.identity(id,[Buffer.from(JSON.stringify(inputs))],settings,[oldModel,metadataPath]));
+ await rename(oldModel,newModel);
+ const identity=cache.identity(id,inputs,settings,[resolve(outputRoot,'types/structures/factory/factory.glb')]);
+ const args={cache,legacy,id,inputs,settings,outputIds:[id],outputRoot,asset,identity};
+ assert.equal(await relocateLegacySpatialCache({...args,settings:{quality:1024}}),null);
+ await writeFile(newModel,'corrupt');assert.equal(await relocateLegacySpatialCache(args),null);
+ await writeFile(newModel,'verified output');
+ const migrated=await relocateLegacySpatialCache(args);assert.equal(migrated.asset.path,'types/structures/factory/factory.glb');
+ assert.deepEqual(await cache.lookup(identity),migrated);
 });
