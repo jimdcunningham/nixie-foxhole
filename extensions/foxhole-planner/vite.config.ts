@@ -9,6 +9,7 @@ import type { createFoxholeSceneV2AssetMetadata } from './src/scene-v2-asset-met
 import type { createFoxholeSceneV2MapMetadata } from './src/scene-v2-map-metadata.ts';
 import { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, selectFoxholeSceneV2ModelBuild } from './src/scene-v2-models.ts';
 import { publishCompletedBuild } from './build/completed-build-publisher.ts';
+import { createResourceBuildSnapshot } from './build/resource-build-snapshot.ts';
 import { bindFoxholeModelLayerNodes } from './src/model-layer-nodes.ts';
 
 const virtualFoxholeSceneV2AssetsId = '#foxhole-scene-v2-assets';
@@ -153,11 +154,11 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
 }
 
 function foxholeSceneV2ResourcesPlugin() {
-  let sourcesPromise: Promise<SceneV2ResourceSources> | undefined;
+  const sources = createResourceBuildSnapshot(readSceneV2AssetSources);
   let updatedManifest = '';
   const extensionRoot = resolve(fileURLToPath(new URL('./', import.meta.url)));
   const buildingMarker = resolve(extensionRoot, '.nixie-building');
-  const getSources = () => sourcesPromise ??= readSceneV2AssetSources();
+  const getSources = sources.read;
   return {
     name: 'nixie-foxhole-scene-v2-resources',
     apply: 'build',
@@ -168,7 +169,7 @@ function foxholeSceneV2ResourcesPlugin() {
       const manifestPath = fileURLToPath(new URL('./nixie.extension.json', import.meta.url));
       const original = await readFile(manifestPath, 'utf8');
       const declaration = JSON.parse(original);
-      const models = (await getSources()).models;
+      const models = (await sources.begin()).models;
       declaration.contributes.experimentalResources = [
         ...declaration.contributes.experimentalResources.filter((resource: { id: string; kind: string; }) =>
           resource.kind !== 'model' || !resource.id.startsWith('foxhole.model.')),
@@ -176,7 +177,6 @@ function foxholeSceneV2ResourcesPlugin() {
           path: `dist/assets/scene-v2/${getFoxholeSceneV2PackagedModelPath(model)}` })),
       ];
       updatedManifest = `${JSON.stringify(declaration)}\n`;
-      sourcesPromise = undefined;
       this.addWatchFile(foxholeManifestPath);
       this.addWatchFile(resolve(foxholeAssetsRoot, 'models/manifest.v1.json'));
       this.addWatchFile(fileURLToPath(new URL('./src/scene-v2-models.ts', import.meta.url)));
