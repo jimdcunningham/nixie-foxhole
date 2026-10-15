@@ -4,12 +4,33 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { parseNixieExperimentalProductResultV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
 import { createFoxholeSceneV2AssetMetadata } from '../../../../../extensions/foxhole-planner/src/scene-v2-asset-metadata.ts';
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 import { createNixieExtensionAssetCard, getNixieExtensionAssetCardImages } from '../../../../nixie/app/utils/nixie-extension-asset-card.ts';
 
-test('SDK library icons and hover text preserve the authored Native assets', async () => {
+function assertSameVisiblePixels(actual: Buffer, expected: Buffer, label: string) {
+    // Lossless WebP may discard RGB beneath alpha zero. Those bytes cannot
+    // affect rendering; every alpha and every nontransparent RGB byte stays exact.
+    const canonical = (bytes: Buffer) => {
+        const result = Buffer.from(bytes);
+        for (let offset = 0; offset < result.length; offset += 4) {
+            if (result[offset + 3] === 0) result.fill(0, offset, offset + 3);
+        }
+        return createHash('sha256').update(result).digest('hex');
+    };
+    assert.equal(canonical(actual), canonical(expected), label);
+}
+
+test('visible-pixel equality ignores only fully transparent RGB, never alpha or visible color', () => {
+    assertSameVisiblePixels(Buffer.from([255, 80, 1, 0]), Buffer.from([0, 0, 0, 0]), 'transparent');
+    assert.throws(() => assertSameVisiblePixels(Buffer.from([0, 0, 0, 1]), Buffer.from([0, 0, 0, 0]), 'alpha'));
+    assert.throws(() => assertSameVisiblePixels(Buffer.from([1, 0, 0, 1]), Buffer.from([0, 0, 0, 1]), 'visible'));
+});
+
+test('SDK library icons and hover text preserve the visible authored Native assets', async () => {
+    const plannerRoot = new URL('../../../../../extensions/foxhole-planner/', import.meta.url);
+    const extension = JSON.parse(await readFile(new URL('nixie.extension.json', plannerRoot), 'utf8'));
     const root = new URL('../../public/foxhole/assets/', import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('manifest.v1.json', root), 'utf8'));
     const generated = createFoxholeSceneV2AssetMetadata(manifest);
@@ -31,12 +52,15 @@ test('SDK library icons and hover text preserve the authored Native assets', asy
             : color?.previewUrl ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${colorHex ? `.${colorHex}` : ''}.webp`);
         for (const [image, source] of [[metadata.browserIcon, asset.icons.default], [metadata.browserPreview, previewSource]] as const) {
             assert.ok(image);
-            const sheet = new URL(`../../../../../extensions/foxhole-planner/dist/assets/scene-v2/browser/${image.resourceId.split('.').at(-1)}.png`, import.meta.url);
+            const resource = resolveNixieExperimentalResourceV1(extension.contributes.experimentalResources ?? [],
+                extension.contributes.experimentalResourceTemplates ?? [], image.resourceId);
+            assert.equal(resource?.kind, 'texture');
+            const sheet = new URL(resource!.path, plannerRoot);
             const actual = await sharp(fileURLToPath(sheet)).extract({ left: image.frame.x, top: image.frame.y,
                 width: image.frame.width, height: image.frame.height }).ensureAlpha().raw().toBuffer();
             const expected = await sharp(fileURLToPath(new URL(source.slice('/foxhole/assets/'.length), root)))
                 .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).ensureAlpha().raw().toBuffer();
-            assert.equal(createHash('sha256').update(actual).digest('hex'), createHash('sha256').update(expected).digest('hex'), asset.id);
+            assertSameVisiblePixels(actual, expected, asset.id);
         }
     }
 });
@@ -63,7 +87,7 @@ test('Materials Factory and Forge cards retain observed Native units and cumulat
         { label: 'Slots: 15', icon: 'ph:grid-nine-fill', tone: 'accent' },
         { label: 'Decays', icon: 'ph:shield-warning-fill', tone: 'accent' },
         { label: 'Fuel: 5,000', icon: 'ph:gas-pump-fill', tone: 'accent' },
-        { label: '-2 MW', icon: 'ph:lightning-fill', tone: 'warning' },
+        { label: '-2 MW', icon: 'nx:lightning', tone: 'warning' },
     ]);
     assert.deepEqual(forge.presentation!.costs!.map(cost => [cost.label, cost.value]),
         [['Basic Materials', 'x200'], ['Construction Materials', 'x200']]);

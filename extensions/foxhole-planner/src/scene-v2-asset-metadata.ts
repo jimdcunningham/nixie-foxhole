@@ -881,7 +881,9 @@ export function createFoxholeSceneV2AssetMetadata(
                 : asset.colors?.[0]?.previewUrl
                     ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${asset.colors?.[0]?.hex ? `.${asset.colors[0].hex.replace(/^#/, '').toLowerCase()}` : ''}.webp`)),
             browserAttributes: [asset.inventorySlots ? `Slots: ${Math.round(asset.inventorySlots)}` : '',
-                requiresFoundation ? 'Requires Foundation' : '', asset.vehicleSeats?.length ? `Seats: ${asset.vehicleSeats.length}` : '',
+                // Native's badge uses the explicit blueprint flag. Keep the
+                // separate placement-support inference above out of presentation.
+                asset.bIsBuiltOnFoundation === true ? 'Requires Foundation' : '', asset.vehicleSeats?.length ? `Seats: ${asset.vehicleSeats.length}` : '',
                 asset.decays ? 'Decays' : '', asset.liquidCapacity ? `Liquid: ${asset.liquidCapacity.toLocaleString('en-US')}` : '',
                 (() => {
                     const fuel = (asset.fuelTanks ?? []).reduce((total, tank) => total + finiteNumber(tank.capacity ?? tank.q), 0)
