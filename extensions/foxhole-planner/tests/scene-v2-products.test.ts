@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
+import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../src/scene-v2-products.ts';
 import foxholeSceneV2Assets from '../src/scene-v2-assets-node.ts';
 import { parseNixieExperimentalProductResultV1, parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
@@ -185,4 +185,22 @@ test('3D-ready filtering exposes only products with packaged model bindings', ()
     assert.ok(result.items.every(item => item.product.components.some(component => component.componentId === 'model')));
     assert.ok(result.items.some(item => item.product.id === 'asset.facilitypowerdiesel'));
     assert.equal(result.items.some(item => item.product.id === 'asset.crane'), false);
+});
+
+test('facility structural tiers do not hide standalone assets or bypass technology and lineage gates', () => {
+    const assets = createFoxholeSceneV2AssetMetadata({ assets: [
+        { id: 'standalone', codeName: 'Standalone', isFacility: true, tier: 3, sprite: { width: 100, height: 100 } },
+        { id: 'technology', codeName: 'Technology', isFacility: true, tier: 3, techId: 'unlockfacilitytier3', sprite: { width: 100, height: 100 } },
+        { id: 'base', codeName: 'Base', isFacility: true, tier: 1, upgradeStructureCodeName: 'Child', sprite: { width: 100, height: 100 } },
+        { id: 'child', codeName: 'Child', isFacility: true, tier: 3, sprite: { width: 100, height: 100 } },
+        { id: 'modification', codeName: 'Modification', isFacility: true, tier: 3, parentStructureId: 'base', sprite: { width: 100, height: 100 } },
+    ] }).assets;
+    const settings = { 'foxhole.assets.filter.tier': '1' };
+    assert.equal(matchesFoxholeSceneV2ProductFilters(assets.standalone!, settings), true);
+    for (const id of ['technology', 'child', 'modification']) assert.equal(matchesFoxholeSceneV2ProductFilters(assets[id]!, settings), false, id);
+    assert.equal(assets.child!.downgradeStructureId, 'base');
+    assert.equal(assets.modification!.parentStructureId, 'base');
+    assert.equal(matchesFoxholeSceneV2ProductFilters(assets.standalone!, { ...settings, 'foxhole.assets.filter.category.facilities': false }), false);
+    assert.ok(listFoxholeSceneV2Products({ contractVersion: 1, query: 'facilitytransfercrate', offset: 0, limit: 50, settings }).items
+        .some(item => item.product.id === 'asset.facilitytransfercrate'));
 });

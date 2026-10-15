@@ -151,6 +151,8 @@ export interface FoxholeSceneV2AssetMetadata {
     isWorldStructure?: boolean;
     isUpgrade?: boolean;
     hasHigherTierSibling?: boolean;
+    parentStructureId?: string | null;
+    downgradeStructureId?: string | null;
     implicitUpgradeTier?: number | null;
     width: number;
     height: number;
@@ -589,6 +591,13 @@ export function createFoxholeSceneV2AssetMetadata(
     const productionRecipesById: Record<string, FoxholeStatisticsRecipe> = {};
     const assetsByCodeName = new Map(publishedAssets.map(asset => [String(asset.codeName ?? '').trim().toLowerCase(), asset]));
     const assetsById = new Map(publishedAssets.map(asset => [asset.id, asset]));
+    const lowerTierById = new Map<string, string>();
+    for (const source of publishedAssets) {
+        if (source.isUpgrade || source.isDestroyed || source.isBreached) continue;
+        const target = assetsById.get(source.upgradeStructureId ?? '')
+            ?? assetsByCodeName.get(String(source.upgradeStructureCodeName ?? '').trim().toLowerCase());
+        if (target && target.id !== source.id && !lowerTierById.has(target.id)) lowerTierById.set(target.id, source.id);
+    }
     const conversionTargets = new Set(publishedAssets.flatMap(asset => asset.conversionCodeNames ?? [])
         .map(codeName => codeName.toLowerCase()));
     const addVisualResource = (id: string, sourceUrlValue: unknown): string | null => {
@@ -909,6 +918,8 @@ export function createFoxholeSceneV2AssetMetadata(
             ...(asset.faction === 'c' || asset.faction === 'w' ? { faction: asset.faction } : {}),
             tier: publishedTier(asset, strings),
             techId: asset.techId ?? '',
+            parentStructureId: asset.parentStructureId ?? null,
+            downgradeStructureId: lowerTierById.get(asset.id) ?? null,
             isVehicle: asset.isVehicle === true || asset.profileType?.trim().toLowerCase() === 'vehicleproxy',
             isBunker: asset.isBunker === true,
             isFacility: asset.isFacility === true,

@@ -24,7 +24,7 @@ const assets: AssetProductEntry[] = Object.entries(
     .sort((left, right) => left.metadata.label.localeCompare(right.metadata.label));
 const upgrades: AssetProductEntry[] = assets.flatMap(({ assetId, metadata }) => Object.entries(metadata.modifications)
     .flatMap(([slotId, slot], slotIndex) => Object.entries(slot.variants).flatMap(([variantId, variant], variantIndex) => variant.isUpgrade
-        ? [{ assetId, metadata: { ...metadata, label: `${metadata.label} (${variant.label ?? variantId})`, isUpgrade: true,
+        ? [{ assetId, metadata: { ...metadata, label: `${metadata.label} (${variant.label ?? variantId})`, isUpgrade: true, parentStructureId: assetId,
             description: variant.description,
             ...(metadata.statistics
                 ? { statistics: { ...metadata.statistics, cost: Object.fromEntries(
@@ -108,11 +108,14 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
     if (metadata.techId && tier < (metadata.techId === 'unlockfacilitytier3' ? 3 : 2)) {
         return false;
     }
-    if (metadata.tier != null) {
+    // Structural tiers do not technology-lock standalone facilities in the Native browser.
+    const standaloneFacility = metadata.isFacility && !metadata.techId && !metadata.hasHigherTierSibling
+        && !metadata.downgradeStructureId && !metadata.parentStructureId;
+    if (!standaloneFacility && metadata.tier != null) {
         if (previous ? metadata.tier > tier : metadata.tier !== tier && !(metadata.tier < tier && !metadata.hasHigherTierSibling)) {
             return false;
         }
-    } else if (!previous && metadata.hasHigherTierSibling && metadata.implicitUpgradeTier !== tier) {
+    } else if (!standaloneFacility && metadata.tier == null && !previous && metadata.hasHigherTierSibling && metadata.implicitUpgradeTier !== tier) {
         return false;
     }
     if (metadata.isUpgrade && !enabled('upgrades')) {
