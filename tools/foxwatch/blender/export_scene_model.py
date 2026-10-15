@@ -29,6 +29,7 @@ from render_scene_common import collection_world_bounds
 from render_scene_graph import import_render_scene
 from spatial_scene_slice import slice_spatial_scene
 from export_scene_model_geometry import bake_static_mesh_instances
+from export_scene_lights import collect_blueprint_lights
 
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
@@ -71,6 +72,11 @@ for obj in meshes:
             break
         ancestor = ancestor.parent
 
+blueprint_lights = collect_blueprint_lights(collection, center)
+for light in blueprint_lights:
+    if light.get("group"):
+        semantic_members.setdefault(light["group"], [])
+
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
 semantic_groups = {}
@@ -105,6 +111,7 @@ metadata = {
     "meshCount": len(meshes),
     "meshParts": mesh_parts,
     "semanticGroups": semantic_groups,
+    "blueprintLights": blueprint_lights,
     "bakedMeshCount": baked_mesh_count,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),

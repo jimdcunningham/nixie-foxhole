@@ -14,6 +14,7 @@ def slice_spatial_scene(document, mode):
         if mode == 'upgrade' and not inside_upgrade:
             node.pop('meshId', None)
             node.pop('primitive', None)
+            node.pop('light', None)
         node['children'] = [child for entry in node.get('children', [])
                             if (child := visit(entry, inside_upgrade)) is not None]
         return node

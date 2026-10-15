@@ -34,3 +34,15 @@ test('component scenes bind composite roofs and inherited aliases through exact 
  const prepared=await prepareSpatialStructureModifications(asset,prepareSpatialStructureScene(asset,scene),async path=>path==='base/components/roof.scene.json'?scene:undefined);
  assert.equal(prepared.scene.roots[0].children[0].spatialGroup,'structure-layer-roof');
 });
+
+test('ordinary asset light modifications use semantic visibility without requiring structural layers',async()=>{
+ const input={scene:{roots:[{id:'root',name:'UpgradeModificationSlot',children:[]}]},assets:{meshes:[],materials:[]}};
+ const fixture={scene:{roots:[{id:'lamp',name:'Bulb',light:{type:'point',enabled:true},children:[]}]},assets:{meshes:[],materials:[]}};
+ const asset={id:'warehouse',codeName:'Warehouse',modifications:[{name:'UpgradeModificationSlot',variants:{light:{},paint:{}}}]};
+ const prepared=await prepareSpatialStructureModifications(asset,input,async path=>path==='warehouse/modifications/light.scene.json'?fixture:undefined);
+ assert.equal(prepared.spatialModifications.length,1);
+ const part=prepared.spatialModifications[0];
+ assert.equal(prepared.scene.roots[0].children[0].children[0].light.type,'point');
+ assert.deepEqual(spatialStructureProfile(prepared,{semanticGroups:{[part.group]:'lamp-group'}}),{version:1,layers:{},modifications:[{slotId:'UpgradeModificationSlot',variantId:'light',nodeNames:['lamp-group'],replacesLayers:[]}]});
+ assert.equal(input.scene.roots[0].children.length,0);
+});

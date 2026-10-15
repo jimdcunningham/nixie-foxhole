@@ -1,3 +1,4 @@
+import { attachSpatialBlueprintLights } from './spatial-blueprint-lights.mjs';
 import { prepareSpatialTrenchScene, spatialTrenchProfile } from './spatial-trench-profiles.mjs';
 import { readFile, writeFile, mkdir, realpath, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -63,7 +64,7 @@ const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
     .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
     .map(name => resolve(foxwatchRoot, 'blender', name));
 sourceFiles.push(...['publish-spatial-models.mjs', 'spatial-model-cache.mjs', 'visual-output-cache.mjs',
-    'spatial-export-policy.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
+    'spatial-export-policy.mjs', 'spatial-blueprint-lights.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
     .map(name => resolve(foxwatchRoot, 'scripts', name)));
 const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(foxwatchRoot, 'tmp/pipeline-cache/v1/spatial-models'),
     sourceFiles, { blender: blenderVersion, sharp: sharp.versions,
@@ -83,7 +84,7 @@ function filteredScene(document, mode) {
         if (node.visible === false) return null;
         inside ||= node.id?.includes(':upgrade:');
         if (mode === 'base' && inside) return null;
-        if (mode === 'upgrade' && !inside) { delete node.meshId; delete node.primitive; }
+        if (mode === 'upgrade' && !inside) { delete node.meshId; delete node.primitive; delete node.light; }
         node.children = (node.children ?? []).map(child => visit(child, inside)).filter(Boolean);
         return node;
     };
@@ -121,6 +122,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     const binary = bytes.subarray(28 + jsonLength);
     const pathProfile = spatialTrenchProfile(preparedStructures.get(asset.id) ?? {}, document, exported) ?? spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
     const structuralProfile = spatialStructureProfile(preparedStructures.get(id) ?? {}, exported);
+    const lightCount = attachSpatialBlueprintLights(document, exported);
     const geometryOptimization = pruneUnusedStaticGltfUvs(document);
     const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
     const chunks = [];
@@ -165,7 +167,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     return { ...(structuralProfile ? { structuralProfile } : {}), ...(pathProfile ? { pathProfile } : {}), assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: `models/${id}.glb`,
         ...exported.sceneDimensions, offsetX: anchor.offsetX, offsetY: anchor.offsetY, offsetZ: anchor.offsetZ,
         blueprintOrigin: { x: 0, y: 0, z: -groundZ * 32 }, groundReference: groundReference ?? { zMetres: 0, basis: 'blueprint-origin' },
-        triangles: compression.precisionOptimization?.triangles ?? exported.triangles, ...geometryOptimization, meshoptBytesSaved: compression.bytesSaved,
+        lightCount, triangles: compression.precisionOptimization?.triangles ?? exported.triangles, ...geometryOptimization, meshoptBytesSaved: compression.bytesSaved,
         ...(compression.precisionOptimization ? { geometryProfile, precisionOptimization: compression.precisionOptimization } : {}),
         ...(compression.compactVertexOptimization ? { sourceTriangles: exported.triangles, compactVertexOptimization: compression.compactVertexOptimization } : {}),
         bytes: glb.length, sha256: createHash('sha256').update(glb).digest('hex'),
