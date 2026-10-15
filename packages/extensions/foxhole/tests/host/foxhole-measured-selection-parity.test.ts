@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
@@ -12,7 +13,7 @@ import { DEFAULT_FOXHOLE_TRIANGULATION_STATE } from '../../app/plugins/foxhole/n
 
 const hook = registerHooks({ resolve(specifier, context, next) {
     const directory = specifier.startsWith('#nixie/') ? '../../../../nixie/app/' : specifier.startsWith('#foxhole/') ? '../../app/' : null;
-    return directory ? { url: new URL(directory + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
+    return directory ? { url: hostSourceUrl(directory + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
 } });
 const { getFoxholeRangeSelectionLocalBounds } = await import('../../app/plugins/nixie/board/types/foxhole-range.ts');
 const { getFoxholeTriangulationSelectionLocalBounds } = await import('../../app/plugins/nixie/board/types/foxhole-triangulation.ts');

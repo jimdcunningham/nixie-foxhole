@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
@@ -15,7 +16,7 @@ import { getNixieSceneV2PresentationLocalBounds } from '../../../../nixie/app/pl
 
 const hook = registerHooks({ resolve(specifier, context, next) {
     const root = specifier.startsWith('#nixie/') ? '../../../../nixie/app/' : specifier.startsWith('#foxhole/') ? '../../app/' : null;
-    return root ? { url: new URL(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
+    return root ? { url: hostSourceUrl(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
 } });
 const { getFoxholeManifest } = await import('../../app/plugins/foxhole/nixie/manifest.ts');
 const { resolveFoxholeEffectiveBuildSockets } = await import('../../app/plugins/foxhole/nixie/structure-socket-resolution.ts');

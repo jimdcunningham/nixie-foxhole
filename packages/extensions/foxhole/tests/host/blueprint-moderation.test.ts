@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import { legacyHasPublicationContent } from '#foxhole/utils/legacy-blueprint-save.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -15,7 +16,7 @@ import { inspectBlueprintArchive, prepareBlueprintImage, BlueprintManualReviewEr
 import { readBoundedBlueprintResponse } from '../../server/utils/legacy-blueprint-resolver.ts';
 
 function loadFunction(file: string, name: string, dependencies: Record<string, unknown>) {
-    const source = ts.createSourceFile('source.ts', readFileSync(new URL(file, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
+    const source = ts.createSourceFile('source.ts', readFileSync(hostSourceUrl(file, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
     const node = source.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name)!;
     return new Function(...Object.keys(dependencies), `${ts.transpile(node.getText(source).replace('export ', ''), { target: ts.ScriptTarget.ES2022 })}; return ${name};`)(...Object.values(dependencies));
 }

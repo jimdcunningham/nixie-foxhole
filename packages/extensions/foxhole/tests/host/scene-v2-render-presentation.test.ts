@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
@@ -24,7 +25,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
         ? '../../../../nixie/app/'
         : specifier.startsWith('#foxhole/') ? '../../app/' : null;
     if (root) {
-        return { url: new URL(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true };
+        return { url: hostSourceUrl(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true };
     }
     return next(specifier, context);
 } });

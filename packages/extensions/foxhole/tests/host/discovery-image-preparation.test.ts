@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { collectDiscoveryImagePaths, runDiscoveryImagePreparation } from '../../../../nixie/app/utils/discovery-image-preparation.ts';
@@ -6,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 function loadLegacyImages(dependencies: Record<string, unknown>) {
-    const path = new URL('../../app/plugins/foxhole/legacy/plan-import-ui.ts', import.meta.url);
+    const path = hostSourceUrl('../../app/plugins/foxhole/legacy/plan-import-ui.ts', import.meta.url);
     const source = ts.createSourceFile('source.ts', readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
     const node = source.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === 'materializeLegacyPlanImages')!;
     return new Function(...Object.keys(dependencies), `${ts.transpile(node.getText(source), { target: ts.ScriptTarget.ES2022 })}; return materializeLegacyPlanImages;`)(...Object.values(dependencies));

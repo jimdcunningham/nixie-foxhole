@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -36,7 +37,7 @@ const contribution: AssetContribution = {
     ],
 };
 const assets = createLegacySettingsAssetIndex([contribution]);
-const fixture = (name: string): string => readFileSync(new URL(`./fixtures/legacy-settings/${name}.json`, import.meta.url), 'utf8');
+const fixture = (name: string): string => readFileSync(hostSourceUrl(`./fixtures/legacy-settings/${name}.json`, import.meta.url), 'utf8');
 
 function current(): NixieUserSettings {
     return {

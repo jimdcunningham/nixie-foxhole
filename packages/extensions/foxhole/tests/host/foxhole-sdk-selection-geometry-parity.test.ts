@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import { resolveFoxholeConnectorSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/connector-selection-geometry.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -8,10 +9,10 @@ import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extensio
 
 registerHooks({ resolve(specifier, context, nextResolve) {
     if (context.parentURL?.includes('/packages/extensions/foxhole/') && specifier.startsWith('#nixie/')) {
-        return { url: new URL(`../../../../nixie/app/${specifier.slice('#nixie/'.length)}`, import.meta.url).href, shortCircuit: true };
+        return { url: hostSourceUrl(`../../../../nixie/app/${specifier.slice('#nixie/'.length)}`, import.meta.url).href, shortCircuit: true };
     }
     if (context.parentURL?.includes('/packages/extensions/foxhole/') && specifier.startsWith('#foxhole/')) {
-        return { url: new URL(`../../app/${specifier.slice('#foxhole/'.length)}`, import.meta.url).href, shortCircuit: true };
+        return { url: hostSourceUrl(`../../app/${specifier.slice('#foxhole/'.length)}`, import.meta.url).href, shortCircuit: true };
     }
     return nextResolve(specifier, context);
 } });

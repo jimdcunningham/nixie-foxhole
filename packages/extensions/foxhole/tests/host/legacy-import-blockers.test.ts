@@ -1,9 +1,10 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 function loadFunction(path: string, name: string, dependencies: Record<string, unknown>) {
-    const source = ts.createSourceFile('source.ts', readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
+    const source = ts.createSourceFile('source.ts', readFileSync(hostSourceUrl(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
     const declaration = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name)!;
     return new Function(...Object.keys(dependencies), `${ts.transpile(declaration.getText(source).replace(/^export /, ''), { target: ts.ScriptTarget.ES2022 })}; return ${name};`)(...Object.values(dependencies));
 }

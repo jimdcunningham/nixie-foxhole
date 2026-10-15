@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createClient } from '@supabase/supabase-js';
@@ -23,7 +24,7 @@ function fixture() {
     function store(actor: string) {
         const client = createClient<Database>('https://fixture.invalid', 'fixture-public-key', { auth: { persistSession: false, autoRefreshToken: false }, global: {
             fetch: async (input, init) => {
-                const url = new URL(String(input));
+                const url = hostSourceUrl(String(input));
                 const method = init?.method ?? 'GET';
                 const body = init?.body ? JSON.parse(String(init.body)) : null;
                 requests.push({ method, url, body });

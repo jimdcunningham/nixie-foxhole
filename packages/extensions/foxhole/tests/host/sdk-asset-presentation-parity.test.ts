@@ -1,7 +1,8 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
@@ -29,10 +30,12 @@ test('visible-pixel equality ignores only fully transparent RGB, never alpha or 
 });
 
 test('SDK library icons and hover text preserve the visible authored Native assets', async () => {
-    const plannerRoot = new URL('../../../../../extensions/foxhole-planner/', import.meta.url);
-    const extension = JSON.parse(await readFile(new URL('nixie.extension.json', plannerRoot), 'utf8'));
-    const root = new URL('../../public/foxhole/assets/', import.meta.url);
-    const manifest = JSON.parse(await readFile(new URL('manifest.v1.json', root), 'utf8'));
+    const plannerRoot = process.env.NIXIE_FOXHOLE_TEST_RUNTIME_ROOT
+        ? pathToFileURL(process.env.NIXIE_FOXHOLE_TEST_RUNTIME_ROOT + '/')
+        : hostSourceUrl('../../../../../extensions/foxhole-planner/', import.meta.url);
+    const extension = JSON.parse(await readFile(hostSourceUrl('nixie.extension.json', plannerRoot), 'utf8'));
+    const root = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);
+    const manifest = JSON.parse(await readFile(hostSourceUrl('manifest.v1.json', root), 'utf8'));
     const generated = createFoxholeSceneV2AssetMetadata(manifest);
     const strings = manifest.localizations.find((entry: { locale: string; }) => entry.locale === 'en').strings;
     const samples = [manifest.assets.find((asset: { id: string; }) => asset.id === 'facilityrefinery1'),
@@ -55,10 +58,10 @@ test('SDK library icons and hover text preserve the visible authored Native asse
             const resource = resolveNixieExperimentalResourceV1(extension.contributes.experimentalResources ?? [],
                 extension.contributes.experimentalResourceTemplates ?? [], image.resourceId);
             assert.equal(resource?.kind, 'texture');
-            const sheet = new URL(resource!.path, plannerRoot);
+            const sheet = hostSourceUrl(resource!.path, plannerRoot);
             const actual = await sharp(fileURLToPath(sheet)).extract({ left: image.frame.x, top: image.frame.y,
                 width: image.frame.width, height: image.frame.height }).ensureAlpha().raw().toBuffer();
-            const expected = await sharp(fileURLToPath(new URL(source.slice('/foxhole/assets/'.length), root)))
+            const expected = await sharp(fileURLToPath(hostSourceUrl(source.slice('/foxhole/assets/'.length), root)))
                 .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).ensureAlpha().raw().toBuffer();
             assertSameVisiblePixels(actual, expected, asset.id);
         }
@@ -66,7 +69,7 @@ test('SDK library icons and hover text preserve the visible authored Native asse
 });
 
 test('base factory and Forge use published card previews separately from library icons', async () => {
-    const manifest = JSON.parse(await readFile(new URL('../../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
+    const manifest = JSON.parse(await readFile(hostSourceUrl('../../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
     const generated = createFoxholeSceneV2AssetMetadata(manifest);
     const factory = generated.assets.facilityrefinery1!;
     const forge = factory.modifications.UpgradeSlotComponent!.variants.forge!;

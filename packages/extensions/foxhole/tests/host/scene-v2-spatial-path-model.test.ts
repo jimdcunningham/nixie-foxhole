@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -26,7 +27,7 @@ test('the real pipeline renderer bends a packaged profile and keeps both exporte
     const entity = { entityId: 'pipeline-proof', revision: 0, components };
     const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity] });
     const node = plan.experimentalSpatial!.nodes[0]!;
-    const bytes = prepareNixieSceneV2ModelGlb(await readFile(new URL('../../public/foxhole/assets/models/facilitypipe.glb', import.meta.url)));
+    const bytes = prepareNixieSceneV2ModelGlb(await readFile(hostSourceUrl('../../public/foxhole/assets/models/facilitypipe.glb', import.meta.url)));
     const { json, buffers } = glbToGltf(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
     while (buffers.length < json.buffers.length) buffers.push(new ArrayBuffer(0));
     await MeshoptDecoder.ready; MeshoptDecoder.useWorkers = () => {};

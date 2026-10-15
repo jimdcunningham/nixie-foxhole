@@ -9,6 +9,7 @@ dist/
 .nixie-building
 .model-build-selection
 tmp/
+.tmp/
 .npm/
 .env
 .env.*

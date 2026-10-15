@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
@@ -7,7 +8,7 @@ import type { PublishedFoxholeAssetForSceneV2 } from '../../../../../extensions/
 
 const hook = registerHooks({ resolve(specifier, context, next) {
     const root = specifier.startsWith('#nixie/') ? '../../../../nixie/app/' : specifier.startsWith('#foxhole/') ? '../../app/' : null;
-    return root ? { url: new URL(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
+    return root ? { url: hostSourceUrl(root + specifier.slice(specifier.indexOf('/') + 1), import.meta.url).href, shortCircuit: true } : next(specifier, context);
 } });
 const { getFoxholeManifest } = await import('../../app/plugins/foxhole/nixie/manifest.ts');
 const { resolveFoxholeAssetHoverAttributes, formatFoxholeHoverPowerLabel } = await import('../../app/plugins/foxhole/nixie/asset-hover-layout.ts');

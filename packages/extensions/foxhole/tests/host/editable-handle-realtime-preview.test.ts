@@ -1,21 +1,22 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const selectionSource = readFileSync(
-    new URL('../../../../nixie/app/plugins/nixie/contributions/tools/selection.contrib.ts', import.meta.url),
+    hostSourceUrl('../../../../nixie/app/plugins/nixie/contributions/tools/selection.contrib.ts', import.meta.url),
     'utf8',
 );
 const presenceSource = readFileSync(
-    new URL('../../../../nixie/app/plugins/nixie/services/presence.ts', import.meta.url),
+    hostSourceUrl('../../../../nixie/app/plugins/nixie/services/presence.ts', import.meta.url),
     'utf8',
 );
 const nodeSource = readFileSync(
-    new URL('../../../../nixie/app/plugins/nixie/board/types/node.ts', import.meta.url),
+    hostSourceUrl('../../../../nixie/app/plugins/nixie/board/types/node.ts', import.meta.url),
     'utf8',
 );
 const foxholeStructureSource = readFileSync(
-    new URL('../../app/plugins/nixie/board/types/foxhole-structure.ts', import.meta.url),
+    hostSourceUrl('../../app/plugins/nixie/board/types/foxhole-structure.ts', import.meta.url),
     'utf8',
 );
 

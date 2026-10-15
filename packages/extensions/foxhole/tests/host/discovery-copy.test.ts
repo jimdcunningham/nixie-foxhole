@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -7,7 +8,7 @@ import { NixieProjectArchive } from '../../../../nixie/app/plugins/nixie/project
 import { checkDiscoveryNodeTree, checkNativeDiscoveryZip } from '../../../../nixie/app/utils/discovery-archive.ts';
 
 function loadCopy(dependencies: Record<string, unknown>, functionName = 'importArchiveIntoCloudProject',
-    path = new URL('../../../../nixie/app/plugins/nixie/project-archive-import.ts', import.meta.url)) {
+    path = hostSourceUrl('../../../../nixie/app/plugins/nixie/project-archive-import.ts', import.meta.url)) {
     const source = ts.createSourceFile('source.ts', readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
     const node = source.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === functionName)!;
     return new Function(...Object.keys(dependencies), `${ts.transpile(node.getText(source).replace(/^export /, ''), { target: ts.ScriptTarget.ES2022 })}; return ${functionName};`)(...Object.values(dependencies));
@@ -99,7 +100,7 @@ test('signed-out legacy Blueprint copies persist locally with credits and pinned
         },
         showNxToast: () => {},
         buildImportToastMessage: () => 'Imported',
-    }, 'importLegacyPlanFile', new URL('../../app/plugins/foxhole/legacy/plan-import-ui.ts', import.meta.url));
+    }, 'importLegacyPlanFile', hostSourceUrl('../../app/plugins/foxhole/legacy/plan-import-ui.ts', import.meta.url));
     assert.equal(await copy(new File([], 'plan.zip'), { initialName: 'Plan Copy', provenance }), 'local-blueprint');
     assert.equal(written?.offline, true);
     assert.equal(written?.credits, 'Author');

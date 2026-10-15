@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'node:fs';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
@@ -15,7 +16,10 @@ function readBooleanEnv(value: string | undefined, fallback = false): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
 
-const nixieLayerDir = join(currentDir, '../../nixie');
+const configuredHostRoot = process.env.NIXIE_HOST_ROOT || process.env.INIT_CWD;
+const nixieLayerDir = configuredHostRoot && existsSync(join(configuredHostRoot, 'packages/nixie'))
+  ? join(configuredHostRoot, 'packages/nixie')
+  : join(currentDir, '../../../../nixie/packages/nixie');
 
 export default defineNuxtConfig({
   $meta: {

@@ -1,10 +1,11 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const foxholeBoardTypeSources = [
-    new URL('../../app/plugins/nixie/board/types/foxhole-structure.ts', import.meta.url),
-    new URL('../../app/plugins/nixie/board/types/foxhole-spline-connector.ts', import.meta.url),
+    hostSourceUrl('../../app/plugins/nixie/board/types/foxhole-structure.ts', import.meta.url),
+    hostSourceUrl('../../app/plugins/nixie/board/types/foxhole-spline-connector.ts', import.meta.url),
 ];
 
 test('Foxhole board textures use the render-nudging shared loader', () => {
@@ -15,7 +16,7 @@ test('Foxhole board textures use the render-nudging shared loader', () => {
     }
 
     const sharedLoaderSource = readFileSync(
-        new URL('../../../../nixie/app/plugins/nixie/board/utils/url-texture.ts', import.meta.url),
+        hostSourceUrl('../../../../nixie/app/plugins/nixie/board/utils/url-texture.ts', import.meta.url),
         'utf8',
     );
     assert.match(
@@ -25,7 +26,7 @@ test('Foxhole board textures use the render-nudging shared loader', () => {
     assert.match(sharedLoaderSource, /if \(media\) \{\s*queueBoardRenderNudge\(\);/);
 
     const boardCoreSource = readFileSync(
-        new URL('../../../../nixie/app/plugins/nixie/board/core.ts', import.meta.url),
+        hostSourceUrl('../../../../nixie/app/plugins/nixie/board/core.ts', import.meta.url),
         'utf8',
     );
     assert.match(
@@ -34,7 +35,7 @@ test('Foxhole board textures use the render-nudging shared loader', () => {
     );
 
     const boardSceneSource = readFileSync(
-        new URL('../../../../nixie/app/plugins/nixie/board/scene.ts', import.meta.url),
+        hostSourceUrl('../../../../nixie/app/plugins/nixie/board/scene.ts', import.meta.url),
         'utf8',
     );
     assert.match(

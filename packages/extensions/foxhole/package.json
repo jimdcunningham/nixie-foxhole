@@ -33,7 +33,7 @@
     "nuxt": "4.5.2"
   },
   "dependencies": {
-    "@nixie/platform": "file:../../nixie",
+    "@nixie/platform": "0.9.4",
     "@supabase/supabase-js": "2.112.3",
     "@turf/helpers": "7.4.0",
     "@turf/intersect": "7.4.0",

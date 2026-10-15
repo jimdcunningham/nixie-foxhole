@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -63,7 +64,7 @@ function fixture() {
 
 function splineFixture(name: 'scene-v2-diagram' | 'foxhole-planner') {
     const f = fixture();
-    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
     f.runtime.load({ type: 'scene-v2', contractVersion: 1, entities: [] }, [{ ownerId: manifest.id,
         contribution: manifest.contributes.experimentalComponents! }]);
     const product = manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component =>
@@ -701,7 +702,7 @@ for (const reject of [false, true]) test(`placement previews surface elevation w
 
 test('real Planner surface finalizer grounds placement and live moves even with socket snapping disabled', async () => {
     const f = splineFixture('foxhole-planner');
-    bindFoxholeModelLayerNodes(foxholeAssets.foundation012x2t1!, readFileSync(new URL('../../public/foxhole/assets/models/foundation012x2t1.glb', import.meta.url)));
+    bindFoxholeModelLayerNodes(foxholeAssets.foundation012x2t1!, readFileSync(hostSourceUrl('../../public/foxhole/assets/models/foundation012x2t1.glb', import.meta.url)));
     const product = (id: string) => listFoxholeSceneV2Products({ contractVersion: 1, query: id, offset: 0, limit: 100 })
         .items.find(entry => entry.product.id === `asset.${id}`)!.product;
     assert.equal(f.runtime.instantiateProduct(product('foundation012x2t1'), f.manifest.id, 'Floor', () => 'floor').ok, true);

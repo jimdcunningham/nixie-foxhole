@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,7 +8,7 @@ import { collectNixieSceneV2ReferenceCleanup } from '../../../../nixie/desktop-e
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 
 function fixture(name: 'foxhole-planner' | 'scene-v2-diagram') {
-    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
     const controller = new NixieSceneV2EditorRuntimeController();
     const batches: unknown[] = [];
     let accept = true;

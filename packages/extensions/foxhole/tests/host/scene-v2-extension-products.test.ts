@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -18,7 +19,7 @@ for (const { name, listProducts } of [
 ]) {
     test(`${name} provider products satisfy the actual Nixie core and extension schemas`, () => {
         const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(
-            new URL(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8',
+            hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8',
         )));
         let total = 1;
         let checked = 0;
@@ -65,7 +66,7 @@ test('SDK filter decisions preserve the Native predicates across the full catalo
 
 test('all filtered upgrade products satisfy the real core/owner schemas and keep product IDs unique across pages', () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(
-        new URL('../../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8',
+        hostSourceUrl('../../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8',
     )));
     const settings = { 'foxhole.assets.filter.upgrades': true, 'foxhole.assets.filter.showPreviousTiers': true,
         'foxhole.assets.filter.destroyed': true, 'foxhole.assets.filter.breached': true };

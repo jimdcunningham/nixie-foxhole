@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import { registerNixieInternalBlueprintServices } from '../../../../nixie/server/utils/internal-blueprint-services.ts';
 import { readFoxholeLegacyUploads } from '../../server/utils/legacy-discovery-uploads.ts';
 registerNixieInternalBlueprintServices({ requireFeature() {}, get: async () => { throw new Error('No listing expected'); }, search: async () => { throw new Error('No search expected'); }, subscriptions: () => { throw new Error('No subscription expected'); }, uploads: readFoxholeLegacyUploads });
@@ -15,7 +16,7 @@ function fixture(fail = false) {
     const client = createClient<Database>('https://fixture.invalid', 'fixture-key', {
         auth: { persistSession: false, autoRefreshToken: false },
         global: { fetch: async input => {
-            const url = new URL(String(input));
+            const url = hostSourceUrl(String(input));
             requests.push(url);
             const table = url.pathname.split('/').at(-1);
             if (fail) {

@@ -1,9 +1,10 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createNixieSceneV2ProductFilters } from '../../../../nixie/app/utils/nixie-scene-v2-product-filters.ts';
 
-const load = (name: string) => JSON.parse(readFileSync(new URL(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')).contributes;
+const load = (name: string) => JSON.parse(readFileSync(hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')).contributes;
 
 test('Planner provider settings preserve bundled button order, cycles and tier availability', () => {
     const manifest = load('foxhole-planner');

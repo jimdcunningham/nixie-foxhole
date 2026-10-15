@@ -1,3 +1,4 @@
+import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import type {
 
 test('Planner and neutral product tool commands use host activation and fail closed outside editable Scene V2', async () => {
     for (const name of ['foxhole-planner', 'scene-v2-diagram']) {
-        const source = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
+        const source = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
         const calls: string[] = [];
         let available = true;
         const contribution = createExternalDeclarativeContribution(source, ['ui.toolbar'], { canActivateProductTool: () => available });

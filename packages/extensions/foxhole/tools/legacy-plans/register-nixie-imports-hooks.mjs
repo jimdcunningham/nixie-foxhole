@@ -3,7 +3,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NIXIE_APP_ROOT = path.resolve(__dirname, '../../../../nixie/app');
+const NIXIE_APP_ROOT = process.env.NIXIE_HOST_ROOT
+    ? path.resolve(process.env.NIXIE_HOST_ROOT, 'packages/nixie/app')
+    : path.resolve(__dirname, '../../../../../../nixie/packages/nixie/app');
 const EXTENSIONS = ['.ts', '.js', '.mjs', '.json'];
 
 function resolveWithExtensions(absolutePath) {

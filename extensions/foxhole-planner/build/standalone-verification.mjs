@@ -3,16 +3,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 
-export async function prepareStandalone({ repositoryRoot, fixtureRoot }) {
-    const foxholeAssetsRoot = join(
-        repositoryRoot,
-        'packages',
-        'extensions',
-        'foxhole',
-        'public',
-        'foxhole',
-        'assets',
-    );
+export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeAssetsRoot = join(extensionSource, '../../packages/extensions/foxhole/public/foxhole/assets') }) {
     const fixtureInputRoot = join(fixtureRoot, 'src', '.nixie-build-input');
     await fs.mkdir(fixtureInputRoot, { recursive: true });
     await fs.copyFile(
