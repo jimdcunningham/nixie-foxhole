@@ -1,6 +1,6 @@
 import { createError } from 'h3';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../../../../nixie/types/database.types.ts';
+import type { Database } from '#nixie-internal/types/database.types.ts';
 import { LEGACY_BLUEPRINT_PREFIX, legacyBlueprintSourceId } from '#nixie/utils/legacy-blueprints.ts';
 import type { LegacyBlueprintListing } from '#nixie/utils/legacy-blueprints.ts';
 import type { BlueprintLibraryItem } from '#nixie/utils/blueprint-subscriptions.ts';

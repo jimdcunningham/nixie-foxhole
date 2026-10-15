@@ -18,10 +18,10 @@ const hook = registerHooks({ resolve(specifier, context, next) {
         if (specifier === '#supabase/server') {
             code = 'export const serverSupabaseServiceRole = () => { throw new Error("No storage access expected"); };';
         }
-        if (specifier === '../../../../nixie/server/utils/nixie-auth.ts' && context.parentURL.endsWith('/legacy-blueprint-delivery.ts')) {
+        if (specifier === '#nixie-internal/server/utils/nixie-auth.ts' && context.parentURL.endsWith('/legacy-blueprint-delivery.ts')) {
             code = 'export const resolveNixieSupabaseUser = async () => globalThis.__blueprintDeliveryFixture.actor;';
         }
-        if (specifier === '../../../../nixie/server/utils/discovery-metrics.ts' && context.parentURL.endsWith('/legacy-blueprint-delivery.ts')) {
+        if (specifier === '#nixie-internal/server/utils/discovery-metrics.ts' && context.parentURL.endsWith('/legacy-blueprint-delivery.ts')) {
             code = 'export const issueDiscoveryReuseReceipt = async () => {};';
         }
         if (code) {

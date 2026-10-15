@@ -1,11 +1,11 @@
 import { useRuntimeConfig } from '#imports';
 import { createError } from 'h3';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createNixieServiceRoleClient } from '../../../../nixie/server/utils/nixie-workspaces.ts';
+import { createNixieServiceRoleClient } from '#nixie-internal/server/utils/nixie-workspaces.ts';
 import { readBoundedBlueprintResponse } from './legacy-blueprint-resolver.ts';
-import { communityTitleIssue } from '../../../../nixie/app/utils/community-submission.ts';
-import { LEGACY_BLUEPRINT_LIMITS } from '../../../../nixie/app/utils/legacy-blueprint-archive-bounds.ts';
-import { requireNixieModerationApiResult } from '../../../../nixie/server/utils/nixie-moderation.ts';
+import { communityTitleIssue } from '#nixie-internal/app/utils/community-submission.ts';
+import { LEGACY_BLUEPRINT_LIMITS } from '#nixie-internal/app/utils/legacy-blueprint-archive-bounds.ts';
+import { requireNixieModerationApiResult } from '#nixie-internal/server/utils/nixie-moderation.ts';
 import { BLUEPRINT_MODERATION_POLICY, blueprintModerationFlags, requireBlueprintModerationResult } from './blueprint-moderation-policy.ts';
 import type { ModerationResult } from './blueprint-moderation-policy.ts';
 import { BlueprintManualReviewError, inspectBlueprintArchive, prepareBlueprintImage } from './blueprint-moderation-archive.ts';

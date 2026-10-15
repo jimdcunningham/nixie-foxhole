@@ -1,6 +1,6 @@
 import { createError } from 'h3';
-import { LEGACY_BLUEPRINT_PREFIX, LEGACY_BLUEPRINT_UUID } from '../../../../nixie/app/utils/legacy-blueprints.ts';
-import type { LegacyBlueprintListing } from '../../../../nixie/app/utils/legacy-blueprints.ts';
+import { LEGACY_BLUEPRINT_PREFIX, LEGACY_BLUEPRINT_UUID } from '#nixie-internal/app/utils/legacy-blueprints.ts';
+import type { LegacyBlueprintListing } from '#nixie-internal/app/utils/legacy-blueprints.ts';
 
 export interface LegacyBlueprintRow {
     id: string; name: string; description: string | null; authors: string | null;

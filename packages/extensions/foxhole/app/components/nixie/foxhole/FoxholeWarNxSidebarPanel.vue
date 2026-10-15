@@ -59,4 +59,4 @@ const canAccessWarTimeline = computed(() => {
 }
 </style>
 
-<style src="../../../../../../nixie/app/components/nixie/nixie-sidebar-form.css"></style>
+<style src="#nixie-internal/app/components/nixie/nixie-sidebar-form.css"></style>

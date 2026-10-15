@@ -1,6 +1,6 @@
 import { defineEventHandler, getRouterParam, createError } from 'h3';
-import { legacyBlueprintSourceId } from '../../../../../../../nixie/app/utils/legacy-blueprints.ts';
-import { requireBlueprintSubscriptions } from '../../../../../../../nixie/server/utils/blueprint-subscriptions.ts';
+import { legacyBlueprintSourceId } from '#nixie-internal/app/utils/legacy-blueprints.ts';
+import { requireBlueprintSubscriptions } from '#nixie-internal/server/utils/blueprint-subscriptions.ts';
 
 export default defineEventHandler(async event => {
     const store = await requireBlueprintSubscriptions(event);

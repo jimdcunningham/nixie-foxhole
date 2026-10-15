@@ -1,7 +1,7 @@
 import { defineEventHandler, getRouterParam, readBody, createError } from 'h3';
-import { legacyBlueprintSourceId } from '../../../../../../../nixie/app/utils/legacy-blueprints.ts';
-import { requireBlueprintSubscriptions } from '../../../../../../../nixie/server/utils/blueprint-subscriptions.ts';
-import { changeBlueprintSubscription } from '../../../../../../../nixie/server/utils/blueprint-subscription-store.ts';
+import { legacyBlueprintSourceId } from '#nixie-internal/app/utils/legacy-blueprints.ts';
+import { requireBlueprintSubscriptions } from '#nixie-internal/server/utils/blueprint-subscriptions.ts';
+import { changeBlueprintSubscription } from '#nixie-internal/server/utils/blueprint-subscription-store.ts';
 import { getFoxholeLegacyBlueprint } from '../../../../utils/legacy-blueprints.ts';
 
 export default defineEventHandler(async event => {

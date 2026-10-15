@@ -1,6 +1,6 @@
 import { defineEventHandler, getQuery } from 'h3';
-import { requireBlueprintSubscriptions } from '../../../../../nixie/server/utils/blueprint-subscriptions.ts';
-import { readBlueprintLibrary } from '../../../../../nixie/server/utils/blueprint-subscription-store.ts';
+import { requireBlueprintSubscriptions } from '#nixie-internal/server/utils/blueprint-subscriptions.ts';
+import { readBlueprintLibrary } from '#nixie-internal/server/utils/blueprint-subscription-store.ts';
 import { getFoxholeLegacyBlueprint } from '../../utils/legacy-blueprints.ts';
 import { foxholeLegacyBlueprintCursor } from '../../utils/legacy-blueprint-source.ts';
 

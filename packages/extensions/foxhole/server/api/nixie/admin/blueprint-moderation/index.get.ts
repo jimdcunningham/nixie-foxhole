@@ -1,7 +1,7 @@
 import { createError, getQuery } from 'h3';
 import { serverSupabaseServiceRole } from '#supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { requireDiscoveryAdmin } from '../../../../../../../nixie/server/utils/discovery-metrics.ts';
+import { requireDiscoveryAdmin } from '#nixie-internal/server/utils/discovery-metrics.ts';
 import { useRuntimeConfig } from '#imports';
 
 export default defineEventHandler(async event => {

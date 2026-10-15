@@ -1,11 +1,11 @@
-import { issueDiscoveryReuseReceipt } from '../../../../nixie/server/utils/discovery-metrics.ts';
+import { issueDiscoveryReuseReceipt } from '#nixie-internal/server/utils/discovery-metrics.ts';
 import { createError, setHeader } from 'h3';
 import type { H3Event } from 'h3';
 import { serverSupabaseServiceRole } from '#supabase/server';
-import { resolveNixieSupabaseUser } from '../../../../nixie/server/utils/nixie-auth.ts';
+import { resolveNixieSupabaseUser } from '#nixie-internal/server/utils/nixie-auth.ts';
 import { getFoxholeLegacyBlueprint, requireFoxholeLegacyBlueprintFeature } from './legacy-blueprints.ts';
 import { readBoundedBlueprintResponse, resolveLegacyBlueprintArchive } from './legacy-blueprint-resolver.ts';
-import { LEGACY_BLUEPRINT_CONVERTER_REVISION } from '../../../../nixie/app/utils/legacy-blueprints.ts';
+import { LEGACY_BLUEPRINT_CONVERTER_REVISION } from '#nixie-internal/app/utils/legacy-blueprints.ts';
 
 export async function requireLegacyBlueprintImportActor(event: H3Event, feature: 'Copy' | 'Insert') {
     requireFoxholeLegacyBlueprintFeature(event, feature);

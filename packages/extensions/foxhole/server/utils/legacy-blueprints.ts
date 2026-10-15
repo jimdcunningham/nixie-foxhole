@@ -1,12 +1,12 @@
 import { createError, setHeader } from 'h3';
 import type { H3Event } from 'h3';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../../../../nixie/types/database.types.ts';
+import type { Database } from '#nixie-internal/types/database.types.ts';
 import { serverSupabaseServiceRole } from '#supabase/server';
 import { useRuntimeConfig } from '#imports';
-import { legacyBlueprintFlag, legacyBlueprintSourceId } from '../../../../nixie/app/utils/legacy-blueprints.ts';
+import { legacyBlueprintFlag, legacyBlueprintSourceId } from '#nixie-internal/app/utils/legacy-blueprints.ts';
 import { isEligibleLegacyBlueprint, foxholeLegacyBlueprintCursor, foxholeLegacyBlueprintSearchText, toLegacyBlueprintListing } from './legacy-blueprint-source.ts';
-import { decodeDiscoveryCursor, discoveryPosition, discoveryBeforeFilter, encodeDiscoveryCursor } from '../../../../nixie/server/utils/discovery-cursor.ts';
+import { decodeDiscoveryCursor, discoveryPosition, discoveryBeforeFilter, encodeDiscoveryCursor } from '#nixie-internal/server/utils/discovery-cursor.ts';
 import type { LegacyBlueprintRow, LegacyBlueprintVersion } from './legacy-blueprint-source.ts';
 
 const COLUMNS = 'id,name,description,authors,game,privacy,approved,deleted_at,version,updated_at,bp_tags(tags(name,key))';

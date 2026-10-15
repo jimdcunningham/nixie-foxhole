@@ -2,8 +2,8 @@ import { checkLegacyBlueprintSave } from '#foxhole/utils/legacy-blueprint-save.t
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
 import sharp from 'sharp';
-import { checkLegacyBlueprintZip, LEGACY_BLUEPRINT_LIMITS } from '../../../../nixie/app/utils/legacy-blueprint-archive-bounds.ts';
-import { readCheckedZipEntry } from '../../../../nixie/app/utils/discovery-archive.ts';
+import { checkLegacyBlueprintZip, LEGACY_BLUEPRINT_LIMITS } from '#nixie-internal/app/utils/legacy-blueprint-archive-bounds.ts';
+import { readCheckedZipEntry } from '#nixie-internal/app/utils/discovery-archive.ts';
 import { legacyHasPublicationContent } from '#foxhole/utils/legacy-blueprint-save.ts';
 import { blueprintTextChunks } from './blueprint-moderation-policy.ts';
 

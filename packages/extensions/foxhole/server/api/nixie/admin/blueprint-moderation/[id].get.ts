@@ -1,11 +1,11 @@
 import { createError, getQuery, getRouterParam } from 'h3';
 import { serverSupabaseServiceRole } from '#supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { requireDiscoveryAdmin } from '../../../../../../../nixie/server/utils/discovery-metrics.ts';
+import { requireDiscoveryAdmin } from '#nixie-internal/server/utils/discovery-metrics.ts';
 import { loadBlueprintModerationContent } from '../../../../utils/blueprint-moderation.ts';
 import { BlueprintManualReviewError } from '../../../../utils/blueprint-moderation-archive.ts';
 import type { BlueprintModerationJob } from '../../../../utils/blueprint-moderation.ts';
-import { LEGACY_BLUEPRINT_UUID } from '../../../../../../../nixie/app/utils/legacy-blueprints.ts';
+import { LEGACY_BLUEPRINT_UUID } from '#nixie-internal/app/utils/legacy-blueprints.ts';
 
 export default defineEventHandler(async event => {
     await requireDiscoveryAdmin(event);

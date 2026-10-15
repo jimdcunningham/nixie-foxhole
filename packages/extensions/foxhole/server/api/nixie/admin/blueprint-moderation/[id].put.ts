@@ -1,11 +1,11 @@
 import { createError, readBody, getRouterParam } from 'h3';
 import { serverSupabaseServiceRole } from '#supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { requireDiscoveryAdmin, requireDiscoverySameOrigin } from '../../../../../../../nixie/server/utils/discovery-metrics.ts';
+import { requireDiscoveryAdmin, requireDiscoverySameOrigin } from '#nixie-internal/server/utils/discovery-metrics.ts';
 import { loadBlueprintModerationContent } from '../../../../utils/blueprint-moderation.ts';
 import type { BlueprintModerationJob } from '../../../../utils/blueprint-moderation.ts';
-import { LEGACY_BLUEPRINT_UUID } from '../../../../../../../nixie/app/utils/legacy-blueprints.ts';
-import { communityTitleIssue } from '../../../../../../../nixie/app/utils/community-submission.ts';
+import { LEGACY_BLUEPRINT_UUID } from '#nixie-internal/app/utils/legacy-blueprints.ts';
+import { communityTitleIssue } from '#nixie-internal/app/utils/community-submission.ts';
 
 export default defineEventHandler(async event => {
     requireDiscoverySameOrigin(event);

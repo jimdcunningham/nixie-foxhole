@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createError } from 'h3';
-import type { LegacyBlueprintListing } from '../../../../nixie/app/utils/legacy-blueprints.ts';
-import { LEGACY_BLUEPRINT_LIMITS, checkLegacyBlueprintZip } from '../../../../nixie/app/utils/legacy-blueprint-archive-bounds.ts';
+import type { LegacyBlueprintListing } from '#nixie-internal/app/utils/legacy-blueprints.ts';
+import { LEGACY_BLUEPRINT_LIMITS, checkLegacyBlueprintZip } from '#nixie-internal/app/utils/legacy-blueprint-archive-bounds.ts';
 
 export async function readBoundedBlueprintResponse(response: Response, maxBytes: number): Promise<Buffer> {
     if (Number(response.headers.get('content-length')) > maxBytes) {
