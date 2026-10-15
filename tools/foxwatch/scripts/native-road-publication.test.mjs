@@ -15,7 +15,8 @@ function productionFunction(name) {
 }
 const names=['isPlainObject','isJsonEqual','hasOwn','compactJsonValue','compactObject','compactArray',
     'compactStructureRenderLayer','getTextureSidecarPath','readRenderSidecar','applyTextureMetadata',
-    'compactEnumToken','compactConnectorMeshMode','compactSplineMeshAxis','compactConnectorMeshConfig'];
+    'compactEnumToken','compactConnectorMeshMode','compactSplineMeshAxis','compactConnectorMeshConfig',
+    'compactNullableObject','isEmptyPlainObject','compactConnectorBehavior','compactSplineComponentConfig','compactConnector'];
 const context=vm.createContext({readFile,readImageDimensions:()=>{throw Error('native metadata lost');}});
 vm.runInContext(names.map(productionFunction).join('\n'),context);
 const nativeSurface={version:1,verticalOffsetCm:5.000000074505806,groundHeightCm:0,
@@ -44,4 +45,12 @@ test('native body metadata survives sidecar publication and compaction without r
         compact.ns.body.indices=[0,1,99];
         assert.equal(foxholeManifestSchema.safeParse({...fixture,assets:[{...fixture.assets[0],renderLayers:[compact]}]}).success,false);
     } finally { await rm(directory,{recursive:true,force:true}); }
+});
+
+test('connector publication preserves the precise UV coefficient after nested compaction',()=>{
+    const scale=[0,0.0022219999227672815];
+    const connector=context.compactConnector({meshConfigs:[{splineMaterialScaling:scale,nativeMeshLengthCm:450.0000305175781}]});
+    const published=JSON.parse(JSON.stringify(connector));
+    assert.deepEqual(published.meshConfigs[0].materialScale,scale);
+    assert.equal(published.meshConfigs[0].length,450,'ordinary dimensions retain compact rounding');
 });

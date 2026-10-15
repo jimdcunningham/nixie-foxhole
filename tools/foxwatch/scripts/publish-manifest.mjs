@@ -1367,6 +1367,9 @@ function compactConnector(value) {
         behavior: null,
         meshConfigs: [],
         configs: [],
+    }, {
+        // Each mesh config has already applied its own precision policy.
+        meshConfigs: entries => entries,
     });
 }
 
