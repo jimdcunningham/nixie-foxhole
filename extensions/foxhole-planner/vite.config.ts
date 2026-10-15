@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import sharp from 'sharp';
+import { readBrowserAtlasImage } from './build/browser-atlas-images.ts';
 import type { createFoxholeSceneV2AssetMetadata } from './src/scene-v2-asset-metadata.ts';
 import type { createFoxholeSceneV2MapMetadata } from './src/scene-v2-map-metadata.ts';
 import { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, selectFoxholeSceneV2ModelBuild } from './src/scene-v2-models.ts';
@@ -228,8 +229,7 @@ function foxholeSceneV2ResourcesPlugin() {
       await mkdir(browserRoot, { recursive: true });
       for (let start = 0; start < sources.browserImageSources.length; start += 64) {
         const images = await Promise.all(sources.browserImageSources.slice(start, start + 64).map(source =>
-          sharp(resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length)))
-            .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).ensureAlpha().raw().toBuffer()));
+          readBrowserAtlasImage(resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length)))));
         const pixels = Buffer.alloc(2048 * 2048 * 4);
         for (const [index, image] of images.entries()) {
           for (let row = 0; row < 256; row++) {
