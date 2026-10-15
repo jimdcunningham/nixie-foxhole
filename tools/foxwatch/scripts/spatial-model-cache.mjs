@@ -24,7 +24,7 @@ export class SpatialDependencies {
         for (const suffix of suffixes) {
             const direct = resolve(this.root, suffix);
             try { if ((await stat(direct)).isFile()) return direct; } catch (error) { if (error.code !== 'ENOENT') throw error; }
-            const match = (await this.index()).find(file => relative(this.root, file).replaceAll('\\', '/').toLowerCase().endsWith(suffix.toLowerCase()));
+            const match = (await this.index()).find(file => basename(file).toLowerCase() === basename(suffix).toLowerCase() && relative(this.root, file).replaceAll('\\', '/').toLowerCase().endsWith(suffix.toLowerCase()));
             if (match) return match;
         }
         return null;

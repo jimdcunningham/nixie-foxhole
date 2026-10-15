@@ -116,3 +116,10 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     await run(); assert.equal((await result()).skipped, 1);
     assert.equal((await result()).assets[0].reason, 'No extracted scene');
 });
+
+test('suffix lookup hashes the exact source basename used by Blender', async t => {
+    const { root, put } = await fixture(t);
+    await put('a/barfoo.glb', 'unrelated');
+    await put('b/foo.glb', 'actual mesh');
+    assert.equal(await new SpatialDependencies(root).asset('foo.glb'), resolve(root, 'b/foo.glb'));
+});
