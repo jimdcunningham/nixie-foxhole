@@ -2092,6 +2092,7 @@ public sealed class FoxWatchAssetMeshExporter
 
     private void ApplyComponentMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
     {
+        targetReference.Light = FoxWatchBlueprintLights.Extract(export);
         ApplyBuildSocketMetadata(targetReference, export);
         ApplyComponentTagsMetadata(targetReference, export);
         ApplyAuthoredFlagMaterialOverrideMetadata(targetReference, export);
@@ -3108,6 +3109,7 @@ public sealed class FoxWatchAssetMeshExporter
     {
         return new FoxWatchBlueprintComponentReference
         {
+            Light = reference.Light,
             SourceClassName = reference.SourceClassName,
             ComponentName = reference.ComponentName,
             ComponentType = reference.ComponentType,
@@ -3289,6 +3291,7 @@ public sealed class FoxWatchAssetMeshExporter
         }
 
         targetReference.SplinePathMode ??= fallbackReference.SplinePathMode;
+        targetReference.Light ??= fallbackReference.Light;
         targetReference.SplineMinBufferCentimeters ??= fallbackReference.SplineMinBufferCentimeters;
         targetReference.SplineMinRadiusCentimeters ??= fallbackReference.SplineMinRadiusCentimeters;
         targetReference.SplineMaxRadiusCentimeters ??= fallbackReference.SplineMaxRadiusCentimeters;
@@ -3934,6 +3937,7 @@ public sealed class FoxWatchSkeletonReferenceBoneDifference
 
 public sealed class FoxWatchBlueprintComponentReference
 {
+    public FoxWatchRenderSceneLight? Light { get; set; }
     public string SourceClassName { get; set; } = string.Empty;
     public string ComponentName { get; set; } = string.Empty;
     public string ComponentType { get; set; } = string.Empty;

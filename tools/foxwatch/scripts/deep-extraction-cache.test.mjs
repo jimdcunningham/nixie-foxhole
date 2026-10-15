@@ -150,7 +150,7 @@ describe('FoxWatch deep extraction cache identity', () => {
             await fs.mkdir(runtimeRoot, { recursive: true });
             for (const fileName of [
                 'FoxWatchAssetMeshExportProbe.cs',
-                'FoxWatchAssetMeshExporter.cs',
+                'FoxWatchAssetMeshExporter.cs', 'FoxWatchBlueprintLights.cs',
                 'FoxWatchAssetTextureExporter.cs',
                 'FoxWatchManifestAssetExtractor.cs',
                 'FoxWatchService.csproj',

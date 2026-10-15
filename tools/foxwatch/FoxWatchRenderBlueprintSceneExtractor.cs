@@ -1825,6 +1825,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             Id = $"{variantNodeIdPrefix}:{sourceNode.Id.Replace(':', '-')}",
             Name = sourceNode.Name,
             Visible = sourceNode.Visible,
+            Light = sourceNode.Light,
             VariantIds = sourceNode.VariantIds == null ? null : [.. sourceNode.VariantIds],
             MeshId = sourceNode.MeshId,
             Primitive = sourceNode.Primitive,
@@ -2433,6 +2434,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
             Id = node.Id,
             Name = node.Name,
             Visible = node.Visible,
+            Light = node.Light,
             VariantIds = node.VariantIds == null ? null : [.. node.VariantIds],
             MeshId = node.MeshId,
             Primitive = node.Primitive == null
@@ -2886,7 +2888,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
     private static bool IsHiddenFromSceneGraph(FoxWatchBlueprintComponentReference componentReference)
     {
-        return (!componentReference.IsVisible || componentReference.IsHiddenInGame)
+        return componentReference.Light == null && (!componentReference.IsVisible || componentReference.IsHiddenInGame)
             && !ShouldIncludeHiddenAircraftRoofComponent(componentReference)
             && !ShouldIncludeHiddenTrenchOpenWallComponent(componentReference);
     }
@@ -3290,6 +3292,7 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
     {
         var node = new FoxWatchRenderSceneNode
         {
+            Light = componentReference.Light,
             Id = BuildNodeId(nodeIdPrefix, componentReference.ComponentName),
             Name = string.IsNullOrWhiteSpace(componentReference.ComponentName) ? componentReference.ComponentType : componentReference.ComponentName,
         };

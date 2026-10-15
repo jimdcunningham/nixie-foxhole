@@ -82,6 +82,7 @@ public sealed class FoxWatchRenderSceneGraph
 
 public sealed class FoxWatchRenderSceneNode
 {
+    public FoxWatchRenderSceneLight? Light { get; set; }
     public string Id { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
