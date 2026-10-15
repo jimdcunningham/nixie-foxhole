@@ -121,9 +121,10 @@ test('packaged models share their owning asset directory with textures and icons
     assert.equal(templates['foxhole.visual.'], 'dist/assets/scene-v2/shared/visuals/{id}.webp');
 });
 
-test('the explicit 3D allowlist covers the five requested categories and excludes vehicles and damaged variants', () => {
+test('the explicit 3D allowlist covers the eight requested categories and excludes damaged variants', () => {
     const expected = catalog.assets.filter(asset => spatialPolicy.categoryIds.includes(asset.categoryId)
-        && !('isVehicle' in asset && asset.isVehicle) && !/destroyed|breached/i.test(`${asset.id} ${asset.codeName}`)).map(asset => asset.id).sort();
+        && (!('isVehicle' in asset && asset.isVehicle) || ['misc', 'trains'].includes(asset.categoryId))
+        && !/destroyed|breached/i.test(`${asset.id} ${asset.codeName}`)).map(asset => asset.id).sort();
     assert.deepEqual([...spatialPolicy.assets].sort(), expected);
     assert.equal(spatialPolicy.geometryProfile, 'curved50-compact16');
     for (const id of ['facilitymineoil', 'facilitymineresource1', 'facilitymineresource2', 'facilitymineresource3', 'facilitymineresource4',
@@ -131,7 +132,7 @@ test('the explicit 3D allowlist covers the five requested categories and exclude
         assert.ok(id in modelBundle.assets);
     }
     assert.ok(spatialAssetIds.every(id => !/destroyed|breached/i.test(id)));
-    for (const id of ['crane', 'truckc', 'mortartankc', 'trainengine', 'largeshipaircraftc', 'aircraftbomberc']) {
+    for (const id of ['largecrane', 'truckc', 'mortartankc', 'largeshipaircraftc', 'aircraftbomberc']) {
         assert.equal(assets[id]!.model, undefined);
         assert.equal(isFoxholeSceneV2ModelAllowed(id), false);
     }
@@ -186,4 +187,19 @@ test('model bundle identity mismatches fail rather than pointing a catalog entry
         resourceId: 'foxhole.model.other', codeName: 'FacilityTransferResource', path: 'models/other.glb',
         width: 310, height: 70, depth: 209, offsetX: 0, offsetY: 0, offsetZ: 0,
     } } }), /Invalid Foxhole model binding/);
+});
+
+test('newly allowlisted defenses, utilities and locomotives bind when model output becomes available', () => {
+    for (const id of ['watchtower', 'maintenancetunnel', 'crane', 'trainengine']) {
+        const catalogAssets = structuredClone(assets);
+        const asset = catalogAssets[id]!;
+        assert.ok(asset, id);
+        assert.equal(isFoxholeSceneV2ModelAllowed(id), true, id);
+        const models = bindFoxholeSceneV2Models(catalogAssets, { schemaVersion: 1, assets: { [id]: {
+            codeName: asset.codeName, resourceId: 'foxhole.model.' + id, path: 'models/' + id + '.glb',
+            width: 32, height: 32, depth: 32, offsetX: 0, offsetY: 0, offsetZ: 0,
+        } } });
+        assert.deepEqual(models, [{ id, assetId: id, path: 'models/' + id + '.glb' }]);
+        assert.equal(catalogAssets[id]!.model!.resourceId, 'foxhole.model.' + id);
+    }
 });

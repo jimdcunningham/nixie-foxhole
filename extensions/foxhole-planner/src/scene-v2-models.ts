@@ -45,7 +45,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
     }
     const models = Object.entries(document.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id)).map(([assetId, model]) => {
         const asset = assets[assetId];
-        if (!asset || asset.isVehicle || !spatialPolicy.categoryIds.includes(asset.category)
+        if (!asset || !spatialPolicy.categoryIds.includes(asset.category)
             || asset.codeName !== model.codeName || model.path !== `models/${assetId}.glb`
             || model.resourceId !== `foxhole.model.${assetId}`
             || !['width', 'height', 'depth'].every(key => Number.isFinite(model[key as 'width']) && Number(model[key as 'width']) > 0)
@@ -71,7 +71,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
     return models;
 }
 
-/** Optional development build selection; the authored facility policy remains the default. */
+/** Optional development build selection; the authored asset policy remains the default. */
 export function selectFoxholeSceneV2ModelBuild(
     assets: Record<string, FoxholeSceneV2AssetMetadata>,
     models: FoxholeSceneV2ModelSource[],

@@ -11,7 +11,7 @@ export function resolveSpatialExportPolicy(config, catalog, { only, geometryProf
     for (const id of config.assets) {
         const asset = byId.get(id);
         assert.ok(/^[a-z0-9-]+$/.test(id) && !/destroyed|breached/i.test(id), `Excluded spatial asset: ${id}`);
-        assert.ok(asset && config.categoryIds.includes(asset.categoryId) && !asset.isVehicle
+        assert.ok(asset && config.categoryIds.includes(asset.categoryId)
             && !asset.isDestroyed && !asset.isBreached && !/destroyed|breached/i.test(asset.codeName), `Asset outside spatial scope: ${id}`);
     }
     const selectedProfile = geometryProfile ?? config.geometryProfile ?? APPROVED_SPATIAL_GEOMETRY_PROFILE;

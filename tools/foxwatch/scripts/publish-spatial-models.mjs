@@ -25,7 +25,7 @@ const catalog = JSON.parse(await readFile(resolve(outputRoot, 'manifest.v1.json'
 const only = option('only')?.split(',').map(value => value.trim().toLowerCase());
 const policy = resolveSpatialExportPolicy(config, catalog, { only, geometryProfile: option('geometry-profile') });
 const { geometryProfile, targets } = policy;
-if (policy.skipped.length) console.log(`Skipping spatial assets outside the intact facilities allowlist: ${policy.skipped.join(', ')}`);
+if (policy.skipped.length) console.log(`Skipping spatial assets outside the intact asset allowlist: ${policy.skipped.join(', ')}`);
 if (config.unitsPerMetre !== 32 || ![512, 1024].includes(config.maxTextureSize)) throw new Error('Invalid authored spatial export profile');
 const modelRoot = resolve(outputRoot, 'models');
 const temporaryRoot = resolve(foxwatchRoot, 'tmp/spatial-models');
