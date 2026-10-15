@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onDeactivated, watch } from 'vue';
-import FoxholeCostCard from '#foxhole/components/nixie/foxhole/FoxholeCostCard.vue';
 import FoxholeCostBreakdownList from '#foxhole/components/nixie/foxhole/FoxholeCostBreakdownList.vue';
 import type { FoxholeCostBreakdownEntry } from '#foxhole/components/nixie/foxhole/FoxholeCostBreakdownList.vue';
 import FoxholeStatsExportDialog from '#foxhole/components/nixie/foxhole/FoxholeStatsExportDialog.vue';
@@ -1063,10 +1062,10 @@ function scheduleHideDestructionWeaponHover(): void {
                     sectionKey="foxhole.scene-stats.construction-cost"
                     collapsible
                 >
-                    <FoxholeCostCard
+                    <FoxholeCostBreakdownList
                         v-if="costBreakdownEntries.length > 0"
                         :entries="costBreakdownEntries"
-                        :showHeading="false"
+                        flush
                     />
 
                     <NxEmptyState
@@ -1204,11 +1203,10 @@ function scheduleHideDestructionWeaponHover(): void {
                     sectionKey="foxhole.scene-stats.building-maintenance"
                     collapsible
                 >
-                    <FoxholeCostCard
+                    <FoxholeCostBreakdownList
                         v-if="maintenanceBreakdownEntries.length > 0"
                         :entries="maintenanceBreakdownEntries"
-                        title="Building Maintenance"
-                        :showHeading="false"
+                        flush
                     />
                 </NixieSidebarFormSection>
 
@@ -1218,10 +1216,9 @@ function scheduleHideDestructionWeaponHover(): void {
                     sectionKey="foxhole.scene-stats.production-input"
                     collapsible
                 >
-                    <FoxholeCostCard
+                    <FoxholeCostBreakdownList
                         :entries="productionInputEntries"
-                        title="Production Input"
-                        :showHeading="false"
+                        flush
                     />
                 </NixieSidebarFormSection>
 
