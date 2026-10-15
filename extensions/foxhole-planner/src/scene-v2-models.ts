@@ -7,8 +7,9 @@ export function readFoxholeSpatialPathProfile(value: unknown): FoxholeSpatialPat
     const validPoint = (value: unknown): value is [number, number, number] => Array.isArray(value) && value.length === 3
         && value.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1_000_000);
     if (!profile || profile.version !== 1 || !profile.parts || Array.isArray(profile.parts)
-        || Object.keys(profile.parts).length > 16 || !Object.values(profile.parts).every(part => part && Number.isInteger(part.meshIndex)
-            && part.meshIndex >= 0 && part.meshIndex <= 1023 && validPoint(part.origin))
+        || Object.keys(profile.parts).length > 128 || !Object.values(profile.parts).every(part => part && Number.isInteger(part.meshIndex)
+            && part.meshIndex >= 0 && part.meshIndex <= 1023 && validPoint(part.origin)
+            && (part.meshIndices === undefined || Array.isArray(part.meshIndices) && part.meshIndices.length > 0 && part.meshIndices.length <= 32 && part.meshIndices.every(index => Number.isInteger(index) && index >= 0 && index <= 1023)))
         || profile.endOrigin !== undefined && !validPoint(profile.endOrigin)) throw new Error('Invalid Foxhole spatial profile');
     return structuredClone(profile);
 }
@@ -21,7 +22,7 @@ export function isFoxholeSceneV2ModelAllowed(assetId: string): boolean {
 
 export interface FoxholeSpatialPathProfile {
     version: 1;
-    parts: Record<string, { meshIndex: number; origin: [number, number, number]; }>;
+    parts: Record<string, { meshIndex: number; meshIndices?: number[]; origin: [number, number, number]; }>;
     endOrigin?: [number, number, number];
 }
 

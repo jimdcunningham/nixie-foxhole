@@ -1,3 +1,4 @@
+import { renderSpatialTrench } from './scene-v2-spatial-trench.ts';
 import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalSpatialEndpointBindingsV1,
     NixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
@@ -9,7 +10,8 @@ import { isFoxholePowerlineOverLength, resolveFoxholePowerlineStroke } from './p
 /** Spatial geometry is derived from the same state and attachment-resolved path as the 2D view. */
 export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponentEntitySnapshotV1,
     data: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number;
-        endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata): NixieExperimentalSpatialPlanV1 | undefined {
+        endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string,unknown>> = {}): NixieExperimentalSpatialPlanV1 | undefined {
+    if (/^trenchconnectort[123]$/.test(data.foxholeKey) && asset) return renderSpatialTrench(entity,data,asset,settings);
     if (data.foxholeKey === 'powerline') {
         const count = 32, startZ = data.startZ ?? 0, endZ = data.endZ ?? 0;
         const distance = Math.hypot(data.endX - data.startX, data.endY - data.startY);

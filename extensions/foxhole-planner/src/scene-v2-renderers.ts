@@ -1,6 +1,7 @@
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
+import { structuralModelClips } from './scene-v2-structural-clips.ts';
 import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
@@ -285,26 +286,7 @@ function renderFoxholeSceneV2Asset(
             height: assetMetadata.packaged.pallet.height,
         }]
         : [];
-    const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
-        && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
-    const occupiedKeys = new Set<string>();
-    if (Array.isArray(attachments)) {
-        for (const attachment of attachments) {
-            if (attachment && typeof attachment === 'object' && !Array.isArray(attachment)
-                && typeof (attachment.localSocketName ?? attachment.socketName) === 'string') {
-                const neighbor = entities.find(candidate => candidate.entityId === attachment.targetEntityId);
-                const neighborAsset = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
-                    && component.componentId === 'asset' && component.definitionAvailable)?.data.assetId;
-                const neighborConnector = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
-                    && component.componentId === 'spline-connector' && component.definitionAvailable)?.data.foxholeKey;
-                if (canFoxholeSocketConnectionOpenWalls(assetMetadata.codeName,
-                    typeof neighborAsset === 'string' ? assetMetadataById[neighborAsset]?.codeName ?? neighborAsset : neighborConnector)) {
-                    occupiedKeys.add(`${entity.entityId}:${attachment.localSocketName ?? attachment.socketName}`);
-                }
-            }
-        }
-    }
-    const occupiedTags = resolveFoxholeOccupiedSocketTags(assetMetadata.buildSockets, occupiedKeys, entity.entityId);
+    const occupiedTags = resolveStructureOccupiedTags(entity, assetMetadata, entities);
     const layerNodes = useLayers
         ? layers
             .filter(layer => shouldShowFoxholeStructureRenderLayer(layer, occupiedTags, { structureCodeName: assetMetadata.codeName,
@@ -514,7 +496,7 @@ export function renderFoxholeSceneV2Entity(
         const powerlineObstructions = findFoxholePowerlineObstructions(entity, resolved, context, assetMetadataById);
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
-        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset) : undefined;
+        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, context.settings ?? {}) : undefined;
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, context.settings ?? {});
         }
@@ -681,6 +663,9 @@ export function renderFoxholeSceneV2Entity(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
             ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes: [...new Set(hiddenModelNodes)] };
     }
+    const modelClips = structuralModelClips(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
+    if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
+        ...placementSpatial, modelClips };
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
     const rotation = entity.components.find(component => (
@@ -734,4 +719,27 @@ export function renderFoxholeSceneV2Entity(
             children: [...renderedNodes, cargoNode],
         },
     };
+}
+
+function resolveStructureOccupiedTags(entity: NixieExperimentalComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata, entities: readonly NixieExperimentalComponentEntitySnapshotV1[]) {
+    const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+        && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+    const occupiedKeys = new Set<string>();
+    if (Array.isArray(attachments)) {
+        for (const attachment of attachments) {
+            if (attachment && typeof attachment === 'object' && !Array.isArray(attachment)
+                && typeof (attachment.localSocketName ?? attachment.socketName) === 'string') {
+                const neighbor = entities.find(candidate => candidate.entityId === attachment.targetEntityId);
+                const neighborAsset = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+                    && component.componentId === 'asset' && component.definitionAvailable)?.data.assetId;
+                const neighborConnector = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+                    && component.componentId === 'spline-connector' && component.definitionAvailable)?.data.foxholeKey;
+                if (canFoxholeSocketConnectionOpenWalls(assetMetadata.codeName,
+                    typeof neighborAsset === 'string' ? assetMetadataById[neighborAsset]?.codeName ?? neighborAsset : neighborConnector)) {
+                    occupiedKeys.add(`${entity.entityId}:${attachment.localSocketName ?? attachment.socketName}`);
+                }
+            }
+        }
+    }
+    return resolveFoxholeOccupiedSocketTags(assetMetadata.buildSockets, occupiedKeys, entity.entityId);
 }

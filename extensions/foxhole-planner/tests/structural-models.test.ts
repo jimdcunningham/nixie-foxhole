@@ -58,14 +58,17 @@ test('every optional bunker and trench part starts hidden and wall replacements 
  const walls=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideWalls':true}}).experimentalSpatial!.hiddenModelNodes!;
  assert.ok(door.nodeNames.every(name=>walls.includes(name)));assert.equal(new Set(walls).size,walls.length);
 });
-test('joined trench sides select open geometry while front joins retain an unobstructed floor',()=>{
- for(const id of ['trencht1','trencht2','trencht3']){
+test('joined trench sides swap solid meshes for authored openings and retain the opposite side',()=>{
+ for(const id of ['trencht1','trencht2','trencht3'])for(const sides of [['Left'],['Right'],['Left','Right']]){
   const asset=assets[id]!,profile=asset.model!.structuralProfile!;
-  const left=asset.buildSockets.find(s=>s.name.split(':').at(-1)==='LeftSocket')!;
-  const entity=make(id,[left.name]),neighbor=make(id);neighbor.entityId='neighbor';
-  const plan=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity,neighbor]});const hidden=plan.experimentalSpatial!.hiddenModelNodes!;
-  assert.ok(profile.layers.leftwall!.every(name=>hidden.includes(name)));
-  assert.ok(profile.layers.openwallleft!.every(name=>!hidden.includes(name)));
+  const names=sides.map(side=>asset.buildSockets.find(s=>s.name.split(':').at(-1)===side+'Socket')!.name);
+  const entity=make(id,names),neighbor=make(id);neighbor.entityId='neighbor';
+  const plan=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity,neighbor]}),hidden=plan.experimentalSpatial!.hiddenModelNodes!;
+  for(const side of ['Left','Right']){
+   const joined=sides.includes(side),key=side.toLowerCase();
+   assert.ok(profile.layers[key+'wall']!.every(name=>hidden.includes(name)===joined));
+   assert.ok(profile.layers['openwall'+key]!.every(name=>hidden.includes(name)!==joined));
+  }
   assert.ok(profile.layers.floor!.every(name=>!hidden.includes(name)));
  }
 });

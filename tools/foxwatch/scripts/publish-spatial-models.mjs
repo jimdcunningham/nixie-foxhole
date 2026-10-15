@@ -1,3 +1,4 @@
+import { prepareSpatialTrenchScene, spatialTrenchProfile } from './spatial-trench-profiles.mjs';
 import { readFile, writeFile, mkdir, realpath, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +63,7 @@ const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
     .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
     .map(name => resolve(foxwatchRoot, 'blender', name));
 sourceFiles.push(...['publish-spatial-models.mjs', 'spatial-model-cache.mjs', 'visual-output-cache.mjs',
-    'spatial-export-policy.mjs', 'spatial-structure-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
+    'spatial-export-policy.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
     .map(name => resolve(foxwatchRoot, 'scripts', name)));
 const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(foxwatchRoot, 'tmp/pipeline-cache/v1/spatial-models'),
     sourceFiles, { blender: blenderVersion, sharp: sharp.versions,
@@ -118,7 +119,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     const jsonLength = bytes.readUInt32LE(12);
     const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
     const binary = bytes.subarray(28 + jsonLength);
-    const pathProfile = spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
+    const pathProfile = spatialTrenchProfile(preparedStructures.get(asset.id) ?? {}, document, exported) ?? spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
     const structuralProfile = spatialStructureProfile(preparedStructures.get(id) ?? {}, exported);
     const geometryOptimization = pruneUnusedStaticGltfUvs(document);
     const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
@@ -197,11 +198,13 @@ for (const id of targets) {
         for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
         continue;
     }
-    scene = await prepareSpatialStructureModifications(asset,prepareSpatialStructureScene(asset, scene),async path=>{
+    const loadStructuralScene = async path=>{
         if(!/^[a-z0-9/-]+\.scene\.json$/.test(path))throw Error('Invalid structural scene reference');
         try{return JSON.parse(await readFile(resolve(sceneRoot,path),'utf8'));}
         catch(error){if(error.code==='ENOENT')return undefined;throw error;}
-    },structuralSharedIds);
+    };
+    scene = /^trenchconnectort[123]$/.test(id) ? await prepareSpatialTrenchScene(asset,scene,loadStructuralScene)
+        : await prepareSpatialStructureModifications(asset,prepareSpatialStructureScene(asset,scene),loadStructuralScene,structuralSharedIds);
     preparedStructures.set(id, scene);
     const upgrades = (asset.modifications ?? []).flatMap(slot => Object.entries(slot.variants ?? {})
         .filter(([variantId, variant]) => variant.isUpgrade)
