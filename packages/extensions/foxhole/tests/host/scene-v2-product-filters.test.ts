@@ -11,7 +11,7 @@ test('Planner provider settings preserve bundled button order, cycles and tier a
     const values = Object.fromEntries(manifest.settings.map((setting: { id: string; defaultValue: unknown; }) => [setting.id, setting.defaultValue]));
     const context = { getSetting: (id: string) => values[id] } as Parameters<NonNullable<(typeof filters)[number]['enabled']>>[0];
     assert.deepEqual(filters.map(filter => typeof filter.label === 'function' ? filter.label(values[filter.settingId], context) : filter.label),
-        ['Bunkers', 'Facilities', 'Vehicles', 'World', 'Items', 'Faction', 'Tier 3', 'Previous Tiers', 'Upgrades', 'Destroyed', 'Breached']);
+        ['Bunkers', 'Facilities', 'Vehicles', 'World', 'Items', 'Faction', 'Tier 3', 'Previous Tiers', '3D Ready', 'Upgrades', 'Destroyed', 'Breached']);
     const faction = filters.find(filter => filter.settingId.endsWith('.faction'))!;
     assert.equal(faction.isActive!('all', context), false);
     assert.equal(faction.nextValue!('all', context), 'c');

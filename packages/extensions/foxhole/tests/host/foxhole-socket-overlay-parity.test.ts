@@ -27,18 +27,17 @@ hook.deregister();
 test('structure socket projection matches Native base/modification resolution, positions, kinds and flows across the catalog', () => {
     const generated = createFoxholeSceneV2AssetMetadata(published as unknown as { assets: PublishedFoxholeAssetForSceneV2[]; });
     const native = getFoxholeManifest('/foxhole/assets/');
+    const expectedCases = native.assets.reduce((count, structure) => count + 1
+        + structure.modificationSlots.reduce((total, slot) => total + Object.keys(slot.variants).length, 0), 0);
+    assert.ok(expectedCases > 0);
     let cases = 0;
     for (const structure of native.assets) {
         const asset = generated.assets[structure.id];
-        if (!asset) {
-            continue;
-        }
+        assert.ok(asset, `Missing socket metadata for Native asset: ${structure.id}`);
         const variants = [null, ...structure.modificationSlots.flatMap(slot => Object.entries(slot.variants).map(([id, source]) => ({ slot: slot.name, id, source })))];
         for (const variant of variants) {
             const sdkVariant = variant ? asset.modifications[variant.slot]?.variants[variant.id] : null;
-            if (variant && !sdkVariant) {
-                continue;
-            }
+            if (variant) assert.ok(sdkVariant, `Missing Native socket variant: ${structure.id}/${variant.slot}/${variant.id}`);
             const expected = resolveFoxholeStructureOverlaySockets(resolveFoxholeEffectiveBuildSockets(structure.buildSockets,
                 variant ? [variant.source] : [], structure.railCouplers), { x: 0, y: 0 }, 'fixture')
                 .filter(socket => socket.kind === 'power' || socket.kind === 'pipe');
@@ -55,23 +54,24 @@ test('structure socket projection matches Native base/modification resolution, p
             }
         }
     }
-    assert.ok(cases > 3000);
+    assert.equal(cases, expectedCases * 3);
     console.info(`Compared ${cases} Native/SDK structure socket cases.`);
 });
 
 test('attachment templates use the same full Native base/modification/coupler socket set as presentation', () => {
     const generated = createFoxholeSceneV2AssetMetadata(published as unknown as { assets: PublishedFoxholeAssetForSceneV2[]; });
     let cases = 0;
-    for (const structure of getFoxholeManifest('/foxhole/assets/').assets) {
+    const native = getFoxholeManifest('/foxhole/assets/');
+    const expectedCases = native.assets.reduce((count, structure) => count + 1
+        + structure.modificationSlots.reduce((total, slot) => total + Object.keys(slot.variants).length, 0), 0);
+    assert.ok(expectedCases > 0);
+    for (const structure of native.assets) {
         const metadata = generated.assets[structure.id];
-        if (!metadata) {
-            continue;
-        }
+        assert.ok(metadata, `Missing attachment metadata for Native asset: ${structure.id}`);
         const variants = [null, ...structure.modificationSlots.flatMap(slot => Object.entries(slot.variants).map(([id, source]) => ({ slot: slot.name, id, source })))];
         for (const variant of variants) {
-            if (variant && !metadata.modifications[variant.slot]?.variants[variant.id]) {
-                continue;
-            }
+            if (variant) assert.ok(metadata.modifications[variant.slot]?.variants[variant.id],
+                `Missing Native attachment variant: ${structure.id}/${variant.slot}/${variant.id}`);
             const entity = { entityId: 'fixture', revision: 1, components: variant
                 ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1,
                     definitionAvailable: true, data: { selections: [{ slotId: variant.slot, variantId: variant.id }] } }]
@@ -87,7 +87,7 @@ test('attachment templates use the same full Native base/modification/coupler so
             cases++;
         }
     }
-    assert.ok(cases > 2500);
+    assert.equal(cases, expectedCases);
     console.info(`Compared ${cases} full Native/SDK attachment template cases.`);
 });
 
