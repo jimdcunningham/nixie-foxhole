@@ -37,3 +37,16 @@ test('intersection floors and emplacement approaches publish convex clip unions 
     const area = triangulateStructureRegion(region).reduce((sum, [a, b, c]) => sum + Math.abs((b!.x - a!.x) * (c!.y - a!.y) - (b!.y - a!.y) * (c!.x - a!.x)) / 2, 0);
     assert.equal(area, 20);
 });
+
+test('native side strips never render again as rigid endpoint spans', () => {
+    for (const id of ['trenchconnectort1','trenchconnectort2','trenchconnectort3']) {
+        const asset=assets[id]!, plan=renderSpatialTrench(entity,data(id),asset)!;
+        const baked=['wallleft','wallright','dirtsplineleft','dirtsplineright','visualsplineleft','visualsplineright','floorsplineconnector'];
+        const indices=baked.flatMap(role=>asset.model!.pathProfile!.parts[role]?.meshIndices??[asset.model!.pathProfile!.parts[role]?.meshIndex]).filter(i=>i!==undefined);
+        assert.ok(!plan.nodes.some(n=>n.kind==='model-path'&&indices.includes(n.meshIndex)),id);
+        for(const role of ['wallback','wallfront']) {
+            const part=asset.model!.pathProfile!.parts[role]!;
+            assert.ok(plan.nodes.some(n=>n.kind==='model-path'&&n.meshIndex===part.meshIndex),id+': '+role);
+        }
+    }
+});

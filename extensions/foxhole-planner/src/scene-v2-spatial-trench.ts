@@ -24,7 +24,8 @@ export function renderSpatialTrench(entity: NixieExperimentalComponentEntitySnap
     const front = !!(data.endAttachmentNodeId || (data.endSocketName && data.socketAttachments?.[data.endSocketName]));
     const pieces = trenchWallPieces(layers, start, end, back, front).filter(p => p.id.startsWith('floorcover') ? settings['foxhole.structure.hideFloors'] !== true
         : p.id.startsWith('dirt:') ? settings['foxhole.structure.hideDirt'] !== true : settings['foxhole.structure.hideWalls'] !== true);
-    for (const frame of layers.filter(f => !f.id.startsWith('piece-'))) {
+    // Match V1: only front/back walls, dirt and corner caps belong to an endpoint.
+    for (const frame of layers.filter(f => /^(?:wall|corner|dirt)/.test(f.id) && /back|front/.test(f.id))) {
         const connected = frame.id.includes('back') ? back : front;
         if (connected && !frame.id.startsWith('dirtcorner'))
             continue;
