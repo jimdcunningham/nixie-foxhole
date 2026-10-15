@@ -105,4 +105,14 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     await rm(resolve(root, `raw/${id}.glb`)); await assert.rejects(run()); assert.equal((await result()).failed, 1);
     assert.ok((await result()).assets[0].error);
     assert.ok((await result()).totalMs > 0);
+    // A failure does not prevent later selected assets from being checked; repeated
+    // --only flags match the runner's actual targeted-refresh argument shape.
+    await put('scenes/powerline/scene.json', { scene: { roots: [] }, assets: { meshes: [] } });
+    await assert.rejects(run(['--only', 'powerline']));
+    assert.equal((await result()).failed, 1);
+    assert.equal((await result()).skipped, 1);
+    assert.equal((await result()).assets[1].id, 'powerline');
+    await rm(resolve(root, `scenes/${id}/scene.json`));
+    await run(); assert.equal((await result()).skipped, 1);
+    assert.equal((await result()).assets[0].reason, 'No extracted scene');
 });

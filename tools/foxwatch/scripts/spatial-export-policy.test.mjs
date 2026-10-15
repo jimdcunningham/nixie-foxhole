@@ -35,27 +35,18 @@ test('stale model and upgrade references outside scope are removed without mutat
     assert.ok('ship' in original.assets);
 });
 
-test('authored spatial policy includes facility defenses, utilities and locomotives', () => {
+test('catalog-wide policy includes every category, vehicles, items and damaged variants', () => {
     const authored = JSON.parse(readFileSync(new URL('../asset-overrides/spatial-models.json', import.meta.url)));
     const bundled = JSON.parse(readFileSync(new URL('../../../extensions/foxhole-planner/src/scene-v2-model-policy.json', import.meta.url)));
-    assert.deepEqual(authored.categoryIds, ['facility', 'power', 'mining', 'liquids', 'foundation', 'defense', 'misc', 'trains']);
-    assert.deepEqual(bundled.assets, authored.assets);
-    assert.deepEqual(bundled.categoryIds, authored.categoryIds);
-    const examples = [
-        { id: 'watchtower', codeName: 'WatchTower', categoryId: 'defense' },
-        { id: 'maintenancetunnel', codeName: 'MaintenanceTunnel', categoryId: 'misc' },
-        { id: 'crane', codeName: 'Crane', categoryId: 'misc', isVehicle: true },
-        { id: 'trainengine', codeName: 'TrainEngine', categoryId: 'trains', isVehicle: true },
-    ];
-    for (const asset of examples) {
-        assert.ok(authored.assets.includes(asset.id), asset.id);
-        if (asset.isVehicle) assert.ok(authored.groundedVehicles.includes(asset.id), asset.id);
-        assert.deepEqual(resolveSpatialExportPolicy({ ...authored, assets: [asset.id] }, { assets: examples }).targets, [asset.id]);
-        for (const flag of ['isDestroyed', 'isBreached']) {
-            assert.throws(() => resolveSpatialExportPolicy({ ...authored, assets: [asset.id] },
-                { assets: [{ ...asset, [flag]: true }] }), /outside spatial scope/);
-        }
-    }
-    assert.ok(authored.groundedVehicles.every(id => authored.assets.includes(id)));
-    assert.ok(!authored.assets.includes('truckc'));
+    assert.equal(authored.assetSelection, 'catalog');
+    assert.equal(bundled.assetSelection, authored.assetSelection);
+    const assets = [...catalog.assets, { id: 'newitem', categoryId: 'new-category', isItem: true },
+        { id: 'breached', codeName: 'Breached', isBreached: true, categoryId: 'bunker' }];
+    const policy = resolveSpatialExportPolicy(authored, { assets });
+    assert.deepEqual(policy.targets, assets.map(asset => asset.id));
+    assert.deepEqual(resolveSpatialExportPolicy(authored, { assets }, { only: ['ship', 'newitem', 'missing'] }).targets, ['ship', 'newitem']);
+    assert.equal(authored.groundAllVehicles, true);
+    assert.throws(() => resolveSpatialExportPolicy(authored, { assets: [{ id: '../escape' }] }), /Excluded spatial asset/);
+    const kept = filterSpatialModelManifest({ assets: { breached: {} } }, policy.allowedIds, { includeDamaged: true });
+    assert.ok(kept.assets.breached);
 });

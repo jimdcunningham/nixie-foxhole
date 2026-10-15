@@ -1,9 +1,10 @@
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import spatialPolicy from './scene-v2-model-policy.json' with { type: 'json' };
 
-const allowedModelIds = new Set(spatialPolicy.assets);
+const allowedCategories = new Set<string>(spatialPolicy.categoryIds);
+const allowedModelIds = new Set<string>(spatialPolicy.assets);
 export function isFoxholeSceneV2ModelAllowed(assetId: string): boolean {
-    return allowedModelIds.has(assetId) && !/destroyed|breached/i.test(assetId);
+    return /^[a-z0-9-]+$/.test(assetId) && (spatialPolicy.assetSelection === 'catalog' || allowedModelIds.has(assetId));
 }
 
 export interface FoxholeSceneV2ModelMetadata {
@@ -45,7 +46,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
     }
     const models = Object.entries(document.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id)).map(([assetId, model]) => {
         const asset = assets[assetId];
-        if (!asset || !spatialPolicy.categoryIds.includes(asset.category)
+        if (!asset || (spatialPolicy.assetSelection !== 'catalog' && !allowedCategories.has(asset.category))
             || asset.codeName !== model.codeName || model.path !== `models/${assetId}.glb`
             || model.resourceId !== `foxhole.model.${assetId}`
             || !['width', 'height', 'depth'].every(key => Number.isFinite(model[key as 'width']) && Number(model[key as 'width']) > 0)
@@ -57,7 +58,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
         return { id: assetId, assetId, path: model.path };
     });
     for (const [id, resource] of Object.entries(document.resources ?? {})) {
-        if (!isFoxholeSceneV2ModelAllowed(resource.assetId) || /destroyed|breached/i.test(id)) {
+        if (!isFoxholeSceneV2ModelAllowed(resource.assetId)) {
             continue;
         }
         if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(id) || !assets[resource.assetId] || !id.startsWith(`${resource.assetId}.`)

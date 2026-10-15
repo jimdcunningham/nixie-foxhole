@@ -13,7 +13,7 @@ import catalog from '../../../packages/extensions/foxhole/public/foxhole/assets/
 const modelBundle = { ...fullModelBundle,
     assets: Object.fromEntries(Object.entries(fullModelBundle.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id))),
     resources: Object.fromEntries(Object.entries(fullModelBundle.resources).filter(([id, value]) =>
-        isFoxholeSceneV2ModelAllowed(value.assetId) && !/destroyed|breached/i.test(id))) };
+        isFoxholeSceneV2ModelAllowed(value.assetId))) };
 
 const spatialAssetIds = Object.keys(modelBundle.assets);
 const selectionFile = new URL('../.model-build-selection', import.meta.url);
@@ -121,23 +121,22 @@ test('packaged models share their owning asset directory with textures and icons
     assert.equal(templates['foxhole.visual.'], 'dist/assets/scene-v2/shared/visuals/{id}.webp');
 });
 
-test('the explicit 3D allowlist covers the eight requested categories and excludes damaged variants', () => {
-    const expected = catalog.assets.filter(asset => spatialPolicy.categoryIds.includes(asset.categoryId)
-        && (!('isVehicle' in asset && asset.isVehicle) || ['misc', 'trains'].includes(asset.categoryId))
-        && !/destroyed|breached/i.test(`${asset.id} ${asset.codeName}`)).map(asset => asset.id).sort();
-    assert.deepEqual([...spatialPolicy.assets].sort(), expected);
+test('catalog-wide models bind every exportable category and keep unavailable models optional', () => {
+    assert.equal(spatialPolicy.assetSelection, 'catalog');
     assert.equal(spatialPolicy.geometryProfile, 'curved50-compact16');
-    for (const id of ['facilitymineoil', 'facilitymineresource1', 'facilitymineresource2', 'facilitymineresource3', 'facilitymineresource4',
-        'facilitypowerdiesel', 'facilitytransferliquid']) {
-        assert.ok(id in modelBundle.assets);
+    for (const asset of catalog.assets) assert.equal(isFoxholeSceneV2ModelAllowed(asset.id), true, asset.id);
+    assert.equal(isFoxholeSceneV2ModelAllowed('../escape'), false);
+    const selected = bindFoxholeSceneV2Models(structuredClone(assets), fullModelBundle);
+    assert.ok(selected.every(model => isFoxholeSceneV2ModelAllowed(model.assetId)));
+    for (const asset of catalog.assets) {
+        const catalogAssets = { [asset.id]: structuredClone(assets[asset.id]!) };
+        const metadata = catalogAssets[asset.id]!;
+        const models = bindFoxholeSceneV2Models(catalogAssets, { schemaVersion: 1, assets: { [asset.id]: {
+            codeName: metadata.codeName, resourceId: `foxhole.model.${asset.id}`, path: `models/${asset.id}.glb`,
+            width: 32, height: 32, depth: 32, offsetX: 0, offsetY: 0, offsetZ: 0,
+        } } });
+        assert.equal(models[0]!.assetId, asset.id);
     }
-    assert.ok(spatialAssetIds.every(id => !/destroyed|breached/i.test(id)));
-    for (const id of ['largecrane', 'truckc', 'mortartankc', 'largeshipaircraftc', 'aircraftbomberc']) {
-        assert.equal(assets[id]!.model, undefined);
-        assert.equal(isFoxholeSceneV2ModelAllowed(id), false);
-    }
-    const selected = bindFoxholeSceneV2Models(assets, fullModelBundle);
-    assert.ok(selected.every(model => isFoxholeSceneV2ModelAllowed(model.id.split('.')[0]!)));
     const manifest = JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8'));
     assert.deepEqual(new Set(manifest.contributes.experimentalResources.filter((resource: { kind: string; }) => resource.kind === 'model').map((resource: { id: string; }) => resource.id)), declaredBuild);
 });
@@ -163,7 +162,7 @@ test('facility upgrades reference declared parts assembled in the original bluep
         }
     }
     const expectedVariants = spatialAssetIds.reduce((count, id) => count + Object.values(assets[id]!.modifications)
-        .reduce((sum, slot) => sum + Object.entries(slot.variants).filter(([id, variant]) => variant.isUpgrade && !/destroyed|breached/i.test(id)).length, 0), 0);
+        .reduce((sum, slot) => sum + Object.entries(slot.variants).filter(([id, variant]) => variant.isUpgrade).length, 0), 0);
     assert.equal(variants, expectedVariants, 'every exported facility upgrade has its declared part');
 });
 

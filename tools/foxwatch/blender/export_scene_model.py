@@ -71,7 +71,7 @@ metadata = {
     "dimensionsMeters": list(dimensions),
     "boundsCenterMeters": list(center),
     "boundsMinMeters": list(low),
-    "sceneDimensions": {"width": dimensions.x * 32, "height": dimensions.z * 32, "depth": dimensions.y * 32},
+    "sceneDimensions": {"width": max(dimensions.x, 0.001) * 32, "height": max(dimensions.z, 0.001) * 32, "depth": max(dimensions.y, 0.001) * 32},
     "meshCount": len(meshes),
     "bakedMeshCount": baked_mesh_count,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),

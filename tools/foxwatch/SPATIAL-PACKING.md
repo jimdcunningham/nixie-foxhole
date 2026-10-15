@@ -2,9 +2,27 @@
 
 `scripts/publish-spatial-models.mjs` defaults to the approved `curved50-compact16` profile. Explicit `--geometry-profile=lossless` and `--geometry-profile=precision16` remain available for diagnostics. Compact integer positions/UVs and lower triangle targets are not part of this default.
 
-The explicit allowlist in `asset-overrides/spatial-models.json` contains 104 intact assets from Facilities, Power, Mining, Liquids, Foundations, Defenses, Utilities, and Locomotives (`facility`, `power`, `mining`, `liquids`, `foundation`, `defense`, `misc`, `trains`). Destroyed and breached assets/upgrade variants are excluded. The 17 allowlisted utility/rail vehicles use static ground-contact references via `groundedVehicles`; vehicles outside the explicit list remain excluded. Utilities here means the structure/vehicle `misc` category, not Utility inventory items. The list is a review boundary: new catalog entries do not automatically enter the spatial export. `--only` narrows this list; requests outside it are skipped so a normal refresh of a non-spatial asset still works.
+The authored `assetSelection: "catalog"` policy considers every catalog entry: structures,
+vehicles, aircraft, naval assets, items, and destroyed/breached states. New catalog entries
+become candidates automatically. `--only` narrows the selection and accepts repeated flags
+from targeted Monitor refreshes. The extension binds available validated model output using
+the same policy; an asset without exported output retains its 2D representation.
 
-The publisher filters stale out-of-scope base and part references from its output manifest and records `packingPolicy`. It does not delete old GLB files. The Nixie extension uses a matching policy snapshot to filter model bindings, copied files, and resource declarations, including previously generated files outside the approved list. Reconcile both snapshots deliberately when adding approved assets.
+Scenes without visible static meshes (including procedural-only cables and icon-only items)
+are skipped with a reason in the timing report. Missing scenes are also reported explicitly.
+Unexpected export/packing failures are collected while other assets continue, and the process
+exits unsuccessfully after saving the report. Failed assets do not retain model-manifest
+references to potentially partial output. Retry fixes/re-exports just the missing or changed groups.
+
+Vehicles use their static mesh contact bounds as ground references. Exported planar models
+receive a minimum 0.001-metre selection extent without changing their actual geometry.
+Existing upgrade assemblies, packing quality, source transforms, and resource bounds remain
+in effect. Availability means a static export exists; it does not assert interactive animation,
+articulation, in-game material parity, or per-asset visual review.
+
+The publisher records the effective catalog policy in its output manifest. It does not delete
+old GLB files. The matching extension policy admits available bases and parts across all
+categories while preserving catalog identity and validating model metadata and paths.
 
 The precision profile preserves all triangles and keeps the texture pipeline unchanged. It rounds position values to a shared power-of-two grid, normals/tangents to a 12-bit precision target, and UVs to a 16-bit fractional precision target. It retains FLOAT accessors and uses the existing `EXT_meshopt_compression` decoder format. It also reorders geometry for compression locality, uses the triangle index codec, and removes byte-identical complete vertex duplicates.
 

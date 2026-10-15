@@ -30,7 +30,10 @@ const catalog = JSON.parse(await readFile(resolve(outputRoot, 'manifest.v1.json'
 const only = args.flatMap((arg, index) => arg.startsWith('--only=') ? arg.slice(7).split(',')
     : arg === '--only' ? (args[index + 1] ?? '').split(',') : []).map(value => value.trim().toLowerCase()).filter(Boolean);
 const policy = resolveSpatialExportPolicy(config, catalog, { only: only.length ? only : undefined, geometryProfile: option('geometry-profile') });
-const { geometryProfile, targets } = policy;
+const categories = args.flatMap((arg, index) => arg.startsWith('--category=') ? arg.slice(11).split(',')
+    : arg === '--category' ? (args[index + 1] ?? '').split(',') : []).map(value => value.trim().toLowerCase()).filter(Boolean);
+const { geometryProfile } = policy;
+const targets = policy.targets.filter(id => !categories.length || categories.includes(catalog.assets.find(asset => asset.id === id).categoryId));
 if (policy.skipped.length) console.log(`Skipping spatial assets outside the intact asset allowlist: ${policy.skipped.join(', ')}`);
 if (config.unitsPerMetre !== 32 || ![512, 1024].includes(config.maxTextureSize)) throw new Error('Invalid authored spatial export profile');
 const modelRoot = resolve(outputRoot, 'models');
@@ -41,8 +44,8 @@ let manifest = { schemaVersion: 1, assets: {}, resources: {} };
 try { manifest = JSON.parse(await readFile(resolve(modelRoot, 'manifest.v1.json'), 'utf8')); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 manifest.resources ??= {};
-manifest = filterSpatialModelManifest(manifest, policy.allowedIds);
-manifest.packingPolicy = { categoryIds: config.categoryIds, assets: config.assets,
+manifest = filterSpatialModelManifest(manifest, policy.allowedIds, { includeDamaged: config.assetSelection === 'catalog' });
+manifest.packingPolicy = { assetSelection: config.assetSelection, categoryIds: config.categoryIds, assets: [...policy.allowedIds],
     defaultGeometryProfile: config.geometryProfile ?? 'curved50-compact16' };
 
 const startedAt = performance.now();
@@ -79,7 +82,7 @@ function filteredScene(document, mode) {
 }
 function meshCount(document, mode) {
     let count = 0;
-    const visit = node => { if (node.meshId) count++; node.children.forEach(visit); };
+    const visit = node => { if (node.meshId || node.primitive?.type === 'trench_berm') count++; node.children.forEach(visit); };
     filteredScene(document, mode).scene.roots.forEach(visit);
     return count;
 }
@@ -104,7 +107,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
     const binary = bytes.subarray(28 + jsonLength);
     const geometryOptimization = pruneUnusedStaticGltfUvs(document);
-    const imageViews = new Map(document.images.map(image => [image.bufferView, image]));
+    const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
     const chunks = [];
     let length = 0;
     for (const [index, view] of document.bufferViews.entries()) {
@@ -122,7 +125,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
         ? await compressSpatialMeshopt(document, Buffer.concat(chunks))
         : await optimizeSpatialGeometry(document, Buffer.concat(chunks), geometryProfile);
     const packed = compression.binary;
-    for (const texture of document.textures) {
+    for (const texture of document.textures ?? []) {
         texture.extensions ??= {};
         texture.extensions.EXT_texture_webp = { source: texture.source };
         delete texture.source;
@@ -162,13 +165,26 @@ for (const id of targets) {
     const timing = { id, status: 'failed', checkMs: 0, exportMs: 0, packMs: 0, models: 0 };
     timings.push(timing);
     try {
-    if (!/^[a-z0-9-]+$/.test(id) || /destroyed|breached/i.test(id)) throw new Error(`Excluded spatial asset: ${id}`);
+    if (!/^[a-z0-9-]+$/.test(id)) throw new Error(`Excluded spatial asset: ${id}`);
     const asset = catalog.assets.find(entry => entry.id === id);
     if (!asset) throw new Error(`Missing real catalog entry: ${id}`);
     const scenePath = resolve(sceneRoot, id, 'scene.json');
-    const scene = JSON.parse(await readFile(scenePath, 'utf8'));
+    let scene;
+    try { scene = JSON.parse(await readFile(scenePath, 'utf8')); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        timing.status = 'skipped'; timing.reason = 'No extracted scene';
+        delete manifest.assets[id];
+        for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
+        continue;
+    }
+    if (!meshCount(scene, 'whole')) {
+        timing.status = 'skipped'; timing.reason = 'Scene has no visible static mesh';
+        delete manifest.assets[id];
+        for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
+        continue;
+    }
     const upgrades = (asset.modifications ?? []).flatMap(slot => Object.entries(slot.variants ?? {})
-        .filter(([variantId, variant]) => variant.isUpgrade && !/destroyed|breached/i.test(variantId))
+        .filter(([variantId, variant]) => variant.isUpgrade)
         .map(([variantId]) => ({ slotId: slot.name, variantId })));
     const useAssembly = config.includeUpgrades && upgrades.length > 0;
     const hasCore = meshCount(scene, 'base') > 0;
@@ -190,7 +206,7 @@ for (const id of targets) {
     }
     const identity = cache.identity(id, inputs, { geometryProfile, unitsPerMetre: config.unitsPerMetre,
         maxTextureSize: config.maxTextureSize, webpQuality: config.webpQuality, includeUpgrades: config.includeUpgrades,
-        grounded: config.groundedVehicles?.includes(id) ?? false, groundReference: config.placementGroundReferences?.[id],
+        grounded: !!(config.groundAllVehicles && asset.isVehicle || config.groundedVehicles?.includes(id)), groundReference: config.placementGroundReferences?.[id],
         codeName: asset.codeName, upgrades, repack }, outputIds.map(outputId => resolve(modelRoot, `${outputId}.glb`)));
     const cached = force ? null : await cache.lookup(identity);
     timing.checkMs = performance.now() - assetStartedAt;
@@ -205,7 +221,7 @@ for (const id of targets) {
     }
     const raw = await timedExport(id, scenePath, useAssembly && hasCore ? 'base' : 'whole');
     let groundReference = config.placementGroundReferences?.[id];
-    if (config.groundedVehicles?.includes(id)) groundReference = { zMetres: raw.exported.boundsMinMeters[2], basis: 'static-vehicle-contact' };
+    if (config.groundAllVehicles && asset.isVehicle || config.groundedVehicles?.includes(id)) groundReference = { zMetres: raw.exported.boundsMinMeters[2], basis: 'static-vehicle-contact' };
     for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
     let assembly;
     if (useAssembly) {
@@ -246,20 +262,24 @@ for (const id of targets) {
     }
     } catch (error) {
         timing.error = error.message;
-        throw error;
+        delete manifest.assets[id];
+        for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
+        console.error(`Spatial ${id} failed: ${error.message}`);
     } finally {
         timing.totalMs = performance.now() - assetStartedAt;
-        console.log(`Spatial ${id}: ${timing.status}, ${(timing.totalMs / 1000).toFixed(2)}s (check ${(timing.checkMs / 1000).toFixed(2)}s, export ${(timing.exportMs / 1000).toFixed(2)}s, pack ${(timing.packMs / 1000).toFixed(2)}s)`);
+        console.log(`Spatial ${id}: ${timing.status}${timing.reason ? ` (${timing.reason})` : ''}, ${(timing.totalMs / 1000).toFixed(2)}s (check ${(timing.checkMs / 1000).toFixed(2)}s, export ${(timing.exportMs / 1000).toFixed(2)}s, pack ${(timing.packMs / 1000).toFixed(2)}s)`);
     }
 }
 await writeJsonAtomic(resolve(modelRoot, 'manifest.v1.json'), manifest);
+if (timings.some(row => row.status === 'failed')) process.exitCode = 1;
 } finally {
     const report = { schemaVersion: 1, createdAt: new Date().toISOString(), totalMs: performance.now() - startedAt,
         exported: timings.filter(row => row.status === 'exported').length,
         reused: timings.filter(row => row.status === 'reused').length,
+        skipped: timings.filter(row => row.status === 'skipped').length,
         failed: timings.filter(row => row.status === 'failed').length, assets: timings };
     await writeJsonAtomic(timingReportPath, report);
-    console.log(`Spatial models: ${report.exported} exported, ${report.reused} reused, ${report.failed} failed; ${(report.totalMs / 1000).toFixed(2)}s. Timings: ${timingReportPath}`);
+    console.log(`Spatial models: ${report.exported} exported, ${report.reused} reused, ${report.skipped} skipped, ${report.failed} failed; ${(report.totalMs / 1000).toFixed(2)}s. Timings: ${timingReportPath}`);
 }
 
 function run(command, arguments_) {
