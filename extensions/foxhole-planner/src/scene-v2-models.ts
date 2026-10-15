@@ -1,13 +1,33 @@
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import spatialPolicy from './scene-v2-model-policy.json' with { type: 'json' };
 
+export function readFoxholeSpatialPathProfile(value: unknown): FoxholeSpatialPathProfile | undefined {
+    if (value === undefined) return undefined;
+    const profile = value as FoxholeSpatialPathProfile;
+    const validPoint = (value: unknown): value is [number, number, number] => Array.isArray(value) && value.length === 3
+        && value.every(n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1_000_000);
+    if (!profile || profile.version !== 1 || !profile.parts || Array.isArray(profile.parts)
+        || Object.keys(profile.parts).length > 16 || !Object.values(profile.parts).every(part => part && Number.isInteger(part.meshIndex)
+            && part.meshIndex >= 0 && part.meshIndex <= 1023 && validPoint(part.origin))
+        || profile.endOrigin !== undefined && !validPoint(profile.endOrigin)) throw new Error('Invalid Foxhole spatial profile');
+    return structuredClone(profile);
+}
+
 const allowedCategories = new Set<string>(spatialPolicy.categoryIds);
 const allowedModelIds = new Set<string>(spatialPolicy.assets);
 export function isFoxholeSceneV2ModelAllowed(assetId: string): boolean {
     return /^[a-z0-9-]+$/.test(assetId) && (spatialPolicy.assetSelection === 'catalog' || allowedModelIds.has(assetId));
 }
 
+export interface FoxholeSpatialPathProfile {
+    version: 1;
+    parts: Record<string, { meshIndex: number; origin: [number, number, number]; }>;
+    endOrigin?: [number, number, number];
+}
+
 export interface FoxholeSceneV2ModelMetadata {
+    pathProfile?: FoxholeSpatialPathProfile;
+    insulatedPathProfile?: FoxholeSpatialPathProfile;
     resourceId: string;
     width: number;
     height: number;
@@ -34,8 +54,8 @@ export function getFoxholeSceneV2PackagedModelPath(model: FoxholeSceneV2ModelSou
 
 /** Join generated spatial output to the real catalog identity, never a preview product. */
 export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2AssetMetadata>,
-    document: { schemaVersion: number; assets: Record<string, FoxholeSceneV2ModelMetadata & { path: string; codeName: string; }>;
-        resources?: Record<string, FoxholeSceneV2ModelMetadata & { path: string; assetId: string; }>; }) {
+    document: { schemaVersion: number; assets: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile'> & { pathProfile?: unknown; } & { path: string; codeName: string; }>;
+        resources?: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile'> & { pathProfile?: unknown; } & { path: string; assetId: string; }>; }) {
     if (document.schemaVersion !== 1) {
         throw new Error('Unsupported Foxhole model bundle version.');
     }
@@ -53,7 +73,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             || !Number.isFinite(model.offsetX) || !Number.isFinite(model.offsetY) || !Number.isFinite(model.offsetZ)) {
             throw new Error(`Invalid Foxhole model binding: ${assetId}`);
         }
-        asset.model = { resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
+        asset.model = { ...(model.pathProfile ? { pathProfile: readFoxholeSpatialPathProfile(model.pathProfile) } : {}), resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
             offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ };
         return { id: assetId, assetId, path: model.path };
     });
@@ -66,6 +86,9 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             || !['width', 'height', 'depth'].every(key => Number.isFinite(resource[key as 'width']) && resource[key as 'width'] > 0)
             || !['offsetX', 'offsetY', 'offsetZ'].every(key => Number.isFinite(resource[key as 'offsetX']))) {
             throw new Error(`Invalid Foxhole model-part binding: ${id}`);
+        }
+        if (id === `${resource.assetId}.upgrade.insulation` && assets[resource.assetId]?.model && resource.pathProfile) {
+            assets[resource.assetId]!.model!.insulatedPathProfile = readFoxholeSpatialPathProfile(resource.pathProfile);
         }
         models.push({ id, assetId: resource.assetId, path: resource.path });
     }
@@ -89,4 +112,10 @@ export function selectFoxholeSceneV2ModelBuild(
         if (!selected.has(id)) delete asset.model;
     }
     return models.filter(model => selected.has(model.assetId));
+}
+
+/** Export recipes belong to runtime metadata, never persisted model components. */
+export function getFoxholeSceneV2ModelComponentData(model: FoxholeSceneV2ModelMetadata) {
+    return { resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
+        offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ };
 }

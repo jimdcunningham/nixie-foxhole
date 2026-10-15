@@ -30,7 +30,7 @@ export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponent
             motion: { kind: 'spring-sway', amplitude: Math.max(2, Math.min(12, distance * 0.025)), frequency: 0.42, phase },
             ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) }] };
     }
-    if (data.foxholeKey !== 'facilitypipe' || !asset?.model) return undefined;
+    if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey) || !asset?.model) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
     if (path.totalLength < 1e-8) return undefined;
     const points = path.points.flatMap((point, i) => [point.x, point.y,
@@ -38,6 +38,18 @@ export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponent
     const selections = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner' && component.componentId === 'modification'
         && component.definitionAvailable)?.data.selections;
     const insulated = Array.isArray(selections) && selections.some(row => row && typeof row === 'object' && !Array.isArray(row) && row.variantId === 'insulation');
+    if (data.foxholeKey === 'facilitypipeoverhead') {
+        const profile = insulated ? asset.model.insulatedPathProfile : asset.model.pathProfile;
+        if (!profile?.parts.span || !profile.parts.start || !profile.parts.end || !profile.endOrigin) return undefined;
+        const config = asset.connector?.meshConfigs[0];
+        return { contractVersion: 1, nodes: [{ id: 'overhead-pipeline', kind: 'model-path', points,
+            resourceId: insulated ? 'foxhole.model.facilitypipeoverhead.upgrade.insulation' : asset.model.resourceId,
+            unitsPerMetre: 32, meshIndex: profile.parts.span.meshIndex,
+            startMeshIndex: profile.parts.start.meshIndex, endMeshIndex: profile.parts.end.meshIndex,
+            startInset: config?.startOffset ?? 70.4, endInset: config?.endOffset ?? 70.4,
+            startOrigin: [0,0,0], endOrigin: profile.endOrigin,
+            ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) }] };
+    }
     return { contractVersion: 1, nodes: [{ id: 'pipeline', kind: 'model-path', points,
         resourceId: insulated ? 'foxhole.model.facilitypipe.upgrade.insulation' : asset.model.resourceId,
         unitsPerMetre: 32, meshIndex: 0, startMeshIndex: 1, endMeshIndex: 2,

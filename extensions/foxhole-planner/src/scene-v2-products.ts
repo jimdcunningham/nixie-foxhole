@@ -1,3 +1,4 @@
+import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import type {
     NixieExperimentalComponentProductTemplateV1,
     NixieExperimentalProductQueryV1,
@@ -180,7 +181,7 @@ export function listFoxholeSceneV2Products(
                         version: 1,
                         data: { catalogId: 'foxhole.structures', assetId },
                     }, ...(metadata.model
-                        ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'model', version: 1, data: { ...metadata.model } }]
+                        ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'model', version: 1, data: getFoxholeSceneV2ModelComponentData(metadata.model) }]
                         : []), ...(metadata.connector?.spline
                         ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1,
                             data: createFoxholeSceneV2SplineProductData(assetId, metadata.connector) }]

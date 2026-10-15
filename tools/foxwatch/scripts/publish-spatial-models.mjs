@@ -8,6 +8,7 @@ import { SpatialDependencies, SpatialModelCache } from './spatial-model-cache.mj
 import { writeJsonAtomic } from './pipeline-core.mjs';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
+import { spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
 import { pruneUnusedStaticGltfUvs } from './spatial-gltf-geometry.mjs';
 import { compressSpatialMeshopt } from './spatial-meshopt.mjs';
 import { optimizeSpatialGeometry } from './spatial-geometry.mjs';
@@ -60,7 +61,7 @@ const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
     .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
     .map(name => resolve(foxwatchRoot, 'blender', name));
 sourceFiles.push(...['publish-spatial-models.mjs', 'spatial-model-cache.mjs', 'visual-output-cache.mjs',
-    'spatial-export-policy.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
+    'spatial-export-policy.mjs', 'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs']
     .map(name => resolve(foxwatchRoot, 'scripts', name)));
 const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(foxwatchRoot, 'tmp/pipeline-cache/v1/spatial-models'),
     sourceFiles, { blender: blenderVersion, sharp: sharp.versions,
@@ -96,9 +97,12 @@ function coreSignature(document) {
 
 async function exportRaw(id, scenePath, slice) {
     const path = resolve(temporaryRoot, `${id}.glb`);
+    const preparedPath = resolve(temporaryRoot, `${id}.scene.json`);
+    const original = JSON.parse(await readFile(scenePath, 'utf8'));
+    await writeJsonAtomic(preparedPath, prepareSpatialConnectorScene(id.split('.')[0], original));
     if (!args.includes('--repack-existing')) await run(blender, ['--background', '--python-exit-code', '1', '--python',
         resolve(foxwatchRoot, 'blender/export_scene_model.py'), '--', '--foxwatch-root', foxwatchRoot, '--asset-root', sourceRoot,
-        '--scene', scenePath, '--slice', slice, '--max-texture-size', String(config.maxTextureSize), '--output', path, '--temp-dir', temporaryRoot]);
+        '--scene', preparedPath, '--slice', slice, '--max-texture-size', String(config.maxTextureSize), '--output', path, '--temp-dir', temporaryRoot]);
     return { bytes: await readFile(path), exported: JSON.parse(await readFile(`${path}.json`, 'utf8')) };
 }
 async function publish(id, asset, scenePath, raw, groundReference, assembly) {
@@ -106,6 +110,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     const jsonLength = bytes.readUInt32LE(12);
     const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
     const binary = bytes.subarray(28 + jsonLength);
+    const pathProfile = spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
     const geometryOptimization = pruneUnusedStaticGltfUvs(document);
     const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
     const chunks = [];
@@ -147,7 +152,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     if (glb.length > 32 * 1024 * 1024 || compression.decodedGeometryBytes > 128 * 1024 * 1024) throw new Error(`Model exceeds bounded resource limits: ${id} (${glb.length} bytes)`);
     await writeFile(resolve(modelRoot, `${id}.glb`), glb);
     console.log(`Published ${id}: ${glb.length} bytes; meshopt saved ${compression.bytesSaved}`);
-    return { assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: `models/${id}.glb`,
+    return { ...(pathProfile ? { pathProfile } : {}), assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: `models/${id}.glb`,
         ...exported.sceneDimensions, offsetX: anchor.offsetX, offsetY: anchor.offsetY, offsetZ: anchor.offsetZ,
         blueprintOrigin: { x: 0, y: 0, z: -groundZ * 32 }, groundReference: groundReference ?? { zMetres: 0, basis: 'blueprint-origin' },
         triangles: compression.precisionOptimization?.triangles ?? exported.triangles, ...geometryOptimization, meshoptBytesSaved: compression.bytesSaved,
@@ -199,7 +204,7 @@ for (const id of targets) {
     ] : [];
     const outputIds = [id, ...partIds];
     const inputs = [];
-    for (const [path, document] of scenes) inputs.push({ path, document, dependencies: await dependencies.scene(document) });
+    for (const [path, document] of scenes) inputs.push({ path, document, dependencies: await dependencies.scene(prepareSpatialConnectorScene(id, document)) });
     if (repack) for (const outputId of outputIds) for (const suffix of ['.glb', '.glb.json']) {
         const path = resolve(temporaryRoot, outputId + suffix);
         inputs.push({ path, hash: createHash('sha256').update(await readFile(path)).digest('hex') });

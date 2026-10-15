@@ -49,6 +49,9 @@ center = (low + high) * 0.5
 meshes = [obj for obj in collection.all_objects if obj.type == "MESH" and not obj.hide_render]
 if not meshes:
     raise RuntimeError("The authored scene did not resolve any meshes")
+mesh_parts = [{"name": obj.name, "origin": [obj.matrix_world.translation.x * 32,
+    -obj.matrix_world.translation.y * 32, obj.matrix_world.translation.z * 32]} for obj in meshes]
+
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
 
@@ -73,6 +76,7 @@ metadata = {
     "boundsMinMeters": list(low),
     "sceneDimensions": {"width": max(dimensions.x, 0.001) * 32, "height": max(dimensions.z, 0.001) * 32, "depth": max(dimensions.y, 0.001) * 32},
     "meshCount": len(meshes),
+    "meshParts": mesh_parts,
     "bakedMeshCount": baked_mesh_count,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),
