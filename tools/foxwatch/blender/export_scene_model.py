@@ -40,6 +40,14 @@ document["render"].pop("clipBounds", None)
 document = slice_spatial_scene(document, args.slice)
 collection = import_render_scene(document, [args.asset_root])
 bpy.context.view_layer.update()
+curves = [obj for obj in collection.all_objects if obj.type == "CURVE" and not obj.hide_render]
+if curves:
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in curves:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = curves[0]
+    bpy.ops.object.convert(target="MESH")
+bpy.context.view_layer.update()
 low, high = collection_world_bounds(collection)
 dimensions = high - low
 center = (low + high) * 0.5

@@ -36,6 +36,12 @@ export function readFoxholeStructuralModelProfile(value: unknown): FoxholeStruct
     const names=(value:unknown): value is string[]=>Array.isArray(value)&&value.length<=256&&value.every(name=>typeof name==='string'&&name.length>0&&name.length<=256&&!/[\u0000-\u001f]/.test(name));
     if(!profile||profile.version!==1||!profile.layers||Array.isArray(profile.layers)||Object.keys(profile.layers).length>128
         ||!Object.values(profile.layers).every(names))throw Error('Invalid Foxhole structural profile');
+    const token=(value:unknown)=>typeof value==='string'&&value.length>0&&value.length<=128&&!/[\u0000-\u001f]/.test(value);
+    if(profile.modifications!==undefined&&(!Array.isArray(profile.modifications)||profile.modifications.length>128
+        ||profile.modifications.some(part=>!part||!token(part.slotId)||!token(part.variantId)||!names(part.nodeNames)
+            ||!names(part.replacesLayers)||part.replacesLayers.some(id=>!profile.layers[id]))))throw Error('Invalid Foxhole structural modifications');
+    if(new Set([...Object.values(profile.layers).flat(),...(profile.modifications??[]).flatMap(part=>part.nodeNames)]).size>256)
+        throw Error('Foxhole structural profile exceeds visibility budget');
     return structuredClone(profile);
 }
 export interface FoxholeSceneV2ModelMetadata {

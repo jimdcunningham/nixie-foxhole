@@ -8,7 +8,7 @@ import { SpatialDependencies, SpatialModelCache } from './spatial-model-cache.mj
 import { writeJsonAtomic } from './pipeline-core.mjs';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { prepareSpatialStructureScene, spatialStructureProfile } from './spatial-structure-profiles.mjs';
+import { prepareSpatialStructureScene, prepareSpatialStructureModifications, spatialStructureProfile } from './spatial-structure-profiles.mjs';
 import { spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
 import { pruneUnusedStaticGltfUvs } from './spatial-gltf-geometry.mjs';
 import { compressSpatialMeshopt } from './spatial-meshopt.mjs';
@@ -69,6 +69,12 @@ const cache = await SpatialModelCache.create(option('cache-root') ?? resolve(fox
         meshoptimizer: JSON.parse(await readFile(resolve(repositoryRoot, 'node_modules/meshoptimizer/package.json'), 'utf8')).version });
 const dependencies = new SpatialDependencies(sourceRoot);
 const preparedStructures = new Map();
+const structuralSharedIds = new Map();
+try {
+    const index=JSON.parse(await readFile(resolve(foxwatchRoot,'tmp/modification-render-index.v1.json'),'utf8'));
+    for(const entry of Object.values(index.entries??{}))for(const consumer of entry.consumers??[])
+        structuralSharedIds.set(consumer.structureId+':'+consumer.slotName+':'+consumer.variantId,entry.renderId);
+}catch(error){if(error.code!=='ENOENT')throw error;}
 
 function filteredScene(document, mode) {
     const copy = structuredClone(document);
@@ -144,7 +150,7 @@ async function publish(id, asset, scenePath, raw, groundReference, assembly) {
     if (!center?.every(Number.isFinite) || !Number.isFinite(groundZ)) throw new Error(`Invalid authored origin: ${id}`);
     const anchor = { version: 1, ...exported.sceneDimensions, offsetX: center[0] * 32, offsetY: -center[1] * 32, offsetZ: (center[2] - groundZ) * 32 };
     document.asset.extras = { ...document.asset.extras, nixieModelAnchor: anchor,
-        nixieBlueprintOrigin: { version: 1, x: 0, y: 0, z: -groundZ * 32 }, ...(assembly ? { nixieModelAssembly: assembly } : {}) };
+        nixieBlueprintOrigin: { version: 1, x: 0, y: 0, z: -groundZ * 32 }, ...(structuralProfile ? { nixieStructuralProfile: structuralProfile } : {}), ...(assembly ? { nixieModelAssembly: assembly } : {}) };
     let json = Buffer.from(JSON.stringify(document));
     json = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4, 32)]);
     const header = Buffer.alloc(20);
@@ -191,7 +197,11 @@ for (const id of targets) {
         for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
         continue;
     }
-    scene = prepareSpatialStructureScene(asset, scene);
+    scene = await prepareSpatialStructureModifications(asset,prepareSpatialStructureScene(asset, scene),async path=>{
+        if(!/^[a-z0-9/-]+\.scene\.json$/.test(path))throw Error('Invalid structural scene reference');
+        try{return JSON.parse(await readFile(resolve(sceneRoot,path),'utf8'));}
+        catch(error){if(error.code==='ENOENT')return undefined;throw error;}
+    },structuralSharedIds);
     preparedStructures.set(id, scene);
     const upgrades = (asset.modifications ?? []).flatMap(slot => Object.entries(slot.variants ?? {})
         .filter(([variantId, variant]) => variant.isUpgrade)

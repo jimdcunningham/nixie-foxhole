@@ -397,6 +397,14 @@ Overhead pipelines use native start/end supports, a repeatable connecting span, 
 
 `spatial-connector-profiles.mjs` prepares export-only scenes: it removes the sample span's axial stretch and adds the fence middle-post prototype when the minimum-length sample has no instance. Canonical 2D scenes remain unchanged. A subsequent deep refresh through FoxWatch Monitor rebuilds these profiles automatically; no separate render command or full batch is required to wire support.
 
+## Structural 3D layers and modifications
+
+Spatial export preserves authored bunker, trench, and foundation component identities in a versioned `structuralProfile`. Composite component scenes define roles such as roof plus roof dirt; Blender transform baking keeps these roles as named GLB groups. Foundation borders and corner pillars follow the existing socket visibility rules, and the floor group supplies the ground-contact surface.
+
+Bunker and trench non-upgrade modifications are included in their owning asset GLB, parented under the original slot hierarchy. Canonical shared modification identities resolve shared prototypes; slot-specific scenes take precedence. Doors, firing ports, stairs, roofs, bridges, sandbags, wire, and infrastructure use independent groups. The Planner shows selected groups, hides replaced default walls, and applies connected-wall and roof/wall settings. Selection data stays unchanged; the visibility recipe is resource metadata.
+
+The asset GLB loads on demand with its optional groups included. Existing model size and visibility budgets still apply. Prepared scenes and their mesh/material dependencies participate in the normal export cache, so the next Monitor deep refresh produces the new bindings without a separate migration. Missing modification scenes or ambiguous slots fail the individual export explicitly. Canonical 2D scenes are unchanged. Dynamic trench-connector spline deformation and partial polygon clipping are separate from these component visibility recipes.
+
 ## Publish safety
 
 `publish-manifest` protects against accidentally publishing a targeted source manifest as though it were a full manifest.

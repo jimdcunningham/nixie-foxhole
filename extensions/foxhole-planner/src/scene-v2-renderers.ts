@@ -80,6 +80,8 @@ const stockpileAssetIdsByCodeName = new Map(Object.entries(assetMetadataById).fl
     ? [[`${asset.isItem ? 'Items' : asset.isVehicle ? 'Vehicles' : 'Structures'}:${asset.codeName.toLowerCase()}`, id] as const] : []));
 
 interface ResolvedFoxholeSceneV2Modification {
+    slotId: string;
+    variantId: string;
     slot: FoxholeSceneV2ModificationSlotMetadata;
     variant: FoxholeSceneV2ModificationVariantMetadata;
 }
@@ -652,6 +654,16 @@ export function renderFoxholeSceneV2Entity(
     const renderedLayers = new Set(spatialRendered.map(node => node.id));
     const hiddenModelNodes = !structural && renderedLayers.has('building-texture') ? [] : Object.entries((assetMetadata as FoxholeModelLayerMetadata).modelLayerNodes ?? {})
         .flatMap(([layerId, names]) => renderedLayers.has(`structure-layer-${layerId}`) ? [] : names);
+    if (structural?.modifications) {
+        const active = !appearance.destroyed && !appearance.packaged ? selectedFoxholeSceneV2Modifications(entity,assetMetadata)
+            .filter(entry=>!entry.variant.isUpgrade && (context.settings?.['foxhole.structure.hideRoofs']!==true || !isFoxholeRoofModification(entry.variant))) : [];
+        for (const part of structural.modifications) {
+            const selected=active.some(entry=>entry.slotId===part.slotId&&entry.variantId===part.variantId);
+            const blocked=part.replacesLayers.some(id=>!renderedLayers.has('structure-layer-'+id));
+            if(!selected||blocked)hiddenModelNodes.push(...part.nodeNames);
+            if(selected)for(const id of part.replacesLayers)hiddenModelNodes.push(...structural.layers[id]??[]);
+        }
+    }
     const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint);
     const placement = resolveFoxholeStructurePlacement(entity, context, assetMetadataById);
     let placementSpatial = renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement);
@@ -667,7 +679,7 @@ export function renderFoxholeSceneV2Entity(
     }
     if (hiddenModelNodes.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
-            ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes };
+            ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes: [...new Set(hiddenModelNodes)] };
     }
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
