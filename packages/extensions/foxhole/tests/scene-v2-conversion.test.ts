@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { registerFoxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 import { createFoxholeSplineConnectorSnapshot } from '../app/plugins/foxhole/nixie/spline-connector-snapshot.ts';
 import { getFoxholeManifest } from '../app/plugins/foxhole/nixie/manifest.ts';
 import { readNixieSceneV2EditableSpline } from '../../../nixie/desktop-extensions/scene-v2-spline-editing.ts';
+
+registerFoxholeSceneV2HostPolicy();
 
 test('authored Wall Tier 1 remains insertable with the implemented spline handles and finalizer', () => {
     const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === 'wallsplinet1')!;
@@ -18,7 +21,7 @@ test('authored Wall Tier 1 remains insertable with the implemented spline handle
     const spline = readNixieSceneV2EditableSpline({ ...entity,
         components: entity.components.map(component => ({ ...component, definitionAvailable: true })) });
     assert.equal(spline?.componentId, 'spline-connector');
-    assert.equal(spline?.data.foxholeKey, 'wallsplinet1');
+    assert.equal(entity.components.find(component => component.componentId === 'spline-connector')?.data.foxholeKey, 'wallsplinet1');
     assert.deepEqual(snapshot, original);
 });
 
@@ -529,7 +532,7 @@ test('Foxhole connectors remap live attachments to Scene V2 entity IDs', () => {
     ]);
 });
 
-test('Foxhole spline connectors convert live attachments and preserve unsupported network statistics', () => {
+test('Foxhole spline connectors preserve live attachments without blocking insertion', () => {
     const result = convertNixieSceneV1ToV2([attachmentTarget(), {
         id: 'spline-connector-1',
         type: 'foxholeSplineConnector',
@@ -567,10 +570,10 @@ test('Foxhole spline connectors convert live attachments and preserve unsupporte
     }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
 
     assert.equal(result.report.supportedNodeCount, 2);
-    assert.equal(result.report.visualParity, false);
+    assert.equal(result.report.visualParity, true);
     assert.ok(!result.report.issues.some(issue => issue.message.includes('spline endpoint socket-snapping')));
     assert.ok(!result.report.issues.some(issue => issue.message.includes('attached socket')));
-    assert.ok(result.report.issues.some(issue => issue.message.includes('network statistics')));
+    assert.deepEqual(result.report.issues, []);
     const connector = result.content.entities[1]?.components.find(component => component.componentId === 'spline-connector');
     assert.deepEqual(connector?.data, {
         foxholeKey: 'facilitypipe',
@@ -639,7 +642,7 @@ test('Foxhole structure socket topology becomes remapped Scene V2 component data
             targetSocketName: 'Pipe',
         }],
     });
-    assert.ok(result.report.issues.some(issue => issue.message.includes('network statistics')));
+    assert.deepEqual(result.report.issues, []);
     assert.ok(!result.report.issues.some(issue => issue.message.includes('not represented')));
 });
 
@@ -797,4 +800,22 @@ test('Foxhole triangulations convert to fitted renderer data without losing disp
         visible: true,
         alpha: 0.8,
     });
+});
+
+test('invalid socket topology still blocks insertion rather than claiming parity', () => {
+    for (const [socketAttachments, expected] of [
+        [[], /malformed/],
+        [{ Pipe: { nodeId: 'missing', socketName: 'Pipe' } }, /missing or ambiguous/],
+        [{ Pipe: { nodeId: 'factory-1' } }, /malformed/],
+        [Object.fromEntries(Array.from({ length: 129 }, (_, index) => [String(index), { nodeId: 'factory-1', socketName: 'Pipe' }])), /component limit/],
+    ] as const) {
+        const source = [attachmentTarget(), { ...attachmentTarget(), id: 'factory-2', state: {
+            ...attachmentTarget().state, socketAttachments,
+        } }];
+        const original = structuredClone(source);
+        const result = convertNixieSceneV1ToV2(source, { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+        assert.equal(result.report.visualParity, false);
+        assert.ok(result.report.issues.some(issue => issue.code === 'unsupported-state' && expected.test(issue.message)));
+        assert.deepEqual(source, original);
+    }
 });

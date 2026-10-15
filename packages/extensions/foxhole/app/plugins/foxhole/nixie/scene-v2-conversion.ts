@@ -360,11 +360,6 @@ function convertSocketAttachments(
         ));
     }
 
-    if (attachments.length > 0) {
-        issues.push(unsupportedStateIssue(
-            'Foxhole socket topology is preserved in Scene V2 and structure sockets can be authored by dragging; network statistics are not exposed yet.',
-        ));
-    }
     return { attachments, issues };
 }
 
