@@ -19,7 +19,7 @@ export default defineNuxtPlugin({
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
         registerFoxholeSceneV2HostPolicy();
         // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
-        registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', '/foxhole/assets/models/facilitytransferresource.glb');
+        registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', '/foxhole/assets/types/structures/facilitytransferresource/facilitytransferresource.glb');
         registerNixieExtension({
             id: 'nixie.foxhole-planner',
             aliases: ['foxhole'],

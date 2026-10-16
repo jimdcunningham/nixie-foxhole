@@ -7,6 +7,18 @@ import { readNixieSceneV2Model } from '../../../../nixie/desktop-extensions/scen
 import { parseNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
 import { registerNixieSceneV2ModelAssembly, resolveNixieSceneV2ModelParts } from '../../../../nixie/app/plugins/nixie/scene-v2/spatial-model-assembly.ts';
 
+const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);
+const modelBundle = JSON.parse(readFileSync(new URL('models/manifest.v1.json', assetsRoot), 'utf8'));
+const readGeneratedModel = (id: string): Buffer => readFileSync(new URL(modelBundle.assets[id].path, assetsRoot));
+
+test('the saved station preview identity resolves the canonical asset-repository model', () => {
+    const plugin = readFileSync(new URL('../../app/plugins/nixie-foxhole-contributions.client.ts', import.meta.url), 'utf8');
+    const registration = /registerNixieInternalModelResource\('nixie\.core\/resource-transfer-station-preview', '([^']+)'\)/.exec(plugin);
+    assert.ok(registration, 'old development documents retain their preview identity');
+    assert.equal(registration[1], '/foxhole/assets/' + modelBundle.assets.facilitytransferresource.path);
+    assert.equal(readGeneratedModel('facilitytransferresource').readUInt32LE(0), 0x46546c67);
+});
+
 test('a neutral architectural model uses owner-local identity and a declared GLB resource', () => {
     const resource = parseNixieExperimentalResourceV1({ contractVersion: 1, id: 'furniture.table', kind: 'model', path: 'models/table.glb' });
     assert.equal(resource.kind, 'model');
@@ -22,7 +34,7 @@ test('a neutral architectural model uses owner-local identity and a declared GLB
 });
 
 test('the real station WebP GLB keeps binary geometry intact and resolves every embedded image', () => {
-    const input = readFileSync(hostSourceUrl('../../public/foxhole/assets/models/facilitytransferresource.glb', import.meta.url));
+    const input = readGeneratedModel('facilitytransferresource');
     const output = prepareNixieSceneV2ModelGlb(input);
     const jsonLength = new DataView(output.buffer).getUint32(12, true);
     const document = JSON.parse(new TextDecoder().decode(output.subarray(20, 20 + jsonLength)));
@@ -63,7 +75,7 @@ test('an architectural footing resource retains its XYZ anchor on old instances 
 
 test('the station resource corrects old component offsets without changing the saved elevation', () => {
     const source = {};
-    const bytes = readFileSync(hostSourceUrl('../../public/foxhole/assets/models/facilitytransferresource.glb', import.meta.url));
+    const bytes = readGeneratedModel('facilitytransferresource');
     registerNixieSceneV2ModelAnchor(source, prepareNixieSceneV2ModelGlb(bytes));
     const document = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString());
     const anchor = document.asset.extras.nixieModelAnchor;
@@ -93,7 +105,7 @@ test('neutral architecture assemblies select roof modules only from the owning e
 });
 
 test('compressed resources remain bounded and cannot introduce external buffers or oversized decoded geometry', () => {
-    const bytes = readFileSync(hostSourceUrl('../../public/foxhole/assets/models/truckc.glb', import.meta.url));
+    const bytes = readGeneratedModel('truckc');
     assert.ok(prepareNixieSceneV2ModelGlb(bytes).length > 28);
     const length = bytes.readUInt32LE(12);
     const document = JSON.parse(bytes.subarray(20, 20 + length).toString());
