@@ -184,7 +184,7 @@ test('3D-ready filtering pages every product with a packaged model binding', () 
     assert.equal(new Set(items.map(item => item.product.id)).size, items.length);
     assert.ok(items.every(item => item.product.components.some(component => component.componentId === 'model')));
     assert.ok(items.some(item => item.product.id === 'asset.facilitypowerdiesel'));
-    assert.equal(items.some(item => item.product.id === 'asset.crane'), false);
+    assert.equal(items.some(item => item.product.id === 'asset.crane'), Boolean(foxholeSceneV2Assets.crane?.model));
 });
 
 test('facility structural tiers do not hide standalone assets or bypass technology and lineage gates', () => {

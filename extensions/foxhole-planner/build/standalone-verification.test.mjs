@@ -12,10 +12,11 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
     try {
         const fixtureRoot = join(taskRoot, 'fixture');
         const assets = join(taskRoot, 'packages/extensions/foxhole/public/foxhole/assets');
-        for (const path of [join(fixtureRoot, 'src'), join(fixtureRoot, 'tests'), join(assets, 'models'), join(assets, 'maps'), join(fixtureRoot, 'dist/assets/maps')]) await fs.mkdir(path, { recursive: true });
+        for (const path of [join(fixtureRoot, 'src'), join(fixtureRoot, 'tests'), join(assets, 'models'), join(assets, 'maps'), join(assets, 'localizations'), join(fixtureRoot, 'dist/assets/maps')]) await fs.mkdir(path, { recursive: true });
         await fs.writeFile(join(assets, 'manifest.v1.json'), '{"assets":[]}');
         await fs.writeFile(join(assets, 'models/manifest.v1.json'), '{"assets":{},"resources":{}}');
         await fs.writeFile(join(assets, 'maps/map-data.v1.json'), '{}');
+        for (const locale of ['de', 'fr', 'pt', 'ru', 'zh']) await fs.writeFile(join(assets, `localizations/${locale}.json`), '{}');
         await fs.copyFile(new URL('../src/scene-v2-models.ts', import.meta.url), join(fixtureRoot, 'src/scene-v2-models.ts'));
         await fs.copyFile(new URL('../src/scene-v2-model-policy.json', import.meta.url), join(fixtureRoot, 'src/scene-v2-model-policy.json'));
         await fs.writeFile(join(fixtureRoot, 'nixie.extension.json'), JSON.stringify({ contributes: { experimentalResources: [] } }));

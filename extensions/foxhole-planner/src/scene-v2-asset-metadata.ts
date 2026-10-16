@@ -1,3 +1,4 @@
+import { resolveFoxholeCatalogSearchAliases } from './catalog-search-aliases.ts';
 import { resolveFoxholeModificationTextureAnchor } from './modification-anchor.ts';
 import { readNativeSplineSurface } from './native-spline-surface.ts';
 import type { NativeSplineSurface } from './native-spline-surface.ts';
@@ -17,7 +18,9 @@ import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.
 import type { FoxholeBunkerDestructionWeaponInput } from './bunker-statistics-destruction.ts';
 
 export interface FoxholeSceneV2ModificationVariantMetadata {
+    localizedText?: { name?: string; description?: string; };
     description?: string;
+    browserRenderedIcon?: FoxholeSceneV2AssetMetadata['browserIcon'];
     browserIcon?: FoxholeSceneV2AssetMetadata['browserIcon'];
     browserPreview?: FoxholeSceneV2AssetMetadata['browserPreview'];
     overlaySockets?: FoxholeBunkerStatisticsSocket[];
@@ -117,6 +120,7 @@ export interface FoxholeSceneV2AssetMetadata {
     description?: string;
     categoryOrder?: number;
     order?: number;
+    browserRenderedIcon?: { resourceId: string; frame: { x: number; y: number; width: number; height: number; }; };
     browserIcon?: { resourceId: string; frame: { x: number; y: number; width: number; height: number; }; };
     browserPreview?: { resourceId: string; frame: { x: number; y: number; width: number; height: number; }; };
     ranges?: FoxholeSceneV2StructureRange[];
@@ -135,6 +139,7 @@ export interface FoxholeSceneV2AssetMetadata {
     powerSocketMaxConnections?: number;
     profileType?: string;
     isRailVehicle?: boolean;
+    localizedText?: { name?: string; description?: string; category?: string; };
     label: string;
     codeName: string;
     category: string;
@@ -724,6 +729,8 @@ export function createFoxholeSceneV2AssetMetadata(
                 }
                 resources.set(resourceSuffix, sourceUrl);
                 return [variantId, {
+                    localizedText: { name: resolved.name, description: resolved.description },
+                    browserRenderedIcon: browserImage(resolved.icons?.rendered ?? resolved.icons?.default),
                     browserIcon: browserImage(resolved.icons?.default),
                     browserPreview: browserImage(resolved.previewUrl ?? resolved.icons?.rendered),
                     description: strings[resolved.description ?? '']?.trim() || undefined,
@@ -873,6 +880,8 @@ export function createFoxholeSceneV2AssetMetadata(
             description: strings[asset.description ?? '']?.trim() || undefined,
             categoryOrder: categoryOrders.get(asset.categoryId ?? '') ?? 0,
             order: assetIndex * 10,
+            localizedText: { name: asset.name, description: asset.description, category: manifest.categories?.find(category => category.id === asset.categoryId)?.name },
+            browserRenderedIcon: browserImage(asset.icons?.rendered ?? asset.icons?.default),
             browserIcon: browserImage(asset.icons?.default),
             // Compact published manifests omit conventional preview URLs. Match
             // the authored card preview rather than substituting the library icon.
@@ -910,6 +919,9 @@ export function createFoxholeSceneV2AssetMetadata(
             category: asset.categoryId?.trim() || 'uncategorized',
             categoryLabel: categoryLabels.get(asset.categoryId ?? '') || humanizeAssetId(asset.categoryId || 'Uncategorized'),
             keywords: [...new Set([
+                ...resolveFoxholeCatalogSearchAliases(asset.id, asset.codeName, asset.legacyKey),
+                ...[asset.isBunker ? 'bunkers' : '', asset.isFacility ? 'facilities' : '', asset.isVehicle ? 'vehicles' : '', asset.isWorldStructure ? 'world' : '', asset.isItem ? 'items' : ''],
+                asset.legacyKey ?? '',
                 asset.id,
                 asset.codeName?.trim() ?? '',
                 humanizeAssetId(asset.codeName ?? asset.id),

@@ -1,3 +1,4 @@
+import { presentFoxholeCatalogAssets, resolveFoxholeCatalogLocale } from './catalog-presentation.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import type {
     NixieExperimentalComponentProductTemplateV1,
@@ -6,7 +7,7 @@ import type {
     NixieExperimentalProductPresentationV1,
     NixieExperimentalProductDetailCellV1,
 } from '@nixie/extension-sdk/experimental/scene-v2';
-import foxholeSceneV2Assets, { productionRecipesById } from '#foxhole-scene-v2-assets';
+import foxholeSceneV2Assets, { productionRecipesById, catalogLocalizations } from '#foxhole-scene-v2-assets';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeSceneV2SplineProductData } from './scene-v2-connector-products.ts';
 
@@ -19,8 +20,9 @@ interface AssetProductEntry {
     selections?: Array<{ slotId: string; variantId: string; }>;
 }
 
+function catalogEntries(dictionary: Record<string, FoxholeSceneV2AssetMetadata>) {
 const assets: AssetProductEntry[] = Object.entries(
-    foxholeSceneV2Assets as Record<string, FoxholeSceneV2AssetMetadata>,
+    dictionary,
 ).map(([assetId, metadata]) => ({ assetId, metadata }))
     .sort((left, right) => left.metadata.label.localeCompare(right.metadata.label));
 const upgrades: AssetProductEntry[] = assets.flatMap(({ assetId, metadata }) => Object.entries(metadata.modifications)
@@ -38,9 +40,23 @@ const upgrades: AssetProductEntry[] = assets.flatMap(({ assetId, metadata }) => 
         productId: `upgrade.${assetId}.${slotIndex}.${variantIndex}`, selections: [{ slotId, variantId }] }]
         : [])));
 
-const resourcesByCode = new Map(Object.values(foxholeSceneV2Assets).map(asset => [asset.codeName.toLowerCase(), asset]));
+
+return { assets, upgrades, dictionary };
+}
+const presentationCatalogs = new Map<string, ReturnType<typeof catalogEntries>>();
+function catalogForQuery(settings: Readonly<Record<string, boolean | string>> = {}) {
+    const locale = resolveFoxholeCatalogLocale(settings['foxhole.locale'], typeof navigator === 'undefined' ? 'en' : navigator.languages?.[0] ?? navigator.language);
+    const rendered = settings['foxhole.assets.browser.iconSet'] === 'rendered';
+    const key = `${locale}:${rendered}`;
+    let result = presentationCatalogs.get(key);
+    if (!result) {
+        result = catalogEntries(presentFoxholeCatalogAssets(foxholeSceneV2Assets, catalogLocalizations[locale] ?? {}, rendered));
+        presentationCatalogs.set(key, result);
+    }
+    return result;
+}
 function formatDuration(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds <= 0) { return '—'; }
+    if (!Number.isFinite(seconds) || seconds <= 0) { return 'â€”'; }
     const rounded = Math.round(seconds);
     const days = Math.floor(rounded / 86400);
     const hours = Math.floor(rounded % 86400 / 3600);
@@ -51,7 +67,8 @@ function formatDuration(seconds: number): string {
     return minutes ? `${minutes}m${remainder ? ` ${remainder}s` : ''}` : `${remainder}s`;
 }
 
-function productDetails(assetId: string, selections?: AssetProductEntry['selections']): Pick<NixieExperimentalProductPresentationV1, 'details'> {
+function productDetails(assetId: string, selections: AssetProductEntry['selections'], dictionary: Record<string, FoxholeSceneV2AssetMetadata>): Pick<NixieExperimentalProductPresentationV1, 'details'> {
+    const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     const recipes = Object.values(productionRecipesById).filter(recipe => recipe.sourceStructureId === assetId
         && (selections?.length ? selections.some(selection => selection.variantId === recipe.sourceVariantId) : recipe.sourceVariantId === null));
     if (!recipes.length) {
@@ -60,7 +77,7 @@ function productDetails(assetId: string, selections?: AssetProductEntry['selecti
     const resources = (items: Record<string, number>, crates: Record<string, number>, liquids: Record<string, number>) =>
         [[items, false], [crates, true], [liquids, false]].flatMap(([entries, crate]) =>
             Object.entries(entries as Record<string, number>).map(([id, quantity]) => {
-                const asset = resourcesByCode.get(id.toLowerCase()) ?? foxholeSceneV2Assets[id];
+                const asset = resourcesByCode.get(id.toLowerCase()) ?? dictionary[id];
                 return { label: `${asset?.label ?? id}${crate ? ' (Crate)' : ''}`,
                     value: `x${quantity.toLocaleString('en-US', { maximumFractionDigits: 1 })}`,
                     ...(asset?.browserIcon ? { icon: asset.browserIcon } : {}) };
@@ -68,7 +85,7 @@ function productDetails(assetId: string, selections?: AssetProductEntry['selecti
     const rows = recipes.map(recipe => {
         const inputs = resources(recipe.itemInput, recipe.crateInput, recipe.liquidInput);
         const outputs = resources(recipe.itemOutput, recipe.crateOutput, recipe.liquidOutput);
-        const power = recipe.powerDelta || foxholeSceneV2Assets[assetId]?.production?.powerDelta || 0;
+        const power = recipe.powerDelta || dictionary[assetId]?.production?.powerDelta || 0;
         return { inputs, outputs, power, duration: recipe.durationSeconds };
     });
     // Like Native, large factories expose an output list rather than hundreds of recipe rows.
@@ -81,12 +98,12 @@ function productDetails(assetId: string, selections?: AssetProductEntry['selecti
     const hasPower = rows.some(row => row.power !== 0);
     const hasDuration = rows.some(row => row.duration != null && row.duration > 0);
     const resourceCell = (entries: ReturnType<typeof resources>, showLabels: boolean): NixieExperimentalProductDetailCellV1 => entries.length
-        ? { resources: entries, showLabels, tone: showLabels ? 'success' : 'danger' } : { text: '—', tone: 'muted' };
+        ? { resources: entries, showLabels, tone: showLabels ? 'success' : 'danger' } : { text: 'â€”', tone: 'muted' };
     return { details: { title: 'Production', columns: [{ label: 'Inputs', compact: true }, 'Outputs',
         ...(hasPower ? [{ label: 'Power', compact: true, align: 'center' as const }] : []),
         ...(hasDuration ? [{ label: 'Time', compact: true, align: 'center' as const }] : [])],
     rows: rows.map(row => [resourceCell(row.inputs, false), resourceCell(row.outputs, true),
-        ...(hasPower ? [{ text: row.power ? `${row.power > 0 ? '+' : ''}${Number.isInteger(row.power / 1000) ? row.power / 1000 : (row.power / 1000).toFixed(1)} MW` : '—', tone: 'warning' as const }] : []),
+        ...(hasPower ? [{ text: row.power ? `${row.power > 0 ? '+' : ''}${Number.isInteger(row.power / 1000) ? row.power / 1000 : (row.power / 1000).toFixed(1)} MW` : 'â€”', tone: 'warning' as const }] : []),
         ...(hasDuration ? [{ text: formatDuration(row.duration ?? 0), tone: 'info' as const }] : [])]),
     } };
 }
@@ -98,7 +115,7 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
         ? settings[`foxhole.assets.filter.${id}`] === true
         : fallback;
     const faction = settings['foxhole.assets.filter.faction'];
-    if (enabled('3dReady') && !metadata.model) {
+    if (enabled('3dReady') && (!metadata.model || metadata.isItem)) {
         return false;
     }
     if ((faction === 'c' || faction === 'w') && metadata.faction && metadata.faction !== faction) {
@@ -142,6 +159,8 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
 export function listFoxholeSceneV2Products(
     query: NixieExperimentalProductQueryV1,
 ): NixieExperimentalProductResultV1 {
+    const { assets, upgrades, dictionary } = catalogForQuery(query.settings);
+    const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     const needle = query.query.toLocaleLowerCase();
     const candidates = query.settings?.['foxhole.assets.filter.upgrades'] === true ? [...assets, ...upgrades] : assets;
     const filtered = candidates.filter(({ metadata }) => !query.settings || matchesFoxholeSceneV2ProductFilters(metadata, query.settings))
@@ -227,7 +246,7 @@ export function listFoxholeSceneV2Products(
                             return { label: resource?.label ?? id, value: `x${quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}`,
                                 ...(resource?.browserIcon ? { icon: resource.browserIcon } : {}) };
                         }),
-                        ...productDetails(assetId, selections),
+                        ...productDetails(assetId, selections, dictionary),
                     } }
                     : {}),
                 product,

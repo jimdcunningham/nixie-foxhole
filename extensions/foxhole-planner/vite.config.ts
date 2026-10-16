@@ -69,6 +69,7 @@ interface SceneV2ResourceSources {
   models: Array<{ id: string; assetId: string; path: string; }>;
   browserImageSources: string[];
   assets: SceneV2AssetSource[];
+  catalogLocalizations: Record<string, Record<string, string>>;
   metadata: ReturnType<typeof createFoxholeSceneV2AssetMetadata>['assets'];
   productionOutputsByRecipeId: ReturnType<typeof createFoxholeSceneV2AssetMetadata>['productionOutputsByRecipeId'];
   productionRecipesById: ReturnType<typeof createFoxholeSceneV2AssetMetadata>['productionRecipesById'];
@@ -137,6 +138,7 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
     models,
     browserImageSources: generated.browserImageSources,
     assets,
+    catalogLocalizations: Object.fromEntries(await Promise.all(['de', 'fr', 'pt', 'ru', 'zh'].map(async locale => [locale, JSON.parse(await readFile(resolve(foxholeAssetsRoot, `localizations/${locale}.json`), 'utf8'))]))),
     metadata: generated.assets,
     productionOutputsByRecipeId: generated.productionOutputsByRecipeId,
     productionRecipesById: generated.productionRecipesById,
@@ -178,6 +180,7 @@ function foxholeSceneV2ResourcesPlugin() {
       ];
       updatedManifest = `${JSON.stringify(declaration)}\n`;
       this.addWatchFile(foxholeManifestPath);
+        for (const locale of ['de', 'fr', 'pt', 'ru', 'zh']) this.addWatchFile(resolve(foxholeAssetsRoot, `localizations/${locale}.json`));
       this.addWatchFile(resolve(foxholeAssetsRoot, 'models/manifest.v1.json'));
       this.addWatchFile(fileURLToPath(new URL('./src/scene-v2-models.ts', import.meta.url)));
       this.addWatchFile(fileURLToPath(new URL('./src/scene-v2-model-policy.json', import.meta.url)));
@@ -210,7 +213,7 @@ function foxholeSceneV2ResourcesPlugin() {
         return null;
       }
       const sources = await getSources();
-      return `export const productionOutputsByRecipeId=${JSON.stringify(sources.productionOutputsByRecipeId)};export const productionRecipesById=${JSON.stringify(sources.productionRecipesById)};export const bunkerDestructionWeapons=${JSON.stringify(sources.bunkerDestructionWeapons)};export default ${JSON.stringify(sources.metadata)};`;
+      return `export const catalogLocalizations=${JSON.stringify(sources.catalogLocalizations)};export const productionOutputsByRecipeId=${JSON.stringify(sources.productionOutputsByRecipeId)};export const productionRecipesById=${JSON.stringify(sources.productionRecipesById)};export const bunkerDestructionWeapons=${JSON.stringify(sources.bunkerDestructionWeapons)};export default ${JSON.stringify(sources.metadata)};`;
     },
     async writeBundle(options) {
       const outputRoot = resolve(String(options.dir ?? 'dist'), 'assets/scene-v2');

@@ -21,6 +21,7 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
         await fs.mkdir(join(fixtureInputRoot, model.path, '..'), { recursive: true });
         await fs.copyFile(join(foxholeAssetsRoot, model.path), join(fixtureInputRoot, model.path));
     }
+    await fs.cp(join(foxholeAssetsRoot, 'localizations'), join(fixtureInputRoot, 'localizations'), { recursive: true });
     // The live watcher may intentionally declare only a development model selection.
     // The detached fixture consumes its complete model input, so derive declarations from that input too.
     const { isFoxholeSceneV2ModelAllowed, getFoxholeSceneV2PackagedModelPath } = await import(
@@ -42,7 +43,7 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
         nodeAssetsSource.replace(
             '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json',
             './.nixie-build-input/manifest.v1.json',
-        ).replace('../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json', './.nixie-build-input/models.v1.json'),
+        ).replace('../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json', './.nixie-build-input/models.v1.json').replaceAll('../../../packages/extensions/foxhole/public/foxhole/assets/localizations/', './.nixie-build-input/localizations/'),
         'utf8',
     );
     // Catalog regression tests consume the same detached generated input as the
