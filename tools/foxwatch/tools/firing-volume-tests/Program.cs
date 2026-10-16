@@ -166,6 +166,26 @@ try {
     cache[path][1].AnimationClassPath="War/Content/Anim/IndependentGun.uasset";
     Check(resolver.Invoke(extractor,[new object[]{flightSeat},blueprint,flightDefaults,flightSeat,new Dictionary<string,object>(),true])==null,"An independently animated gun must not be treated as a visual follower");
 
+    var payload=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"PayloadInstancedStaticMesh_GEN_VARIABLE","Type":"PayloadInstancedStaticMeshComponent","$ClassText":"Class'/Script/War.PayloadInstancedStaticMeshComponent'","Rows":2,"Columns":8,"MeshRotation":{"Yaw":-90}}""");
+    cache[path]=new[]{
+        new FoxWatchBlueprintComponentReference{ComponentName="CharacterMesh0",MeshType="skeletal",MeshPath=mesh},
+        new FoxWatchBlueprintComponentReference{ComponentName="PayloadInstancedStaticMesh",ComponentType="PayloadInstancedStaticMeshComponent",MeshType="static",AttachParentName="CharacterMesh0",AttachSocketName="S_Muzzle",RelativeLocation="X=10 Y=0 Z=20"}
+    };
+    var rocketDefaults=Newtonsoft.Json.Linq.JObject.Parse("""{"PayloadMeshes":{"GunnerIndex":1,"bUseForMuzzleTransform":true},"MuzzleInfo":[{"GunnerIndex":1,"MuzzleIndex":0,"SocketName":"S_RuntimeGenerated0"}]}""");
+    resolved=resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])!;
+    Check(resolved!=null,"Runtime payload muzzle binding was ignored because its generated socket is not in the skeleton");
+    transform=Read(resolved!,"Transform");
+    Check(Math.Abs((double)Read(transform,"Y")-110)<0.001&&(double)Read(transform,"Z")==220,"Payload muzzle lost its socket attachment or local offset");
+    Check(Math.Abs(((Quaternion)Read(transform,"Rotation")).Z-Math.Sqrt(0.5))<1e-6,"Visual rocket mesh rotation contaminated the firing axes");
+    rocketDefaults["PayloadMeshes"]!["GunnerIndex"]=2;
+    Check(resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])==null,"Payload was bound to a different gunner");
+    rocketDefaults["PayloadMeshes"]!["GunnerIndex"]=1;
+    rocketDefaults["PayloadMeshes"]!["bUseForMuzzleTransform"]=false;
+    Check(resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])==null,"Payload ignored its explicit muzzle-transform opt-out");
+    rocketDefaults["PayloadMeshes"]!["bUseForMuzzleTransform"]=true;
+    cache[path]=cache[path].Concat(new[]{new FoxWatchBlueprintComponentReference{ComponentName="OtherPayload",ComponentType="PayloadInstancedStaticMeshComponent"}}).ToArray();
+    Check(resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])==null,"Several unassociated payload grids were silently ordered");
+
     Console.WriteLine("Nested AI component, mesh/socket composition, quarter-turn and ambiguity checks passed");
 } finally { Directory.Delete(temp); }
 

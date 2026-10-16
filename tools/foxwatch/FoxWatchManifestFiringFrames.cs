@@ -31,6 +31,8 @@ public partial class FoxWatchManifestAssetExtractor
                 var frame = ResolveDeclaredFiringSocket(objects, blueprint, defaultObject, references, socket);
                 if (frame != null) return frame;
             }
+            var payload = ResolvePayloadFiringFrame(objects, blueprint, defaultObject, references, lookup, ExtractInt(index));
+            if (payload != null) return payload;
             // An explicitly mapped but unresolved muzzle must not use an unrelated socket.
             if (GetFiringSocketNames(info, ExtractInt(index)).Length > 0) return null;
         }
@@ -68,6 +70,29 @@ public partial class FoxWatchManifestAssetExtractor
                 }
         }
         return null;
+    }
+
+    private FiringFrame? ResolvePayloadFiringFrame(IEnumerable<dynamic> objects, object blueprint, object defaultObject,
+        IReadOnlyList<FoxWatchBlueprintComponentReference> references, IReadOnlyDictionary<string, object> lookup, int gunnerIndex)
+    {
+        var binding = GetInheritedBlueprintProperty(objects, blueprint, defaultObject, "PayloadMeshes");
+        if (ExtractBoolValue(GetNamedValue(binding, "bUseForMuzzleTransform")) != true
+            || ExtractInt(GetNamedValue(binding, "GunnerIndex")) != gunnerIndex) return null;
+        var payloads = references.Where(reference => reference.ComponentType == "PayloadInstancedStaticMeshComponent").ToArray();
+        if (payloads.Length != 1) return null; // Several grids need a separate source association/order.
+        var payload = payloads[0];
+        var components = objects.Cast<object>().Concat(EnumerateBlueprintComponentScopes(objects, blueprint).SelectMany(scope => scope.Objects)).Concat(lookup.Values)
+            .Where(value => GetObjectTypeName(value).Contains("PayloadInstancedStaticMeshComponent", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(NormalizeTemplateComponentName(GetObjectName(value)), payload.ComponentName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        // The component's property declaration can precede its _GEN_VARIABLE
+        // template in export order; read authored component templates, not that declaration.
+        var rows = ExtractInt(components.Select(value => GetNamedValue(value, "Rows")).FirstOrDefault(value => value != null));
+        var columns = ExtractInt(components.Select(value => GetNamedValue(value, "Columns")).FirstOrDefault(value => value != null));
+        if (rows <= 0 || columns <= 0 || (long)rows * columns > 1024) return null;
+        // The Blueprint explicitly selects this payload grid for muzzle transforms.
+        // Use its authored launcher anchor; per-round grid offsets are not simulated.
+        // MeshRotation describes the rocket artwork, not the firing frame.
+        return new(ResolveFiringReferenceTransform(payload, references).Transform, "muzzle-component", payload.ComponentName);
     }
 
     private FiringFrame? ResolveDeclaredFiringSocket(IEnumerable<dynamic> objects, object blueprint, object defaultObject,
