@@ -115,6 +115,21 @@ try {
     cache[path][0].RelativeScale=string.Empty;
     cache[path]=cache[path].Concat(new[]{new FoxWatchBlueprintComponentReference{ComponentName="OtherMesh",ComponentType="SkeletalMeshComponent",MeshType="SkeletalMesh",MeshPath=mesh}}).ToArray();
     Check(socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])==null,"Ambiguous socket selected an unrelated gun mesh");
+    var ranks=(Dictionary<string,Dictionary<string,int>>)type.GetField("_firingSocketBoneRanks",flags)!.GetValue(extractor)!;
+    var gunMesh="War/Content/Meshes/ActualGun.uasset";
+    socketCache.Add(gunMesh,boneMap);
+    ((Dictionary<string,string>)type.GetField("_mountedPackagePathByNormalizedPath",flags)!.GetValue(extractor)!)[gunMesh]=gunMesh;
+    cache[path]=new[]{
+        new FoxWatchBlueprintComponentReference{ComponentName="Tracks",MeshType="skeletal",MeshPath=mesh,RelativeLocation="X=10 Y=20 Z=-50"},
+        new FoxWatchBlueprintComponentReference{ComponentName="Gun",MeshType="skeletal",MeshPath=gunMesh}
+    };
+    ranks[mesh]=new(){{"S_Muzzle",2}};ranks[gunMesh]=new(){{"S_Muzzle",0}};
+    resolved=socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])!;
+    transform=Read(resolved,"Transform");
+    Check((double)Read(transform,"X")==0&&(double)Read(transform,"Y")==100&&(double)Read(transform,"Z")==200,"Shared track skeleton displaced the socket owned by the gun mesh");
+    ranks[mesh]["S_Muzzle"]=0;
+    Check(socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])==null,"Equally owned but different gun frames must remain ambiguous");
+    ranks.Clear();
     cache[path]=new[]{
         new FoxWatchBlueprintComponentReference{ComponentName="CharacterMesh0",MeshType="skeletal",MeshPath="War/Content/Meshes/Vehicles/SK_Motorcycle.uasset",AttachParentName="CollisionCylinder",RelativeRotation="P=0 Y=0 R=0"},
         new FoxWatchBlueprintComponentReference{ComponentName="GunMesh",MeshType="skeletal",MeshPath=mesh,AttachParentName="CharacterMesh0",RelativeRotation="P=0 Y=0 R=0"}

@@ -1,5 +1,7 @@
 using System.Numerics;
 using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
+using CUE4Parse.UE4.Assets.Exports.Animation;
 using Newtonsoft.Json.Linq;
 
 namespace FoxWatchService;
@@ -59,7 +61,7 @@ public partial class FoxWatchManifestAssetExtractor
 
     private FiringFrame? ResolveFiringSocketReferences(IReadOnlyList<FoxWatchBlueprintComponentReference> references, string socket)
     {
-        var matches = new List<FiringFrame>();
+        var matches = new List<(FiringFrame Frame, string MeshPath)>();
         foreach (var mesh in references.Where(reference => !string.IsNullOrWhiteSpace(reference.MeshPath)
                      && reference.MeshType?.Contains("skeletal", StringComparison.OrdinalIgnoreCase) == true))
         {
@@ -67,15 +69,59 @@ public partial class FoxWatchManifestAssetExtractor
             var transform = ComposeFiringTransform(ResolveFiringReferenceTransform(mesh, references), new(local, Vector3.One)).Transform;
             // This already includes the authored model hierarchy. Legacy planar
             // body-axis inference must not rotate this physical frame again.
-            matches.Add(new(transform, "muzzle-socket", socket));
+            matches.Add((new(transform, "muzzle-socket", socket), mesh.MeshPath!));
         }
         if (matches.Count == 0) return null;
-        var first = matches[0].Transform;
+        // Shared skeletons also expose a gun socket on tracks, wings and other
+        // parts. Prefer the mesh whose render sections use the socket's bone,
+        // then its closest weighted ancestor. Equal ownership stays ambiguous.
+        if (matches.Count > 1)
+        {
+            var ranked = matches.Select(match => (match, Rank: GetFiringSocketBoneRank(match.MeshPath, socket))).ToArray();
+            var best = ranked.Min(item => item.Rank);
+            if (best < int.MaxValue) matches = ranked.Where(item => item.Rank == best).Select(item => item.match).ToList();
+        }
+        var first = matches[0].Frame.Transform;
         // Modular parts may share a skeleton and the same socket frame. Accept
         // equivalent frames, but reject sockets placed on genuinely different guns.
-        return matches.All(match => Math.Abs(match.Transform.X - first.X) < 0.1 && Math.Abs(match.Transform.Y - first.Y) < 0.1
-            && Math.Abs(match.Transform.Z - first.Z) < 0.1 && Math.Abs(Quaternion.Dot(match.Transform.Rotation, first.Rotation)) > 0.999999f)
-            ? matches[0] : null;
+        return matches.All(match => Math.Abs(match.Frame.Transform.X - first.X) < 0.1 && Math.Abs(match.Frame.Transform.Y - first.Y) < 0.1
+            && Math.Abs(match.Frame.Transform.Z - first.Z) < 0.1 && Math.Abs(Quaternion.Dot(match.Frame.Transform.Rotation, first.Rotation)) > 0.999999f)
+            ? matches[0].Frame : null;
+    }
+
+    private readonly Dictionary<string, Dictionary<string, int>> _firingSocketBoneRanks = new(StringComparer.OrdinalIgnoreCase);
+
+    private int GetFiringSocketBoneRank(string meshPath, string socket)
+    {
+        if (_firingSocketBoneRanks.TryGetValue(meshPath, out var cached) && cached.TryGetValue(socket, out var rank)) return rank;
+        if (cached == null) _firingSocketBoneRanks[meshPath] = cached = new(StringComparer.OrdinalIgnoreCase);
+        rank = int.MaxValue;
+        try
+        {
+            var mesh = _fileProvider.LoadPackage(meshPath).GetExports().OfType<USkeletalMesh>().FirstOrDefault();
+            if (mesh == null) return cached[socket] = rank;
+            var bones = mesh.ReferenceSkeleton.FinalRefBoneInfo;
+            var weighted = mesh.LODModels?.FirstOrDefault()?.Sections.SelectMany(section => section.BoneMap).ToHashSet() ?? [];
+            var skeleton = ResolveObjectReference<USkeleton>(GetNamedValue(mesh, "Skeleton"));
+            var definitions = AsEnumerable(GetNamedValue(mesh, "Sockets")).Concat(AsEnumerable(GetNamedValue(skeleton, "Sockets")))
+                .Select(value => ResolveObjectReference<UObject>(value)).Where(value => value != null).Cast<object>().ToList();
+            var skeletonPath = ResolvePackagePath(ResolveReferencedPackagePath(GetNamedValue(mesh, "Skeleton")));
+            if (!string.IsNullOrWhiteSpace(skeletonPath)) definitions.AddRange(_fileProvider.LoadPackage(skeletonPath).GetExports().Where(IsSkeletalMeshSocketExport));
+            definitions.AddRange(_fileProvider.LoadPackage(meshPath).GetExports().Where(IsSkeletalMeshSocketExport));
+            var definition = definitions.LastOrDefault(value => string.Equals(ExtractText(GetNamedValue(value, "SocketName")), socket, StringComparison.OrdinalIgnoreCase));
+            var boneName = definition == null ? socket : ExtractText(GetNamedValue(definition, "BoneName"));
+            var index = Array.FindIndex(bones, bone => string.Equals(bone.Name.Text, boneName, StringComparison.OrdinalIgnoreCase));
+            var distance = 0;
+            var visited = new HashSet<int>();
+            while (index >= 0 && index < bones.Length && visited.Add(index))
+            {
+                if (weighted.Contains((ushort)index)) { rank = distance; break; }
+                index = bones[index].ParentIndex;
+                distance++;
+            }
+        }
+        catch { /* Without mesh ownership evidence, keep normal ambiguity checks. */ }
+        return cached[socket] = rank;
     }
 
     private FiringFrame? ResolveArtilleryGunFrame(IEnumerable<dynamic> objects, object blueprint, IReadOnlyDictionary<string, object> lookup, ManifestComponentTransform aimingFrame)
