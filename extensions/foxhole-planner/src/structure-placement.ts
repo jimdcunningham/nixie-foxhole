@@ -15,6 +15,8 @@ import {
 import type { FoxholeSceneV2Point } from './scene-v2-footprints.ts';
 import { FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane } from './render-lanes.ts';
 
+export const FOXHOLE_PLACEMENT_WARNING_SETTING_ID = 'nixie.foxhole-planner.debug.placementWarnings';
+
 export const FOXHOLE_PLACEMENT_OVERLAP_COLOR = 0xEF4444;
 export const FOXHOLE_PLACEMENT_FOUNDATION_COLOR = 0xF59E0B;
 const FOUNDATION_SAMPLE_INTERVAL = 32;

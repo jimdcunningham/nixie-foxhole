@@ -38,6 +38,15 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.ok(manifest.contributes.experimentalResourceTemplates?.some(resource => resource.idPrefix === 'foxhole.asset.'));
     assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-icons'));
     assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-assets'));
+    const placementWarnings = manifest.contributes.settings.find(setting => setting.id === 'nixie.foxhole-planner.debug.placementWarnings');
+    assert.equal(placementWarnings?.defaultValue, false);
+    assert.equal(placementWarnings?.accessibleInDev, true);
+    assert.equal(placementWarnings?.settingsPageSectionId, 'foxhole-debug');
+    const placementOverlay = manifest.contributes.menus.find(menu => menu.id === 'nixie.foxhole-planner.overlay.placement-warnings');
+    assert.equal(placementOverlay?.menu, 'overlays.debug');
+    assert.equal(placementOverlay?.type, 'toggle-setting');
+    assert.equal(placementOverlay?.type === 'toggle-setting' && placementOverlay.settingId, 'nixie.foxhole-planner.debug.placementWarnings');
+    assert.ok(manifest.contributes.experimentalRenderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('nixie.foxhole-planner.debug.placementWarnings'));
     assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'spline-connector'));
     assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'cargo'));
     assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'socket-attachments'));

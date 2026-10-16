@@ -948,6 +948,19 @@ export default defineContribution({
         },
         {
             menu: NIXIE_OVERLAYS_DEBUG_MENU_ID,
+            order: 15,
+            item: {
+                type: 'checkbox',
+                label: 'Placement Warnings',
+                icon: 'ph:warning',
+                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings) === true,
+                onClick: () => {
+                    useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings);
+                },
+            },
+        },
+        {
+            menu: NIXIE_OVERLAYS_DEBUG_MENU_ID,
             order: 20,
             item: {
                 type: 'checkbox',

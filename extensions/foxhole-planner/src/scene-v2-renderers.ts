@@ -7,6 +7,7 @@ import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts'
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
+    FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
     renderFoxholeStructurePlacementOverlay,
     renderFoxholeStructurePlacementSpatialOverlay,
     resolveFoxholeStructurePlacement,
@@ -648,9 +649,11 @@ export function renderFoxholeSceneV2Entity(
         }
     }
     const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint);
-    const placement = resolveFoxholeStructurePlacement(entity, context, assetMetadataById);
-    let placementSpatial = renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement);
-    visualState.nodes.push(...renderFoxholeStructurePlacementOverlay(assetMetadata, placement));
+    const placement = context.settings?.[FOXHOLE_PLACEMENT_WARNING_SETTING_ID] === true
+        ? resolveFoxholeStructurePlacement(entity, context, assetMetadataById)
+        : null;
+    let placementSpatial = placement ? renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement) : undefined;
+    if (placement) visualState.nodes.push(...renderFoxholeStructurePlacementOverlay(assetMetadata, placement));
     visualState.nodes.push(...renderBreachIndicators(entity, assetMetadata, context));
     visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, context.settings ?? {}, appearance));
     const socketAttachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'

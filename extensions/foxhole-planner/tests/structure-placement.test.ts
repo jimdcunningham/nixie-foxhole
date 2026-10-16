@@ -3,6 +3,7 @@ import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
 import {
+    FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
     FOXHOLE_PLACEMENT_FOUNDATION_COLOR,
     FOXHOLE_PLACEMENT_OVERLAP_COLOR,
     renderFoxholeStructurePlacementOverlay,
@@ -111,19 +112,28 @@ test('the real diesel plant keeps its model while placement feedback updates aga
     };
     const diesel = product('facilitypowerdiesel');
     const foundation = product('foundation012x2t1');
+    for (const enabled of [undefined, false]) {
+        const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(diesel, {
+            contractVersion: 1, entities: [diesel],
+            ...(enabled === undefined ? {} : { settings: { [FOXHOLE_PLACEMENT_WARNING_SETTING_ID]: enabled } }),
+        }));
+        assert.equal(plan.root.children.some(node => node.id.startsWith('placement-invalid-')), false);
+        assert.equal(plan.experimentalSpatial?.nodes.some(node => node.id.startsWith('placement-')) ?? false, false);
+    }
+    const settings = { [FOXHOLE_PLACEMENT_WARNING_SETTING_ID]: true };
     const unsupported = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(diesel,
-        { contractVersion: 1, entities: [diesel] }));
+        { contractVersion: 1, entities: [diesel], settings }));
     assert.equal(unsupported.experimentalSpatial?.supplementModel, true);
     assert.equal(unsupported.experimentalSpatial?.nodes[0]?.kind === 'line'
         && unsupported.experimentalSpatial.nodes[0].color, FOXHOLE_PLACEMENT_FOUNDATION_COLOR);
-    const supported = renderFoxholeSceneV2Entity(diesel, { contractVersion: 1, entities: [diesel, foundation] });
+    const supported = renderFoxholeSceneV2Entity(diesel, { contractVersion: 1, entities: [diesel, foundation], settings });
     assert.deepEqual(supported.experimentalSpatial?.nodes, []);
     assert.ok(supported.experimentalSpatial?.markers?.some(marker => marker.label === 'PowerSocket'));
     const neighbor = product('facilitypowerdiesel');
     neighbor.entityId = 'neighbor';
     neighbor.components.find(component => component.componentId === 'transform')!.data.x = 16;
     const overlapping = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(diesel,
-        { contractVersion: 1, entities: [diesel, foundation, neighbor] }));
+        { contractVersion: 1, entities: [diesel, foundation, neighbor], settings }));
     assert.equal(overlapping.experimentalSpatial?.supplementModel, true);
     assert.equal(overlapping.experimentalSpatial?.nodes[0]?.kind === 'line'
         && overlapping.experimentalSpatial.nodes[0].color, FOXHOLE_PLACEMENT_OVERLAP_COLOR);
