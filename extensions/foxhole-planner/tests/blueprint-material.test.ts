@@ -41,3 +41,32 @@ test('pipeline blueprint materials preserve the model-path geometry recipe', () 
     assert.deepEqual(blue.experimentalSpatial?.nodes, normal.experimentalSpatial?.nodes);
     assert.ok(blue.experimentalSpatial?.nodes.some(node => node.kind === 'model-path'));
 });
+
+test('previously saved demolished blueprints render only their demolished appearance', () => {
+    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'old-conflicting-state', revision: 1,
+        components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
+            data: { catalogId: 'foxhole.structures', assetId: 'facilityrefinery1' } },
+        { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
+            data: { destroyed: true, blueprint: true } }] };
+    const plan = renderFoxholeSceneV2Entity(entity);
+    assert.equal(plan.experimentalSpatial?.modelMaterial, undefined);
+    const texture = plan.root.children.find(node => node.id === 'building-texture');
+    assert.notEqual(texture?.kind === 'sprite' && texture.tint, 0x335CFF);
+    entity.components[1]!.data.blueprint = false;
+    assert.deepEqual(plan, renderFoxholeSceneV2Entity(entity));
+
+});
+
+test('standalone wreck identities cannot render blueprint materials or tint', () => {
+    const wreck = Object.entries(metadata).find(([, asset]) => asset.isDestroyed && asset.canBlueprint);
+    assert.ok(wreck);
+    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'standalone-wreck', revision: 1,
+        components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
+            data: { catalogId: 'foxhole.structures', assetId: wreck[0] } },
+        { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
+            data: { blueprint: true } }] };
+    const plan = renderFoxholeSceneV2Entity(entity);
+    assert.equal(plan.experimentalSpatial?.modelMaterial, undefined);
+    entity.components[1]!.data.blueprint = false;
+    assert.deepEqual(plan, renderFoxholeSceneV2Entity(entity));
+});

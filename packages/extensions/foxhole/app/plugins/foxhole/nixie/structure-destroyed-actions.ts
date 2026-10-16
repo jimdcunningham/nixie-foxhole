@@ -30,6 +30,9 @@ export function resolveFoxholeStructureDestroyedMutation(
         patch.foxholeKey = intact.foxholeKey;
         patch.destroyed = false;
     }
+    if (nextDestroyed && state.blueprint === true) {
+        patch.blueprint = false;
+    }
     if (state.packaged === true && (nextDestroyed || asset.intactStructureId)) {
         patch.packaged = false;
     }

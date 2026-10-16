@@ -24,6 +24,15 @@ function inspect(assetId: string, overrides: Record<string, Record<string, unkno
 test('all published assets return bounded Inspector choices validated against their real schemas', () => {
     for (const assetId of Object.keys(assets)) {
         assert.doesNotThrow(() => inspect(assetId), assetId);
+        const states = inspect(assetId).components.find(component => component.componentId === 'appearance')
+            ?.fields.find(field => field.path.length === 0)?.choices?.options ?? [];
+        for (const option of states) {
+            const value = option.value as Record<string, unknown>;
+            assert.ok([value.destroyed, value.packaged, value.blueprint].filter(flag => flag === true).length <= 1, `${assetId}: ${option.label}`);
+            if (assets[assetId]!.isDestroyed) {
+                assert.notEqual(value.blueprint, true, assetId);
+            }
+        }
     }
 });
 
@@ -92,7 +101,7 @@ test('appearance offers only published variants and atomic valid state combinati
     assert.deepEqual(root.choices!.valuePropertyIds, ['destroyed', 'packaged', 'blueprint']);
     for (const option of root.choices!.options) {
         const value = option.value as Record<string, unknown>;
-        assert.equal(value.packaged === true && (value.destroyed === true || value.blueprint === true), false);
+        assert.equal([value.packaged, value.destroyed, value.blueprint].filter(flag => flag === true).length <= 1, true, option.label);
     }
 });
 

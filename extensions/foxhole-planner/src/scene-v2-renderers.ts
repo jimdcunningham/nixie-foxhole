@@ -127,7 +127,7 @@ function readFoxholeSceneV2Appearance(
         ...(colorHex ? { colorHex } : {}),
         destroyed: appearance?.destroyed === true,
         packaged: appearance?.packaged === true,
-        blueprint: appearance?.blueprint === true,
+        blueprint: appearance?.blueprint === true && appearance?.destroyed !== true && appearance?.packaged !== true,
         ...(number(appearance?.tint, 0, 0xFFFFFF) === undefined ? {} : { tint: number(appearance?.tint, 0, 0xFFFFFF) }),
         ...(number(appearance?.brightness, 0, 4) === undefined ? {} : { brightness: number(appearance?.brightness, 0, 4) }),
         ...(number(appearance?.anchorX, -10, 10) === undefined ? {} : { anchorX: number(appearance?.anchorX, -10, 10) }),
@@ -440,7 +440,9 @@ export function renderFoxholeSceneV2Entity(
     const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'spline-connector' && component.definitionAvailable);
     const metadata = assetMetadataById[String(asset?.data.assetId ?? spline?.data.foxholeKey ?? '')];
-    if (metadata?.canBlueprint && (readFoxholeSceneV2Appearance(entity).blueprint || spline?.data.blueprint === true)) {
+    const appearance = readFoxholeSceneV2Appearance(entity);
+    if (metadata?.canBlueprint && !metadata.isDestroyed && !appearance.destroyed && !appearance.packaged
+        && (appearance.blueprint || spline?.data.blueprint === true)) {
         plan.experimentalSpatial = {
             ...(plan.experimentalSpatial ?? { contractVersion: 1, supplementModel: true, nodes: [] }),
             modelMaterial: { color: 0x4f79c6, roughness: 0.6, metallic: 0 },
@@ -668,7 +670,7 @@ function renderFoxholeSceneV2EntityPlan(
             if(selected)for(const id of part.replacesLayers)hiddenModelNodes.push(...structural.layers[id]??[]);
         }
     }
-    const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint);
+    const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint && !assetMetadata.isDestroyed);
     const placement = context.settings?.[FOXHOLE_PLACEMENT_WARNING_SETTING_ID] === true
         ? resolveFoxholeStructurePlacement(entity, context, assetMetadataById)
         : null;

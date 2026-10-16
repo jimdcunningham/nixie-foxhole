@@ -73,10 +73,9 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
     const cargoItems = data('cargo')?.items;
     const defaultState = { destroyed: false, packaged: false, blueprint: false };
     const modes = [{ label: 'Default', value: defaultState },
-        ...(asset.canBlueprint ? [{ label: 'Blueprint', value: { ...defaultState, blueprint: true } }] : []),
+        ...(asset.canBlueprint && !asset.isDestroyed ? [{ label: 'Blueprint', value: { ...defaultState, blueprint: true } }] : []),
         ...(asset.destroyed
-            ? [{ label: 'Destroyed', value: { ...defaultState, destroyed: true } },
-                ...(asset.canBlueprint ? [{ label: 'Destroyed Blueprint', value: { ...defaultState, destroyed: true, blueprint: true } }] : [])]
+            ? [{ label: 'Destroyed', value: { ...defaultState, destroyed: true } }]
             : []),
         ...(asset.packaged ? [{ label: 'Packaged', value: { ...defaultState, packaged: true } }] : [])];
     result.set('appearance', [{ path: [], title: 'State', choices: { valuePropertyIds: ['destroyed', 'packaged', 'blueprint'],

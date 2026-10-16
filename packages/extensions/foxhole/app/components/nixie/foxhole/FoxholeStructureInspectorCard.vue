@@ -701,6 +701,9 @@ async function setDestroyedValue(nextValue: boolean): Promise<void> {
     const embeddedEntries = destroyableEntries.value.filter(entry => !entry.asset?.destroyedStructureId && !entry.asset?.intactStructureId);
     if (embeddedEntries.length > 0) {
         const patch: Partial<FoxholeStructureState> = { destroyed: nextValue };
+        if (nextValue && embeddedEntries.some(entry => entry.state.blueprint === true)) {
+            patch.blueprint = false;
+        }
         if (nextValue && hasAnyDestroyablePackagedState.value) {
             patch.packaged = false;
         }
@@ -751,8 +754,20 @@ async function setBlueprintValue(nextValue: boolean): Promise<void> {
     if (nextValue && hasAnyBlueprintablePackagedState.value) {
         patch.packaged = false;
     }
+    if (nextValue && blueprintableEntries.value.some(entry => isFoxholeStructureDestroyed(entry.asset, entry.state))) {
+        patch.destroyed = false;
+    }
 
-    await patchEligibleSelectionTargets(blueprintableTargetIds.value, patch as Record<string, unknown>, 'inspector:foxhole-structure-blueprint-toggle');
+    const reason = 'inspector:foxhole-structure-blueprint-toggle';
+    const rebuildEntries = nextValue ? blueprintableEntries.value.filter(entry => entry.asset?.intactStructureId) : [];
+    const rebuildIds = new Set(rebuildEntries.map(entry => entry.id));
+    await patchEligibleSelectionTargets(blueprintableTargetIds.value.filter(id => !rebuildIds.has(id)), patch as Record<string, unknown>, reason);
+    for (const entry of rebuildEntries) {
+        const rebuild = resolveFoxholeStructureDestroyedMutation(structureCatalog.value, entry.state, false);
+        if (rebuild) {
+            await runtime.patchNode(entry.id, { ...rebuild, ...patch } as Record<string, unknown>, reason);
+        }
+    }
 }
 
 const destroyedValue = computed({

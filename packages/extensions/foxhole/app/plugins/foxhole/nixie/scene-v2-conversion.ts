@@ -1260,7 +1260,7 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             issues.push(unsupportedStateIssue('Foxhole destroyed appearance has no published Scene V2 visual for this asset and remains in legacy source data.'));
         }
     }
-    if (!packaged && state.blueprint === true) {
+    if (!packaged && state.destroyed !== true && state.blueprint === true) {
         appearance.blueprint = true;
         if (!appearanceSupport.blueprint) {
             issues.push(unsupportedStateIssue('Foxhole blueprint appearance is not supported by this asset and remains in legacy source data.'));

@@ -131,3 +131,39 @@ test('shared wrecks without a matching declared rebuild target stay unresolved i
         }
     }
 });
+
+test('Blueprint and Demolished edits remain exclusive through Scene V2 conversion and undo', () => {
+    registerNixieSceneV2StateAdapter('nixie.foxhole-planner', foxholeSceneV2StateAdapter);
+    const { host, id } = fixture('facilityrefinery1');
+    const apply = (patch: Record<string, unknown>) => {
+        const updates = buildNixieSceneV2InspectorPatches(host.readEntity(id), patch);
+        host.applyEditorComponentPatches(updates.map(update => ({ ...update, entityId: id })));
+        return foxholeSceneV2StateAdapter.project(host.readEntity(id))!.state;
+    };
+    const original = host.exportDocument();
+    const blueprint = apply({ blueprint: true });
+    assert.equal(blueprint.blueprint, true);
+    const blueprintDocument = host.exportDocument();
+    const demolished = apply(resolveFoxholeStructureDestroyedMutation(catalog, blueprint, true)!);
+    assert.equal(demolished.destroyed, true);
+    assert.equal(demolished.blueprint, false);
+    const demolishedDocument = host.exportDocument();
+    const rebuilt = apply({ blueprint: true, destroyed: false });
+    assert.equal(rebuilt.blueprint, true);
+    assert.equal(rebuilt.destroyed, false);
+    host.undo();
+    assert.deepEqual(host.exportDocument(), demolishedDocument);
+    host.undo();
+    assert.deepEqual(host.exportDocument(), blueprintDocument);
+    host.undo();
+    assert.deepEqual(host.exportDocument(), original);
+    host.redo();
+    host.redo();
+    assert.deepEqual(host.exportDocument(), demolishedDocument);
+
+    const converted = convertFoxholeSceneV1NodeToV2({ entityId: 'old-conflict', nodePath: 'fixture', resolveEntityId: value => value,
+        node: { id: 'old-conflict', type: 'foxholeAsset', state: { foxholeKey: 'facilityrefinery1', destroyed: true, blueprint: true }, children: [] } })!;
+    const appearance = converted.components!.find(component => component.componentId === 'appearance')!.data;
+    assert.equal(appearance.destroyed, true);
+    assert.notEqual(appearance.blueprint, true);
+});

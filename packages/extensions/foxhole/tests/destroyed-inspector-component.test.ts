@@ -22,9 +22,9 @@ const executable = stripTypeScriptTypes(compiled)
     })
     .replace('export default', 'module.exports =');
 
-function harness(foxholeKey: string) {
+function harness(foxholeKey: string, appearance: Record<string, boolean> = {}) {
     const snapshot = Vue.reactive({ id: 'bunker', type: 'foxholeAsset', state: {
-        foxholeKey, destroyed: false, x: 123, y: -47, rotation: 37 * Math.PI / 180, scaleX: 1.25, scaleY: 0.75,
+        foxholeKey, destroyed: false, ...appearance, x: 123, y: -47, rotation: 37 * Math.PI / 180, scaleX: 1.25, scaleY: 0.75,
     } });
     const patches: Array<Record<string, unknown>> = [];
     const patchNode = async (id: string, patch: Record<string, unknown>) => {
@@ -53,7 +53,7 @@ function harness(foxholeKey: string) {
         useFoxholeLocalization: () => ({ assetBaseUrl: Vue.ref('/foxhole/assets/'), t: (_key: string, fallback: string) => fallback }),
         useRuntimeConfig: () => ({ app: { baseURL: '/' } }),
         useSupabaseUser: () => Vue.ref(null),
-        setTimeout, clearTimeout,
+        setTimeout, clearTimeout, requestAnimationFrame: setTimeout, cancelAnimationFrame: clearTimeout,
     };
     runInNewContext(executable, sandbox);
     const scope = Vue.effectScope();
@@ -103,5 +103,41 @@ test('compiled Inspector rebuilds standalone shared wrecks into their authored i
         } finally {
             dispose();
         }
+    }
+});
+
+test('compiled Inspector switches between Demolished and Blueprint with one complete patch', async () => {
+    for (const key of ['facilityrefinery1', 'fortrampt2']) {
+        const { control, snapshot, patches, dispose } = harness(key, { blueprint: true });
+        try {
+            assert.equal(control.blueprint.value, true, key);
+            await control.setDestroyedValue(true);
+            assert.equal(control.destroyed.value, true, key);
+            assert.equal(control.blueprint.value, false, key);
+            assert.equal(patches.length, 1);
+            assert.equal(patches[0]!.blueprint, false);
+            await control.setBlueprintValue(true);
+            assert.equal(control.blueprint.value, true, key);
+            assert.equal(control.destroyed.value, false, key);
+            assert.equal(patches.length, 2);
+            assert.equal(patches[1]!.destroyed, false);
+            assert.equal(snapshot.state.foxholeKey, key);
+        } finally {
+            dispose();
+        }
+    }
+});
+
+test('compiled Inspector restores standalone wreck identity before enabling Blueprint', async () => {
+    const { control, snapshot, patches, dispose } = harness('fortdestroyedt2');
+    try {
+        assert.equal(control.canBlueprint.value, true);
+        await control.setBlueprintValue(true);
+        assert.equal(control.blueprint.value, true);
+        assert.equal(control.destroyed.value, false);
+        assert.equal(snapshot.state.foxholeKey, 'fortt2');
+        assert.equal(patches.length, 1);
+    } finally {
+        dispose();
     }
 });
