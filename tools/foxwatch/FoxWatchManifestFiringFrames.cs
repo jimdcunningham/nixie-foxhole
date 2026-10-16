@@ -43,11 +43,12 @@ public partial class FoxWatchManifestAssetExtractor
                 : null;
             var muzzleReference = property == null ? null : GetInheritedBlueprintProperty(objects, blueprint, defaultObject, property);
             if (muzzleReference != null)
-                foreach (var key in GetComponentLookupKeys(muzzleReference))
-                {
-                    var muzzleFrameReference = references.FirstOrDefault(item => string.Equals(NormalizeComponentReferenceName(item.ComponentName), key, StringComparison.OrdinalIgnoreCase));
-                    if (muzzleFrameReference != null) return new(ResolveFiringReferenceTransform(muzzleFrameReference, references).Transform, "muzzle-component", key);
-                }
+            {
+                // The scene components are positioned by game initialization;
+                // their serialized zero transforms are not muzzle positions.
+                var socket = ExtractInt(index) switch { 1 => "S_MainGunMuzzle", 2 => "S_LeftGunMuzzle", 3 => "S_RightGunMuzzle", _ => null };
+                if (socket != null) return ResolveFiringSocketReferences(references, socket);
+            }
             return null;
         }
 
