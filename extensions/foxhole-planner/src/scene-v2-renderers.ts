@@ -433,6 +433,25 @@ export function renderFoxholeSceneV2Entity(
     entity: NixieExperimentalComponentEntitySnapshotV1,
     context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
+    const plan = renderFoxholeSceneV2EntityPlan(entity, context);
+    const asset = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+        && component.componentId === 'asset' && component.definitionAvailable);
+    const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+        && component.componentId === 'spline-connector' && component.definitionAvailable);
+    const metadata = assetMetadataById[String(asset?.data.assetId ?? spline?.data.foxholeKey ?? '')];
+    if (metadata?.canBlueprint && (readFoxholeSceneV2Appearance(entity).blueprint || spline?.data.blueprint === true)) {
+        plan.experimentalSpatial = {
+            ...(plan.experimentalSpatial ?? { contractVersion: 1, supplementModel: true, nodes: [] }),
+            modelMaterial: { color: 0x4f79c6, roughness: 0.6, metallic: 0 },
+        };
+    }
+    return plan;
+}
+
+function renderFoxholeSceneV2EntityPlan(
+    entity: NixieExperimentalComponentEntitySnapshotV1,
+    context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
+): NixieExtensionRenderPlanV1 {
     const renderScale = context.viewport?.renderScale ?? 1;
     const tacticalLine = entity.components.find(component => (
         component.ownerId === 'nixie.foxhole-planner'
