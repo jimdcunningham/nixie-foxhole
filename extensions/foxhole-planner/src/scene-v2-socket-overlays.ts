@@ -5,6 +5,7 @@ import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2ModificationVariantMeta
 import { FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane } from './render-lanes.ts';
 
 export const FOXHOLE_SOCKET_DISPLAY_SETTING_IDS = ['foxhole.debug.structure.powerSockets', 'foxhole.debug.structure.pipeSockets', 'foxhole.debug.structure.socketLabels'] as const;
+export const FOXHOLE_ALL_SOCKETS_SETTING_ID = 'foxhole.debug.structure.allSockets';
 export type FoxholeSocketDisplayKind = 'power' | 'pipe' | 'generic';
 export type FoxholePipeDisplayFlow = 'input' | 'output' | 'bidirectional';
 export const FOXHOLE_POWER_SOCKET_COLOR = 0xFFD800;
@@ -38,7 +39,7 @@ export function renderFoxholeSpatialSocketMarkers(asset: FoxholeSceneV2AssetMeta
         color: entry.kind === 'power' ? FOXHOLE_POWER_SOCKET_COLOR : FOXHOLE_PIPE_SOCKET_COLORS[entry.flow], label: entry.socket.name.slice(0, 128),
     }));
     for (const socket of resolveFoxholeEffectiveStructureSocketSources(asset, variants)) {
-        if (markers.length >= 128 || resolveFoxholeSocketDisplayKind(socket) !== 'generic' || occupied.has(socket.name)
+        if (settings[FOXHOLE_ALL_SOCKETS_SETTING_ID] !== true || markers.length >= 128 || resolveFoxholeSocketDisplayKind(socket) !== 'generic' || occupied.has(socket.name)
             || !socket.socketTags.some(tag => tag.mask > 0 && tag.category > 0)) continue;
         markers.push({ id: `socket-${markers.length}`, point: [Number(socket.x ?? 0) * 0.32, Number(socket.y ?? 0) * 0.32, Number(socket.z ?? 0) * 0.32],
             color: 0x9bd3df, label: socket.name.slice(0, 128) });

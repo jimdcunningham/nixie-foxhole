@@ -60,3 +60,18 @@ test('selected modification socket sources are normalized/deduplicated and exact
     assert.equal(resolveFoxholeSocketDisplayKind({ name: 'ByTag', socketTags: [{ category: 1, mask: 131072 }] }), 'power');
     assert.equal(resolveFoxholeSocketDisplayKind({ name: 'ByTag', socketTags: [{ category: 2048, mask: 16795648 }] }), 'pipe');
 });
+
+test('generic bunker socket markers follow All Sockets independently of power and pipe overlays', () => {
+    const generic = { name: 'WallSocket', x: 100, y: 50, z: 250, socketTags: [{ category: 4, mask: 1 }] };
+    const bunker = { ...asset, overlaySockets: [...asset.overlaySockets!, generic] };
+    const render = (settings: Record<string, boolean>) => renderFoxholeSpatialSocketMarkers(bunker, [], [], settings,
+        { destroyed: false, packaged: false });
+    assert.ok(!render({}).some(marker => marker.label === generic.name));
+    assert.ok(!render({ 'foxhole.debug.structure.allSockets': false }).some(marker => marker.label === generic.name));
+    assert.ok(render({ 'foxhole.debug.structure.allSockets': true }).some(marker => marker.label === generic.name && marker.point[2] === 80));
+    for (const all of [false, true]) {
+        const markers = render({ 'foxhole.debug.structure.allSockets': all, 'foxhole.debug.structure.powerSockets': false,
+            'foxhole.debug.structure.pipeSockets': false });
+        assert.deepEqual(markers.map(marker => marker.label), all ? [generic.name] : []);
+    }
+});
