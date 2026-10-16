@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import assets from '../src/scene-v2-assets-node.ts';
+import { renderFoxholeStructureFiringVolumes } from '../src/scene-v2-structure-range-overlays.ts';
+
+test('all catalog AI garrisons and pillboxes retain their source gun heights and offsets', () => {
+    const expected: Record<string, readonly [number, number, number]> = {
+        mgait1: [2.68,-0.01067,2.6243], mgait2: [2.68,-0.01067,2.6243], mgait3: [2.61,0,2.01],
+        rifleait1: [3,0,2.2], rifleait2: [3,0,2.2], rifleait3: [3,0,2.26],
+        atgunait1: [2.98,0,2.67067], atgunait2: [2.98,0,2.67067], atgunait3: [4.84,0,2.36],
+        mgpillbox: [2,0,1.1], riflepillbox: [2.8,-0.01749,0.9], atpillbox: [2.2,0,1.66359], isgpillbox: [2.2,0,1.66359],
+        artilleryait1: [2.06801,0,1.98435], artilleryait2: [3.78628,0,1.89237], artilleryait3: [2.49838,0,2.63672],
+    };
+    for (const [id, origin] of Object.entries(expected)) {
+        const asset=assets[id]!, source=asset.ranges!.find(range=>range.firingVolume)!.firingVolume!;
+        assert.ok(source.originSource==='muzzle-component' || source.originSource==='gun-bone',id);
+        origin.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<0.0001,`${id} source axis ${i}`));
+        const volume=renderFoxholeStructureFiringVolumes(asset,{}, {destroyed:false,packaged:false})[0]!;
+        assert.ok(volume,`${id} must render its source-backed AI volume`);
+        const offset=asset.model!.blueprintOrigin!;
+        origin.forEach((value,i)=>assert.ok(Math.abs(volume.origin[i]!-(value*32+[offset.x,offset.y,offset.z][i]!))<0.004,`${id} model axis ${i}`));
+    }
+});
+
+test('tankette gun sockets face forward and do not inherit stale ground-range centers', () => {
+    for (const [id,x] of [['tankettec',1.85378],['tanketteoffensivec',2.16036]] as const) {
+        const asset=assets[id]!, source=asset.ranges![0]!.firingVolume!;
+        assert.equal(source.originSource,'muzzle-socket');
+        assert.ok(Math.abs(source.origin[0]-x)<0.001,id);
+        assert.ok(Math.abs(source.origin[1]-0.28763)<0.001,id);
+        assert.ok(Math.abs(source.orientation[3])>0.99999,`${id} must not acquire a quarter turn`);
+        assert.ok(Math.abs(source.origin[0]-(asset.ranges![0]!.x??0))>1,'seat position must not replace the gun');
+        const volume=renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false})[0]!;
+        assert.ok(volume);
+        assert.ok(Math.abs(volume.origin[0]-source.origin[0]*32)<0.0001);
+    }
+});

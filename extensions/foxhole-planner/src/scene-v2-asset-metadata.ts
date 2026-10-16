@@ -281,6 +281,9 @@ interface PublishedFoxholeHoldProfile {
 }
 
 export type FoxholeSceneV2FiringVolume = {
+    originSource?: 'muzzle-component' | 'muzzle-socket' | 'gun-bone' | 'firing-component';
+    originName?: string;
+    reference?: { origin: [number, number]; heading: number; };
     origin: [number, number, number];
     orientation: [number, number, number, number];
 } & ({ source: 'mount-dynamic-data'; minYaw: number; maxYaw: number; minPitch: number; maxPitch: number; }

@@ -28,6 +28,8 @@ export function publishFiringVolumes(source, published, { sourceFrame = false } 
             }
             const sourceRange = candidates.splice(candidateIndex,1)[0];
             if (!sourceRange?.firingVolume) continue;
+            if (sourceFrame && sourceRange.firingVolume.originSource === 'firing-component'
+                && !range.fv && !range.firingVolume) continue;
             // A model-space migration uses the newly extracted source frame. Old
             // generated ground centers may themselves contain the positioning bug.
             const volume = alignFiringVolume(sourceFrame ? sourceRange : range, sourceRange.firingVolume);

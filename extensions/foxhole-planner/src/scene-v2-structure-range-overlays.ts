@@ -137,7 +137,7 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
     if (appearance.destroyed || appearance.packaged || !asset.model) return [];
     return (asset.ranges ?? []).flatMap((range, index) => {
         const source = range.firingVolume;
-        if (!source || !range.type.startsWith('killbox')
+        if (!source || source.originSource === 'firing-component' || !range.type.startsWith('killbox')
             || !isFoxholeStructureRangeVisible(range, settings, true, asset.isVehicle === true)) return [];
         const max = distance(range.max), min = Math.max(0,distance(range.min) ?? 0);
         if (!max || min >= max || !source.origin.every(Number.isFinite) || source.origin.length !== 3

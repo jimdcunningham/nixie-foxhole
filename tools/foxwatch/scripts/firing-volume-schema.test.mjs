@@ -96,3 +96,14 @@ test('model-frame migration ignores stale generated ground positions and keeps 2
     const range=result.manifest.assets[0].ranges[0];delete range.fv;
     assert.deepEqual(range,catalog.assets[0].ranges[0]);
 });
+
+test('model-frame migration avoids adding unresolved volumes but marks existing uncertain ones', () => {
+    const unknown={...volume,originSource:'firing-component'};
+    const source={assets:[{id:'test',ranges:[{type:'killboxAT',max:35,firingVolume:unknown}]}]};
+    const fresh={assets:[{id:'test',ranges:[{t:'killboxAT',mx:35}]}]};
+    assert.deepEqual(publishFiringVolumes(source,fresh,{sourceFrame:true}),{manifest:fresh,count:0});
+    const existing=structuredClone(fresh);existing.assets[0].ranges[0].fv=volume;
+    const result=publishFiringVolumes(source,existing,{sourceFrame:true});
+    assert.equal(result.count,1);
+    assert.equal(result.manifest.assets[0].ranges[0].fv.originSource,'firing-component');
+});

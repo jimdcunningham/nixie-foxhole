@@ -111,3 +111,11 @@ test('AI artillery cones retain minimum ranges and the nighttime exception',()=>
         assert.equal(cone.clipCylinder,undefined);
     }
 });
+
+
+test('unresolved weapon positions keep ground coverage without inventing a 3D muzzle', () => {
+    const asset=assets.mgait2!, appearance={destroyed:false,packaged:false};
+    const unknown={...asset,ranges:asset.ranges!.map(range=>({...range,firingVolume:{...range.firingVolume!,originSource:'firing-component' as const}}))};
+    assert.deepEqual(renderFoxholeStructureFiringVolumes(unknown,{},appearance),[]);
+    assert.ok(renderFoxholeStructureRangeOverlays(unknown,{},appearance).length>0);
+});
