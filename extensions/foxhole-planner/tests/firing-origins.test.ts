@@ -36,7 +36,6 @@ test('tankette gun sockets face forward and do not inherit stale ground-range ce
     }
 });
 
-
 test('recovered shared-skeleton and legacy guns retain distinct source muzzle bindings', () => {
     const expected: Record<string, string[]> = {
         battletankw:['S_MainGunMuzzle'], mediumtank2multiw:['S_ComTurretMuzzle'],
@@ -66,4 +65,40 @@ test('recovered shared-skeleton and legacy guns retain distinct source muzzle bi
     assert.ok(Math.abs(main.origin[0]-3.62988)<0.001);
     assert.ok(Math.abs(main.origin[2]-1.27306)<0.001);
     assert.ok(Math.abs(main.orientation[3])>0.99999,'main gun acquired an extra quarter turn');
+});
+
+test('remaining initialization-bound guns retain their source origins and launcher axes', () => {
+    const expected: Record<string, [string, number, number, number][]> = {
+        motorcycleoffensivec:[['S_Muzzle',1.73415,-0.55052,0.76473]],
+        landingcraftoffensivec:[['S_Muzzle',2.88139,0.63233,1.26671]],
+        scoutvehicleoffensivew:[['S_Muzzle',0.28917,0.00001,0.82404]],
+        truckoffensivec:[['S_Muzzle',3.60915,0.5552,1.65804]],
+        scoutvehicleoffensivec:[['S_Muzzle',-0.38509,0.32216,0.90299]],
+        aircraftfighter2c:[['S_AircraftFighter2C_Top_Gunner_0',2.07726,-0.72919,1.40527]],
+        aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',-0.00393,6.16677,0.28913]],
+        aircraftdivec:[['S_AircraftDiveC_Muzzle_L',0.06061,2.0636,0.9044]],
+        aircraftbomberc:[['S_Muzzle_Fore_0',0,-7.11152,0.46479],['S_Muzzle_Mid_0',0.00005,7.46581,1.46248],['S_Muzzle_Aft_0',-0.01029,15.62941,0.23921]],
+        armoredcar2multiw:[['PayloadInstancedStaticMesh',-1.79493,-0.56515,0.9297]],
+        truckmultic:[['PayloadInstancedStaticMesh',-3.57564,1.52788,0.99559]],
+        gunboat2c:[['PayloadInstancedStaticMesh',-4.64533,-1.2613,4.94592]],
+    };
+    let count=0;
+    for(const [id,frames] of Object.entries(expected)) {
+        const asset=assets[id]!;
+        for(const [name,...position] of frames) {
+            const source=asset.ranges!.find(range=>range.firingVolume?.originName===name)?.firingVolume;
+            assert.ok(source,`${id}/${name}`);
+            assert.equal(source.originSource,name==='PayloadInstancedStaticMesh'?'muzzle-component':'muzzle-socket',id);
+            position.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<0.001,`${id} axis ${i}`));
+            count++;
+        }
+        const appearance={destroyed:false,packaged:false};
+        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{},appearance),[],'vehicle debug gate must stay closed');
+        assert.ok(renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},appearance).length>=frames.length,id);
+    }
+    assert.equal(count,14);
+    for(const [id,forward] of [['armoredcar2multiw',1],['truckmultic',1],['gunboat2c',-1]] as const) {
+        const q=assets[id]!.ranges!.find(range=>range.firingVolume)?.firingVolume!.orientation!;
+        assert.ok(Math.abs(1-2*(q[1]*q[1]+q[2]*q[2])-forward)<0.0001,`${id}: visual mesh rotation changed firing direction`);
+    }
 });
