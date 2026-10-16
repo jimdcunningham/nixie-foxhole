@@ -40,6 +40,18 @@ public static class FoxWatchFiringVolumes
         };
     }
 
+    // Legacy seat/ground overlays have corrective frames that the 3D Blueprint
+    // model does not use. Move their reference without moving a resolved muzzle.
+    public static void RotateLegacyRangeFrame(FoxWatchManifestFiringVolume? volume, double yaw, double x, double y)
+    {
+        if (volume?.OriginSource is not ("muzzle-component" or "muzzle-socket" or "gun-bone")) {
+            Rotate(volume,yaw,x,y); return;
+        }
+        var origin=volume.Origin.ToArray(); var orientation=volume.Orientation.ToArray();
+        Rotate(volume,yaw,x,y);
+        volume.Origin=origin; volume.Orientation=orientation;
+    }
+
     public static void Rotate(FoxWatchManifestFiringVolume? volume, double yawDegrees, double offsetX, double offsetY)
     {
         if (volume == null) return;
@@ -47,6 +59,12 @@ public static class FoxWatchFiringVolumes
         var x = volume.Origin[0]; var y = volume.Origin[1];
         volume.Origin[0] = x * Math.Cos(angle) - y * Math.Sin(angle) + offsetX;
         volume.Origin[1] = x * Math.Sin(angle) + y * Math.Cos(angle) + offsetY;
+        if (volume.Reference is { } reference) {
+            var rx = reference.Origin[0]; var ry = reference.Origin[1];
+            reference.Origin = [rx * Math.Cos(angle) - ry * Math.Sin(angle) + offsetX,
+                rx * Math.Sin(angle) + ry * Math.Cos(angle) + offsetY];
+            reference.Heading += yawDegrees;
+        }
         var q = volume.Orientation;
         var rotated = Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (float)angle)
             * new Quaternion((float)q[0], (float)q[1], (float)q[2], (float)q[3]));

@@ -29,7 +29,7 @@ using UBlueprintGeneratedClass = System.Object;
 
 namespace FoxWatchService;
 
-public class FoxWatchManifestAssetExtractor
+public partial class FoxWatchManifestAssetExtractor
     {
         private const double UnrealUnitsPerMeter = 100.0;
         private const string BlueprintPackagePrefix = "War/Content/Blueprints/";
@@ -5082,7 +5082,7 @@ public class FoxWatchManifestAssetExtractor
                         continue;
                     }
 
-                    var range = ExtractVehicleWeaponRange(objects, blueprint, item, componentLookup);
+                    var range = ExtractVehicleWeaponRange(objects, blueprint, defaultObject, item, componentLookup);
                     if (range == null)
                     {
                         continue;
@@ -5136,7 +5136,7 @@ public class FoxWatchManifestAssetExtractor
                         continue;
                     }
 
-                    var range = ExtractAiTurretRange(objects, blueprint, item, componentLookup);
+                    var range = ExtractAiTurretRange(objects, blueprint, defaultObject, item, componentLookup);
                     if (range == null)
                     {
                         continue;
@@ -5281,6 +5281,7 @@ public class FoxWatchManifestAssetExtractor
         private FoxWatchManifestRange? ExtractVehicleWeaponRange(
             IEnumerable<dynamic> rootObjects,
             UBlueprintGeneratedClass blueprint,
+            object defaultObject,
             object component,
             IReadOnlyDictionary<string, object> componentLookup)
         {
@@ -5321,6 +5322,10 @@ public class FoxWatchManifestAssetExtractor
                 ? mountComponentMetadata.ExtendedMaxDistance
                 : mountDynamicData.MaxDistance;
 
+            var muzzle = ResolveWeaponFiringFrame(rootObjects, blueprint, defaultObject, component, componentLookup, vehicle: true);
+            var firing = muzzle?.Transform ?? transform;
+            var aiming = muzzle?.Transform.Rotation ?? Quaternion.Normalize(CreateUnrealRotatorQuaternion(0, facingYawDegrees - transform.YawDegrees, 0) * transform.Rotation);
+            aiming = Quaternion.Normalize(CreateUnrealRotatorQuaternion(0, mountDynamicData.YawOffset ?? 0, 0) * aiming);
             return new FoxWatchManifestRange
             {
                 Type = rangeType,
@@ -5333,16 +5338,16 @@ public class FoxWatchManifestAssetExtractor
                 Min = RoundRangeDistance(mountDynamicData.MinDistance),
                 Max = RoundRangeDistance(maxDistance),
                 Reach = RoundRangeDistance(mountDynamicData.MaxReachability),
-                FiringVolume = FoxWatchFiringVolumes.Create(
-                    [transform.X / 100, transform.Y / 100, transform.Z / 100],
-                    Quaternion.Normalize(CreateUnrealRotatorQuaternion(0, facingYawDegrees - transform.YawDegrees + (mountDynamicData.YawOffset ?? 0), 0) * transform.Rotation),
-                    mountDynamicData.MinYaw, mountDynamicData.MaxYaw, mountDynamicData.MinPitch, mountDynamicData.MaxPitch),
+                FiringVolume = SetFiringFrame(FoxWatchFiringVolumes.Create(
+                    [firing.X / 100, firing.Y / 100, firing.Z / 100], aiming,
+                    mountDynamicData.MinYaw, mountDynamicData.MaxYaw, mountDynamicData.MinPitch, mountDynamicData.MaxPitch), muzzle, transform, rotation),
             };
         }
 
         private FoxWatchManifestRange? ExtractAiTurretRange(
             IEnumerable<dynamic> rootObjects,
             UBlueprintGeneratedClass blueprint,
+            object defaultObject,
             object component,
             IReadOnlyDictionary<string, object> componentLookup)
         {
@@ -5367,6 +5372,8 @@ public class FoxWatchManifestAssetExtractor
                 : componentName;
             var arc = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "FiringConeAngle"));
 
+            var muzzle = ResolveWeaponFiringFrame(rootObjects, blueprint, defaultObject, component, componentLookup, vehicle: false);
+            var firing = muzzle?.Transform ?? transform;
             return new FoxWatchManifestRange
             {
                 Type = rangeType,
@@ -5376,9 +5383,9 @@ public class FoxWatchManifestAssetExtractor
                 Rotation = arc is > 0 and < 360 ? RoundRangeValue(NormalizeDegrees(transform.YawDegrees)) : null,
                 Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value) : null,
                 Max = RoundRangeDistance(maximumRange),
-                FiringVolume = FoxWatchFiringVolumes.CreateCone(
-                    [transform.X / 100, transform.Y / 100, transform.Z / 100], transform.Rotation,
-                    arc is > 0 ? Math.Min(arc.Value, 180) : 180),
+                FiringVolume = SetFiringFrame(FoxWatchFiringVolumes.CreateCone(
+                    [firing.X / 100, firing.Y / 100, firing.Z / 100], firing.Rotation,
+                    arc is > 0 ? Math.Min(arc.Value, 180) : 180), muzzle, transform, transform.YawDegrees),
             };
         }
 
@@ -5446,6 +5453,9 @@ public class FoxWatchManifestAssetExtractor
                 rotation = firingAngle is > 0 and < 360 ? RoundRangeValue(NormalizeDegrees(transform.YawDegrees)) : null;
             }
 
+            var aimingFrame = new ManifestComponentTransform(originX, originY, originZ, orientation);
+            var muzzle = ResolveArtilleryGunFrame(objects, blueprint, componentLookup, aimingFrame);
+            var firing = muzzle?.Transform ?? aimingFrame;
             return
             [
                 new FoxWatchManifestRange
@@ -5458,8 +5468,8 @@ public class FoxWatchManifestAssetExtractor
                     Min = RoundRangeDistance(minDistance),
                     Max = RoundRangeDistance(maxDistance),
                     FiringVolume = ContainsAny(NormalizeString(GetObjectName(blueprint)), "ArtilleryAIT")
-                        ? FoxWatchFiringVolumes.CreateCone([originX / 100, originY / 100, originZ / 100], orientation,
-                            firingAngle is > 0 ? Math.Min(firingAngle.Value, 180) : 180, artillery: true)
+                        ? SetFiringFrame(FoxWatchFiringVolumes.CreateCone([firing.X / 100, firing.Y / 100, firing.Z / 100], firing.Rotation,
+                            firingAngle is > 0 ? Math.Min(firingAngle.Value, 180) : 180, artillery: true), muzzle, aimingFrame, aimingFrame.YawDegrees)
                         : null,
                 }
             ];
@@ -8803,7 +8813,7 @@ public class FoxWatchManifestAssetExtractor
                 var rotatedPosition = RotatePlanarCoordinates(range.X, range.Y, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 range.X = rotatedPosition.X;
                 range.Y = rotatedPosition.Y;
-                FoxWatchFiringVolumes.Rotate(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
+                FoxWatchFiringVolumes.RotateLegacyRangeFrame(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 if (range.Rotation != null)
                 {
                     range.Rotation = NormalizeDegrees(range.Rotation.Value + yawOffsetDegrees);
@@ -8869,7 +8879,7 @@ public class FoxWatchManifestAssetExtractor
                 var rotatedPosition = RotatePlanarCoordinates(range.X, range.Y, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 range.X = rotatedPosition.X;
                 range.Y = rotatedPosition.Y;
-                FoxWatchFiringVolumes.Rotate(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
+                FoxWatchFiringVolumes.RotateLegacyRangeFrame(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 if (range.Rotation != null)
                 {
                     range.Rotation = NormalizeDegrees(range.Rotation.Value + yawOffsetDegrees);
@@ -13722,8 +13732,11 @@ public class FoxWatchManifestAssetExtractor
                     rollDegrees: ExtractVectorComponent(relativeRotation, "Roll") ?? 0);
 
                 var boneName = NormalizeComponentReferenceName(ExtractText(GetNamedValue(socket, "BoneName")));
-                if (!string.IsNullOrWhiteSpace(boneName) && boneTransforms.TryGetValue(boneName, out var boneTransform))
+                if (!string.IsNullOrWhiteSpace(boneName))
                 {
+                    // A shared skeleton can declare sockets for bones absent from a mesh.
+                    // Its socket-local offset alone is not a valid mesh-space position.
+                    if (!boneTransforms.TryGetValue(boneName, out var boneTransform)) continue;
                     socketTransform = ComposeComponentTransforms(boneTransform, socketTransform);
                 }
 

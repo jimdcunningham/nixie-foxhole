@@ -553,3 +553,12 @@ node --test tools/foxwatch/scripts/firing-volume-schema.test.mjs
 ```
 
 The SDK renderer restores the model's exported Blueprint-origin offset before drawing volumes. Supply, detection and other coverage radii remain ground overlays. AI turrets export `FiringConeAngle`, their resolved origin and orientation as `ai-turret` metadata; the SDK renders a circular radial cone. Artillery garrisons preserve their separate `FiringAngle` and minimum range as `ai-artillery` metadata. An absent/nonpositive angle retains the existing omnidirectional coverage convention as a full-angle volume. Nighttime and powered spotlights intersect eligible AI cones with the same structure-centered visibility cylinder used by ground ranges, preserving existing exceptions.
+
+
+## Firing origin metadata
+
+3D firing frames use the Blueprint muzzle component or the gunner's `MuzzleInfo` socket, including bone ancestry, mesh transforms and scale. Multi-barrel mounts use their first declared muzzle. Equivalent sockets shared by modular mesh parts are coalesced; genuinely different candidate frames are rejected. Artillery garrisons without a declared muzzle use their named barrel or gun pivot and keep the structure aiming frame.
+
+`firingVolume.originSource` and `originName` record this provenance. `reference` preserves the ground range frame so authored corrections do not erase muzzle offsets. Legacy seat/ground-frame corrections do not rotate a resolved model-space muzzle. An unresolved native constructor frame stays `firing-component`; Planner keeps its ground coverage but does not present that position as a 3D muzzle. Generate against the PAK-addressed decoded package and inspection bundle used for the models.
+
+For a metadata-only migration from the current source manifest, use `publish-firing-volumes.mjs --source-frame <source> <catalog> [catalog...]`. This preserves every existing 2D range field and replaces only firing metadata; old generated ground offsets are not applied to the new muzzle frame.

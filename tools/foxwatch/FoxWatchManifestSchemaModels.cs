@@ -533,8 +533,17 @@ public sealed class FoxWatchManifestConnectorMeshConfig
     public List<double>? RelativeScale { get; set; }
 }
 
+public sealed class FoxWatchManifestFiringReference
+{
+    public double[] Origin { get; set; } = [];
+    public double Heading { get; set; }
+}
+
 public sealed class FoxWatchManifestFiringVolume
 {
+    public FoxWatchManifestFiringReference? Reference { get; set; }
+    public string? OriginSource { get; set; }
+    public string? OriginName { get; set; }
     public string Source { get; set; } = "mount-dynamic-data";
     public double? ConeHalfAngle { get; set; }
     public double[] Origin { get; set; } = [];
