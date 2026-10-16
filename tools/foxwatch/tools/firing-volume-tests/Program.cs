@@ -235,3 +235,13 @@ var inherited=new CUE4Parse.UE4.Assets.Exports.Component.SkeletalMesh.USkeletalM
 };
 Check(authoredRotation.Invoke(null,[inherited])!=null,"Native component archetype rotation was lost");
 Console.WriteLine("Native firing archetype inheritance checks passed");
+
+// Native payload component: row-major index, negative local Y/Z spacing; no artwork rotation.
+var squireGrid=FoxWatchPayloadGrid.CreateOffsets(2,5,-39,-28.2)!;
+Check(squireGrid.Length==10 && Vector3.Distance(squireGrid[4],new(0,112.8f,0))<0.0001f && Vector3.Distance(squireGrid[5],new(0,0,39))<0.0001f,"Squire payload axes, signs or row-major order changed");
+var retiariusGrid=FoxWatchPayloadGrid.CreateOffsets(2,8,42,43.5)!;
+Check(retiariusGrid.Length==16 && retiariusGrid[7]==new Vector3(0,-304.5f,0) && retiariusGrid[8]==new Vector3(0,0,-42),"Retiarius payload row rollover changed");
+var lucianGrid=FoxWatchPayloadGrid.CreateOffsets(1,6,0,50.5)!;
+Check(lucianGrid.Length==6 && lucianGrid[5]==new Vector3(0,-252.5f,0),"Lucian payload spacing changed");
+Check(FoxWatchPayloadGrid.CreateOffsets(0,6,0,50.5)==null && FoxWatchPayloadGrid.CreateOffsets(256,1,0,0)==null && FoxWatchPayloadGrid.CreateOffsets(255,255,0,0)==null && FoxWatchPayloadGrid.CreateOffsets(1,1,double.NaN,1)==null,"Malformed payload grid accepted");
+Console.WriteLine("Native rocket payload layout checks passed");
