@@ -359,6 +359,11 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
             : null;
     },
     selectionLocalBounds(entity, renderScale) {
+        // Spline products also carry asset identity, whose sprite bounds describe
+        // only the undeformed source segment. Measure their rendered path instead.
+        if (data(entity, 'spline-connector')) {
+            return null;
+        }
         const geometry = structureGeometry(entity);
         if (geometry) {
             const { state, structure, manifest, dimensions, packaged, destroyed, replacement, variants, catalog } = geometry;
@@ -392,12 +397,12 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
             resolveFoxholeTriangulationState({ ...triangulation, ...transform } as Partial<FoxholeTriangulationState>), renderScale);
     },
     selectionTransformOriginLocal(entity) {
-        if (data(entity, 'asset')?.catalogId === 'foxhole.structures') {
-            return { x: 0, y: 0 };
-        }
         const spline = editableSpline(entity);
         if (spline) {
             return { x: (spline.state.start.x + spline.state.end.x) / 2, y: (spline.state.start.y + spline.state.end.y) / 2 };
+        }
+        if (data(entity, 'asset')?.catalogId === 'foxhole.structures') {
+            return { x: 0, y: 0 };
         }
         const range = data(entity, 'range');
         if (!range) {

@@ -684,3 +684,23 @@ test('triangulation bounds reuse V1 fitted-circle padding at every render scale'
     unresolved.components.find(component => component.componentId === 'triangulation')!.definitionAvailable = false;
     assert.equal(foxholeSceneV2StateAdapter.selectionLocalBounds!(unresolved, 1), null);
 });
+
+
+test('spline assets defer selection bounds to the rendered path and use the endpoint midpoint', () => {
+    for (const foxholeKey of ['facilitypipeoverhead', 'facilitypipe', 'railtrackspline', 'powerline']) {
+        const { host, id, apply } = fixture('foxholeSplineConnector', { foxholeKey,
+            start: { x: 0, y: 0, rotation: 0 }, end: { x: 448, y: 224, rotation: 0 } });
+        // Explorer products retain asset identity alongside their editable spline component.
+        const input = () => ({ ...host.readEntity(id), components: [...host.readEntity(id).components,
+            { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
+                data: { catalogId: 'foxhole.structures', assetId: foxholeKey } }] });
+        const before = host.exportDocument();
+        assert.equal(foxholeSceneV2StateAdapter.selectionLocalBounds!(input(), 1), null, foxholeKey);
+        assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(input()), { x: 224, y: 112 }, foxholeKey);
+        assert.deepEqual(host.exportDocument(), before);
+        apply({ end: { x: 320, y: -160, rotation: 0 } });
+        assert.equal(foxholeSceneV2StateAdapter.selectionLocalBounds!(input(), 1), null, foxholeKey);
+        assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(input()), { x: 160, y: -80 }, foxholeKey);
+        assert.equal(Boolean(foxholeSceneV2StateAdapter.selectionLocalQuad!(input())), foxholeKey === 'powerline');
+    }
+});
