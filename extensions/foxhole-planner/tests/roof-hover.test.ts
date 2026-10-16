@@ -67,3 +67,29 @@ test('every modeled structural asset publishes valid bounded hover visibility', 
             { contractVersion: 1, entities: [], settings: { 'foxhole.structure.hideRoofsOnHover': true } })), id);
     }
 });
+
+test('roof-mounted flags on garrisons and intelligence buildings hide with fixed and hovered roofs', () => {
+    const ids = ['artilleryait1', 'artilleryait2', 'artilleryait3', 'atgunait1', 'atgunait2', 'atgunait3',
+        'mgait1', 'mgait2', 'mgait3', 'rifleait1', 'rifleait2', 'rifleait3',
+        'observationbunkert1', 'observationbunkert2', 'observationbunkert3', 'fortradart1', 'fortradart2', 'fortradart3',
+        'intelcenter', 'fortlargeradar', 'lrartillery', 'weatherstation'];
+    for (const id of ids) {
+        const asset = assets[id]!, subject = entity(id);
+        const flags = Object.entries(asset.renderLayers).filter(([layerId]) => /^(?:team)?flag(?:mesh)?\d*$/.test(layerId));
+        assert.ok(flags.length, `${id} must exercise a real flag layer`);
+        const hidden = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], settings: { 'foxhole.structure.hideRoofs': true } });
+        const hovered = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
+            settings: { 'foxhole.structure.hideRoofsOnHover': true } }));
+        for (const [layerId, layer] of flags) {
+            assert.equal(isFoxholeRoofRenderLayer({ id: layerId, ...layer }, asset.codeName), true, `${id}:${layerId}`);
+            assert.ok(hovered.experimentalHover!.hiddenNodeIds!.includes(`structure-layer-${layerId}`), `${id}:${layerId} planar hover`);
+            for (const node of asset.model!.structuralProfile!.layers[layerId]!) {
+                assert.ok(hidden.experimentalSpatial!.hiddenModelNodes!.includes(node), `${id}:${node} fixed roof hiding`);
+                assert.ok(hovered.experimentalHover!.hiddenModelNodes!.includes(node), `${id}:${node} model hover`);
+            }
+        }
+        assert.equal(hovered.experimentalHover!.opacity, 0);
+        assert.equal(hovered.experimentalHover!.fadeDurationMs, 0);
+    }
+    assert.equal(isFoxholeRoofRenderLayer({ id: 'flagmesh' }, 'UnrelatedStructure'), false);
+});

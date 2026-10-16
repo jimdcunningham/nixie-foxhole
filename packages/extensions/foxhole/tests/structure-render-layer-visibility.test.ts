@@ -589,23 +589,23 @@ test('isFoxholeRoofRenderLayer matches roof layer ids', () => {
 test('overhead components of radar, artillery, weather, and observation structures hide with roofs', () => {
     const manifest = JSON.parse(readFileSync(new URL('../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
     const roofParts: Record<string, string[]> = {
-        fortlargeradar: ['roofmesh', 'skeletalmesh'],
-        intelcenter: ['roofbasemesh', 'roofmesh', 'skeletalmesh'],
-        lrartillery: ['roofmesh', 'skeletalmesh'],
-        weatherstation: ['roofbasemesh', 'roofmesh', 'skeletalmesh', 'staticmesh'],
+        fortlargeradar: ['flag', 'flag2', 'roofmesh', 'skeletalmesh'],
+        intelcenter: ['flag', 'flag2', 'roofbasemesh', 'roofmesh', 'skeletalmesh'],
+        lrartillery: ['flag', 'flag2', 'roofmesh', 'skeletalmesh'],
+        weatherstation: ['flag', 'roofbasemesh', 'roofmesh', 'skeletalmesh', 'staticmesh'],
         fortartillerysheltert2: ['roof', 'artilleryshelterroof'],
         fortartillerysheltert3: ['roof', 'artilleryshelterroof'],
-        observationbunkert1: ['roof', 'observationbunkert1'],
-        observationbunkert2: ['roof', 'observationbunkert2'],
-        observationbunkert3: ['roof', 'observationbunkert3'],
-        atgunait2: ['roof', 'skelmesh', 'basemesh', 'topmesh'],
-        atgunait3: ['roof', 'skelmesh', 'basemesh', 'topmesh'],
-        mgait1: ['mesh'],
-        mgait2: ['mesh', 'roof', 'basemesh', 'topmesh'],
-        mgait3: ['mesh', 'roof', 'basemesh', 'topmesh'],
-        rifleait1: ['fortt1gunai'],
-        rifleait2: ['fortt1gunai', 'basemesh', 'topmesh'],
-        rifleait3: ['fortt1gunai', 'basemesh', 'topmesh'],
+        observationbunkert1: ['teamflagmesh', 'roof', 'observationbunkert1'],
+        observationbunkert2: ['teamflagmesh', 'roof', 'observationbunkert2'],
+        observationbunkert3: ['teamflagmesh', 'roof', 'observationbunkert3'],
+        atgunait2: ['flagmesh', 'roof', 'skelmesh', 'basemesh', 'topmesh'],
+        atgunait3: ['flagmesh', 'roof', 'skelmesh', 'basemesh', 'topmesh'],
+        mgait1: ['flagmesh', 'mesh'],
+        mgait2: ['flagmesh', 'mesh', 'roof', 'basemesh', 'topmesh'],
+        mgait3: ['flagmesh', 'mesh', 'roof', 'basemesh', 'topmesh'],
+        rifleait1: ['flagmesh', 'fortt1gunai'],
+        rifleait2: ['flagmesh', 'fortt1gunai', 'basemesh', 'topmesh'],
+        rifleait3: ['flagmesh', 'fortt1gunai', 'basemesh', 'topmesh'],
     };
     for (const [id, roofLayerIds] of Object.entries(roofParts)) {
         const asset = manifest.assets.find((item: { id: string; }) => item.id === id);

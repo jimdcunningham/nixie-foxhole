@@ -275,21 +275,27 @@ function layerMatchesOccupiedSocketTags(
 // These authored components sit above the interior, but their source names
 // do not carry the usual Roof tag. Keep the aliases scoped to each asset.
 const additionalRoofLayerIdsByStructure: Readonly<Record<string, readonly string[]>> = {
-    fortlargeradar: ['roofmesh', 'skeletalmesh'],
-    intelcenter: ['roofbasemesh', 'roofmesh', 'skeletalmesh'],
-    lrartillery: ['roofmesh', 'skeletalmesh'],
-    weatherstation: ['roofbasemesh', 'roofmesh', 'skeletalmesh', 'staticmesh'],
+    fortlargeradar: ['roofmesh', 'skeletalmesh', 'flag', 'flag2'],
+    intelcenter: ['roofbasemesh', 'roofmesh', 'skeletalmesh', 'flag', 'flag2'],
+    lrartillery: ['roofmesh', 'skeletalmesh', 'flag', 'flag2'],
+    weatherstation: ['roofbasemesh', 'roofmesh', 'skeletalmesh', 'staticmesh', 'flag'],
     fortartillerysheltert2: ['artilleryshelterroof'],
     fortartillerysheltert3: ['artilleryshelterroof'],
     observationbunkert1: ['observationbunkert1', 'teamflagmesh'],
     observationbunkert2: ['observationbunkert2', 'teamflagmesh'],
     observationbunkert3: ['observationbunkert3', 'teamflagmesh'],
-    atgunait2: ['basemesh', 'topmesh'],
-    atgunait3: ['basemesh', 'topmesh'],
-    mgait2: ['basemesh', 'topmesh'],
-    mgait3: ['basemesh', 'topmesh'],
-    rifleait2: ['basemesh', 'topmesh'],
-    rifleait3: ['basemesh', 'topmesh'],
+    artilleryait1: ['flagmesh'],
+    artilleryait2: ['flagmesh'],
+    artilleryait3: ['flagmesh'],
+    atgunait1: ['flagmesh'],
+    atgunait2: ['basemesh', 'topmesh', 'flagmesh'],
+    atgunait3: ['basemesh', 'topmesh', 'flagmesh'],
+    mgait1: ['flagmesh'],
+    mgait2: ['basemesh', 'topmesh', 'flagmesh'],
+    mgait3: ['basemesh', 'topmesh', 'flagmesh'],
+    rifleait1: ['flagmesh'],
+    rifleait2: ['basemesh', 'topmesh', 'flagmesh'],
+    rifleait3: ['basemesh', 'topmesh', 'flagmesh'],
 };
 
 export function isFoxholeRoofRenderLayer(
