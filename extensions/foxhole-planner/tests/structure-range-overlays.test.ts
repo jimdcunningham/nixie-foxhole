@@ -48,3 +48,30 @@ test('spatial coverage retains existing category, selection, vehicle and nightti
         }
     }
 });
+
+import { renderFoxholeStructureFiringVolumes } from '../src/scene-v2-structure-range-overlays.ts';
+import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
+
+test('source-backed mounted envelopes use ground-aligned height and existing category/selection gates', () => {
+    const asset = assets.tankettec!, appearance = { destroyed: false, packaged: false };
+    const settings = { 'foxhole.debug.ranges.vehicleWeapons': true };
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{},appearance).length,0);
+    const selected = renderFoxholeStructureFiringVolumes(asset,settings,appearance);
+    assert.equal(selected.length,1);
+    assert.deepEqual(selected[0]!.yaw,[-45,45]);
+    assert.deepEqual(selected[0]!.pitch,[-15,15]);
+    assert.equal(selected[0]!.selectionOnly,true);
+    assert.ok(Math.abs(selected[0]!.origin[2] - (asset.ranges![0]!.firingVolume!.origin[2]*32+asset.model!.blueprintOrigin!.z))<1e-8);
+    assert.ok(selected[0]!.origin[2]>0,'mount follows the model ground reference');
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{...settings,'foxhole.ranges.selectionOnly':false},appearance).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{...settings,'foxhole.ranges.antiTank':true},appearance)[0]!.selectionOnly,false);
+    assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{...settings,'foxhole.ranges.nighttime':true},appearance),selected,'manned vehicles retain the existing night exception');
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:true,packaged:false}).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:false,packaged:true}).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes({...asset, ranges:[{type:'intel',max:80}]},settings,appearance).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes(assets.mgait2!,{},appearance).length,0,'AI elevation is not invented');
+    const entity = {entityId:'test',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:'tankettec'}}]};
+    const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings}));
+    assert.deepEqual(plan.experimentalSpatial?.volumes,selected);
+    assert.equal(plan.experimentalSpatial?.supplementModel,true);
+});

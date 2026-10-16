@@ -1,4 +1,4 @@
-import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialVolumeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2StructureRange } from './scene-v2-asset-metadata.ts';
 import { isFoxholeStructureRangeVisible, foxholeStructureRangeColor } from './structure-range-settings.ts';
 import { FOXHOLE_RANGE_RENDER_LANE, foxholeRenderLane } from './render-lanes.ts';
@@ -128,4 +128,31 @@ export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMe
             experimentalPresentation: { contractVersion: 1 as const, groundOverlay: true, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
         }]
         : []);
+}
+
+
+/** Only explicit source aim bounds produce volumes. Coverage and missing elevations remain planar. */
+export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
+    appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialVolumeV1[] {
+    if (appearance.destroyed || appearance.packaged || !asset.model) return [];
+    return (asset.ranges ?? []).flatMap((range, index) => {
+        const source = range.firingVolume;
+        if (!source || source.source !== 'mount-dynamic-data' || !range.type.startsWith('killbox')
+            || !isFoxholeStructureRangeVisible(range, settings, true, asset.isVehicle === true)) return [];
+        const max = distance(range.max), min = Math.max(0,distance(range.min) ?? 0);
+        if (!max || min >= max || !source.origin.every(Number.isFinite) || source.origin.length !== 3
+            || source.orientation.length !== 4 || !source.orientation.every(Number.isFinite)
+            || Math.abs(Math.hypot(...source.orientation) - 1) > 0.001
+            || ![source.minYaw,source.maxYaw,source.minPitch,source.maxPitch].every(Number.isFinite)
+            || source.maxYaw <= source.minYaw || source.maxYaw - source.minYaw > 360
+            || source.minPitch < -90 || source.maxPitch > 90 || source.minPitch >= source.maxPitch) return [];
+        const night = resolveFoxholeNightVisionRadius(asset,range,id => settings[id]);
+        return [{ id: `firing-volume-${index}`, kind: 'angular-envelope' as const,
+            origin: source.origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(["x","y","z"] as const)[i]!] ?? 0)) as [number,number,number], orientation: [...source.orientation] as [number,number,number,number],
+            yaw: [source.minYaw,source.maxYaw] as [number,number], pitch: [source.minPitch,source.maxPitch] as [number,number],
+            minRadius: min, maxRadius: max, color: foxholeStructureRangeColor(range.type), alpha: 0.10,
+            selectionOnly: !isFoxholeStructureRangeVisible(range,settings,false,asset.isVehicle === true),
+            ...(night === null ? {} : { clipCylinder: { center: [0,0] as [number,number], radius: night * 32 } }),
+        }];
+    });
 }

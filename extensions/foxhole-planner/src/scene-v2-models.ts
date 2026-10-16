@@ -49,6 +49,7 @@ export interface FoxholeSceneV2ModelMetadata {
     structuralProfile?: FoxholeStructuralModelProfile;
     pathProfile?: FoxholeSpatialPathProfile;
     insulatedPathProfile?: FoxholeSpatialPathProfile;
+    blueprintOrigin?: { x: number; y: number; z: number; };
     resourceId: string;
     width: number;
     height: number;
@@ -103,7 +104,8 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             throw new Error(`Invalid Foxhole model binding: ${assetId}`);
         }
         asset.model = { ...(model.structuralProfile ? { structuralProfile: readFoxholeStructuralModelProfile(model.structuralProfile) } : {}), ...(model.pathProfile ? { pathProfile: readFoxholeSpatialPathProfile(model.pathProfile) } : {}), resourceId: model.resourceId, width: model.width, height: model.height, depth: model.depth,
-            offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ };
+            offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ,
+            ...(model.blueprintOrigin ? { blueprintOrigin: { ...model.blueprintOrigin } } : {}) };
         if (asset.model.structuralProfile) (asset as FoxholeSceneV2AssetMetadata & {modelLayerNodes?:Record<string,string[]>}).modelLayerNodes = asset.model.structuralProfile.layers;
         return { id: assetId, assetId, path: model.path };
     });

@@ -280,7 +280,14 @@ interface PublishedFoxholeHoldProfile {
     allowedItems?: string[];
 }
 
+export interface FoxholeSceneV2FiringVolume {
+    source: 'mount-dynamic-data';
+    origin: [number, number, number];
+    orientation: [number, number, number, number];
+    minYaw: number; maxYaw: number; minPitch: number; maxPitch: number;
+}
 export interface FoxholeSceneV2StructureRange {
+    firingVolume?: FoxholeSceneV2FiringVolume | null;
     type: string;
     codeName?: string;
     x?: number | null;
@@ -294,7 +301,7 @@ export interface FoxholeSceneV2StructureRange {
 }
 
 interface PublishedFoxholeRange extends Partial<FoxholeSceneV2StructureRange> {
-    t?: string; c?: string; r?: number; a?: number; mn?: number; mx?: number; o?: number;
+    t?: string; c?: string; r?: number; a?: number; mn?: number; mx?: number; o?: number; fv?: FoxholeSceneV2FiringVolume;
 }
 
 interface PublishedFoxholeBuildSocket {
@@ -978,7 +985,7 @@ export function createFoxholeSceneV2AssetMetadata(
                 const type = String(range.type ?? range.t ?? '').trim();
                 return type
                     ? [{ type, codeName: range.codeName ?? range.c, x: range.x, y: range.y, rotation: range.rotation ?? range.r,
-                        arc: range.arc ?? range.a, min: range.min ?? range.mn, max: range.max ?? range.mx, reach: range.reach, overlap: range.overlap ?? range.o }]
+                        arc: range.arc ?? range.a, min: range.min ?? range.mn, max: range.max ?? range.mx, reach: range.reach, overlap: range.overlap ?? range.o, firingVolume: range.firingVolume ?? range.fv }]
                     : [];
             }),
             overlaySockets: overlaySocketMetadata(asset.buildSockets),

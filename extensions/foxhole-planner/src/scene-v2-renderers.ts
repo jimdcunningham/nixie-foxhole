@@ -15,7 +15,7 @@ import {
 } from './structure-placement.ts';
 import { createFoxholeBarbedWireSplineGeometry, createFoxholeSandbagSplineGeometry } from './modification-spline.ts';
 import { resolveFoxholeConnectorSelectionGeometry } from './connector-selection-geometry.ts';
-import { renderFoxholeStructureRangeOverlays } from './scene-v2-structure-range-overlays.ts';
+import { renderFoxholeStructureRangeOverlays, renderFoxholeStructureFiringVolumes } from './scene-v2-structure-range-overlays.ts';
 import { resolveFoxholeBunkerSpotlightLights, showFoxholeBunkerSpotlightGlow } from './bunker-spotlights.ts';
 import { createFoxholeSpotlightBeamGraphics } from './spotlight-beam.ts';
 import { renderFoxholeConnectorGuides } from './scene-v2-connector-guides.ts';
@@ -746,6 +746,10 @@ function renderFoxholeSceneV2EntityPlan(
         const destroyedModel = assetMetadata.destroyedAssetId ? assetMetadataById[assetMetadata.destroyedAssetId]?.model : undefined;
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [],
             model: destroyedModel ? getFoxholeSceneV2ModelComponentData(destroyedModel) : null };
+    }
+    const firingVolumes = renderFoxholeStructureFiringVolumes(assetMetadata, context.settings ?? {}, appearance);
+    if (firingVolumes.length) {
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, volumes: firingVolumes };
     }
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
