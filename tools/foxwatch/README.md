@@ -552,4 +552,4 @@ dotnet run --project tools/foxwatch/tools/firing-volume-tests/FiringVolumeTests.
 node --test tools/foxwatch/scripts/firing-volume-schema.test.mjs
 ```
 
-The SDK renderer restores the model's exported Blueprint-origin offset before drawing volumes. Supply, detection and other radii remain ground overlays; AI families without explicit elevation bounds do not acquire invented cones.
+The SDK renderer restores the model's exported Blueprint-origin offset before drawing volumes. Supply, detection and other coverage radii remain ground overlays. AI turrets export `FiringConeAngle`, their resolved origin and orientation as `ai-turret` metadata; the SDK renders a circular radial cone. Artillery garrisons preserve their separate `FiringAngle` and minimum range as `ai-artillery` metadata. An absent/nonpositive angle retains the existing omnidirectional coverage convention as a full-angle volume. Nighttime and powered spotlights intersect eligible AI cones with the same structure-centered visibility cylinder used by ground ranges, preserving existing exceptions.

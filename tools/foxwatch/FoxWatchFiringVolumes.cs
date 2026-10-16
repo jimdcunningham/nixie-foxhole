@@ -25,6 +25,21 @@ public static class FoxWatchFiringVolumes
             MinYaw = yawMin, MaxYaw = yawMax, MinPitch = pitchMin, MaxPitch = pitchMax,
         };
     }
+    /// <summary>Render the AI turret's FiringConeAngle as a radial cone, preserving its mount frame.</summary>
+    public static FoxWatchManifestFiringVolume? CreateCone(double[] origin, Quaternion orientation, double halfAngle, bool artillery = false)
+    {
+        if (origin.Length != 3 || origin.Any(value => !double.IsFinite(value))
+            || !double.IsFinite(halfAngle) || halfAngle <= 0 || halfAngle > 180 || orientation.LengthSquared() < 0.001f) return null;
+        orientation = Quaternion.Normalize(orientation);
+        var quaternion = new double[] { orientation.X, orientation.Y, orientation.Z, orientation.W };
+        if (quaternion.Any(value => !double.IsFinite(value))) return null;
+        return new FoxWatchManifestFiringVolume {
+            Source = artillery ? "ai-artillery" : "ai-turret", ConeHalfAngle = halfAngle,
+            Origin = origin.Select(value => Math.Round(value, 5)).ToArray(),
+            Orientation = quaternion.Select(value => Math.Round(value, 6)).ToArray(),
+        };
+    }
+
     public static void Rotate(FoxWatchManifestFiringVolume? volume, double yawDegrees, double offsetX, double offsetY)
     {
         if (volume == null) return;

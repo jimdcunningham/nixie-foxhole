@@ -992,13 +992,18 @@ const connectorSchema = z.object({
     behavior: connectorBehaviorSchema.nullish().transform(value => value ?? undefined),
 });
 
-export const foxholeFiringVolumeSchema = z.object({
-    source: z.literal('mount-dynamic-data'),
+const firingVolumeFrameSchema = z.object({
     origin: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
     orientation: z.tuple([z.number(), z.number(), z.number(), z.number()]).refine(q => Math.abs(Math.hypot(...q) - 1) < 0.001),
-    minYaw: z.number().min(-360).max(360), maxYaw: z.number().min(-360).max(360),
-    minPitch: z.number().min(-90).max(90), maxPitch: z.number().min(-90).max(90),
-}).refine(v => v.maxYaw > v.minYaw && v.maxYaw - v.minYaw <= 360 && v.maxPitch > v.minPitch);
+});
+export const foxholeFiringVolumeSchema = z.discriminatedUnion('source', [
+    firingVolumeFrameSchema.extend({
+        source: z.literal('mount-dynamic-data'),
+        minYaw: z.number().min(-360).max(360), maxYaw: z.number().min(-360).max(360),
+        minPitch: z.number().min(-90).max(90), maxPitch: z.number().min(-90).max(90),
+    }).refine(v => v.maxYaw > v.minYaw && v.maxYaw - v.minYaw <= 360 && v.maxPitch > v.minPitch),
+    firingVolumeFrameSchema.extend({ source: z.enum(['ai-turret','ai-artillery']), coneHalfAngle: z.number().positive().max(180) }),
+]);
 
 const structureRangeSchema = z.object({
     type: z.string().min(1),

@@ -16,3 +16,15 @@ Console.WriteLine("Firing-volume extraction checks passed");
 FoxWatchFiringVolumes.Rotate(tankette, 90, 1, 2);
 Check(Math.Abs(tankette.Origin[0] - 0.679) < 0.00001 && Math.Abs(tankette.Origin[1] - 1.884) < 0.00001 && tankette.Origin[2] == 1.75, "Canonical vehicle frame did not rotate the volume origin");
 Check(Math.Abs(tankette.Orientation[2] - Math.Sqrt(0.5)) < 0.000001, "Canonical vehicle frame did not rotate the volume orientation");
+
+foreach (var angle in new double[] {45,75,180}) {
+    var cone = FoxWatchFiringVolumes.CreateCone([1,2,3], Quaternion.Identity, angle)!;
+    Check(cone.Source == "ai-turret" && cone.ConeHalfAngle == angle && cone.MinPitch == null && cone.MinYaw == null, "AI cone became a mount envelope");
+    FoxWatchFiringVolumes.Rotate(cone, 90, 0, 0);
+    Check(Math.Abs(cone.Origin[0] + 2) < 0.00001 && cone.Origin[2] == 3, "AI cone frame changed height");
+}
+foreach (var angle in new double[] {0,181,double.NaN}) Check(FoxWatchFiringVolumes.CreateCone([0,0,0],Quaternion.Identity,angle) == null,"Invalid cone angle accepted");
+Console.WriteLine("AI firing-cone extraction checks passed");
+
+var artilleryCone = FoxWatchFiringVolumes.CreateCone([0,0,1],Quaternion.Identity,60,artillery:true)!;
+Check(artilleryCone.Source == "ai-artillery" && artilleryCone.ConeHalfAngle == 60,"AI artillery firing angle lost");

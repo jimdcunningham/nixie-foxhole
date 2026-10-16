@@ -23,7 +23,7 @@ export function publishFiringVolumes(source, published) {
             const volume = alignFiringVolume(range, sourceRange.firingVolume);
             const compact = range.t !== undefined;
             range[compact ? 'fv' : 'firingVolume'] = volume;
-            if ((range.arc ?? range.a) !== undefined && volume.maxYaw - volume.minYaw < 360)
+            if (volume.source === 'mount-dynamic-data' && (range.arc ?? range.a) !== undefined && volume.maxYaw - volume.minYaw < 360)
                 range[compact ? 'a' : 'arc'] = (volume.maxYaw - volume.minYaw) / 2;
             count++;
         }

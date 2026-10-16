@@ -5376,6 +5376,9 @@ public class FoxWatchManifestAssetExtractor
                 Rotation = arc is > 0 and < 360 ? RoundRangeValue(NormalizeDegrees(transform.YawDegrees)) : null,
                 Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value) : null,
                 Max = RoundRangeDistance(maximumRange),
+                FiringVolume = FoxWatchFiringVolumes.CreateCone(
+                    [transform.X / 100, transform.Y / 100, transform.Z / 100], transform.Rotation,
+                    arc is > 0 ? Math.Min(arc.Value, 180) : 180),
             };
         }
 
@@ -5429,6 +5432,8 @@ public class FoxWatchManifestAssetExtractor
             var firingAngle = ExtractDouble(GetNamedValue(defaultObject, "FiringAngle"));
             var originX = 0.0;
             var originY = 0.0;
+            var originZ = 0.0;
+            var orientation = Quaternion.Identity;
             double? rotation = null;
 
             if (structureArrow != null)
@@ -5436,6 +5441,8 @@ public class FoxWatchManifestAssetExtractor
                 var transform = ResolveBlueprintComponentTransform(objects, blueprint, structureArrow, componentLookup);
                 originX = transform.X;
                 originY = transform.Y;
+                originZ = transform.Z;
+                orientation = transform.Rotation;
                 rotation = firingAngle is > 0 and < 360 ? RoundRangeValue(NormalizeDegrees(transform.YawDegrees)) : null;
             }
 
@@ -5450,6 +5457,10 @@ public class FoxWatchManifestAssetExtractor
                     Arc = firingAngle is > 0 and < 360 ? RoundRangeValue(firingAngle.Value) : null,
                     Min = RoundRangeDistance(minDistance),
                     Max = RoundRangeDistance(maxDistance),
+                    FiringVolume = ContainsAny(NormalizeString(GetObjectName(blueprint)), "ArtilleryAIT")
+                        ? FoxWatchFiringVolumes.CreateCone([originX / 100, originY / 100, originZ / 100], orientation,
+                            firingAngle is > 0 ? Math.Min(firingAngle.Value, 180) : 180, artillery: true)
+                        : null,
                 }
             ];
         }

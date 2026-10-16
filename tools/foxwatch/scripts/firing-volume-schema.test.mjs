@@ -29,3 +29,17 @@ test('generated fixture hydrates compact firing metadata through the shared sche
     assert.equal(tankette.ranges[0].firingVolume.minPitch,-15);
     assert.equal(tankette.ranges[0].arc,45);
 });
+
+
+test('AI cone metadata hydrates separately from mount limits and preserves authored heading overrides', () => {
+    const cone={source:'ai-turret',origin:[1,2,3],orientation:[0,0,0,1],coneHalfAngle:45};
+    assert.deepEqual(foxholeFiringVolumeSchema.parse(cone),cone);
+    for(const coneHalfAngle of [0,181,NaN])assert.equal(foxholeFiringVolumeSchema.safeParse({...cone,coneHalfAngle}).success,false);
+    const aligned=alignFiringVolume({x:4,y:5,r:90},cone);
+    assert.deepEqual(aligned.origin,[4,5,3]);assert.ok(Math.abs(aligned.orientation[2]-Math.SQRT1_2)<1e-6);
+    const source={assets:[{id:'ai',ranges:[{type:'killbox',max:33.5,firingVolume:cone}]}]};
+    const published={assets:[{id:'ai',ranges:[{t:'killbox',a:45,mx:33.5}]}]};
+    const result=publishFiringVolumes(source,published);
+    assert.equal(result.count,1);assert.equal(result.manifest.assets[0].ranges[0].a,45);
+    assert.equal(result.manifest.assets[0].ranges[0].fv.source,'ai-turret');
+});
