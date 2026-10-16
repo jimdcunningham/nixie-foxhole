@@ -8792,6 +8792,7 @@ public class FoxWatchManifestAssetExtractor
                 var rotatedPosition = RotatePlanarCoordinates(range.X, range.Y, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 range.X = rotatedPosition.X;
                 range.Y = rotatedPosition.Y;
+                FoxWatchFiringVolumes.Rotate(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 if (range.Rotation != null)
                 {
                     range.Rotation = NormalizeDegrees(range.Rotation.Value + yawOffsetDegrees);
@@ -8857,6 +8858,7 @@ public class FoxWatchManifestAssetExtractor
                 var rotatedPosition = RotatePlanarCoordinates(range.X, range.Y, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 range.X = rotatedPosition.X;
                 range.Y = rotatedPosition.Y;
+                FoxWatchFiringVolumes.Rotate(range.FiringVolume, yawOffsetDegrees, rangeOffsetX, rangeOffsetY);
                 if (range.Rotation != null)
                 {
                     range.Rotation = NormalizeDegrees(range.Rotation.Value + yawOffsetDegrees);

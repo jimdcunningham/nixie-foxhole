@@ -12,3 +12,7 @@ Check(FoxWatchFiringVolumes.Create([0,0,0], Quaternion.Identity, -45,45,15,-15) 
 Check(FoxWatchFiringVolumes.Create([0,0,0], Quaternion.Identity, -45,45,double.NaN,15) == null, "Nonfinite limits accepted");
 Check(FoxWatchFiringVolumes.Create([0,0,0], Quaternion.Identity, 170,-170,-5,15)!.MaxYaw == 190, "Wrapped yaw changed");
 Console.WriteLine("Firing-volume extraction checks passed");
+
+FoxWatchFiringVolumes.Rotate(tankette, 90, 1, 2);
+Check(Math.Abs(tankette.Origin[0] - 0.679) < 0.00001 && Math.Abs(tankette.Origin[1] - 1.884) < 0.00001 && tankette.Origin[2] == 1.75, "Canonical vehicle frame did not rotate the volume origin");
+Check(Math.Abs(tankette.Orientation[2] - Math.Sqrt(0.5)) < 0.000001, "Canonical vehicle frame did not rotate the volume orientation");

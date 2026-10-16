@@ -25,4 +25,17 @@ public static class FoxWatchFiringVolumes
             MinYaw = yawMin, MaxYaw = yawMax, MinPitch = pitchMin, MaxPitch = pitchMax,
         };
     }
+    public static void Rotate(FoxWatchManifestFiringVolume? volume, double yawDegrees, double offsetX, double offsetY)
+    {
+        if (volume == null) return;
+        var angle = yawDegrees * Math.PI / 180;
+        var x = volume.Origin[0]; var y = volume.Origin[1];
+        volume.Origin[0] = x * Math.Cos(angle) - y * Math.Sin(angle) + offsetX;
+        volume.Origin[1] = x * Math.Sin(angle) + y * Math.Cos(angle) + offsetY;
+        var q = volume.Orientation;
+        var rotated = Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (float)angle)
+            * new Quaternion((float)q[0], (float)q[1], (float)q[2], (float)q[3]));
+        volume.Orientation = [rotated.X, rotated.Y, rotated.Z, rotated.W];
+    }
+
 }
