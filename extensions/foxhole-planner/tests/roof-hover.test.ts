@@ -34,7 +34,7 @@ test('roof hover is transient, contains roof flags, and leaves fixed Hide Roofs 
     const hover = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
         settings: { 'foxhole.structure.hideRoofsOnHover': true, 'foxhole.structure.useStaticRender': true } }));
     assert.equal(hover.experimentalHover!.opacity, 0.25);
-    assert.equal(hover.experimentalHover!.fadeDurationMs, 110);
+    assert.equal(hover.experimentalHover!.fadeDurationMs, 300);
     assert.ok(hover.experimentalHover!.hiddenNodeIds!.includes('structure-layer-teamflagmesh'));
     assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
     assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-observationbunkert3'));
