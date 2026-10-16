@@ -1,3 +1,4 @@
+import { getFoxholeManifest } from '../plugins/foxhole/nixie/manifest.ts';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { useSupabaseUser } from '#imports';
 import { useNixieRegistry } from '#nixie/composables/useNixieRegistry.ts';
@@ -83,7 +84,9 @@ export function useNixieLegacySettingsImport() {
             if (owner.value !== expectedOwner) {
                 throw new Error('Your account changed. Choose the file again.');
             }
-            const mapped = parseLegacySettings(text, createLegacySettingsAssetIndex(registry.getAllAssetContributions()));
+            const manifest = getFoxholeManifest('/foxhole/assets/');
+            const mapped = parseLegacySettings(text, createLegacySettingsAssetIndex(manifest.assets,
+                manifest.localizations.find(bundle => bundle.locale === 'en')?.strings));
             // Missing extension definitions are reported, never retained as arbitrary overrides.
             mapped.changes = mapped.changes.filter(change => {
                 if (!change.settingId) {

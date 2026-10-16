@@ -1,9 +1,9 @@
-import type { AssetContribution, NixieSettingValue } from '#nixie/plugins/nixie/registry/types.ts';
+import type { NixieSettingValue } from '#nixie/plugins/nixie/registry/types.ts';
 import type { NixiePaletteBinding, NixieUserSettings } from '#nixie/stores/settings.ts';
 import { isNixieRotationDegrees, NIXIE_MOUSE_ROTATION_DEGREES_SETTING_ID, NIXIE_KEYBOARD_ROTATION_DEGREES_SETTING_ID } from '#nixie/utils/nixie-rotation-settings.ts';
 
 export const LEGACY_SETTINGS_MAX_BYTES = 5 * 1024 * 1024;
-export const LEGACY_SETTINGS_ASSET_SOURCE = 'foxhole.structures';
+export const LEGACY_SETTINGS_ASSET_SOURCE = 'sdk.nixie.foxhole-planner__assets';
 
 export interface LegacySettingsAsset {
     legacyKey: string;
@@ -40,29 +40,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Only authored legacy identifiers, never display names, URLs, or search aliases. */
-export function createLegacySettingsAssetIndex(sources: readonly AssetContribution[]): LegacySettingsAsset[] {
-    const source = sources.find(entry => entry.id === LEGACY_SETTINGS_ASSET_SOURCE);
-    return (source?.assets ?? []).flatMap((asset): LegacySettingsAsset[] => {
-        const metadata = asset.metadata ?? {};
-        const item = metadata.isItem === true;
-        // Exclude generated upgrades and destroyed variants sharing a legacy key.
-        if (!item && asset.id !== metadata.foxholeKey) {
-            return [];
-        }
-        // Foxhole's catalog contribution authors buildingKey/resourceKey first.
-        const legacyKey = asset.keywords?.[0];
-        if (!legacyKey) {
-            return [];
-        }
-        return [{
-            legacyKey,
-            legacyType: item ? 'icon' : 'building',
-            binding: {
-                kind: 'asset', sourceId: source!.id, assetId: asset.id,
-                label: asset.name.slice(0, 160), icon: item ? 'ph:package' : 'ph:wall',
-            },
-        }];
-    });
+export function createLegacySettingsAssetIndex(assets: readonly {
+    id: string; name?: string | { id?: string | null; fallback: string; } | null; legacyKey?: string | null; isItem?: boolean | null;
+}[], strings: Readonly<Record<string, string>> = {}): LegacySettingsAsset[] {
+    return assets.flatMap(asset => /^[a-z0-9-]+$/u.test(asset.id) ? [{
+        legacyKey: asset.legacyKey ?? asset.id,
+        legacyType: asset.isItem ? 'icon' as const : 'building' as const,
+        binding: {
+            kind: 'asset' as const, sourceId: LEGACY_SETTINGS_ASSET_SOURCE, assetId: `asset.${asset.id}`,
+            label: (typeof asset.name === 'object' && asset.name ? strings[asset.name.id ?? ''] ?? asset.name.fallback
+                : asset.name ?? asset.id).slice(0, 160), icon: asset.isItem ? 'ph:package' : 'ph:wall',
+        },
+    }] : []);
 }
 
 /** Bound the parsed graph as well as bytes, including ignored embedded payloads. */

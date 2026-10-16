@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { getFoxholeManifest } from '../../app/plugins/foxhole/nixie/manifest.ts';
-import { buildFoxholeStructureCatalog, buildFoxholeItemCatalog } from '../../app/plugins/foxhole/nixie/catalog.ts';
 import {
     LEGACY_SETTINGS_MAX_BYTES,
     buildLegacySettingsPatch,
@@ -11,32 +10,10 @@ import {
     createLegacySettingsAssetIndex,
     parseLegacySettings,
 } from '../../app/utils/nixie-legacy-settings.ts';
-import type { AssetContribution } from '../../../../nixie/app/plugins/nixie/registry/types.ts';
 import type { NixieUserSettings } from '../../../../nixie/app/stores/settings.ts';
 
-// Use the published catalog identifiers and authored first-keyword contract of
-// structures.contrib.ts, with no editor/Pixi or live account initialization.
 const manifest = getFoxholeManifest('/foxhole/assets/');
-const structures = buildFoxholeStructureCatalog(manifest);
-const items = buildFoxholeItemCatalog(manifest);
-const contribution: AssetContribution = {
-    id: 'foxhole.structures', name: 'Foxhole',
-    assets: [
-        ...structures.assets.map(asset => ({
-            id: asset.foxholeKey, name: asset.name, keywords: [asset.buildingKey],
-            metadata: { foxholeKey: asset.foxholeKey }, createSnapshot: () => {
-                throw new Error('Never place during import');
-            },
-        })),
-        ...items.assets.map(asset => ({
-            id: `item:${asset.resourceKey}`, name: asset.name, keywords: [asset.resourceKey],
-            metadata: { foxholeKey: asset.resourceKey, isItem: true }, createSnapshot: () => {
-                throw new Error('Never place during import');
-            },
-        })),
-    ],
-};
-const assets = createLegacySettingsAssetIndex([contribution]);
+const assets = createLegacySettingsAssetIndex(manifest.assets);
 const fixture = (name: string): string => readFileSync(hostSourceUrl(`./fixtures/legacy-settings/${name}.json`, import.meta.url), 'utf8');
 
 function current(): NixieUserSettings {
@@ -68,9 +45,9 @@ test('maps the real export wrapper to explicit user preferences and published as
     assert.equal(patch.paletteBuildMode, 'exchange-all');
     assert.equal(patch.selectedPaletteRow, 2);
     assert.deepEqual(report.slots.map(item => [item.row, item.slot, item.binding.kind === 'asset' && item.binding.assetId]), [
-        [0, 0, 'fortt1'], [0, 1, 'crane'], [0, 2, 'item:metal'], [2, 9, 'greatmarchroad'],
+        [0, 0, 'asset.fortt1'], [0, 1, 'asset.crane'], [0, 2, 'asset.metal'], [2, 9, 'asset.greatmarchroad'],
     ]);
-    assert.equal(report.slots.every(item => item.binding.kind === 'asset' && item.binding.sourceId === 'foxhole.structures'), true);
+    assert.equal(report.slots.every(item => item.binding.kind === 'asset' && item.binding.sourceId === 'sdk.nixie.foxhole-planner__assets'), true);
     assert.equal(report.skipped.length, 12);
     for (const path of ['toolbelts.0.3', 'toolbelts.0.4', 'toolbelts.0.5', 'toolbelts.0.6', 'toolbelts.0.7', 'toolbeltFilters', 'bindings']) {
         assert.ok(report.skipped.some(item => item.source === path));
@@ -200,13 +177,12 @@ test('repeated imports are idempotent and undo preserves subsequent edits', () =
     assert.equal(undone.paletteRows[0]![2], null);
 });
 
-test('asset index excludes destroyed/generated variants and ignores alternate search keywords', () => {
-    const original = contribution.assets.find(item => item.id === 'fortt1')!;
-    const index = createLegacySettingsAssetIndex([{ ...contribution, assets: [
-        { ...original, keywords: ['fortt1', 'friendly-name'] },
-        { ...original, id: 'fortt1:destroyed' },
-        { ...original, id: 'fortt1:upgrade:abc' },
-    ] }]);
-    assert.deepEqual(index.map(item => item.legacyKey), ['fortt1']);
+test('asset index uses authored legacy keys and SDK identities without an Explorer source', () => {
+    const index = createLegacySettingsAssetIndex([
+        { id: 'fortt1', legacyKey: 'oldfort', name: 'Fort' },
+        { id: 'fortt1:destroyed' }, { id: 'fortt1:upgrade:abc' },
+    ]);
+    assert.deepEqual(index.map(item => item.legacyKey), ['oldfort']);
+    assert.equal(index[0]?.binding.kind === 'asset' && index[0].binding.assetId, 'asset.fortt1');
     assert.equal(createLegacySettingsAssetIndex([]).length, 0);
 });
