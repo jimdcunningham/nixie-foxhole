@@ -294,6 +294,7 @@ function foxholeSceneV2ResourcesPlugin() {
 }
 
 export default defineConfig({
+  root: fileURLToPath(new URL('./', import.meta.url)),
   base: './',
   build: { outDir: '.nixie-build' },
   plugins: [foxholeSceneV2ResourcesPlugin()],
