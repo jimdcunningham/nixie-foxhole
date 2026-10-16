@@ -43,3 +43,34 @@ test('AI cone metadata hydrates separately from mount limits and preserves autho
     assert.equal(result.count,1);assert.equal(result.manifest.assets[0].ranges[0].a,45);
     assert.equal(result.manifest.assets[0].ranges[0].fv.source,'ai-turret');
 });
+
+test('muzzle offsets survive publication and rotate around the authored range frame exactly once', () => {
+    const muzzle = { source:'ai-turret',origin:[2.68,-0.01,2.62],orientation:[0,0,0,1],coneHalfAngle:45,
+        reference:{origin:[0,0],heading:0},originSource:'muzzle-component',originName:'MuzzleFxLocationComponent' };
+    const range={x:10,y:20,r:90};
+    const aligned=alignFiringVolume(range,muzzle);
+    assert.ok(Math.abs(aligned.origin[0]-10.01)<1e-6);
+    assert.ok(Math.abs(aligned.origin[1]-22.68)<1e-6);
+    assert.equal(aligned.origin[2],2.62);
+    assert.ok(Math.abs(aligned.orientation[2]-Math.SQRT1_2)<1e-6);
+    assert.equal(aligned.originName,'MuzzleFxLocationComponent');
+    assert.deepEqual(alignFiringVolume(range,aligned),aligned,'publishing an aligned frame twice must not apply the correction twice');
+    assert.deepEqual(alignFiringVolume({},muzzle),muzzle,'an uncorrected structure must keep its source muzzle');
+    const result=publishFiringVolumes({assets:[{id:'mg',ranges:[{type:'killbox',max:33.5,firingVolume:muzzle}]}]},
+        {assets:[{id:'mg',ranges:[{t:'killbox',a:45,mx:33.5}]}]});
+    assert.deepEqual(result.manifest.assets[0].ranges[0].fv,muzzle);
+});
+
+test('mount frame corrections preserve socket elevation, pitch, and asymmetric yaw limits', () => {
+    const pitch=Math.PI/12;
+    const muzzle={...volume,origin:[3,4,5],orientation:[0,Math.sin(pitch),0,Math.cos(pitch)],minYaw:-20,maxYaw:40,
+        reference:{origin:[1,2],heading:10},originSource:'muzzle-socket',originName:'S_Muzzle'};
+    const aligned=alignFiringVolume({x:7,y:8,r:100},muzzle);
+    assert.ok(Math.abs(aligned.origin[0]-5)<1e-6);
+    assert.ok(Math.abs(aligned.origin[1]-10)<1e-6);
+    assert.equal(aligned.origin[2],5);
+    assert.deepEqual([aligned.minYaw,aligned.maxYaw],[-20,40]);
+    const [x,y,z,w]=aligned.orientation;
+    assert.ok(Math.abs(Math.atan2(2*(w*z+x*y),1-2*(y*y+z*z))-Math.PI/2)<1e-6);
+    assert.ok(Math.abs(Math.asin(2*(w*y-z*x))-Math.PI/6)<1e-6);
+});

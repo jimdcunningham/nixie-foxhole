@@ -993,6 +993,9 @@ const connectorSchema = z.object({
 });
 
 const firingVolumeFrameSchema = z.object({
+    reference: z.object({ origin: z.tuple([z.number().finite(), z.number().finite()]), heading: z.number().finite() }).optional(),
+    originSource: z.enum(['muzzle-component','muzzle-socket','gun-bone','firing-component']).optional(),
+    originName: z.string().min(1).max(256).optional(),
     origin: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
     orientation: z.tuple([z.number(), z.number(), z.number(), z.number()]).refine(q => Math.abs(Math.hypot(...q) - 1) < 0.001),
 });
