@@ -1,3 +1,4 @@
+import { createFoxholeAssetIdentityResolver } from '../../../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
 import type {
     NixieSceneV1ConversionIssue,
     NixieSceneV1NodeConverter,
@@ -38,6 +39,12 @@ import {
     resolveFoxholeHoldProfileMarkedItemLimit,
 } from './hold-profile.ts';
 import { normalizeFoxholeColorHex, normalizeFoxholeFaction } from './types.ts';
+
+let resolveAssetIdentity: ReturnType<typeof createFoxholeAssetIdentityResolver> | undefined;
+function canonicalAssetId(value: unknown): string {
+    return (resolveAssetIdentity ??= createFoxholeAssetIdentityResolver(getFoxholeManifest('/foxhole/assets/').assets))(value)
+        ?? normalizedText(value);
+}
 
 const FOXHOLE_SCENE_V1_NODE_TYPES = new Set(['foxholeAsset', 'foxholeStructure']);
 const FOXHOLE_SCENE_V2_OWNER_ID = 'nixie.foxhole-planner';
@@ -467,7 +474,7 @@ function convertConnectorState(
     issues: Array<Omit<NixieSceneV1ConversionIssue, 'nodeId' | 'nodePath' | 'nodeType'>>;
 } {
     const issues: Array<Omit<NixieSceneV1ConversionIssue, 'nodeId' | 'nodePath' | 'nodeType'>> = [];
-    const foxholeKey = normalizedText(state.foxholeKey);
+    const foxholeKey = canonicalAssetId(state.foxholeKey);
     if (!foxholeKey || foxholeKey.length > 128) {
         return {
             data: null,
@@ -548,7 +555,7 @@ function convertSplineConnectorState(
     issues: Array<Omit<NixieSceneV1ConversionIssue, 'nodeId' | 'nodePath' | 'nodeType'>>;
 } {
     const issues: Array<Omit<NixieSceneV1ConversionIssue, 'nodeId' | 'nodePath' | 'nodeType'>> = [];
-    const foxholeKey = normalizedText(state.foxholeKey);
+    const foxholeKey = canonicalAssetId(state.foxholeKey);
     if (!foxholeKey || foxholeKey.length > 128) {
         return {
             data: null,
@@ -1155,7 +1162,7 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     }
 
     const state = node.state;
-    const assetId = normalizedText(state.foxholeKey);
+    const assetId = canonicalAssetId(state.foxholeKey);
     if (!assetId) {
         return {
             supported: false,

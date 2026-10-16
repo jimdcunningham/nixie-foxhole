@@ -819,3 +819,18 @@ test('invalid socket topology still blocks insertion rather than claiming parity
         assert.deepEqual(source, original);
     }
 });
+
+test('legacy asset aliases convert to canonical SDK identities without rewriting saved Native nodes', () => {
+    for (const [legacy, canonical] of [['worldroad', 'greatmarchroad'], ['GreatMarchRoad', 'greatmarchroad'],
+        ['emplacedaircraftc', 'emplacedaac'], ['emplacedaircraftw', 'emplacedaaw']]) {
+        const node = { id: `old-${legacy}`, type: 'foxholeAsset', state: { foxholeKey: legacy, x: 12, y: 24 }, children: [] };
+        const original = structuredClone(node);
+        const converted = convertNixieSceneV1ToV2([node], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+        const entity = converted.content.entities[0]!;
+        assert.equal(entity.components.find(component => component.componentId === 'asset')?.data.assetId, canonical);
+        assert.equal(converted.report.preservedOnlyNodeCount, 0);
+        const preserved = entity.components.find(component => component.componentId === 'legacy-source')!.data.snapshotJson;
+        assert.equal(JSON.parse(String(preserved)).state.foxholeKey, legacy);
+        assert.deepEqual(node, original);
+    }
+});
