@@ -449,6 +449,10 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
                 components.add('production-order');
             } else if (projected.type === 'foxholeAsset' && key === 'foxholeKey') {
                 components.add('asset');
+                if (merged.foxholeKey !== projected.state.foxholeKey
+                    && converted.components?.some(component => component.componentId === 'model')) {
+                    components.add('model');
+                }
                 if ('markedItemCodenames' in reconciledPatch) {
                     components.add('cargo');
                 }

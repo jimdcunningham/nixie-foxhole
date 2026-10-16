@@ -694,6 +694,13 @@ function renderFoxholeSceneV2EntityPlan(
         ...placementSpatial, modelClips };
     const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
     if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
+    // Older inspector edits changed the asset without updating its saved model.
+    const boundModel = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+        && component.componentId === 'model' && component.definitionAvailable);
+    if (boundModel && boundModel.data.resourceId !== assetMetadata.model?.resourceId) {
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial,
+            model: assetMetadata.model ? getFoxholeSceneV2ModelComponentData(assetMetadata.model) : null };
+    }
     if (appearance.destroyed && !appearance.packaged) {
         const destroyedModel = assetMetadata.destroyedAssetId ? assetMetadataById[assetMetadata.destroyedAssetId]?.model : undefined;
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [],

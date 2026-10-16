@@ -21,6 +21,7 @@ import { getFoxholeManifest } from '../app/plugins/foxhole/nixie/manifest.ts';
 import { resolveNixieSceneV2Transforms } from '../../../nixie/desktop-extensions/scene-v2-transforms.ts';
 import { resolveFoxholePowerlineSelectionQuad } from '../app/plugins/foxhole/nixie/connector.ts';
 import { getFoxholeStructureCatalog } from '../app/plugins/foxhole/nixie/catalog.ts';
+import { resolveFoxholeStructureTierMutation } from '../app/plugins/foxhole/nixie/structure-tier-actions.ts';
 import { resolveFoxholeStructureDimensions } from '../app/plugins/foxhole/nixie/structure-dimensions.ts';
 import { collectNixieSceneV2FoxholeSockets, isNixieSceneV2FoxholeSocketAvailable } from '../app/plugins/foxhole/nixie/scene-v2-socket-geometry.ts';
 
@@ -703,4 +704,40 @@ test('spline assets defer selection bounds to the rendered path and use the endp
         assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(input()), { x: 160, y: -80 }, foxholeKey);
         assert.equal(Boolean(foxholeSceneV2StateAdapter.selectionLocalQuad!(input())), foxholeKey === 'powerline');
     }
+});
+
+test('Inspector tier actions update model resources and dimensions with identity in one undo step', () => {
+    const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
+    for (const [source, direction, target] of [['fortt2', 'up', 'fortt3'], ['fortt2', 'down', 'fortt1']] as const) {
+        const { host, id, apply, project } = fixture('foxholeAsset', {
+            foxholeKey: source, x: 123, y: -47, rotation: 0.75, scaleX: -1.25, scaleY: 0.8,
+        });
+        const before = host.exportDocument();
+        const retained = host.readEntity(id).components.filter(component => !['asset', 'model'].includes(component.componentId));
+        const mutation = resolveFoxholeStructureTierMutation(catalog, project().state, direction)!;
+        assert.equal(mutation.targetAsset.foxholeKey, target);
+        apply(mutation.patch);
+        const changed = host.readEntity(id);
+        const expected = fixture('foxholeAsset', { foxholeKey: target }).host.listEntities()[0]!
+            .components.find(component => component.componentId === 'model')!.data;
+        assert.equal(project().state.foxholeKey, target);
+        assert.deepEqual(changed.components.find(component => component.componentId === 'model')!.data, expected);
+        assert.deepEqual(changed.components.filter(component => !['asset', 'model'].includes(component.componentId)), retained);
+        const after = host.exportDocument();
+        host.undo();
+        assert.deepEqual(host.exportDocument(), before);
+        host.redo();
+        assert.deepEqual(host.exportDocument(), after);
+    }
+});
+
+test('identity changes create a missing model binding without resetting unrelated state', () => {
+    const { host, id, apply } = fixture('foxholeAsset', { foxholeKey: 'fortt2' });
+    const document = host.exportDocument();
+    document.entities[0]!.components = document.entities[0]!.components.filter(component => component.componentId !== 'model');
+    host.replaceDocument(document);
+    apply({ foxholeKey: 'fortt3' });
+    assert.equal(host.readEntity(id).components.find(component => component.componentId === 'model')?.data.resourceId, 'foxhole.model.fortt3');
+    host.undo();
+    assert.deepEqual(host.exportDocument(), document);
 });
