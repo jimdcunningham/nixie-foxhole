@@ -133,6 +133,11 @@ function prepareStructureSocketPresentation(...[entity, plan, , settings]: Param
 function prepareStructurePresentation(...args: Parameters<NixieSceneV2RenderPresentationAdapter>) {
     const [entity, plan, , settings] = args;
     const sockets = prepareStructureSocketPresentation(...args);
+    if (plan.root.children.some(node => (node.id === 'structure-ranges' || node.id === 'selected-structure-ranges')
+        && node.experimentalPresentation?.groundOverlay === true)) {
+        return sockets;
+    }
+
     const asset = componentData(entity, 'asset');
     const appearance = componentData(entity, 'appearance');
     const structure = asset?.catalogId === 'foxhole.structures'

@@ -10,7 +10,7 @@ test('range visibility separates persistent and selected-only overlays without e
     const before = structuredClone(asset);
     const selected = renderFoxholeStructureRangeOverlays(asset, {}, { destroyed: false, packaged: false });
     assert.equal(selected[0]?.id, 'selected-structure-ranges');
-    assert.deepEqual(selected[0]?.experimentalPresentation, { contractVersion: 1, excludeFromBounds: true, selectionOnly: true });
+    assert.deepEqual(selected[0]?.experimentalPresentation, { contractVersion: 1, groundOverlay: true, excludeFromBounds: true, selectionOnly: true });
     const always = renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.artillery': true }, { destroyed: false, packaged: false });
     assert.equal(always[0]?.id, 'structure-ranges');
     assert.equal(renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.selectionOnly': false }, { destroyed: false, packaged: false }).length, 0);
@@ -28,4 +28,23 @@ test('annular circles, partial sweeps, overlap-only and reach bands retain their
     assert.equal(isFoxholeStructureRangeVisible({ type: 'killbox', max: 30 }, {}, true, true), false);
     assert.equal(isFoxholeStructureRangeVisible({ type: 'killbox', max: 30 }, { 'foxhole.debug.ranges.vehicleWeapons': true }, true, true), true);
     assert.equal(isFoxholeStructureRangeVisible({ type: 'killbox', max: 30 }, { 'foxhole.ranges.defense.smallArms': true }, false), true);
+});
+
+test('spatial coverage retains existing category, selection, vehicle and nighttime settings', () => {
+    const appearance = { destroyed: false, packaged: false };
+    for (const [type, setting] of [['supply', 'foxhole.ranges.supply'], ['intel', 'foxhole.ranges.intel'],
+        ['killbox', 'foxhole.ranges.rifle'], ['killboxAT', 'foxhole.ranges.antiTank'], ['killboxArty', 'foxhole.ranges.artillery']] as const) {
+        const asset = { ...assets.mgait2!, ranges: [{ type, max: 50, arc: 45 }] };
+        const variants: Record<string, boolean>[] = [{}, { [setting]: true }, { 'foxhole.ranges.selectionOnly': false },
+            { [setting]: true, 'foxhole.ranges.selectionOnly': false }, { [setting]: true, 'foxhole.ranges.nighttime': true }];
+        for (const settings of variants) {
+            const groups = renderFoxholeStructureRangeOverlays(asset, settings, appearance);
+            assert.equal(groups.length > 0, isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, true, false), `${type}:${JSON.stringify(settings)}`);
+            for (const group of groups) {
+                assert.equal(group.experimentalPresentation?.groundOverlay, true);
+                assert.equal(group.experimentalPresentation?.selectionOnly, !isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, false, false));
+            }
+            assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: groups } }));
+        }
+    }
 });

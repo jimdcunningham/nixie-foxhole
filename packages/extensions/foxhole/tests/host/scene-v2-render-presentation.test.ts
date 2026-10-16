@@ -48,13 +48,17 @@ test('presentation annotations stay visible without enlarging authored bounds', 
     root.destroy({ children: true });
 });
 
-test('structure ranges reuse Native drawing and visibility without changing authored bounds or ECS state', async () => {
+test('older structure range plans retain Native fallback drawing and visibility', async () => {
     const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'artillery', revision: 0, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'artilleryait1' } },
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true, data: { rotation: 0.4 } },
     ] };
     const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity] });
+    // Plans from older extension generations lack the spatial overlay declaration.
+    for (const node of plan.root.children) {
+        if (node.experimentalPresentation) delete node.experimentalPresentation.groundOverlay;
+    }
     assert.ok(plan.root.children.some(node => node.id === 'selected-structure-ranges'));
     const original = structuredClone({ entity, plan });
     for (const enabled of [false, true]) {
@@ -357,4 +361,20 @@ test('structure presentation retains native socket placement, occupancy, setting
     const children = [...layer.children];
     host.destroy();
     assert.equal(children.every(child => child.destroyed), true);
+});
+
+test('SDK ground range groups survive the Native compatibility adapter', () => {
+    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'garrison', revision: 0, components: [
+        { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
+            data: { catalogId: 'foxhole.structures', assetId: 'mgait2' } },
+    ] };
+    for (const enabled of [false, true]) {
+        const settings = { 'foxhole.ranges.selectionOnly': true, 'foxhole.ranges.machineGun': enabled };
+        const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings });
+        const original = JSON.stringify(plan);
+        assert.ok(plan.root.children.some(node => node.experimentalPresentation?.groundOverlay));
+        const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings);
+        assert.equal(presentation === null, true, 'the host must render the portable ranges without a private replacement');
+        assert.equal(JSON.stringify(plan), original);
+    }
 });

@@ -125,7 +125,7 @@ export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMe
     return [[always, false], [selected, true]].flatMap(([children, selectionOnly], index) => (children as NixieExtensionRenderNodeV1[]).length
         ? [{
             id: index === 0 ? 'structure-ranges' : 'selected-structure-ranges', kind: 'group' as const, ...foxholeRenderLane(FOXHOLE_RANGE_RENDER_LANE),
-            experimentalPresentation: { contractVersion: 1 as const, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
+            experimentalPresentation: { contractVersion: 1 as const, groundOverlay: true, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
         }]
         : []);
 }
