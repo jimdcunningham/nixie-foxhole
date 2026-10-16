@@ -58,8 +58,9 @@ test('source-backed mounted envelopes use ground-aligned height and existing cat
     assert.equal(renderFoxholeStructureFiringVolumes(asset,{},appearance).length,0);
     const selected = renderFoxholeStructureFiringVolumes(asset,settings,appearance);
     assert.equal(selected.length,1);
-    assert.deepEqual(selected[0]!.yaw,[-45,45]);
-    assert.deepEqual(selected[0]!.pitch,[-15,15]);
+    assert.ok(selected[0]?.kind === 'angular-envelope');
+    assert.deepEqual(selected[0].yaw,[-45,45]);
+    assert.deepEqual(selected[0].pitch,[-15,15]);
     assert.equal(selected[0]!.selectionOnly,true);
     assert.ok(Math.abs(selected[0]!.origin[2] - (asset.ranges![0]!.firingVolume!.origin[2]*32+asset.model!.blueprintOrigin!.z))<1e-8);
     assert.ok(selected[0]!.origin[2]>0,'mount follows the model ground reference');
@@ -69,9 +70,44 @@ test('source-backed mounted envelopes use ground-aligned height and existing cat
     assert.equal(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:true,packaged:false}).length,0);
     assert.equal(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:false,packaged:true}).length,0);
     assert.equal(renderFoxholeStructureFiringVolumes({...asset, ranges:[{type:'intel',max:80}]},settings,appearance).length,0);
-    assert.equal(renderFoxholeStructureFiringVolumes(assets.mgait2!,{},appearance).length,0,'AI elevation is not invented');
+    assert.equal(renderFoxholeStructureFiringVolumes({...asset,ranges:[{type:'killbox',max:35}]},settings,appearance).length,0,'range-only data does not invent a volume');
     const entity = {entityId:'test',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:'tankettec'}}]};
     const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings}));
     assert.deepEqual(plan.experimentalSpatial?.volumes,selected);
     assert.equal(plan.experimentalSpatial?.supplementModel,true);
+});
+
+
+test('AI uses firing cones with the existing category, selection and nighttime settings', () => {
+    const asset=assets.mgait2!, appearance={destroyed:false,packaged:false};
+    const cone=renderFoxholeStructureFiringVolumes(asset,{},appearance)[0];
+    assert.ok(cone?.kind==='cone');
+    assert.equal(cone.halfAngle,45);
+    assert.equal(cone.selectionOnly,true);
+    assert.equal(cone.clipCylinder,undefined);
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{'foxhole.ranges.selectionOnly':false},appearance).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{'foxhole.ranges.rifle':true},appearance)[0]!.selectionOnly,false);
+    const night={'foxhole.ranges.nighttime':true,'foxhole.ranges.poweredSpotlights':true};
+    const powered=renderFoxholeStructureFiringVolumes(asset,night,appearance)[0]!;
+    assert.deepEqual(powered.clipCylinder,{center:[0,0],radius:15*1.33*32});
+    assert.equal(powered.maxRadius,cone.maxRadius,'nighttime clips visibility, not weapon range');
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,{...night,'foxhole.ranges.poweredSpotlights':false},appearance)[0]!.clipCylinder!.radius,15*32);
+    for(const [codeName,type] of [['ArtilleryAIT1','killboxArty'],['CoastalGun','killboxAT'],['AANavalTurret','killboxAA']]){
+        const exception={...asset,codeName,ranges:asset.ranges!.map(range=>({...range,type}))};
+        assert.equal(renderFoxholeStructureFiringVolumes(exception,night,appearance)[0]!.clipCylinder,undefined);
+    }
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,night,{destroyed:true,packaged:false}).length,0);
+    assert.equal(renderFoxholeStructureFiringVolumes(asset,night,{destroyed:false,packaged:true}).length,0);
+    const entity={entityId:'ai',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:'mgait2'}}]};
+    const plan=parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings:night}));
+    assert.deepEqual(plan.experimentalSpatial?.volumes,[powered]);
+});
+
+
+test('AI artillery cones retain minimum ranges and the nighttime exception',()=>{
+    for(const id of ['artilleryait1','artilleryait2','artilleryait3']){
+        const cone=renderFoxholeStructureFiringVolumes(assets[id]!,{'foxhole.ranges.nighttime':true},{destroyed:false,packaged:false})[0];
+        assert.ok(cone?.kind==='cone');assert.equal(cone.halfAngle,60);assert.equal(cone.minRadius,25*32);
+        assert.equal(cone.clipCylinder,undefined);
+    }
 });

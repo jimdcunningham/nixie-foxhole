@@ -280,12 +280,11 @@ interface PublishedFoxholeHoldProfile {
     allowedItems?: string[];
 }
 
-export interface FoxholeSceneV2FiringVolume {
-    source: 'mount-dynamic-data';
+export type FoxholeSceneV2FiringVolume = {
     origin: [number, number, number];
     orientation: [number, number, number, number];
-    minYaw: number; maxYaw: number; minPitch: number; maxPitch: number;
-}
+} & ({ source: 'mount-dynamic-data'; minYaw: number; maxYaw: number; minPitch: number; maxPitch: number; }
+    | { source: 'ai-turret' | 'ai-artillery'; coneHalfAngle: number; });
 export interface FoxholeSceneV2StructureRange {
     firingVolume?: FoxholeSceneV2FiringVolume | null;
     type: string;
