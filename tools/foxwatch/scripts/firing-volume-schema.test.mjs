@@ -74,3 +74,13 @@ test('mount frame corrections preserve socket elevation, pitch, and asymmetric y
     assert.ok(Math.abs(Math.atan2(2*(w*z+x*y),1-2*(y*y+z*z))-Math.PI/2)<1e-6);
     assert.ok(Math.abs(Math.asin(2*(w*y-z*x))-Math.PI/6)<1e-6);
 });
+
+
+test('repeated mount types match their source frame when extraction order changes', () => {
+    const first={...volume,origin:[1,0,1],reference:{origin:[0,0],heading:0}};
+    const second={...volume,origin:[12,0,2],reference:{origin:[10,0],heading:0}};
+    const source={assets:[{id:'ship',ranges:[{type:'killboxAT',codeName:'MG',x:10,max:35,firingVolume:second},{type:'killboxAT',codeName:'MG',x:0,max:35,firingVolume:first}]}]};
+    const target={assets:[{id:'ship',ranges:[{t:'killboxAT',c:'MG',x:0,mx:35},{t:'killboxAT',c:'MG',x:10,mx:35}]}]};
+    const result=publishFiringVolumes(source,target);
+    assert.deepEqual(result.manifest.assets[0].ranges.map(r=>r.fv.origin),[[1,0,1],[12,0,2]]);
+});

@@ -18,7 +18,15 @@ export function publishFiringVolumes(source, published) {
             ranges.get(key).push(range);
         }
         for (const range of asset.ranges ?? []) {
-            const sourceRange = ranges.get(identity(range))?.shift();
+            const candidates = ranges.get(identity(range)) ?? [];
+            let candidateIndex = 0;
+            if (candidates.length > 1) {
+                const matches = candidates.map((candidate,index) => ({candidate,index})).filter(({candidate}) =>
+                    Math.hypot((candidate.x??0)-(range.x??0),(candidate.y??0)-(range.y??0)) < 0.01);
+                if (matches.length !== 1) throw new Error(`Ambiguous firing range frame: ${asset.id}/${range.codeName??range.c??range.type??range.t}`);
+                candidateIndex = matches[0].index;
+            }
+            const sourceRange = candidates.splice(candidateIndex,1)[0];
             if (!sourceRange?.firingVolume) continue;
             const volume = alignFiringVolume(range, sourceRange.firingVolume);
             const compact = range.t !== undefined;
