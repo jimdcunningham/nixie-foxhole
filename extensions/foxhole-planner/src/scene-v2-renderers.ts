@@ -434,13 +434,54 @@ export function renderFoxholeSceneV2Entity(
     entity: NixieExperimentalComponentEntitySnapshotV1,
     context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
-    const plan = renderFoxholeSceneV2EntityPlan(entity, context);
+    const hoverEnabled = context.settings?.['foxhole.structure.hideRoofsOnHover'] === true
+        && context.settings?.['foxhole.structure.hideRoofs'] !== true;
+    const effectiveContext = hoverEnabled ? { ...context, settings: { ...context.settings, 'foxhole.structure.useStaticRender': false } } : context;
+    const plan = renderFoxholeSceneV2EntityPlan(entity, effectiveContext);
     const asset = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'asset' && component.definitionAvailable);
     const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'spline-connector' && component.definitionAvailable);
     const metadata = assetMetadataById[String(asset?.data.assetId ?? spline?.data.foxholeKey ?? '')];
     const appearance = readFoxholeSceneV2Appearance(entity);
+    if (hoverEnabled && metadata && !metadata.isDestroyed && !metadata.isBreached && !appearance.destroyed && !appearance.packaged) {
+        const roofless = renderFoxholeSceneV2EntityPlan(entity, { ...effectiveContext,
+            settings: { ...effectiveContext.settings, 'foxhole.structure.hideRoofs': true } });
+        const ids = (node: NixieExtensionRenderNodeV1): string[] => [node.id, ...(node.kind === 'group' ? node.children.flatMap(ids) : [])];
+        const retainedNodes = new Set(ids(roofless.root));
+        const retainedModels = new Set(plan.experimentalSpatial?.hiddenModelNodes ?? []);
+        const retainedPaths = new Set(roofless.experimentalSpatial?.nodes.map(node => node.id) ?? []);
+        const bunker = (candidate: FoxholeSceneV2AssetMetadata) => !candidate.isDestroyed && !candidate.isBreached
+            && !/destroyed|breached|buildsite/i.test(candidate.codeName)
+            && (candidate.isBunker === true || /^fort/i.test(candidate.profileType ?? '')
+                || /^(?:fort|observationbunker|rifleai|mgai|atgunai|artilleryai)/i.test(candidate.codeName));
+        const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+            && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+        const relatedEntityIds = bunker(metadata) && Array.isArray(attachments)
+            ? [...new Set(attachments.flatMap(attachment => {
+                if (!attachment || typeof attachment !== 'object' || Array.isArray(attachment)
+                    || typeof attachment.localSocketName !== 'string' || typeof attachment.targetEntityId !== 'string') {
+                    return [];
+                }
+                const socket = metadata.buildSockets.find(candidate => candidate.name === attachment.localSocketName);
+                if (!socket?.socketTags?.some(tag => tag.category === 4 && (BigInt(Math.trunc(tag.mask)) & ~8n) !== 0n)) {
+                    return [];
+                }
+                const neighbor = context.entities.find(candidate => candidate.entityId === attachment.targetEntityId);
+                const neighborId = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+                    && component.componentId === 'asset' && component.definitionAvailable)?.data.assetId;
+                const neighborAsset = typeof neighborId === 'string' ? assetMetadataById[neighborId] : undefined;
+                return neighborAsset && bunker(neighborAsset) ? [attachment.targetEntityId] : [];
+            }))]
+            : [];
+        const hover = { contractVersion: 1 as const, relatedEntityIds,
+            hiddenNodeIds: ids(plan.root).filter(id => !retainedNodes.has(id)),
+            hiddenModelNodes: (roofless.experimentalSpatial?.hiddenModelNodes ?? []).filter(name => !retainedModels.has(name)),
+            hiddenSpatialNodeIds: (plan.experimentalSpatial?.nodes ?? []).filter(node => !retainedPaths.has(node.id)).map(node => node.id) };
+        if (bunker(metadata) || hover.hiddenNodeIds.length || hover.hiddenModelNodes.length || hover.hiddenSpatialNodeIds.length) {
+            plan.experimentalHover = hover;
+        }
+    }
     if (metadata?.canBlueprint && !metadata.isDestroyed && !appearance.destroyed && !appearance.packaged
         && (appearance.blueprint || spline?.data.blueprint === true)) {
         plan.experimentalSpatial = {
