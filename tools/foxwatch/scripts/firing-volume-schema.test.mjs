@@ -84,3 +84,15 @@ test('repeated mount types match their source frame when extraction order change
     const result=publishFiringVolumes(source,target);
     assert.deepEqual(result.manifest.assets[0].ranges.map(r=>r.fv.origin),[[1,0,1],[12,0,2]]);
 });
+
+
+test('model-frame migration ignores stale generated ground positions and keeps 2D fields intact', () => {
+    const muzzle={...volume,origin:[2,3,4],reference:{origin:[0,0],heading:0}};
+    const source={assets:[{id:'tank',ranges:[{type:'killboxAT',x:0,y:0,rotation:0,max:35,firingVolume:muzzle}]}]};
+    const catalog={assets:[{id:'tank',ranges:[{t:'killboxAT',x:50,y:60,r:90,a:90,mx:35}]}]};
+    const result=publishFiringVolumes(source,catalog,{sourceFrame:true});
+    assert.deepEqual(result.manifest.assets[0].ranges[0].fv.origin,[2,3,4]);
+    assert.deepEqual(result.manifest.assets[0].ranges[0].fv.orientation,[0,0,0,1]);
+    const range=result.manifest.assets[0].ranges[0];delete range.fv;
+    assert.deepEqual(range,catalog.assets[0].ranges[0]);
+});
