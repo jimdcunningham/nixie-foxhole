@@ -65,7 +65,8 @@ public partial class FoxWatchManifestAssetExtractor
         {
             if (!GetSkeletalMeshAttachPointTransforms(mesh.MeshPath!).TryGetValue(socket, out var local)) continue;
             var transform = ComposeFiringTransform(ResolveFiringReferenceTransform(mesh, references), new(local, Vector3.One)).Transform;
-            transform = ApplyKnownBlueprintReferenceFrameCorrections(mesh, references, transform);
+            // This already includes the authored model hierarchy. Legacy planar
+            // body-axis inference must not rotate this physical frame again.
             matches.Add(new(transform, "muzzle-socket", socket));
         }
         if (matches.Count == 0) return null;

@@ -115,6 +115,13 @@ try {
     cache[path][0].RelativeScale=string.Empty;
     cache[path]=cache[path].Concat(new[]{new FoxWatchBlueprintComponentReference{ComponentName="OtherMesh",ComponentType="SkeletalMeshComponent",MeshType="SkeletalMesh",MeshPath=mesh}}).ToArray();
     Check(socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])==null,"Ambiguous socket selected an unrelated gun mesh");
+    cache[path]=new[]{
+        new FoxWatchBlueprintComponentReference{ComponentName="CharacterMesh0",MeshType="skeletal",MeshPath="War/Content/Meshes/Vehicles/SK_Motorcycle.uasset",AttachParentName="CollisionCylinder",RelativeRotation="P=0 Y=0 R=0"},
+        new FoxWatchBlueprintComponentReference{ComponentName="GunMesh",MeshType="skeletal",MeshPath=mesh,AttachParentName="CharacterMesh0",RelativeRotation="P=0 Y=0 R=0"}
+    };
+    resolved=socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])!;
+    transform=Read(resolved,"Transform");
+    Check(Math.Abs((double)Read(transform,"X"))<0.001&&Math.Abs((double)Read(transform,"Y")-100)<0.001,"Legacy planar body inference rotated an explicitly authored model muzzle");
     Console.WriteLine("Nested AI component, mesh/socket composition, quarter-turn and ambiguity checks passed");
 } finally { Directory.Delete(temp); }
 
