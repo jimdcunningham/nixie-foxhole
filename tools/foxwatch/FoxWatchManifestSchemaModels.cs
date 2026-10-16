@@ -533,6 +533,17 @@ public sealed class FoxWatchManifestConnectorMeshConfig
     public List<double>? RelativeScale { get; set; }
 }
 
+public sealed class FoxWatchManifestFiringVolume
+{
+    public string Source { get; set; } = "mount-dynamic-data";
+    public double[] Origin { get; set; } = [];
+    public double[] Orientation { get; set; } = [];
+    public double MinYaw { get; set; }
+    public double MaxYaw { get; set; }
+    public double MinPitch { get; set; }
+    public double MaxPitch { get; set; }
+}
+
 public sealed class FoxWatchManifestRange
 {
     public string Type { get; set; } = string.Empty;
@@ -552,6 +563,8 @@ public sealed class FoxWatchManifestRange
     public double? Max { get; set; }
 
     public double? Reach { get; set; }
+
+    public FoxWatchManifestFiringVolume? FiringVolume { get; set; }
 
     public double? Overlap { get; set; }
 }

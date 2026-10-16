@@ -5328,10 +5328,15 @@ public class FoxWatchManifestAssetExtractor
                 X = RoundRangeDistance(transform.X),
                 Y = RoundRangeDistance(transform.Y),
                 Rotation = arc is > 0 and < 360 ? RoundRangeValue(rotation) : null,
-                Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value) : null,
+                // Renderers consume a half-angle; source mount limits describe the full yaw span.
+                Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value / 2) : null,
                 Min = RoundRangeDistance(mountDynamicData.MinDistance),
                 Max = RoundRangeDistance(maxDistance),
                 Reach = RoundRangeDistance(mountDynamicData.MaxReachability),
+                FiringVolume = FoxWatchFiringVolumes.Create(
+                    [transform.X / 100, transform.Y / 100, transform.Z / 100],
+                    Quaternion.Normalize(CreateUnrealRotatorQuaternion(0, facingYawDegrees - transform.YawDegrees + (mountDynamicData.YawOffset ?? 0), 0) * transform.Rotation),
+                    mountDynamicData.MinYaw, mountDynamicData.MaxYaw, mountDynamicData.MinPitch, mountDynamicData.MaxPitch),
             };
         }
 
@@ -6710,6 +6715,8 @@ public class FoxWatchManifestAssetExtractor
                         MaxReachability = value.Value<double?>("MaxReachability"),
                         MinYaw = value.Value<double?>("MinYaw"),
                         MaxYaw = value.Value<double?>("MaxYaw"),
+                        MinPitch = value.Value<double?>("MinPitch"),
+                        MaxPitch = value.Value<double?>("MaxPitch"),
                         YawOffset = value.Value<double?>("YawOffset"),
                     };
                 }
@@ -13961,6 +13968,10 @@ public class FoxWatchManifestAssetExtractor
             public double? MinYaw { get; set; }
 
             public double? MaxYaw { get; set; }
+
+            public double? MinPitch { get; set; }
+
+            public double? MaxPitch { get; set; }
 
             public double? YawOffset { get; set; }
 

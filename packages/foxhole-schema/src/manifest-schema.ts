@@ -496,6 +496,7 @@ function hydrateRangeInput(value: unknown): unknown {
         max: source.max ?? source.mx,
         reach: source.reach,
         overlap: source.overlap ?? source.o,
+        firingVolume: source.firingVolume ?? source.fv,
     };
 }
 
@@ -991,6 +992,14 @@ const connectorSchema = z.object({
     behavior: connectorBehaviorSchema.nullish().transform(value => value ?? undefined),
 });
 
+export const foxholeFiringVolumeSchema = z.object({
+    source: z.literal('mount-dynamic-data'),
+    origin: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+    orientation: z.tuple([z.number(), z.number(), z.number(), z.number()]).refine(q => Math.abs(Math.hypot(...q) - 1) < 0.001),
+    minYaw: z.number().min(-360).max(360), maxYaw: z.number().min(-360).max(360),
+    minPitch: z.number().min(-90).max(90), maxPitch: z.number().min(-90).max(90),
+}).refine(v => v.maxYaw > v.minYaw && v.maxYaw - v.minYaw <= 360 && v.maxPitch > v.minPitch);
+
 const structureRangeSchema = z.object({
     type: z.string().min(1),
     codeName: optionalStringSchema,
@@ -1002,6 +1011,7 @@ const structureRangeSchema = z.object({
     max: optionalNumberSchema,
     reach: optionalNumberSchema,
     overlap: optionalNumberSchema,
+    firingVolume: foxholeFiringVolumeSchema.nullish().transform(value => value ?? undefined),
 });
 
 const socketTagSchema = z.object({

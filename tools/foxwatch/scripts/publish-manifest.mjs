@@ -1,3 +1,4 @@
+import { alignFiringVolume } from './firing-volume-metadata.mjs';
 import { readFileSync } from 'node:fs';
 import { access, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -1222,6 +1223,7 @@ function compactRange(value) {
         mx: compactJsonValue(value.max),
         reach: compactJsonValue(value.reach),
         o: compactJsonValue(value.overlap),
+        fv: compactJsonValue(alignFiringVolume(value)),
     }, {
         c: null,
         x: 0,

@@ -539,3 +539,17 @@ You do not need Blender for `generate-manifest`, `generate-map-data`, `find-asse
 - `tools/foxwatch/ASSET-OUTPUT.md` for the authoritative published file layout, image roles, formats, and manifest URL rules
 - `tools/foxwatch/blender/README.md` for Blender scene import and render bundle details
 - the repository root README for source-code and generated-asset licensing boundaries
+
+### Firing Envelope Metadata
+
+Mount range extraction preserves `MinYaw`, `MaxYaw`, `MinPitch`, `MaxPitch`, the resolved mount transform and the dynamic-data row name. These define an aiming envelope, not projectile spread or a ballistic hit prediction. Missing pitch limits retain ground coverage. Planar arcs use half of the source yaw span.
+
+Normal manifest publication carries `firingVolume` as compact `fv` metadata and applies the same authored origin/heading overrides as the ground range. To migrate existing catalogs without touching images, models or unrelated metadata, first generate a targeted source manifest, then run:
+
+```powershell
+node tools/foxwatch/scripts/publish-firing-volumes.mjs <extracted-manifest> <published-catalog> <fixture-catalog>
+dotnet run --project tools/foxwatch/tools/firing-volume-tests/FiringVolumeTests.csproj
+node --test tools/foxwatch/scripts/firing-volume-schema.test.mjs
+```
+
+The SDK renderer restores the model's exported Blueprint-origin offset before drawing volumes. Supply, detection and other radii remain ground overlays; AI families without explicit elevation bounds do not acquire invented cones.
