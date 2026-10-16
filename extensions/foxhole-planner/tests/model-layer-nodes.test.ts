@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFoxholeGeneratedModel } from './generated-models.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import type { FoxholeModelLayerMetadata } from '../src/model-layer-nodes.ts';
 import { bindFoxholeModelLayerNodes } from '../src/model-layer-nodes.ts';
@@ -9,7 +9,7 @@ import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalCompo
 
 test('packed foundation borders follow the same socket visibility as flat layers', () => {
     const metadata = assets.foundation012x2t3 as FoxholeModelLayerMetadata;
-    bindFoxholeModelLayerNodes(metadata, readFileSync(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/models/foundation012x2t3.glb', import.meta.url)));
+    bindFoxholeModelLayerNodes(metadata, readFoxholeGeneratedModel('foundation012x2t3'));
     assert.equal(Object.entries(metadata.modelLayerNodes!).filter(([id]) => id !== 'floor').flatMap(([,names]) => names).length, 12);
     const make = (attachments: NixieExperimentalComponentJsonValueV1[]): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: 'foundation', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,

@@ -21,10 +21,17 @@ const developmentSelection = process.env.NIXIE_FOXHOLE_MODEL_IDS ?? (existsSync(
 const declaredBuild = new Set(selectFoxholeSceneV2ModelBuild(structuredClone(assets), bindFoxholeSceneV2Models(structuredClone(assets), fullModelBundle), developmentSelection).map(model => `foxhole.model.${model.id}`));
 
 for (const assetId of spatialAssetIds) {
-    test(`${assetId} explorer placement retains catalog identity and its declared model binding`, () => {
+    test(`${assetId} explorer placement retains catalog identity and ${assets[assetId]!.isItem ? 'portable icon presentation' : 'its declared model binding'}`, () => {
         const item = listFoxholeSceneV2Products({ contractVersion: 1, query: assetId, offset: 0, limit: 100 })
             .items.find(candidate => candidate.product.id === `asset.${assetId}`)!;
         assert.ok(item);
+        if (assets[assetId]!.isItem) {
+            assert.deepEqual(item.product.components.find(component => component.componentId === 'asset')!.data,
+                { catalogId: 'foxhole.icons', assetId });
+            assert.ok(item.product.components.some(component => component.ownerId === 'nixie.core' && component.componentId === 'icon'));
+            assert.equal(item.product.components.some(component => component.componentId === 'model'), false);
+            return;
+        }
         const model = item.product.components.find(component => component.componentId === 'model')!;
         const manifest = JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8'));
         const definition = manifest.contributes.experimentalComponents.components.find((component: { id: string; }) => component.id === 'model');
@@ -61,7 +68,8 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.ok(treads.length > 0);
             const trackHeight = Math.min(...treads.map((primitive: { attributes: { POSITION: number; }; }) =>
                 document.accessors[primitive.attributes.POSITION].min[1] * 32 + metadata.offsetZ));
-            assert.ok(Math.abs(trackHeight) < 0.0001, 'crane tracks must retain their existing ground contact');
+            const contactTolerance = metadata.precisionOptimization.positionStepMetres * 32 + 0.0001;
+            assert.ok(Math.abs(trackHeight) <= contactTolerance, 'crane tracks must retain ground contact within their declared precision grid');
             assert.ok(metadata.blueprintOrigin.z > 70, 'the vehicle actor origin is retained above the track reference');
         }
         const binary = bytes.subarray(28 + jsonLength);

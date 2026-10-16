@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFoxholeGeneratedModel } from './generated-models.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { bindFoxholeModelLayerNodes } from '../src/model-layer-nodes.ts';
@@ -8,7 +8,7 @@ import type { FoxholeModelLayerMetadata } from '../src/model-layer-nodes.ts';
 import { finalizeFoxholeSurfacePlacement } from '../src/surface-placement.ts';
 
 const floor = assets.foundation012x2t1 as FoxholeModelLayerMetadata;
-bindFoxholeModelLayerNodes(floor, readFileSync(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/models/foundation012x2t1.glb', import.meta.url)));
+bindFoxholeModelLayerNodes(floor, readFoxholeGeneratedModel('foundation012x2t1'));
 function entity(id: string, assetId: string, x = 0, elevation = 0, parentId?: string): Entity {
     return { entityId: id, revision: 0, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId, catalogId: 'foxhole.structures' } },

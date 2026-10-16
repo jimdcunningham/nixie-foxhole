@@ -49,7 +49,7 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     // Catalog regression tests consume the same detached generated input as the
     // Node alias; they must not require a monorepo beside the standalone fixture.
     for (const filename of await fs.readdir(join(fixtureRoot, 'tests'))) {
-        if (!filename.endsWith('.test.ts')) {
+        if (!filename.endsWith('.ts')) {
             continue;
         }
         const testPath = join(fixtureRoot, 'tests', filename);

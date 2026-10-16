@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import { readFoxholeGeneratedModel } from './generated-models.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import {bindFoxholeModelLayerNodes} from '../src/model-layer-nodes.ts';
 import {renderFoxholeSceneV2Entity} from '../src/scene-v2-renderers.ts';
@@ -13,7 +13,7 @@ test('every foundation trim shape binds all authored borders and keeps its floor
  for(const id of ['foundation01t1','foundation011x2t1','foundation012x2t1','foundation02t1','foundation01t3','foundation011x2t3','foundation012x2t3','foundation02t3']){
   const asset=assets[id]!;assert.ok(asset.model?.structuralProfile,id);
   assert.deepEqual(Object.keys(asset.model.structuralProfile.layers).sort(),Object.keys(asset.renderLayers).sort());
-  bindFoxholeModelLayerNodes(asset,readFileSync(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/models/'+id+'.glb',import.meta.url)));
+  bindFoxholeModelLayerNodes(asset,readFoxholeGeneratedModel(id));
   assert.ok(Number.isFinite((asset as typeof asset & {foundationSurfaceZ:number}).foundationSurfaceZ));
   const entity=make(id,asset.buildSockets.map(socket=>socket.name));const before=structuredClone(entity);
   const plan=renderFoxholeSceneV2Entity(entity);const names=plan.experimentalSpatial?.hiddenModelNodes??[];
@@ -42,7 +42,7 @@ test('every optional bunker and trench part starts hidden and wall replacements 
   assert.equal(profile.modifications!.length,expected,id);
   const defaultNames=renderFoxholeSceneV2Entity(make(id)).experimentalSpatial!.hiddenModelNodes!;
   assert.ok(profile.modifications!.every(part=>part.nodeNames.every(name=>defaultNames.includes(name))));
-  const bytes=readFileSync(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/models/'+id+'.glb',import.meta.url));
+  const bytes=readFoxholeGeneratedModel(id);
   const gltf=JSON.parse(bytes.subarray(20,20+bytes.readUInt32LE(12)).toString());const exported=new Set(gltf.nodes.map((n:{name:string})=>n.name));
   for(const name of [...Object.values(profile.layers).flat(),...profile.modifications!.flatMap(p=>p.nodeNames)])assert.ok(exported.has(name),name);
  }

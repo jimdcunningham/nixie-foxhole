@@ -24,9 +24,11 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
         const metadata = { regions: [{ labels: [], staticIcons: [] }] };
         await fs.writeFile(join(fixtureRoot, 'src/scene-v2-map-data-node.ts'), 'export default ' + JSON.stringify(metadata) + '; export const foxholeMapResources = [{ id: "map", sourcePath: "maps/source.bin", path: "dist/assets/maps/tile.bin" }];');
         await fs.writeFile(join(fixtureRoot, 'tests/catalog.test.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json';");
+        await fs.writeFile(join(fixtureRoot, 'tests/generated-models.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json';");
         await prepareStandalone({ extensionSource: join(taskRoot, 'extensions/foxhole-planner'), fixtureRoot, foxholeAssetsRoot: assets });
         assert.match(await fs.readFile(join(fixtureRoot, 'src/scene-v2-assets-node.ts'), 'utf8'), /.nixie-build-input/);
         assert.match(await fs.readFile(join(fixtureRoot, 'tests/catalog.test.ts'), 'utf8'), /.nixie-build-input/);
+        assert.match(await fs.readFile(join(fixtureRoot, 'tests/generated-models.ts'), 'utf8'), /.nixie-build-input\/models.v1.json/);
         const bytes = Buffer.from('map bytes');
         await fs.writeFile(join(assets, 'maps/source.bin'), bytes);
         await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), bytes);
