@@ -559,6 +559,8 @@ The SDK renderer restores the model's exported Blueprint-origin offset before dr
 
 3D firing frames use the Blueprint muzzle component or the gunner's `MuzzleInfo` socket, including bone ancestry, mesh transforms and scale. Multi-barrel mounts use their first declared muzzle. Equivalent sockets shared by modular mesh parts are coalesced; genuinely different candidate frames are rejected. Artillery garrisons without a declared muzzle use their named barrel or gun pivot and keep the structure aiming frame.
 
+Shared-skeleton candidates are ranked by render-section bone ownership: a mesh using the muzzle bone wins over a part using only a more distant ancestor. Equally owned, different frames remain unresolved. Physical sockets retain their authored model hierarchy and never receive the legacy planar body-axis inference. The legacy mech uses its explicitly named main, left and right muzzle components for seat indices 1, 2 and 3.
+
 `firingVolume.originSource` and `originName` record this provenance. `reference` preserves the ground range frame so authored corrections do not erase muzzle offsets. Legacy seat/ground-frame corrections do not rotate a resolved model-space muzzle. An unresolved native constructor frame stays `firing-component`; Planner keeps its ground coverage but does not present that position as a 3D muzzle. Generate against the PAK-addressed decoded package and inspection bundle used for the models.
 
 For a metadata-only migration from the current source manifest, use `publish-firing-volumes.mjs --source-frame <source> <catalog> [catalog...]`. This preserves every existing 2D range field and replaces only firing metadata; old generated ground offsets are not applied to the new muzzle frame.

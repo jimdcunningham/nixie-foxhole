@@ -34,7 +34,22 @@ public partial class FoxWatchManifestAssetExtractor
             // An explicitly mapped but unresolved muzzle must not use an unrelated socket.
             if (GetFiringSocketNames(info, ExtractInt(index)).Length > 0) return null;
         }
-        if (vehicle) return null;
+        if (vehicle)
+        {
+            // The legacy mech predates MuzzleInfo. Its Blueprint names each gun's
+            // muzzle component and its main/left/right seats are indices 1/2/3.
+            var property = string.Equals(GetObjectName(blueprint), "BPMech_C", StringComparison.OrdinalIgnoreCase)
+                ? ExtractInt(index) switch { 1 => "MainGunMuzzleLocation", 2 => "LeftGunMuzzleLocation", 3 => "RightGunMuzzleLocation", _ => null }
+                : null;
+            var muzzleReference = property == null ? null : GetInheritedBlueprintProperty(objects, blueprint, defaultObject, property);
+            if (muzzleReference != null)
+                foreach (var key in GetComponentLookupKeys(muzzleReference))
+                {
+                    var muzzleFrameReference = references.FirstOrDefault(item => string.Equals(NormalizeComponentReferenceName(item.ComponentName), key, StringComparison.OrdinalIgnoreCase));
+                    if (muzzleFrameReference != null) return new(ResolveFiringReferenceTransform(muzzleFrameReference, references).Transform, "muzzle-component", key);
+                }
+            return null;
+        }
 
         // Native fort AI exposes its muzzle FX arrow separately from the AI controller.
         var reference = GetInheritedBlueprintComponentProperty(objects, blueprint, component, "MuzzleFlashLocationComponent");

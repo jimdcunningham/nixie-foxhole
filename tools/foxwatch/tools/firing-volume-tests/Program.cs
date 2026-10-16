@@ -137,6 +137,16 @@ try {
     resolved=socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])!;
     transform=Read(resolved,"Transform");
     Check(Math.Abs((double)Read(transform,"X"))<0.001&&Math.Abs((double)Read(transform,"Y")-100)<0.001,"Legacy planar body inference rotated an explicitly authored model muzzle");
+    var mechPath="War/Content/Blueprints/Vehicles/BPMech.uasset";
+    var mechBp=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"BPMech_C","$PackagePath":"War/Content/Blueprints/Vehicles/BPMech.uasset"}""");
+    var mechDefault=Newtonsoft.Json.Linq.JObject.Parse("""{"MainGunMuzzleLocation":{"ObjectName":"SceneComponent'Default__BPMech_C:MainGunMuzzleLocation'"},"LeftGunMuzzleLocation":{"ObjectName":"SceneComponent'Default__BPMech_C:LeftGunMuzzleLocation'"},"RightGunMuzzleLocation":{"ObjectName":"SceneComponent'Default__BPMech_C:RightGunMuzzleLocation'"}}""");
+    cache[mechPath]=new[]{"Main","Left","Right"}.Select((side,i)=>new FoxWatchBlueprintComponentReference{ComponentName=side+"GunMuzzleLocation",RelativeLocation=$"X={i+1} Y=0 Z=300"}).ToArray();
+    for(var seatIndex=1;seatIndex<=3;seatIndex++){
+        var seat=Newtonsoft.Json.Linq.JObject.Parse("{\"Name\":\"Seat\",\"Index\":"+seatIndex+"}");
+        resolved=resolver.Invoke(extractor,[new object[]{seat},mechBp,mechDefault,seat,new Dictionary<string,object>(),true])!;
+        transform=Read(resolved,"Transform");
+        Check((double)Read(transform,"X")==seatIndex&&(double)Read(transform,"Z")==300,"Legacy mech seat used a different gun's muzzle");
+    }
     Console.WriteLine("Nested AI component, mesh/socket composition, quarter-turn and ambiguity checks passed");
 } finally { Directory.Delete(temp); }
 
