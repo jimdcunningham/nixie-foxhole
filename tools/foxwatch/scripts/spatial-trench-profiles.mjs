@@ -7,8 +7,14 @@ export async function prepareSpatialTrenchScene(asset,input,load){
  const roofZ=height('BPTrenchConnectorRoofModSlot')??floorZ,defenseZ=height('LeftDefenseModSlot');
  const result=structuredClone(input);result.scene.roots=[];result.assets={meshes:[],materials:[]};
  delete result.spatialLayerGroups;delete result.spatialModifications;result.spatialTrenchParts={};
- const layers=[...(asset.renderLayers??[]).map(layer=>[layer.i,asset.id+'/components/'+layer.i+'.scene.json']),['floor','trencht'+asset.id.at(-1)+'/components/floor.scene.json']];
- for(const [id,path]of layers){const part=await load(path);if(!part)throw Error('Missing trench spatial prototype: '+path);
+ const layers=[...(asset.renderLayers??[]).map(layer=>{
+  const id=layer.i??layer.id,name=layer.cn??layer.componentName;
+  // Raw declarations may include components absent from this tier's extracted scene.
+  // Native mesh prototypes remain required even when absent from the preview pose.
+  const absent=name&&!name.startsWith('mesh:')&&!sourceNodes.some(node=>node.name?.split(':').at(-1).toLowerCase()===name.split(':').at(-1).toLowerCase());
+  return [id,asset.id+'/components/'+id+'.scene.json',absent];
+ }),['floor','trencht'+asset.id.at(-1)+'/components/floor.scene.json']];
+ for(const [id,path,absent]of layers){const part=await load(path);if(!part){if(absent)continue;throw Error('Missing trench spatial prototype: '+path);}
   const key='spatial-trench-'+id,copy=structuredClone(part),ids=new Map();
   for(const mesh of copy.assets.meshes){const qualified=key+':'+mesh.id;ids.set(mesh.id,qualified);mesh.id=qualified;result.assets.meshes.push(mesh);}
   result.assets.materials.push(...copy.assets.materials??[]);

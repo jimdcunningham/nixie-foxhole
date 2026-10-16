@@ -35,10 +35,13 @@ export function attachSpatialBlueprintLights(document, exported) {
         const magnitude = Math.hypot(...direction);
         if (magnitude < 1e-8) throw Error('Invalid blueprint light direction');
         const forward = direction.map(n => n / magnitude);
-        const range = bounded(source.attenuationRadius, .001, 1e7, 'range') / 100;
+        const intensity = bounded(source.intensity, 0, 1e9, 'intensity');
+        const inactive = source.enabled === false || intensity === 0;
+        const radius = bounded(source.attenuationRadius, inactive ? 0 : .001, 1e7, 'range');
+        // glTF requires a positive range even for dark fixtures; retain the zero source radius in extras.
+        const range = Math.max(.001, radius) / 100;
         const outer = bounded(source.outerConeAngle ?? 44, .01, 89.9, 'outer cone') * Math.PI / 180;
         const inner = Math.min(outer - 1e-6, bounded(source.innerConeAngle ?? 0, 0, 89.9, 'inner cone') * Math.PI / 180);
-        const intensity = bounded(source.intensity, 0, 1e9, 'intensity');
         let candela;
         if (source.useInverseSquaredFalloff === false) {
             // glTF has inverse-square falloff only. Match the authored custom curve at

@@ -17,3 +17,29 @@ test('wall, roof and defense prototypes inherit their distinct authored heights'
  const prepared=await prepareSpatialTrenchScene(asset,input,async()=>part);
  assert.deepEqual(prepared.scene.roots.map(node=>node.unrealLocationCentimeters[2]),[-160,-120,20,0]);
 });
+
+
+test('raw extraction and published trench layers load the same canonical prototypes',async()=>{
+ const input={scene:{roots:[{name:'FloorQuadrilateralCover',unrealLocationCentimeters:[0,0,-160]}]},assets:{meshes:[],materials:[]}};
+ const part={scene:{roots:[{id:'mesh',meshId:'mesh',children:[]}]},assets:{meshes:[{id:'mesh'}],materials:[]}};
+ for(const tier of [1,2,3])for(const layer of [{id:'piece-wall',componentName:'Wall'},{i:'piece-wall',cn:'Wall'}]){
+  const id='trenchconnectort'+tier,paths=[];
+  const available=new Map([[id+'/components/piece-wall.scene.json',part],['trencht'+tier+'/components/floor.scene.json',part]]);
+  const result=await prepareSpatialTrenchScene({id,renderLayers:[layer]},input,async path=>{paths.push(path);return available.get(path);});
+  assert.deepEqual(paths,[...available.keys()]);
+  assert.deepEqual(Object.keys(result.spatialTrenchParts),['piece-wall','floor']);
+ }
+});
+
+
+test('absent declared components need no prototype, but native pieces and present components do',async()=>{
+ const input={scene:{roots:[{name:'FloorQuadrilateralCover',unrealLocationCentimeters:[0,0,-160]},{name:'Common:WallBack'}]},assets:{meshes:[],materials:[]}};
+ const part={scene:{roots:[{id:'mesh',meshId:'mesh',children:[]}]},assets:{meshes:[{id:'mesh'}],materials:[]}};
+ const absent={id:'dirtback',componentName:'DirtBack'},present={id:'wallback',componentName:'WallBack'},native={id:'piece-roof',componentName:'mesh:Roof'};
+ const prepare=(layers,load)=>prepareSpatialTrenchScene({id:'trenchconnectort3',renderLayers:layers},input,load);
+ const load=async path=>path.endsWith('/floor.scene.json')?part:undefined;
+ const result=await prepare([absent],load);
+ assert.deepEqual(Object.keys(result.spatialTrenchParts),['floor']);
+ for(const layer of [present,native])await assert.rejects(()=>prepare([layer],load),/Missing trench spatial prototype/);
+ await assert.rejects(()=>prepare([absent],async()=>undefined),/Missing trench spatial prototype: trencht3/);
+});

@@ -34,3 +34,17 @@ test('malformed lights and missing groups fail instead of silently emitting brok
  assert.throws(()=>attachSpatialBlueprintLights(document(),{blueprintLights:[bad]}));
  assert.throws(()=>attachSpatialBlueprintLights(document(),{blueprintLights:Array(65).fill(row())}));
 });
+
+
+test('zero-radius non-emitting fixtures retain source metadata with a valid finite export range',()=>{
+ for(const extra of [{intensity:0,enabled:true},{intensity:0,enabled:false},{intensity:100,enabled:false}]){
+  const original=source({...extra,attenuationRadius:0}),doc=document();
+  attachSpatialBlueprintLights(doc,{blueprintLights:[row({source:original})]});
+  const light=doc.extensions.KHR_lights_punctual.lights[0];
+  assert.equal(light.intensity,0);assert.ok(light.range>0&&Number.isFinite(light.range));
+  assert.deepEqual(doc.nodes[1].extras.nixieBlueprintLight.source,original);
+  assert.equal(original.attenuationRadius,0);
+ }
+ for(const original of [source({attenuationRadius:0}),source({attenuationRadius:-1,intensity:0}),source({attenuationRadius:NaN,enabled:false})])
+  assert.throws(()=>attachSpatialBlueprintLights(document(),{blueprintLights:[row({source:original})]}),/Invalid blueprint light range/);
+});
