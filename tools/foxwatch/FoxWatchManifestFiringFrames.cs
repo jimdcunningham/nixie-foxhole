@@ -33,7 +33,8 @@ public partial class FoxWatchManifestAssetExtractor
             }
             var payload = ResolvePayloadFiringFrame(objects, blueprint, defaultObject, references, lookup, ExtractInt(index));
             if (payload != null) return payload;
-            if (vehicle && !AsEnumerable(info).Any() && !HasCompetingWeaponMount(objects, blueprint, component))
+            if (vehicle && GetObjectTypeName(component).Contains("VehicleSeatComponent", StringComparison.OrdinalIgnoreCase)
+                && !AsEnumerable(info).Any() && !HasCompetingWeaponMount(objects, blueprint, component))
             {
                 var unique = ResolveSingleLegacyMuzzle(references);
                 if (unique != null) return unique;

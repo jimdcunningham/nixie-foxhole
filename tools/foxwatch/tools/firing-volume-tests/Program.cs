@@ -194,6 +194,9 @@ try {
     var legacyDefaults=new Newtonsoft.Json.Linq.JObject();
     resolved=resolver.Invoke(extractor,[new object[]{loneSeat},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])!;
     Check(resolved!=null,"A sole legacy gun with one canonical source muzzle remained unbound");
+    loneSeat["Type"]="StructureSeatComponent";
+    Check(resolver.Invoke(extractor,[new object[]{loneSeat},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])==null,"Legacy vehicle inference must not promote structure-mounted guns");
+    loneSeat["Type"]="VehicleSeatComponent";
     var competitor=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"OtherGunner","Type":"VehicleSeatComponent","MountCodeName":"UnclassifiedGun","Index":2,"Outer":{"ObjectName":"BlueprintGeneratedClass'Fixture_C'"}}""");
     Check(resolver.Invoke(extractor,[new object[]{loneSeat,competitor},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])==null,"A competing or unclassified gunner reused the sole muzzle");
     competitor["bIsEnabled"]=false;
