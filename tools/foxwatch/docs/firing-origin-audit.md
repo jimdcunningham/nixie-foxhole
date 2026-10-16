@@ -69,3 +69,6 @@ The vehicle debug gate, overlay settings and nighttime behavior remain unchanged
 - Planner catalog regressions cover every recovered family and all 14 initialization-bound entries, source offsets, independent port/starboard muzzles, firing axes and the vehicle debug gate.
 
 - Full Planner suite: 1,016 tests passed; FoxWatch suite: 258 tests passed. Planner typecheck and offline C# firing-volume checks passed.
+- Production Planner build passed with 812 declared resources verified against the completed artifact. An isolated Windows directory-rename failure was avoided on retry; the completed artifact was mirrored locally behind the normal discovery marker without restarting the running watcher or Studio server.
+- Disposable Studio scene checks: Stinger 3D firing volume follows the vehicle rotation; Harpy renders its recovered volume in 2.5D; Retiarius generates its source-backed long-range volume (375-500 m, beyond the close-up camera). These are static authored reference frames, not live game aiming/deployment poses.
+- Temporary Studio fixtures were removed, the prior view restored, and the vehicle weapon range debug overlay returned to false.
