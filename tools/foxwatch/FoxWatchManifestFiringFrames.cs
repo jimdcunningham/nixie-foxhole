@@ -33,6 +33,11 @@ public partial class FoxWatchManifestAssetExtractor
             }
             var payload = ResolvePayloadFiringFrame(objects, blueprint, defaultObject, references, lookup, ExtractInt(index));
             if (payload != null) return payload;
+            if (vehicle && !AsEnumerable(info).Any() && !HasCompetingWeaponMount(objects, blueprint, component))
+            {
+                var unique = ResolveSingleLegacyMuzzle(references);
+                if (unique != null) return unique;
+            }
             // An explicitly mapped but unresolved muzzle must not use an unrelated socket.
             if (GetFiringSocketNames(info, ExtractInt(index)).Length > 0) return null;
         }
@@ -70,6 +75,41 @@ public partial class FoxWatchManifestAssetExtractor
                 }
         }
         return null;
+    }
+
+    private bool HasCompetingWeaponMount(IEnumerable<dynamic> objects, object blueprint, object current)
+    {
+        var name = NormalizeTemplateComponentName(GetObjectName(current));
+        var blueprintName = GetObjectName(blueprint);
+        var candidates = objects.Cast<object>().Where(item => IsObjectOwnedByBlueprintScope(item, blueprintName, "Default__" + blueprintName))
+            .Concat(EnumerateBlueprintComponentScopes(objects, blueprint).SelectMany(scope => scope.Objects.Where(item => IsObjectOwnedByBlueprintScope(item, scope.BlueprintName, scope.DefaultObjectName))));
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { name };
+        foreach (var candidate in candidates)
+        {
+            var type = GetObjectTypeName(candidate);
+            if (!type.Contains("VehicleSeatComponent", StringComparison.OrdinalIgnoreCase) && !type.Contains("StructureSeatComponent", StringComparison.OrdinalIgnoreCase)) continue;
+            var candidateName = NormalizeTemplateComponentName(GetObjectName(candidate));
+            if (seen.Contains(candidateName)) continue;
+            if (ExtractBoolValue(GetInheritedBlueprintComponentProperty(objects, blueprint, candidate, "bIsEnabled")) == false) { seen.Add(candidateName); continue; }
+            var code = ExtractText(GetInheritedBlueprintComponentProperty(objects, blueprint, candidate, "MountCodeName"));
+            if (string.IsNullOrWhiteSpace(code)) continue; // A parent template may still provide it.
+            seen.Add(candidateName);
+            var direction = NormalizeSeatDirection(GetInheritedBlueprintComponentProperty(objects, blueprint, candidate, "Direction"));
+            var data = ResolveMountDynamicDataEntry(code, direction);
+            if (data == null || data.HasWeaponRange) return true; // An unknown mount cannot be assumed harmless.
+        }
+        return false;
+    }
+
+    private FiringFrame? ResolveSingleLegacyMuzzle(IReadOnlyList<FoxWatchBlueprintComponentReference> references)
+    {
+        var names = references.Where(reference => reference.MeshType == "skeletal" && !string.IsNullOrWhiteSpace(reference.MeshPath))
+            .SelectMany(reference => GetSkeletalMeshAttachPointTransforms(reference.MeshPath).Keys)
+            .Where(name => name.Contains("muzzle", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        // No muzzle table, one armed mount and one canonical physical muzzle form
+        // a unique association. Multiple guns, unknown mounts or extra muzzles do not.
+        return names.Length == 1 && string.Equals(names[0], "S_Muzzle", StringComparison.OrdinalIgnoreCase)
+            ? ResolveFiringSocketReferences(references, names[0]) : null;
     }
 
     private FiringFrame? ResolvePayloadFiringFrame(IEnumerable<dynamic> objects, object blueprint, object defaultObject,

@@ -186,6 +186,24 @@ try {
     cache[path]=cache[path].Concat(new[]{new FoxWatchBlueprintComponentReference{ComponentName="OtherPayload",ComponentType="PayloadInstancedStaticMeshComponent"}}).ToArray();
     Check(resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])==null,"Several unassociated payload grids were silently ordered");
 
+    var singleMap=(System.Collections.IDictionary)Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(typeof(string),transformType))!;
+    singleMap.Add("S_Muzzle",bone);
+    socketCache[mesh]=singleMap;
+    cache[path]=new[]{new FoxWatchBlueprintComponentReference{ComponentName="GunMesh",MeshType="skeletal",MeshPath=mesh}};
+    var loneSeat=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"LoneGunner","Type":"VehicleSeatComponent","Index":1,"Outer":{"ObjectName":"BlueprintGeneratedClass'Fixture_C'"}}""");
+    var legacyDefaults=new Newtonsoft.Json.Linq.JObject();
+    resolved=resolver.Invoke(extractor,[new object[]{loneSeat},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])!;
+    Check(resolved!=null,"A sole legacy gun with one canonical source muzzle remained unbound");
+    var competitor=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"OtherGunner","Type":"VehicleSeatComponent","MountCodeName":"UnclassifiedGun","Index":2,"Outer":{"ObjectName":"BlueprintGeneratedClass'Fixture_C'"}}""");
+    Check(resolver.Invoke(extractor,[new object[]{loneSeat,competitor},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])==null,"A competing or unclassified gunner reused the sole muzzle");
+    competitor["bIsEnabled"]=false;
+    Check(resolver.Invoke(extractor,[new object[]{loneSeat,competitor},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])!=null,"Disabled competing mounts blocked an otherwise unique binding");
+    singleMap.Add("S_AnotherMuzzle",bone);
+    Check(resolver.Invoke(extractor,[new object[]{loneSeat},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])==null,"Multiple source muzzles were silently reduced to the first socket");
+    singleMap.Remove("S_AnotherMuzzle");
+    legacyDefaults["MuzzleInfo"]=Newtonsoft.Json.Linq.JArray.Parse("""[{"GunnerIndex":1,"SocketName":"S_MissingDeclared"}]""");
+    Check(resolver.Invoke(extractor,[new object[]{loneSeat},blueprint,legacyDefaults,loneSeat,new Dictionary<string,object>(),true])==null,"A missing explicit binding was replaced by the legacy canonical socket");
+
     Console.WriteLine("Nested AI component, mesh/socket composition, quarter-turn and ambiguity checks passed");
 } finally { Directory.Delete(temp); }
 
