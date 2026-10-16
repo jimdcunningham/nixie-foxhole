@@ -35,3 +35,35 @@ test('tankette gun sockets face forward and do not inherit stale ground-range ce
         assert.ok(Math.abs(volume.origin[0]-source.origin[0]*32)<0.0001);
     }
 });
+
+
+test('recovered shared-skeleton and legacy guns retain distinct source muzzle bindings', () => {
+    const expected: Record<string, string[]> = {
+        battletankw:['S_MainGunMuzzle'], mediumtank2multiw:['S_ComTurretMuzzle'],
+        mediumtank2rangew:['S_MediumTank2RangeWAssaultRifle_L'], lighttankflamec:['S_Muzzle_FlameC'],
+        lighttank2infantryc:['S_Infantry_Muzzle_R','S_Infantry_Muzzle_L'], halftracktwinw:['S_MuzzleTwinL','S_MuzzleTwinR'],
+        halftrackmultiw:['S_HalftrackMultiW_0'], armoredcarflamew:['S_Muzzle_Flame'],
+        aircraftparatrooperw:['S_Muzzle_AircraftParatrooperW_MG'],
+        mediumboatw:['S_BowGunnerLMuzzle','S_PortGunnerLMuzzle','S_StarboardGunnerLMuzzle'],
+        largefieldmultiw:['S_MuzzleC'], aircraftbomberw:['S_AicraftBomberW_Top_Muzzle_01','S_AicraftBomberW_Back_Muzzle_01'],
+        gunboatc:['S_GunboatCMainGunMuzzle'], aircraftparatrooperc:['S_AircraftParatrooperC_MG_Muzzle'],
+        mech:['S_MainGunMuzzle','S_LeftGunMuzzle','S_RightGunMuzzle'],
+    };
+    for (const [id,names] of Object.entries(expected)) {
+        const asset=assets[id]!;
+        for(const name of names) {
+            const source=asset.ranges!.find(range=>range.firingVolume?.originName===name)?.firingVolume;
+            assert.ok(source,`${id}: missing ${name}`);
+            assert.ok(source.originSource==='muzzle-socket'||source.originSource==='muzzle-component',id);
+        }
+        assert.ok(renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false}).length>=names.length,id);
+    }
+    for(const range of assets.mech!.ranges!) if(range.firingVolume) assert.ok(range.firingVolume.origin[2]>1,'mech muzzle fell back to an uninitialized component');
+    const boat=assets.mediumboatw!.ranges!.flatMap(range=>range.firingVolume??[]);
+    assert.ok(boat.find(volume=>volume.originName==='S_PortGunnerLMuzzle')!.origin[1]<-2);
+    assert.ok(boat.find(volume=>volume.originName==='S_StarboardGunnerLMuzzle')!.origin[1]>2);
+    const main=assets.battletankw!.ranges!.find(range=>range.firingVolume?.originName==='S_MainGunMuzzle')!.firingVolume!;
+    assert.ok(Math.abs(main.origin[0]-3.62988)<0.001);
+    assert.ok(Math.abs(main.origin[2]-1.27306)<0.001);
+    assert.ok(Math.abs(main.orientation[3])>0.99999,'main gun acquired an extra quarter turn');
+});
