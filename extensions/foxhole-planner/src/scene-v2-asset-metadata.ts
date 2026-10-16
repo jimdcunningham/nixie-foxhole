@@ -648,8 +648,10 @@ export function createFoxholeSceneV2AssetMetadata(
         let destroyed = destroyedResourceId && destroyedSprite
             ? createVisualMetadata(destroyedResourceId, destroyedSprite, sprite)
             : null;
+        const destroyedCodeName = String(asset.destroyedStructureCodeName ?? '').trim().toLowerCase();
+        const destroyedAsset = destroyedCodeName ? assetsByCodeName.get(destroyedCodeName) : undefined;
         const relatedDestroyed = !destroyed
-            ? assetsByCodeName.get(String(asset.destroyedStructureCodeName ?? '').trim().toLowerCase())
+            ? destroyedAsset
             : undefined;
         if (!destroyed) {
             const related = relatedDestroyed;
@@ -1020,9 +1022,8 @@ export function createFoxholeSceneV2AssetMetadata(
             factionVariants,
             colorVariants,
             ...(destroyed ? { destroyed } : {}),
-            ...(/^trenchconnectort[123]$/u.test(asset.id)
-                && assetsByCodeName.has(String(asset.destroyedStructureCodeName ?? '').trim().toLowerCase())
-                ? { destroyedAssetId: assetsByCodeName.get(String(asset.destroyedStructureCodeName).trim().toLowerCase())!.id }
+            ...(destroyedAsset
+                ? { destroyedAssetId: destroyedAsset.id }
                 : {}),
             ...(packagedStructure || packagedPallet
                 ? {

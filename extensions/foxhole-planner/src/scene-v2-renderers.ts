@@ -1,3 +1,4 @@
+import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
@@ -691,6 +692,11 @@ function renderFoxholeSceneV2EntityPlan(
         ...placementSpatial, modelClips };
     const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
     if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
+    if (appearance.destroyed && !appearance.packaged) {
+        const destroyedModel = assetMetadata.destroyedAssetId ? assetMetadataById[assetMetadata.destroyedAssetId]?.model : undefined;
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [],
+            model: destroyedModel ? getFoxholeSceneV2ModelComponentData(destroyedModel) : null };
+    }
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
     const rotation = entity.components.find(component => (
