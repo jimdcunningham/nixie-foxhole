@@ -4,6 +4,11 @@ import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extens
 const OWNER_ID = 'nixie.foxhole-planner';
 export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     ownerId: OWNER_ID,
+    catalog: {
+        providerId: 'assets', legacySourceIds: ['foxhole.structures'],
+        lookup: async (sourceId, assetId) => (await import('./sdk-catalog-compatibility.ts')).lookupFoxholeSdkCatalogReference(sourceId, assetId),
+        createSnapshot: async (product, label, position) => (await import('./sdk-catalog-compatibility.ts')).createFoxholeSdkCatalogSnapshot(product, label, position),
+    },
     productCapabilities(product) {
         const hasProductComponent = (value: typeof product, ownerId: string, componentId: string) => value.components.some(component => component.ownerId === ownerId && component.componentId === componentId);
     const recognizedFoxholeOwner = true;

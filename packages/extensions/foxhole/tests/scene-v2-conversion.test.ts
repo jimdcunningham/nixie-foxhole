@@ -834,3 +834,13 @@ test('legacy asset aliases convert to canonical SDK identities without rewriting
         assert.deepEqual(node, original);
     }
 });
+
+test('legacy icon folder aliases resolve to canonical SDK textures during conversion', () => {
+    const snapshot = { id: 'old-icon', type: 'nixieIcon', state: {
+        textureUrl: '/foxhole/assets/types/structures/worldroad/worldroad.icon.default.webp', x: 4, y: 8,
+    }, children: [] };
+    const result = convertNixieSceneV1ToV2([snapshot], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+    assert.deepEqual(result.content.entities[0]!.components.find(c => c.componentId === 'asset')?.data,
+        { catalogId: 'foxhole.icons', assetId: 'greatmarchroad' });
+    assert.equal(snapshot.state.textureUrl.includes('/worldroad/'), true);
+});

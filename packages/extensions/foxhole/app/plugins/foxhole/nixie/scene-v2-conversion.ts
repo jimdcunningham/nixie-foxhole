@@ -1,3 +1,5 @@
+import modelBundle from '../../../../public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
+import { getFoxholeSceneV2ModelComponentData, isFoxholeSceneV2ModelAllowed } from '../../../../../../../extensions/foxhole-planner/src/scene-v2-models.ts';
 import { createFoxholeAssetIdentityResolver } from '../../../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
 import type {
     NixieSceneV1ConversionIssue,
@@ -61,6 +63,16 @@ let foxholeSceneV2AppearanceSupportByAsset: ReadonlyMap<string, {
 let foxholeSceneV2CargoSupportByAsset: ReadonlyMap<string, { limit: number | null; }> | undefined;
 let foxholeSceneV2ItemIdsByCodeName: ReadonlyMap<string, string> | undefined;
 let foxholeSceneV2SocketAssetIds: ReadonlySet<string> | undefined;
+function convertedModelData(assetId: string) {
+    const model = (modelBundle.assets as Record<string, typeof modelBundle.assets.factory>)[assetId];
+    return model && isFoxholeSceneV2ModelAllowed(assetId)
+        && model.resourceId === `foxhole.model.${assetId}`
+        && ['width', 'height', 'depth'].every(key => Number.isFinite(model[key as 'width']) && model[key as 'width'] > 0)
+        && ['offsetX', 'offsetY', 'offsetZ'].every(key => Number.isFinite(model[key as 'offsetX']))
+        ? getFoxholeSceneV2ModelComponentData(model) : null;
+
+}
+
 const FOXHOLE_STATE_KEYS = [
     'foxholeKey',
     'faction',
@@ -287,7 +299,7 @@ function resolveFoxholeIconAssetId(value: unknown): string | null {
         return null;
     }
     const normalized = value.trim().replaceAll('\\', '/').split(/[?#]/u, 1)[0]?.toLowerCase() ?? '';
-    const assetId = FOXHOLE_ASSET_ICON_PATH_PATTERN.exec(normalized)?.[1] ?? '';
+    const assetId = canonicalAssetId(FOXHOLE_ASSET_ICON_PATH_PATTERN.exec(normalized)?.[1] ?? '');
     return getFoxholeSceneV2RenderableAssetIds().has(assetId) ? assetId : null;
 }
 
@@ -1113,12 +1125,16 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     }
     if (node.type === FOXHOLE_SPLINE_CONNECTOR_NODE_TYPE) {
         const converted = convertSplineConnectorState(node.state, resolveEntityId);
+        const modelData = convertedModelData(String(converted.data?.foxholeKey ?? ''));
         return {
             supported: converted.data !== null,
             handledStateKeys: [...SPLINE_CONNECTOR_STATE_KEYS],
             issues: converted.issues,
             components: converted.data
-                ? [{
+                ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'asset', version: 1,
+                    data: { catalogId: 'foxhole.structures', assetId: String(converted.data.foxholeKey) } },
+                ...(modelData ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'model', version: 1,
+                    data: modelData }] : []), {
                     ownerId: FOXHOLE_SCENE_V2_OWNER_ID,
                     componentId: 'spline-connector',
                     version: 1,
@@ -1314,6 +1330,8 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
         issues.push(unsupportedStateIssue(`Foxhole asset ${assetId} has no Scene V2 product renderer yet.`));
     }
 
+    const modelData = convertedModelData(assetId);
+
     return {
         supported: renderable,
         handledStateKeys: [...FOXHOLE_STATE_KEYS],
@@ -1323,7 +1341,7 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             componentId: 'asset',
             version: 1,
             data: { catalogId: 'foxhole.structures', assetId },
-        }, ...(Object.keys(appearance).length > 0
+        }, ...(modelData ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'model', version: 1, data: modelData }] : []), ...(Object.keys(appearance).length > 0
             ? [{
                 ownerId: FOXHOLE_SCENE_V2_OWNER_ID,
                 componentId: 'appearance',
