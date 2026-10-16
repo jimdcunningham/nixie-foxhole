@@ -28,7 +28,7 @@ public partial class FoxWatchManifestAssetExtractor
             var info = GetInheritedBlueprintProperty(objects, blueprint, defaultObject, "MuzzleInfo");
             foreach (var socket in GetFiringSocketNames(info, ExtractInt(index)))
             {
-                var frame = ResolveFiringSocketReferences(references, socket);
+                var frame = ResolveDeclaredFiringSocket(objects, blueprint, defaultObject, references, socket);
                 if (frame != null) return frame;
             }
             // An explicitly mapped but unresolved muzzle must not use an unrelated socket.
@@ -68,6 +68,26 @@ public partial class FoxWatchManifestAssetExtractor
                 }
         }
         return null;
+    }
+
+    private FiringFrame? ResolveDeclaredFiringSocket(IEnumerable<dynamic> objects, object blueprint, object defaultObject,
+        IReadOnlyList<FoxWatchBlueprintComponentReference> references, string socket)
+    {
+        var actorMesh = GetInheritedBlueprintProperty(objects, blueprint, defaultObject, "Mesh");
+        var keys = actorMesh == null ? [] : GetComponentLookupKeys(actorMesh).ToArray();
+        var primary = references.FirstOrDefault(reference => keys.Contains(reference.ComponentName, StringComparer.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(reference.AnimationClassPath) && reference.MeshType == "skeletal");
+        if (primary != null)
+        {
+            var candidates = references.Where(reference => reference.MeshType == "skeletal" && !string.IsNullOrWhiteSpace(reference.MeshPath)
+                && GetSkeletalMeshAttachPointTransforms(reference.MeshPath).ContainsKey(socket)).ToArray();
+            // Modular aircraft slots are visual parts of the explicitly bound,
+            // animated actor mesh, not independent sources of its MuzzleInfo.
+            if (candidates.Contains(primary) && candidates.All(reference => reference == primary
+                || (reference.ComponentType == "AircraftPartSlotComponent" && string.IsNullOrWhiteSpace(reference.AnimationClassPath))))
+                return ResolveFiringSocketReferences(references.Where(reference => reference == primary || !candidates.Contains(reference)).ToArray(), socket);
+        }
+        return ResolveFiringSocketReferences(references, socket);
     }
 
     private FiringFrame? ResolveFiringSocket(object blueprint, string socket)
@@ -192,6 +212,7 @@ public partial class FoxWatchManifestAssetExtractor
                 ComponentName = reference.ComponentName,
                 ComponentType = reference.ComponentType,
                 SourceClassName = reference.SourceClassName,
+                AnimationClassPath = reference.AnimationClassPath,
                 MeshType = reference.MeshType,
                 MeshPath = reference.MeshPath,
                 MeshName = reference.MeshName,

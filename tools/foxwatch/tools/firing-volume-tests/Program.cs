@@ -149,6 +149,23 @@ try {
         transform=Read(resolved,"Transform");
         Check((double)Read(transform,"X")==seatIndex&&(double)Read(transform,"Z")==300,"Legacy mech seat used a different gun's muzzle");
     }
+    cache[path]=new[]{
+        new FoxWatchBlueprintComponentReference{ComponentName="CharacterMesh0",ComponentType="SkeletalMeshComponent",MeshType="skeletal",MeshPath=mesh,AnimationClassPath="War/Content/Anim/Fixture.uasset"},
+        new FoxWatchBlueprintComponentReference{ComponentName="MechanicalSlot0",ComponentType="AircraftPartSlotComponent",MeshType="skeletal",MeshPath=gunMesh,RelativeLocation="X=500 Y=0 Z=0"}
+    };
+    ranks[mesh]=new(){{"S_Muzzle",0}};ranks[gunMesh]=new(){{"S_Muzzle",0}};
+    var flightDefaults=Newtonsoft.Json.Linq.JObject.Parse("""{"Mesh":{"ObjectName":"SkeletalMeshComponent'Default__Fixture_C:CharacterMesh0'"},"MuzzleInfo":[{"GunnerIndex":1,"MuzzleIndex":0,"SocketName":"S_Muzzle"}]}""");
+    var flightSeat=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"GunnerSeat1","Type":"VehicleSeatComponent","Index":1}""");
+    resolved=resolver.Invoke(extractor,[new object[]{flightSeat},blueprint,flightDefaults,flightSeat,new Dictionary<string,object>(),true])!;
+    Check(resolved!=null,"Aircraft modular part displaced the explicitly bound animated actor mesh");
+    transform=Read(resolved!,"Transform");
+    Check((double)Read(transform,"X")==0,"Aircraft socket inherited a visual part's placement offset");
+    flightDefaults.Remove("Mesh");
+    Check(resolver.Invoke(extractor,[new object[]{flightSeat},blueprint,flightDefaults,flightSeat,new Dictionary<string,object>(),true])==null,"Unbound aircraft must not arbitrarily prefer a mesh");
+    flightDefaults["Mesh"]=Newtonsoft.Json.Linq.JObject.Parse("""{"ObjectName":"SkeletalMeshComponent'Default__Fixture_C:CharacterMesh0'"}""");
+    cache[path][1].AnimationClassPath="War/Content/Anim/IndependentGun.uasset";
+    Check(resolver.Invoke(extractor,[new object[]{flightSeat},blueprint,flightDefaults,flightSeat,new Dictionary<string,object>(),true])==null,"An independently animated gun must not be treated as a visual follower");
+
     Console.WriteLine("Nested AI component, mesh/socket composition, quarter-turn and ambiguity checks passed");
 } finally { Directory.Delete(temp); }
 
