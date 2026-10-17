@@ -34,4 +34,6 @@ export interface FoxholeMapContext {
     /** True only while a scene tab is the active editor surface. */
     hasActiveSceneView: () => boolean;
     loadTexture: (url: string) => Promise<PIXI.Texture>;
+    releaseTexture?: (url: string) => Promise<void>;
+    releaseAllTextures?: () => Promise<void>;
 }

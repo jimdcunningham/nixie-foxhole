@@ -17,6 +17,7 @@ import type { FoxholeMapPlaybackPreviewState, FoxholePlaybackPreviewReportEntry 
 import { foxholeWarApiStorage } from '#foxhole/plugins/foxhole/nixie/map/storage.ts';
 import type { FoxholeMapContext } from './context.ts';
 import { FoxholeMapRenderer } from './renderer.ts';
+import { FoxholeMapTexturePool } from './texture-leases.ts';
 import { FoxholeRealtimeSocket } from './live-socket.ts';
 import { resolveFoxholeRealtimeSocketEndpoint } from './realtime-origin.ts';
 import type { NixieViewportPluginContext } from '#nixie/plugins/nixie/registry/types.ts';
@@ -45,6 +46,11 @@ const FOXHOLE_MAP_FONT_LOADS = [
     '600 16px Jost',
     '700 16px Jost',
 ] as const;
+
+const mapTexturePool = new FoxholeMapTexturePool<PIXI.Texture>(
+    url => PIXI.Assets.load(url.startsWith('blob:') ? { src: url, parser: 'texture' } : url),
+    url => PIXI.Assets.unload(url),
+);
 
 let foxholeMapFontLoad: Promise<void> | null = null;
 
@@ -178,6 +184,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private static readonly NO_BACKGROUND_FIT_BOUNDS_PADDING_FACTOR = 0.045;
 
     private renderer: FoxholeMapRenderer | null = null;
+    private readonly textureOwner = mapTexturePool.createOwner();
     private syncPending = false;
     private cacheLoadPromise: Promise<void> | null = null;
     private cachedMaps: Record<string, FoxholeMapCacheEntry> = {};
@@ -308,6 +315,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         this.renderer?.clearAssistantHighlights();
         this.renderer?.destroy();
         this.renderer = null;
+        void this.textureOwner.releaseAll().catch(() => {});
     }
 
     private async ensureRenderer(): Promise<void> {
@@ -370,7 +378,9 @@ export class FoxholeMapViewportPlugin extends Plugin {
                     resolveNxTheme(this.settingsStore.getValue(NIXIE_COLOR_THEME_SETTING_ID) as 'light' | 'dark' | 'system'),
                 ),
                 hasActiveSceneView: () => this.pluginContext.session.sceneViewActive.value,
-                loadTexture: async url => await PIXI.Assets.load(url) as PIXI.Texture,
+                loadTexture: url => this.textureOwner.load(url),
+                releaseTexture: url => this.textureOwner.release(url),
+                releaseAllTextures: () => this.textureOwner.releaseAll(),
             };
 
             this.renderer = new FoxholeMapRenderer(context);

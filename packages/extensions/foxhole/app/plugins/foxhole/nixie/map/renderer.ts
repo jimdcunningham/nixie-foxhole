@@ -1169,12 +1169,16 @@ export class FoxholeMapRenderer {
         this.regionTextureCache.clear();
         this.iconTextureCache.clear();
 
+        if (this.context.releaseAllTextures) {
+            void this.context.releaseAllTextures().catch(() => {});
+            return;
+        }
         for (const url of unloadUrls) {
             if (!url) {
                 continue;
             }
 
-            void PIXI.Assets.unload(url).catch(() => {});
+            void (this.context.releaseTexture?.(url) ?? PIXI.Assets.unload(url)).catch(() => {});
         }
     }
 
@@ -1229,7 +1233,7 @@ export class FoxholeMapRenderer {
     }
 
     private async loadBackgroundTexture(variant: 'dark' | 'light' = 'dark'): Promise<void> {
-        if (this.backgroundVariant === variant && this.background.texture) {
+        if (this.backgroundVariant === variant && this.background.texture && !this.background.texture.destroyed) {
             return;
         }
 
@@ -1240,7 +1244,7 @@ export class FoxholeMapRenderer {
         }
 
         if (!this.context.readMapSettings().enabled) {
-            void PIXI.Assets.unload(textureUrl).catch(() => {});
+            void (this.context.releaseTexture?.(textureUrl) ?? PIXI.Assets.unload(textureUrl)).catch(() => {});
             return;
         }
 
@@ -1437,13 +1441,8 @@ export class FoxholeMapRenderer {
             return await existing;
         }
 
-        const isBlobUrl = typeof cacheKey === 'string' && cacheKey.startsWith('blob:');
-        const promise = (
-            isBlobUrl
-                // Blob URLs have no extension; Pixi needs an explicit texture parser.
-                ? PIXI.Assets.load({ src: cacheKey, parser: 'texture' }) as Promise<PIXI.Texture>
-                : this.context.loadTexture(cacheKey)
-        ).then(texture => {
+        // The shared loader also selects the texture parser for extensionless blob URLs.
+        const promise = this.context.loadTexture(cacheKey).then(texture => {
             if (texture?.source) {
                 texture.source.scaleMode = 'nearest';
             }
