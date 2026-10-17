@@ -171,6 +171,7 @@ export function getFoxholeMapActiveBounds(
 export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginContext, 'session'> {
     getSceneNodeCount?: () => number;
     getZoom?: () => number;
+    manualPresentation?: boolean;
     session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
         pointerTrackerRef: { readonly value: { pointer: { readonly value: { world: PIXI.PointData | null; }; }; } | null; };
     };
@@ -212,7 +213,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private readonly assistantHighlightsRef = getFoxholeMapAssistantHighlightsRef();
     private readonly settingsStore = useNixieSettingsStore();
 
-    private readonly handleTick = (): void => {
+    readonly updatePresentation = (): void => {
         if (!this.readMapSettings().enabled || !this.pluginContext.session.sceneViewActive.value) {
             return;
         }
@@ -225,7 +226,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         super(parent);
         this.pluginContext = pluginContext;
         void this.ensureRenderer();
-        this.pluginContext.session.appRef.value?.ticker.add(this.handleTick);
+        if (!pluginContext.manualPresentation) this.pluginContext.session.appRef.value?.ticker.add(this.updatePresentation);
         this.stopSettingsWatch = watch(
             () => this.readMapSettings(),
             (settings, previousSettings) => {
@@ -287,6 +288,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         void this.syncRenderer();
     }
 
+
     get presentationRoot(): PIXI.Container | null {
         return this.renderer?.root ?? null;
     }
@@ -298,7 +300,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
 
     override destroy(): void {
         this.isDestroyed = true;
-        this.pluginContext.session.appRef.value?.ticker.remove(this.handleTick);
+        this.pluginContext.session.appRef.value?.ticker.remove(this.updatePresentation);
         this.stopSettingsWatch?.();
         this.stopSettingsWatch = null;
         this.stopPlaybackPreviewWatch?.();

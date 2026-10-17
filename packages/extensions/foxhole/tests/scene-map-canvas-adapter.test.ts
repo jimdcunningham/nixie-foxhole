@@ -8,7 +8,7 @@ import { stripTypeScriptTypes } from 'node:module';
 const source = readFileSync(new URL('../app/plugins/foxhole/nixie/scene-map-canvas-adapter.ts', import.meta.url), 'utf8');
 
 test('the War map adapter uses ECS counts, pointer, camera and lifetime instead of the hidden V1 scene', () => {
-    let context: any, destroyed = 0, pointer = { x: 10, y: 20 }, interacting = false;
+    let context: any, destroyed = 0, frames = 0, pointer = { x: 10, y: 20 }, interacting = false;
     const moves: unknown[] = [], suppression: boolean[] = [];
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const settings = { enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 };
@@ -20,6 +20,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         FoxholeMapViewportPlugin: class {
             presentationRoot = root;
             constructor(_: unknown, value: unknown) { context = value; }
+            updatePresentation() { frames++; }
             destroy() { destroyed++; }
         },
     });
@@ -29,6 +30,9 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         cameraTo: (...args: unknown[]) => moves.push(args) });
     assert.equal(context.getSceneNodeCount(), 17);
     assert.equal(context.getZoom(), 0.025);
+    assert.equal(context.manualPresentation, true);
+    adapter.updatePresentation();
+    assert.equal(frames, 1);
     const layers = adapter.spatialLayers();
     assert.equal(layers.length, 2);
     assert.equal(layers[0].content, terrain);

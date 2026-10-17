@@ -14,6 +14,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         projectStore: context.runtime.projectStore,
         getSceneNodeCount: context.nodeCount,
         getZoom: context.zoom,
+        manualPresentation: true,
         session: {
             appRef: shallowRef(context.app),
             sceneLayerRef: shallowRef(context.before),
@@ -27,6 +28,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     return {
         documentRendererIds: ['planning-map', 'planning-grid'],
         ownsViewportConstraints: true,
+        updatePresentation: () => plugin.updatePresentation(),
         get root() { return plugin.presentationRoot; },
         navigationBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));
@@ -43,7 +45,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 : undefined;
             const billboardLabels = new Set(['foxhole-map-labels', 'foxhole-map-major-labels', 'foxhole-map-minor-labels',
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
-            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), pixelScale: context.zoom(), clip }));
+            const pixelScale = context.zoom();
+            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), pixelScale, clip }));
         },
         worldBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));
