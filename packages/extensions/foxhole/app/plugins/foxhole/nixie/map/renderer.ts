@@ -185,6 +185,7 @@ interface FoxholeMapRegionView {
     voronoiLayoutSignature: string;
     voronoiStyleSignature: string;
     voronoiRenderSignature: string;
+    voronoiFillSignature?: string;
     activityHeatSignature: string;
     activityHeatIntensity: number;
     liveIcons: PIXI.Container;
@@ -1387,6 +1388,15 @@ export class FoxholeMapRenderer {
         minorLabels.eventMode = 'none';
         minorLabels.interactiveChildren = false;
         this.minorLabels.addChild(minorLabels);
+
+        // Stable local footprints let spatial views skip whole offscreen regions.
+        // Keep a generous gutter for labels and icons that straddle hex borders.
+        container.cullArea = new PIXI.Rectangle(-FOXHOLE_REGION_WIDTH / 2, -FOXHOLE_REGION_HEIGHT / 2, FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT).pad(512);
+        border.cullArea = container.cullArea;
+        subregions.cullArea = new PIXI.Rectangle(0, 0, FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT).pad(512);
+        for (const group of [liveIcons, majorLabels, minorLabels]) {
+            group.cullArea = new PIXI.Rectangle(0, 0, FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT).pad(FOXHOLE_REGION_WIDTH / 2);
+        }
 
         const view: FoxholeMapRegionView = {
             region,
@@ -2828,7 +2838,10 @@ export class FoxholeMapRenderer {
             return;
         }
 
-        this.redrawRegionVoronoi(view, lineThickness, showVoronoi, showFaction);
+        const fillSignature = this.getVoronoiRenderSignature(view, 0, false, showFaction);
+        const redrawFill = !view.voronoiRenderSignature || view.voronoiFillSignature !== fillSignature;
+        this.redrawRegionVoronoi(view, lineThickness, showVoronoi, showFaction, redrawFill);
+        view.voronoiFillSignature = fillSignature;
         view.voronoiRenderSignature = nextRenderSignature;
     }
 
@@ -2837,11 +2850,12 @@ export class FoxholeMapRenderer {
         lineThickness: number,
         showVoronoi: boolean,
         showFaction: boolean,
+        redrawFill: boolean,
     ): void {
         const fillGraphics = view.subregionFillGraphics;
         const lineGraphics = view.subregionLineGraphics;
         const suppressFactionColor = this.shouldSuppressResistanceFactionColor(view.region);
-        fillGraphics.clear();
+        if (redrawFill) fillGraphics.clear();
         lineGraphics.clear();
         lineGraphics.alpha = showVoronoi ? 0.15 : 1;
 
@@ -2851,10 +2865,10 @@ export class FoxholeMapRenderer {
                 continue;
             }
 
-            this.drawPolyline(lineGraphics, points);
+            if (showVoronoi) this.drawPolyline(lineGraphics, points);
 
             const fillColor = this.resolveFactionFillColor(cell.teamId);
-            if (showFaction && !suppressFactionColor && fillColor !== null) {
+            if (redrawFill && showFaction && !suppressFactionColor && fillColor !== null) {
                 const fillAlpha = cell.teamId && cell.teamId !== 'NONE'
                     ? this.computeFactionAlpha(cell.capturedTimestamp)
                     : 0.15;

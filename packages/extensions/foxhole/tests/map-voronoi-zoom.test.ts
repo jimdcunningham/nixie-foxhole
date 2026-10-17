@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {stripTypeScriptTypes} from 'node:module';
+import {runInNewContext} from 'node:vm';
+import test from 'node:test';
+const source=readFileSync(new URL('../app/plugins/foxhole/nixie/map/renderer.ts',import.meta.url),'utf8');
+const methods=['getVoronoiRenderSignature','redrawRegionVoronoiIfNeeded','redrawRegionVoronoi'].map(name=>source.match(new RegExp(`    private ${name}\\([\\s\\S]*?\\n    }`))![0]).join('\n');
+test('zoom refreshes division strokes without rebuilding unchanged faction polygons',()=>{
+ const Renderer=runInNewContext(stripTypeScriptTypes(`class FoxholeMapRenderer { static FACTION_RENDER_BUCKET_MS=1000; ${methods} }; FoxholeMapRenderer;`));
+ const renderer=new Renderer();
+ renderer.context={getPlaybackTimestamp:()=>10000};
+ renderer.shouldSuppressResistanceFactionColor=()=>false;
+ renderer.resolveFactionFillColor=()=>0x245682;
+ renderer.computeFactionAlpha=()=>0.3;
+ renderer.drawPolyline=()=>{};
+ const fill={clears:0,fills:0,clear(){this.clears++;},fill(){this.fills++;}};
+ const line={clears:0,width:0,clear(){this.clears++;},stroke(style:{width:number}){this.width=style.width;}};
+ const view={region:{},voronoiRenderSignature:'',voronoiStyleSignature:'wardens',subregionFillGraphics:fill,subregionLineGraphics:line,
+  voronoiCells:[{points:[0,0,10,0,10,10],teamId:'WARDENS'}]};
+ renderer.redrawRegionVoronoiIfNeeded(view,100,true,true);
+ renderer.redrawRegionVoronoiIfNeeded(view,200,true,true);
+ assert.equal(fill.clears,1);assert.equal(fill.fills,1);assert.equal(line.width,200);
+ view.voronoiStyleSignature='colonials';
+ renderer.redrawRegionVoronoiIfNeeded(view,200,true,true);
+ assert.equal(fill.clears,2,'capture changes must redraw faction polygons');
+ view.voronoiRenderSignature='';
+ renderer.redrawRegionVoronoiIfNeeded(view,200,true,true);
+ assert.equal(fill.clears,3,'restoring hidden or changed layouts must rebuild their fill');
+ renderer.redrawRegionVoronoiIfNeeded(view,200,true,false);
+ renderer.redrawRegionVoronoiIfNeeded(view,300,true,false);
+ assert.equal(fill.clears,4,'disabled faction fills stay empty during zoom');
+ renderer.redrawRegionVoronoiIfNeeded(view,300,true,true);
+ assert.equal(fill.clears,5,'enabling faction colors restores their polygons');
+});
