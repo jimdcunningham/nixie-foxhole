@@ -2,12 +2,12 @@ import { copyFile, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promis
 import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import sharp from 'sharp';
 import { readBrowserAtlasImage } from './build/browser-atlas-images.ts';
 import type { createFoxholeSceneV2AssetMetadata } from './src/scene-v2-asset-metadata.ts';
 import type { createFoxholeSceneV2MapMetadata } from './src/scene-v2-map-metadata.ts';
-import { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, selectFoxholeSceneV2ModelBuild } from './src/scene-v2-models.ts';
+import type { FoxholeSceneV2ModelSource } from './src/scene-v2-models.ts';
 import { publishCompletedBuild } from './build/completed-build-publisher.ts';
 import { createResourceBuildSnapshot } from './build/resource-build-snapshot.ts';
 import { bindFoxholeModelLayerNodes } from './src/model-layer-nodes.ts';
@@ -66,7 +66,7 @@ interface SceneV2VisualSource {
 }
 
 interface SceneV2ResourceSources {
-  models: Array<{ id: string; assetId: string; path: string; }>;
+  models: Array<FoxholeSceneV2ModelSource & { packagedPath: string; }>;
   browserImageSources: string[];
   assets: SceneV2AssetSource[];
   catalogLocalizations: Record<string, Record<string, string>>;
@@ -77,6 +77,21 @@ interface SceneV2ResourceSources {
   modifications: SceneV2ModificationSource[];
   visuals: SceneV2VisualSource[];
   maps: ReturnType<typeof createFoxholeSceneV2MapMetadata>;
+}
+
+/** Reload model binding code with each source revision and freeze its destination paths in the build snapshot. */
+export async function readSceneV2ModelSources(
+  assets: Parameters<typeof import('./src/scene-v2-models.ts')['bindFoxholeSceneV2Models']>[0],
+  manifest: Parameters<typeof import('./src/scene-v2-models.ts')['bindFoxholeSceneV2Models']>[1] | undefined,
+  selection?: string,
+  moduleUrl = new URL('./src/scene-v2-models.ts', import.meta.url),
+): Promise<SceneV2ResourceSources['models']> {
+  const version = createHash('sha256').update(await readFile(moduleUrl, 'utf8')).digest('hex');
+  const { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, selectFoxholeSceneV2ModelBuild } =
+    await import(`${moduleUrl.href}?version=${version}`) as typeof import('./src/scene-v2-models.ts');
+  const models = manifest ? bindFoxholeSceneV2Models(assets, manifest) : [];
+  return selectFoxholeSceneV2ModelBuild(assets, models, selection)
+    .map(model => ({ ...model, packagedPath: getFoxholeSceneV2PackagedModelPath(model) }));
 }
 
 async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
@@ -92,9 +107,9 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
   const generated = createFoxholeSceneV2AssetMetadata(
     manifest as unknown as Parameters<typeof createFoxholeSceneV2AssetMetadata>[0],
   );
-  let models: SceneV2ResourceSources['models'] = [];
+  let modelManifest: Parameters<typeof import('./src/scene-v2-models.ts')['bindFoxholeSceneV2Models']>[1] | undefined;
   try {
-    models = bindFoxholeSceneV2Models(generated.assets, JSON.parse(await readFile(resolve(foxholeAssetsRoot, 'models/manifest.v1.json'), 'utf8')));
+    modelManifest = JSON.parse(await readFile(resolve(foxholeAssetsRoot, 'models/manifest.v1.json'), 'utf8'));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error;
@@ -106,7 +121,7 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
   selection = selection?.trim() || undefined;
-  models = selectFoxholeSceneV2ModelBuild(generated.assets, models, selection);
+  const models = await readSceneV2ModelSources(generated.assets, modelManifest, selection);
   for (const model of models) {
     const asset = generated.assets[model.assetId];
     if (asset?.model && /^Foundation/i.test(asset.codeName) && model.id === model.assetId) {
@@ -155,7 +170,7 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
   };
 }
 
-function foxholeSceneV2ResourcesPlugin() {
+function foxholeSceneV2ResourcesPlugin(): Plugin {
   const sources = createResourceBuildSnapshot(readSceneV2AssetSources);
   let updatedManifest = '';
   const extensionRoot = resolve(fileURLToPath(new URL('./', import.meta.url)));
@@ -176,7 +191,7 @@ function foxholeSceneV2ResourcesPlugin() {
         ...declaration.contributes.experimentalResources.filter((resource: { id: string; kind: string; }) =>
           resource.kind !== 'model' || !resource.id.startsWith('foxhole.model.')),
         ...models.map(model => ({ contractVersion: 1, id: `foxhole.model.${model.id}`, kind: 'model',
-          path: `dist/assets/scene-v2/${getFoxholeSceneV2PackagedModelPath(model)}` })),
+          path: `dist/assets/scene-v2/${model.packagedPath}` })),
       ];
       updatedManifest = `${JSON.stringify(declaration)}\n`;
       this.addWatchFile(foxholeManifestPath);
@@ -224,7 +239,7 @@ function foxholeSceneV2ResourcesPlugin() {
       await rm(assetsRoot, { recursive: true, force: true });
       await mkdir(assetsRoot, { recursive: true });
       for (const model of sources.models) {
-        const destination = resolve(outputRoot, getFoxholeSceneV2PackagedModelPath(model));
+        const destination = resolve(outputRoot, model.packagedPath);
         await mkdir(dirname(destination), { recursive: true });
         await copyFile(resolve(foxholeAssetsRoot, model.path), destination);
       }
