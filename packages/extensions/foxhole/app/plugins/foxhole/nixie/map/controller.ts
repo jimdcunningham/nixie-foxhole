@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import { useRuntimeConfig } from '#imports';
 import { Plugin } from '#nixie/utils/nixie-pixi-viewport.ts';
 import type { Viewport } from 'pixi-viewport';
 import { watch } from 'vue';
@@ -160,6 +161,14 @@ export function getFoxholeMapActiveBounds(
     };
 }
 
+/** The map needs a canvas surface, not the V1 board implementation. */
+export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginContext, 'session'> {
+    getSceneNodeCount?: () => number;
+    session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
+        pointerTrackerRef: { readonly value: { pointer: { readonly value: { world: PIXI.PointData | null; }; }; } | null; };
+    };
+}
+
 export class FoxholeMapViewportPlugin extends Plugin {
     private static readonly DEFAULT_MIN_SCALE = 0.0025;
     private static readonly DEFAULT_MAX_SCALE = 2;
@@ -189,7 +198,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private fitMapOnNextSync = false;
     private rendererCreation: Promise<void> | null = null;
     private isDestroyed = false;
-    private readonly pluginContext: NixieViewportPluginContext;
+    private readonly pluginContext: FoxholeMapViewportContext;
     private readonly warAPIStorage = foxholeWarApiStorage;
     private readonly playbackPreviewRef = getFoxholeMapPlaybackPreviewRef();
     private readonly assistantHighlightsRef = getFoxholeMapAssistantHighlightsRef();
@@ -204,7 +213,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         this.refreshViewportConstraints();
     };
 
-    constructor(parent: Viewport, pluginContext: NixieViewportPluginContext) {
+    constructor(parent: Viewport, pluginContext: FoxholeMapViewportContext) {
         super(parent);
         this.pluginContext = pluginContext;
         void this.ensureRenderer();
@@ -213,7 +222,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             () => this.readMapSettings(),
             (settings, previousSettings) => {
                 const project = this.pluginContext.project ?? this.pluginContext.projectStore.project;
-                const sceneNodeCount = project?.getSelectableNodeIds({
+                const sceneNodeCount = this.pluginContext.getSceneNodeCount?.() ?? project?.getSelectableNodeIds({
                     includeHidden: true,
                     includeLocked: true,
                 }).length;
@@ -268,6 +277,10 @@ export class FoxholeMapViewportPlugin extends Plugin {
         );
         void this.ensureCacheLoaded();
         void this.syncRenderer();
+    }
+
+    get presentationRoot(): PIXI.Container | null {
+        return this.renderer?.root ?? null;
     }
 
     override update(): void {
@@ -487,7 +500,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         }
 
         const project = this.pluginContext.project ?? this.pluginContext.projectStore.project;
-        if (!project || project.getSelectableNodeIds({ includeHidden: true, includeLocked: true }).length > 0) {
+        if (!project || (this.pluginContext.getSceneNodeCount?.() ?? project.getSelectableNodeIds({ includeHidden: true, includeLocked: true }).length) > 0) {
             this.fitMapOnNextSync = false;
             return;
         }
