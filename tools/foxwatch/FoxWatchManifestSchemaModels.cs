@@ -539,8 +539,22 @@ public sealed class FoxWatchManifestFiringReference
     public double Heading { get; set; }
 }
 
+public sealed class FoxWatchManifestPayloadPose
+{
+    public string Animation { get; set; } = "";
+    public string BlendSpace { get; set; } = "";
+    public string Bone { get; set; } = "";
+    public double InputPitch { get; set; }
+    public double MaxInputPitch { get; set; }
+    public bool RequiresDeployment { get; set; }
+    public double PitchSpan { get; set; }
+    public double[] MaximumOrigin { get; set; } = [];
+}
+
 public sealed class FoxWatchManifestFiringVolume
 {
+    public double[][]? MuzzleOrigins { get; set; }
+    public FoxWatchManifestPayloadPose? PayloadPose { get; set; }
     public FoxWatchManifestFiringReference? Reference { get; set; }
     public string? OriginSource { get; set; }
     public string? OriginName { get; set; }

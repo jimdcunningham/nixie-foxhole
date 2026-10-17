@@ -8,10 +8,11 @@ export function alignFiringVolume(range, source = range.firingVolume) {
         const reference=volume.reference;
         const heading=range.rotation ?? range.r ?? reference.heading;
         const angle=(heading-reference.heading)*Math.PI/180, c=Math.cos(angle), s=Math.sin(angle);
-        const x=volume.origin[0]-reference.origin[0], y=volume.origin[1]-reference.origin[1];
         const center=[Number(range.x ?? 0),Number(range.y ?? 0)];
-        volume.origin[0]=center[0]+c*x-s*y;
-        volume.origin[1]=center[1]+s*x+c*y;
+        for (const point of [volume.origin, ...(volume.muzzleOrigins ?? []), ...(volume.payloadPose ? [volume.payloadPose.maximumOrigin] : [])]) {
+            const x=point[0]-reference.origin[0], y=point[1]-reference.origin[1];
+            point[0]=center[0]+c*x-s*y; point[1]=center[1]+s*x+c*y;
+        }
         const [qx,qy,qz,qw]=volume.orientation, ch=Math.cos(angle/2), sh=Math.sin(angle/2);
         volume.orientation=[ch*qx-sh*qy,ch*qy+sh*qx,ch*qz+sh*qw,ch*qw-sh*qz];
         volume.reference={origin:center,heading};

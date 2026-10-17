@@ -166,7 +166,7 @@ try {
     cache[path][1].AnimationClassPath="War/Content/Anim/IndependentGun.uasset";
     Check(resolver.Invoke(extractor,[new object[]{flightSeat},blueprint,flightDefaults,flightSeat,new Dictionary<string,object>(),true])==null,"An independently animated gun must not be treated as a visual follower");
 
-    var payload=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"PayloadInstancedStaticMesh_GEN_VARIABLE","Type":"PayloadInstancedStaticMeshComponent","$ClassText":"Class'/Script/War.PayloadInstancedStaticMeshComponent'","Rows":2,"Columns":8,"MeshRotation":{"Yaw":-90}}""");
+    var payload=Newtonsoft.Json.Linq.JObject.Parse("""{"Name":"PayloadInstancedStaticMesh_GEN_VARIABLE","Type":"PayloadInstancedStaticMeshComponent","$ClassText":"Class'/Script/War.PayloadInstancedStaticMeshComponent'","Rows":2,"Columns":8,"RowSpacing":42,"ColumnSpacing":43.5,"MeshRotation":{"Yaw":-90}}""");
     cache[path]=new[]{
         new FoxWatchBlueprintComponentReference{ComponentName="CharacterMesh0",MeshType="skeletal",MeshPath=mesh},
         new FoxWatchBlueprintComponentReference{ComponentName="PayloadInstancedStaticMesh",ComponentType="PayloadInstancedStaticMeshComponent",MeshType="static",AttachParentName="CharacterMesh0",AttachSocketName="S_Muzzle",RelativeLocation="X=10 Y=0 Z=20"}
@@ -177,6 +177,8 @@ try {
     transform=Read(resolved!,"Transform");
     Check(Math.Abs((double)Read(transform,"Y")-110)<0.001&&(double)Read(transform,"Z")==220,"Payload muzzle lost its socket attachment or local offset");
     Check(Math.Abs(((Quaternion)Read(transform,"Rotation")).Z-Math.Sqrt(0.5))<1e-6,"Visual rocket mesh rotation contaminated the firing axes");
+    var payloadOrigins=(double[][])Read(resolved!,"MuzzleOrigins");
+    Check(payloadOrigins.Length==16 && Math.Abs(payloadOrigins[7][0]-payloadOrigins[0][0]-3.045)<0.0001 && Math.Abs(payloadOrigins[8][2]-payloadOrigins[0][2]+0.42)<0.0001,"Payload grid did not inherit the socket rotation or row spacing");
     rocketDefaults["PayloadMeshes"]!["GunnerIndex"]=2;
     Check(resolver.Invoke(extractor,[new object[]{flightSeat,payload},blueprint,rocketDefaults,flightSeat,new Dictionary<string,object>{{"PayloadInstancedStaticMesh",payload}},true])==null,"Payload was bound to a different gunner");
     rocketDefaults["PayloadMeshes"]!["GunnerIndex"]=1;

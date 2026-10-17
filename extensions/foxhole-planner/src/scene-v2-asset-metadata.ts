@@ -281,6 +281,10 @@ interface PublishedFoxholeHoldProfile {
 }
 
 export type FoxholeSceneV2FiringVolume = {
+    /** Native row-major payload indices in the minimum firing-ready pose. */
+    muzzleOrigins?: [number, number, number][];
+    payloadPose?: { animation: string; blendSpace: string; bone: string; inputPitch: number; maxInputPitch: number;
+        requiresDeployment: boolean; pitchSpan: number; maximumOrigin: [number, number, number]; };
     originSource?: 'muzzle-component' | 'muzzle-socket' | 'gun-bone' | 'firing-component';
     originName?: string;
     reference?: { origin: [number, number]; heading: number; };

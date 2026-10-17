@@ -107,3 +107,15 @@ test('model-frame migration avoids adding unresolved volumes but marks existing 
     assert.equal(result.count,1);
     assert.equal(result.manifest.assets[0].ranges[0].fv.originSource,'firing-component');
 });
+
+test('payload muzzle arrays and pose diagnostics follow canonical publication exactly once', () => {
+    const input={...volume,reference:{origin:[0,0],heading:0},muzzleOrigins:[[1,0,2],[1,-1,3]],
+        payloadPose:{animation:'Animation.uasset',blendSpace:'Blend.uasset',bone:'rack',inputPitch:65,maxInputPitch:80,
+            requiresDeployment:true,pitchSpan:6,maximumOrigin:[2,0,4]}};
+    const aligned=alignFiringVolume({x:10,y:20,r:90},input);
+    assert.deepEqual(aligned.muzzleOrigins.map(point=>point.map(n=>Math.round(n))),[[10,21,2],[11,21,3]]);
+    assert.deepEqual(aligned.payloadPose.maximumOrigin,[10,22,4]);
+    assert.deepEqual(alignFiringVolume({x:10,y:20,r:90},aligned),aligned);
+    assert.equal(foxholeFiringVolumeSchema.safeParse({...input,muzzleOrigins:Array(33).fill([0,0,0])}).success,false);
+    assert.equal(foxholeFiringVolumeSchema.safeParse({...input,muzzleOrigins:[[0,NaN,0]]}).success,false);
+});

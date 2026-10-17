@@ -8,7 +8,7 @@ namespace FoxWatchService;
 
 public partial class FoxWatchManifestAssetExtractor
 {
-    private readonly record struct FiringFrame(ManifestComponentTransform Transform, string Source, string Name);
+    private readonly record struct FiringFrame(ManifestComponentTransform Transform, string Source, string Name, double[][]? MuzzleOrigins = null, FoxWatchManifestPayloadPose? PayloadPose = null);
 
     // Use the explicit gunner mapping, never a nearby seat or the first socket on a multi-gun mesh.
     private static string[] GetFiringSocketNames(object? muzzleInfo, int gunnerIndex) => AsEnumerable(muzzleInfo)
@@ -130,10 +130,32 @@ public partial class FoxWatchManifestAssetExtractor
         var rows = ExtractInt(components.Select(value => GetNamedValue(value, "Rows")).FirstOrDefault(value => value != null));
         var columns = ExtractInt(components.Select(value => GetNamedValue(value, "Columns")).FirstOrDefault(value => value != null));
         if (rows <= 0 || columns <= 0 || (long)rows * columns > 1024) return null;
-        // The Blueprint explicitly selects this payload grid for muzzle transforms.
-        // Use its authored launcher anchor; per-round grid offsets are not simulated.
-        // MeshRotation describes the rocket artwork, not the firing frame.
-        return new(ResolveFiringReferenceTransform(payload, references).Transform, "muzzle-component", payload.ComponentName);
+        var rowSpacing = ExtractDouble(components.Select(value => GetNamedValue(value, "RowSpacing")).FirstOrDefault(value => value != null)) ?? 0;
+        var columnSpacing = ExtractDouble(components.Select(value => GetNamedValue(value, "ColumnSpacing")).FirstOrDefault(value => value != null)) ?? 0;
+        var offsets = FoxWatchPayloadGrid.CreateOffsets(rows, columns, rowSpacing, columnSpacing);
+        if (offsets == null || offsets.Length > 32) return null;
+        var frame = ResolveFiringReferenceTransform(payload, references);
+        FoxWatchManifestPayloadPose? pose = null;
+        var seat = lookup.Values.FirstOrDefault(value => GetObjectTypeName(value).Contains("VehicleSeatComponent", StringComparison.OrdinalIgnoreCase)
+            && ExtractInt(GetInheritedBlueprintComponentProperty(objects, blueprint, value, "Index")) == gunnerIndex);
+        if (seat != null)
+        {
+            var code = ExtractText(GetInheritedBlueprintComponentProperty(objects, blueprint, seat, "MountCodeName"));
+            var direction = NormalizeSeatDirection(GetInheritedBlueprintComponentProperty(objects, blueprint, seat, "Direction"));
+            var mount = ResolveMountDynamicDataEntry(code, direction);
+            var deployment = GetInheritedBlueprintProperty(objects, blueprint, defaultObject, "DeploymentLogic");
+            if (mount?.MinPitch is double min && mount.MaxPitch is double max)
+            {
+                var sampled = ResolvePayloadPose(blueprint, payload, references, min, max,
+                    ExtractBoolValue(GetNamedValue(deployment, "bRequiresDeployment")) == true);
+                if (sampled != null) { frame = sampled.Value.Frame; pose = sampled.Value.Pose; }
+            }
+        }
+        // Native local layout is composed after the animated socket and component transform.
+        // MeshRotation affects only rocket artwork; firing uses an identity local rotation.
+        var origins = offsets.Select(offset => ComposeFiringTransform(frame, new(new(offset.X,offset.Y,offset.Z,Quaternion.Identity),Vector3.One)).Transform)
+            .Select(value => new[] { Math.Round(value.X/100,5),Math.Round(value.Y/100,5),Math.Round(value.Z/100,5) }).ToArray();
+        return new(frame.Transform, "muzzle-component", payload.ComponentName, origins, pose);
     }
 
     private FiringFrame? ResolveDeclaredFiringSocket(IEnumerable<dynamic> objects, object blueprint, object defaultObject,
@@ -361,6 +383,9 @@ public partial class FoxWatchManifestAssetExtractor
         volume.Reference = new() { Origin = [rangeFrame.X / 100, rangeFrame.Y / 100], Heading = heading };
         volume.OriginSource = muzzle?.Source ?? "firing-component";
         volume.OriginName = muzzle?.Name;
+        volume.MuzzleOrigins = muzzle?.MuzzleOrigins;
+        volume.PayloadPose = muzzle?.PayloadPose;
+        if (volume.PayloadPose is { } pose) { volume.MinPitch = 0; volume.MaxPitch = pose.PitchSpan; }
         return volume;
     }
 }

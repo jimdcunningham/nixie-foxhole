@@ -992,7 +992,15 @@ const connectorSchema = z.object({
     behavior: connectorBehaviorSchema.nullish().transform(value => value ?? undefined),
 });
 
+const firingOriginSchema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
+const payloadPoseSchema = z.object({
+    animation: z.string().min(1).max(512), blendSpace: z.string().min(1).max(512), bone: z.string().min(1).max(256),
+    inputPitch: z.number().finite(), maxInputPitch: z.number().finite(), requiresDeployment: z.boolean(),
+    pitchSpan: z.number().positive().max(90), maximumOrigin: firingOriginSchema,
+}).refine(value => value.maxInputPitch > value.inputPitch);
 const firingVolumeFrameSchema = z.object({
+    muzzleOrigins: z.array(firingOriginSchema).min(1).max(32).optional(),
+    payloadPose: payloadPoseSchema.optional(),
     reference: z.object({ origin: z.tuple([z.number().finite(), z.number().finite()]), heading: z.number().finite() }).optional(),
     originSource: z.enum(['muzzle-component','muzzle-socket','gun-bone','firing-component']).optional(),
     originName: z.string().min(1).max(256).optional(),

@@ -47,9 +47,12 @@ public static class FoxWatchFiringVolumes
         if (volume?.OriginSource is not ("muzzle-component" or "muzzle-socket" or "gun-bone")) {
             Rotate(volume,yaw,x,y); return;
         }
-        var origin=volume.Origin.ToArray(); var orientation=volume.Orientation.ToArray();
-        Rotate(volume,yaw,x,y);
-        volume.Origin=origin; volume.Orientation=orientation;
+        // Correct only the legacy planar reference; every physical muzzle and pose stays model-local.
+        if (volume.Reference is { } reference) {
+            var angle=yaw*Math.PI/180; var rx=reference.Origin[0]; var ry=reference.Origin[1];
+            reference.Origin=[rx*Math.Cos(angle)-ry*Math.Sin(angle)+x,rx*Math.Sin(angle)+ry*Math.Cos(angle)+y];
+            reference.Heading+=yaw;
+        }
     }
 
     public static void Rotate(FoxWatchManifestFiringVolume? volume, double yawDegrees, double offsetX, double offsetY)
@@ -65,6 +68,13 @@ public static class FoxWatchFiringVolumes
                 rx * Math.Sin(angle) + ry * Math.Cos(angle) + offsetY];
             reference.Heading += yawDegrees;
         }
+        void RotatePoint(double[] point) {
+            var px=point[0]; var py=point[1];
+            point[0]=px*Math.Cos(angle)-py*Math.Sin(angle)+offsetX;
+            point[1]=px*Math.Sin(angle)+py*Math.Cos(angle)+offsetY;
+        }
+        foreach (var point in volume.MuzzleOrigins ?? []) RotatePoint(point);
+        if (volume.PayloadPose is { } pose) RotatePoint(pose.MaximumOrigin);
         var q = volume.Orientation;
         var rotated = Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (float)angle)
             * new Quaternion((float)q[0], (float)q[1], (float)q[2], (float)q[3]));
