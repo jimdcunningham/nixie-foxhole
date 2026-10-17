@@ -164,6 +164,7 @@ export function getFoxholeMapActiveBounds(
 /** The map needs a canvas surface, not the V1 board implementation. */
 export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginContext, 'session'> {
     getSceneNodeCount?: () => number;
+    getZoom?: () => number;
     session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
         pointerTrackerRef: { readonly value: { pointer: { readonly value: { world: PIXI.PointData | null; }; }; } | null; };
     };
@@ -310,7 +311,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     private async ensureRenderer(): Promise<void> {
-        if (this.renderer) {
+        if (this.isDestroyed || this.renderer) {
             return;
         }
 
@@ -340,7 +341,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
 
             const world = readySceneLayer.parent;
             const runtimeConfig = useRuntimeConfig();
-            const assetsBaseUrl = createFoxholeAssetsBaseUrl(runtimeConfig.app.baseURL);
+            const assetsBaseUrl = createFoxholeAssetsBaseUrl((runtimeConfig.app as { baseURL: string; }).baseURL);
 
             const context: FoxholeMapContext = {
                 app: readyApp,
@@ -361,7 +362,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
                 },
                 getAssetsBaseUrl: () => assetsBaseUrl,
                 getWorldPointer: () => pointerTracker?.pointer.value.world ?? null,
-                getZoom: () => this.parent.scale.x,
+                getZoom: () => this.pluginContext.getZoom?.() ?? this.parent.scale.x,
                 getCanvasLabelTheme: () => resolveNxCanvasLabelTheme(
                     resolveNxTheme(this.settingsStore.getValue(NIXIE_COLOR_THEME_SETTING_ID) as 'light' | 'dark' | 'system'),
                 ),
@@ -419,7 +420,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     private async syncRenderer(): Promise<void> {
-        if (this.syncPending) {
+        if (this.isDestroyed || this.syncPending) {
             return;
         }
 
@@ -444,6 +445,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         }
 
         await this.ensureCacheLoaded();
+        if (this.isDestroyed || !this.renderer) return;
 
         if (!this.renderer.hasInitialized) {
             this.syncPending = true;
@@ -455,6 +457,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             }
         }
 
+        if (this.isDestroyed || !this.renderer) return;
         if (settingsSignature !== this.lastSettingsSignature) {
             this.renderer.sync();
             this.lastSettingsSignature = settingsSignature;
@@ -560,6 +563,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             }
         });
 
+        if (this.isDestroyed) return;
         this.cachedMaps = cachedMaps;
         this.warData = warData;
         this.liveDataRevision += 1;
@@ -639,6 +643,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     private connectLiveUpdatesIfNeeded(): void {
+        if (this.isDestroyed || !this.pluginContext.session.sceneViewActive.value) return;
         const settings = this.readMapSettings();
         if (!settings.enabled || !this.needsLiveData(settings) || this.getActivePlaybackPreview()) {
             this.disconnectLiveUpdates();

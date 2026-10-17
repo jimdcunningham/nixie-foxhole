@@ -647,6 +647,7 @@ export class FoxholeMapRenderer {
     }
 
     sync(): void {
+        if (this.root.destroyed) return;
         if (!this.context.readMapSettings().enabled) {
             return;
         }

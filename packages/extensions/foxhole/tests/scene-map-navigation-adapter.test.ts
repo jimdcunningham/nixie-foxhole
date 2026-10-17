@@ -15,3 +15,16 @@ test('War map navigation uses the active ECS camera with the existing search fra
     assert.deepEqual(restored, { x: 123, y: -456, worldWidth: 1000 / target.scale, worldHeight: 600 / target.scale });
     assert.equal(focusFoxholeSceneV2MapEntry({ captureFrame: () => null, getZoomScale: () => null, restoreFrame: () => { throw new Error('Canvas is not ready'); } }, entry), false);
 });
+
+
+test('War search focuses the active spatial camera without restoring a flat frame', () => {
+    const entry: FoxholeMapSearchEntry = { id: 'region', type: 'region', label: 'Region', regionKey: 'test', regionLabel: 'Test', searchLabel: 'Region', worldPosition: { x: 200, y: 300 } };
+    let focus: unknown;
+    assert.equal(focusFoxholeSceneV2MapEntry({
+        captureFrame: () => ({ x: 0, y: 0, worldWidth: 500, worldHeight: 300 }),
+        getZoomScale: () => 2,
+        restoreFrame: () => { throw new Error('Search must preserve the active spatial mode'); },
+        focusWorldPoint: (position, scale) => { focus = { position, scale }; return true; },
+    }, entry), true);
+    assert.deepEqual(focus, getFoxholeMapSearchCameraTarget(entry, { screenWidth: 1000, screenHeight: 600 }));
+});
