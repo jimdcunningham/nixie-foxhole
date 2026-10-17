@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { validateNixieExperimentalComponentDataV1 } from '@nixie/extension-sdk';
 import fullModelBundle from '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
 import catalog from '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json' with { type: 'json' };
+import { modelArtifactBounds } from './helpers/model-artifact-bounds.ts';
 
 const modelBundle = { ...fullModelBundle,
     assets: Object.fromEntries(Object.entries(fullModelBundle.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id))),
@@ -83,11 +84,12 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
         // Bounds sizing must preserve the authored 32-units-per-metre ratio.
         // Repeated pipes/crates once shared geometry during transform baking,
         // corrupting these bounds and squashing the entire building at load time.
-        const positions = document.meshes.flatMap((mesh: { primitives: Array<{ attributes: { POSITION: number; }; }>; }) =>
-            mesh.primitives.map(primitive => document.accessors[primitive.attributes.POSITION]));
-        const dimensions = [0, 1, 2].map(axis =>
-            Math.max(...positions.map((accessor: { max: number[]; }) => accessor.max[axis]!))
-            - Math.min(...positions.map((accessor: { min: number[]; }) => accessor.min[axis]!)));
+        const dimensions = modelArtifactBounds(document, resourceId => {
+            const shared = (fullModelBundle as unknown as { sharedParts: Record<string, { resourceId: string; path: string; }> }).sharedParts;
+            const part = Object.values(shared).find(part => part.resourceId === resourceId)!;
+            const bytes = readFileSync(new URL(`../../../packages/extensions/foxhole/public/foxhole/assets/${part.path}`, import.meta.url));
+            return JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString('utf8'));
+        }).dimensions;
         for (const [axis, size] of [metadata.width, metadata.height, metadata.depth].entries()) {
             const step = 'precisionOptimization' in metadata ? metadata.precisionOptimization.positionStepMetres : 0;
             // Rounding each bound to the shared grid can change the extent by one step.

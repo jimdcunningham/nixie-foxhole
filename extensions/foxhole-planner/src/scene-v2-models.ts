@@ -1,5 +1,6 @@
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import spatialPolicy from './scene-v2-model-policy.json' with { type: 'json' };
+import { parseNixieExperimentalModelPartsV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 
 export function readFoxholeSpatialPathProfile(value: unknown): FoxholeSpatialPathProfile | undefined {
     if (value === undefined) return undefined;
@@ -63,10 +64,28 @@ export interface FoxholeSceneV2ModelSource {
     id: string;
     assetId: string;
     path: string;
+    sharedPart?: boolean;
+    dependencyIds?: string[];
+}
+
+interface FoxholeSharedModelPart { resourceId: string; path: string; }
+const sharedModelId = /^shared\.[a-f0-9]{64}$/;
+
+function modelDependencies(value: unknown): string[] {
+    if (value === undefined) return [];
+    return [...new Set(parseNixieExperimentalModelPartsV1(value).parts.map(part => {
+        const id = part.resourceId.replace(/^foxhole\.model\./, '');
+        if (!sharedModelId.test(id) || part.resourceId !== `foxhole.model.${id}`) {
+            throw new Error('Invalid Foxhole shared model dependency.');
+        }
+        return id;
+    }))];
 }
 
 /** Accept existing generated output while new exports move beside their owning asset. */
 export function isFoxholeGeneratedModelPath(model: FoxholeSceneV2ModelSource): boolean {
+    if (model.sharedPart) return model.assetId === 'shared' && sharedModelId.test(model.id)
+        && model.path === `shared/models/${model.id.slice('shared.'.length)}.glb`;
     if (!/^[a-z0-9-]+$/.test(model.assetId) || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(model.id)
         || (model.id !== model.assetId && !model.id.startsWith(model.assetId + '.'))) return false;
     return model.path === 'models/' + model.id + '.glb' || ['items', 'structures', 'vehicles'].some(type =>
@@ -75,6 +94,10 @@ export function isFoxholeGeneratedModelPath(model: FoxholeSceneV2ModelSource): b
 
 /** Keep every packaged model and model part beside its owning asset resources. */
 export function getFoxholeSceneV2PackagedModelPath(model: FoxholeSceneV2ModelSource): string {
+    if (model.sharedPart) {
+        if (!isFoxholeGeneratedModelPath(model)) throw new Error(`Invalid Foxhole shared model identity: ${model.id}`);
+        return model.path;
+    }
     if (!/^[a-z0-9-]+$/.test(model.assetId)
         || (model.id !== model.assetId && !model.id.startsWith(`${model.assetId}.`))) {
         throw new Error(`Invalid Foxhole packaged model identity: ${model.id}`);
@@ -84,8 +107,9 @@ export function getFoxholeSceneV2PackagedModelPath(model: FoxholeSceneV2ModelSou
 
 /** Join generated spatial output to the real catalog identity, never a preview product. */
 export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2AssetMetadata>,
-    document: { schemaVersion: number; assets: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; } & { path: string; codeName: string; }>;
-        resources?: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; } & { path: string; assetId: string; }>; }) {
+    document: { schemaVersion: number; assets: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; modelParts?: unknown; } & { path: string; codeName: string; }>;
+        resources?: Record<string, Omit<FoxholeSceneV2ModelMetadata, 'pathProfile' | 'structuralProfile'> & { pathProfile?: unknown; structuralProfile?: unknown; modelParts?: unknown; } & { path: string; assetId: string; }>;
+        sharedParts?: Record<string, FoxholeSharedModelPart>; }) {
     if (document.schemaVersion !== 1) {
         throw new Error('Unsupported Foxhole model bundle version.');
     }
@@ -94,7 +118,7 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             delete asset.model;
         }
     }
-    const models = Object.entries(document.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id)).map(([assetId, model]) => {
+    const models: FoxholeSceneV2ModelSource[] = Object.entries(document.assets).filter(([id]) => isFoxholeSceneV2ModelAllowed(id)).map(([assetId, model]) => {
         const asset = assets[assetId];
         if (!asset || (spatialPolicy.assetSelection !== 'catalog' && !allowedCategories.has(asset.category))
             || asset.codeName !== model.codeName || !isFoxholeGeneratedModelPath({ id: assetId, assetId, path: model.path })
@@ -107,7 +131,8 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
             offsetX: model.offsetX, offsetY: model.offsetY, offsetZ: model.offsetZ,
             ...(model.blueprintOrigin ? { blueprintOrigin: { ...model.blueprintOrigin } } : {}) };
         if (asset.model.structuralProfile) (asset as FoxholeSceneV2AssetMetadata & {modelLayerNodes?:Record<string,string[]>}).modelLayerNodes = asset.model.structuralProfile.layers;
-        return { id: assetId, assetId, path: model.path };
+        const dependencyIds = modelDependencies(model.modelParts);
+        return { id: assetId, assetId, path: model.path, ...(dependencyIds.length ? { dependencyIds } : {}) };
     });
     for (const [id, resource] of Object.entries(document.resources ?? {})) {
         if (!isFoxholeSceneV2ModelAllowed(resource.assetId)) {
@@ -122,7 +147,16 @@ export function bindFoxholeSceneV2Models(assets: Record<string, FoxholeSceneV2As
         if (id === `${resource.assetId}.upgrade.insulation` && assets[resource.assetId]?.model && resource.pathProfile) {
             assets[resource.assetId]!.model!.insulatedPathProfile = readFoxholeSpatialPathProfile(resource.pathProfile);
         }
-        models.push({ id, assetId: resource.assetId, path: resource.path });
+        const dependencyIds = modelDependencies(resource.modelParts);
+        models.push({ id, assetId: resource.assetId, path: resource.path, ...(dependencyIds.length ? { dependencyIds } : {}) });
+    }
+    const required = new Set(models.flatMap(model => model.dependencyIds ?? []));
+    for (const id of required) {
+        const resource = document.sharedParts?.[id];
+        const source = { id, assetId: 'shared', path: resource?.path ?? '', sharedPart: true };
+        if (!resource || resource.resourceId !== `foxhole.model.${id}` || !isFoxholeGeneratedModelPath(source)
+            || 'modelParts' in resource) throw new Error(`Invalid Foxhole shared model binding: ${id}`);
+        models.push(source);
     }
     return models;
 }
@@ -143,7 +177,9 @@ export function selectFoxholeSceneV2ModelBuild(
     for (const [id, asset] of Object.entries(assets)) {
         if (!selected.has(id)) delete asset.model;
     }
-    return models.filter(model => selected.has(model.assetId));
+    const selectedModels = models.filter(model => !model.sharedPart && selected.has(model.assetId));
+    const dependencies = new Set(selectedModels.flatMap(model => model.dependencyIds ?? []));
+    return [...selectedModels, ...models.filter(model => model.sharedPart && dependencies.has(model.id))];
 }
 
 /** Export recipes belong to runtime metadata, never persisted model components. */
