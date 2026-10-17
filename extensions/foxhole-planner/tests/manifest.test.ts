@@ -71,3 +71,15 @@ test('connects with the local migration capability', async () => {
     assert.equal(connection.disconnected, false);
     connection.dispose();
 });
+
+
+test('War owns map controls without duplicate sidebar panels or lost saved settings', async () => {
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(resolve(extensionRoot, 'nixie.extension.json'), 'utf8')));
+    assert.ok(!manifest.contributes.panels.some(panel => panel.id === 'map' || panel.id === 'map-icons'));
+    for (const id of ['foxhole.map.enabled', 'foxhole.map.regionKeys', 'foxhole.map.crop.enabled', 'foxhole.map.crop.x',
+        'foxhole.map.crop.y', 'foxhole.map.crop.width', 'foxhole.map.crop.height', 'foxhole.map.icons', 'foxhole.map.coloredIcons',
+        'foxhole.map.iconCategories.bases', 'foxhole.map.iconCategories.resources', 'foxhole.map.iconCategories.structures', 'foxhole.map.iconBlacklist']) {
+        assert.ok(manifest.contributes.settings.some(setting => setting.id === id), id);
+    }
+    assert.deepEqual(manifest.contributes.experimentalDocumentRenderers?.map(renderer => renderer.id), ['planning-map', 'planning-grid']);
+});
