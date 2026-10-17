@@ -1,3 +1,4 @@
+import { filterFoxholeSameWallInfrastructureSelections } from './modification-wall-conflicts.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import { deduplicateFoxholeBuildSockets, normalizeFoxholeBuildSocketName, resolveFoxholeBuildSocketPosition } from './bunker-statistics-sockets.ts';
 import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.ts';
@@ -39,13 +40,13 @@ export function resolveFoxholeSelectedSocketVariants(entity: NixieExperimentalCo
     const selections = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'modification' && component.version === 1 && component.definitionAvailable)?.data.selections;
     return Array.isArray(selections)
-        ? selections.flatMap(value => {
+        ? filterFoxholeSameWallInfrastructureSelections(asset.modifications, selections.flatMap(value => {
             if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.slotId !== 'string' || typeof value.variantId !== 'string') {
                 return [];
             }
             const variant = asset.modifications[value.slotId]?.variants[value.variantId];
-            return variant ? [variant] : [];
-        })
+            return variant ? [{ slotId: value.slotId, variantId: value.variantId, variant }] : [];
+        })).map(selection => selection.variant)
         : [];
 }
 

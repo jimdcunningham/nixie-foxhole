@@ -65,3 +65,21 @@ test('spatial socket projection handles parent elevation, tilt, and connector sc
     assert.ok(Math.abs(resolved.startY - socket.z! * 2) < 1e-8);
     assert.ok(Math.abs(resolved.startZ - (100 - socket.y - 20) / 2) < 1e-8);
 });
+
+for (const id of ['engineroomt2', 'engineroomt3']) {
+    test(id + ' renders the cable endpoint at the selected wall connector height', () => {
+        const engine = product(id, 300, -100), cable = product('powerline');
+        engine.components.find(c => c.componentId === 'modification')!.data.selections = [
+            { slotId: 'RightModSlot', variantId: 'powerconnection' }];
+        const spline = cable.components.find(c => c.componentId === 'spline-connector')!.data;
+        Object.assign(spline, { endAttachmentNodeId: engine.entityId, endAttachmentSocketName: 'PowerSocket' });
+        const entities = [engine, cable], before = structuredClone(entities);
+        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).experimentalSpatial!.nodes[0]!;
+        assert.equal(node.kind, 'tube');
+        if (node.kind !== 'tube') return;
+        const expected = [-147.27136 * .32, 299.42903 * .32, 62.74524 * .32];
+        node.points.slice(-3).forEach((value, i) => assert.ok(Math.abs(value - (expected[i]! + [300,-100,0][i]!)) < .002));
+        assert.equal(node.endpointBindings?.end?.entityId, engine.entityId);
+        assert.deepEqual(entities, before);
+    });
+}

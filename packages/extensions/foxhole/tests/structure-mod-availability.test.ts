@@ -301,3 +301,15 @@ test('selecting an unrelated modification preserves infrastructure and separate 
     assert.deepEqual(firstPiece, { [front.id]: 'desk' });
     assert.deepEqual(secondPiece, { [left.id]: 'kitchen' });
 });
+
+for (const id of ['engineroomt2', 'engineroomt3']) {
+    test(id + ' moves its one power connection between wall slots without removing other supported mods', () => {
+        const { asset } = getStructure(id);
+        const before = { BackModSlot: 'powerconnection', FrontDefenseModSlot: 'sandbags', RightFortStairsModSlot: 'stairs' };
+        const next = prepareFoxholeModificationSelection(asset, before, asset.modificationSlotById.FrontModSlot!, 'powerconnection');
+        assert.deepEqual(next, { FrontModSlot: 'powerconnection', FrontDefenseModSlot: 'sandbags', RightFortStairsModSlot: 'stairs' });
+        assert.equal(before.BackModSlot, 'powerconnection');
+        assert.deepEqual(sanitizeFoxholeModificationSelections(asset, { ...before, FrontModSlot: 'powerconnection' },
+            { nodeId: 'engine', buildSockets: [], socketAttachments: {}, sceneNodes: [] }), before);
+    });
+}

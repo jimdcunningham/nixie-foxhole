@@ -149,3 +149,16 @@ test('an unavailable connector retains authored geometry and identity for inspec
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.readOnly, true);
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.hidden, false);
 });
+
+for (const id of ['engineroomt2', 'engineroomt3']) {
+    test(id + ' offers one engine-room power connection while leaving defense and stair slots available', () => {
+        const options = inspect(id, { modification: { selections: [{ slotId: 'BackModSlot', variantId: 'powerconnection' }] } })
+            .components.find(c => c.componentId === 'modification')!.fields[0]!.choices!.options;
+        const has = (slotId: string, variantId: string) => options.some(o => o.value && typeof o.value === 'object'
+            && !Array.isArray(o.value) && o.value.slotId === slotId && o.value.variantId === variantId);
+        assert.ok(has('BackModSlot', 'powerconnection'));
+        for (const side of ['Front', 'Left', 'Right']) assert.equal(has(side + 'ModSlot', 'powerconnection'), false);
+        assert.ok(has('FrontDefenseModSlot', 'sandbags'));
+        assert.ok(has('RightFortStairsModSlot', 'stairs'));
+    });
+}

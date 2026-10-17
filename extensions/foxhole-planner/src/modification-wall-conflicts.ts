@@ -1,6 +1,7 @@
 export interface FoxholeWallModificationSlot {
     componentType?: string | null;
     linkedSocketNames?: readonly string[];
+    blockedByModTypes?: readonly string[];
 }
 
 export interface FoxholeWallModificationSelection {
@@ -34,14 +35,33 @@ export function hasFoxholeSameWallModificationConflict(
     });
 }
 
-/** Resolve older invalid plans consistently: retain the firing port, omit its infrastructure. */
+/** Resolve older invalid plans consistently: keep the first type-compatible choice and prefer firing ports over infrastructure. */
 export function filterFoxholeSameWallInfrastructureSelections<T extends FoxholeWallModificationSelection>(
     slots: Readonly<Record<string, FoxholeWallModificationSlot>>,
     selections: readonly T[],
 ): T[] {
-    return selections.filter(selection => {
+    const retained: T[] = [];
+    for (const selection of selections) {
+        const slot = slots[selection.slotId];
+        if (!slot || !hasFoxholeModificationTypeConflict(slot, selection.variantId, slots, retained)) retained.push(selection);
+    }
+    return retained.filter(selection => {
         const slot = slots[selection.slotId];
         return !slot || !isInfrastructure(slot)
             || !hasFoxholeSameWallModificationConflict(slot, selection.variantId, slots, selections);
+    });
+}
+
+/** Source BlockedByModTypes applies across slots on the same host, excluding the slot itself. */
+export function hasFoxholeModificationTypeConflict(
+    slot: FoxholeWallModificationSlot,
+    variantId: string,
+    slots: Readonly<Record<string, FoxholeWallModificationSlot>>,
+    selections: readonly FoxholeWallModificationSelection[],
+): boolean {
+    return selections.some(selection => {
+        const other = slots[selection.slotId];
+        return other && other !== slot && ((slot.blockedByModTypes ?? []).includes(selection.variantId)
+            || (other.blockedByModTypes ?? []).includes(variantId));
     });
 }

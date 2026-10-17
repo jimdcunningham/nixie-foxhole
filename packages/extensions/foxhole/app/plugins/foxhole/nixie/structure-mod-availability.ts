@@ -16,7 +16,7 @@ import { normalizeFoxholeStructureSocketAttachmentMap } from './types.ts';
 import { normalizeFoxholeBuildSocketName } from './structure-socket-resolution.ts';
 import { trenchConnectorTier } from './trench-connector.ts';
 import { isFoxholeModificationSlotTierEligible } from '../../../../../../../extensions/foxhole-planner/src/modification-tier.ts';
-import { filterFoxholeSameWallInfrastructureSelections, hasFoxholeSameWallModificationConflict } from '../../../../../../../extensions/foxhole-planner/src/modification-wall-conflicts.ts';
+import { hasFoxholeModificationTypeConflict, filterFoxholeSameWallInfrastructureSelections, hasFoxholeSameWallModificationConflict } from '../../../../../../../extensions/foxhole-planner/src/modification-wall-conflicts.ts';
 
 const BIGINT_ZERO = BigInt(0);
 
@@ -388,6 +388,13 @@ export function prepareFoxholeModificationSelection(
         return nextSelections;
     }
 
+    // Choosing a blocked type replaces conflicting wall selections, just as
+    // choosing a slot blocked by another slot already does below.
+    for (const other of selectedWallModifications(asset, nextSelections)) {
+        if (hasFoxholeModificationTypeConflict(slot, normalizedVariantId, asset.modificationSlotById, [other]))
+            nextSelections = setFoxholeModificationSlotVariantSelection(nextSelections, asset.modificationSlotById[other.slotId]!, '');
+    }
+
     // Infrastructure slots are alternate wall positions for one modification
     // per bunker piece, rather than four independently occupied slots.
     if (slot.componentType === 'BPFortInfraModSlot_C') {
@@ -406,10 +413,11 @@ export function prepareFoxholeModificationSelection(
 }
 
 export function isFoxholeModificationSlotBlocked(
-    slot: Pick<FoxholeStructureModificationSlotAsset, 'blockedByModSlotNames'>,
+    slot: Pick<FoxholeStructureModificationSlotAsset, 'blockedByModSlotNames' | 'blockedByModTypes'>,
     context: Pick<FoxholeStructureModAvailabilityContext, 'asset' | 'modificationVariantIds'>,
 ): boolean {
-    return slot.blockedByModSlotNames.some(blockingSlotName =>
+    return hasFoxholeModificationTypeConflict(slot, '', context.asset.modificationSlotById,
+        selectedWallModifications(context.asset, context.modificationVariantIds)) || slot.blockedByModSlotNames.some(blockingSlotName =>
         isBlockingModificationSlotActive(
             context.asset,
             blockingSlotName,
@@ -443,6 +451,8 @@ export function isFoxholeModificationVariantAvailable(
     if (!isFoxholeModificationSlotTierEligible(slot.componentType, context.asset.tier)) {
         return false;
     }
+    if (hasFoxholeModificationTypeConflict(slot, variant.id, context.asset.modificationSlotById,
+        selectedWallModifications(context.asset, context.modificationVariantIds))) return false;
     if (hasFoxholeSameWallModificationConflict(slot, variant.id, context.asset.modificationSlotById,
         selectedWallModifications(context.asset, context.modificationVariantIds))) {
         return false;

@@ -40,6 +40,7 @@ export interface FoxholeSceneV2ModificationVariantMetadata {
 export interface FoxholeSceneV2ModificationSlotMetadata {
     componentType?: string;
     linkedSocketNames?: string[];
+    blockedByModTypes?: string[];
     id?: string;
     name?: string;
     z?: number | null;
@@ -364,6 +365,7 @@ interface PublishedFoxholeModificationSlot {
     y?: number;
     z?: number;
     linkedSocketNames?: string[];
+    blockedByModTypes?: string[];
     rotation?: number;
     variants?: Record<string, PublishedFoxholeModificationVariant>;
 }
@@ -773,6 +775,7 @@ export function createFoxholeSceneV2AssetMetadata(
                 id: slotId, name: slotId, z: slot.z ?? null,
                 componentType: slot.componentType,
                 linkedSocketNames: slot.linkedSocketNames ?? [],
+                blockedByModTypes: slot.blockedByModTypes ?? [],
                 x: anchor.x,
                 y: anchor.y,
                 rotation: finiteNumber(slot.rotation) * (Math.PI / 180),

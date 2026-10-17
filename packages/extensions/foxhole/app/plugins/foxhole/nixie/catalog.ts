@@ -208,6 +208,7 @@ export interface FoxholeStructureModificationSlotAsset {
     isLinkedToSocket: boolean;
     linkedSocketNames: string[];
     blockedByModSlotNames: string[];
+    blockedByModTypes?: string[];
     variants: FoxholeStructureModificationSlotVariantAsset[];
     variantById: Record<string, FoxholeStructureModificationSlotVariantAsset>;
 }
@@ -1116,6 +1117,7 @@ function createStructureModificationSlotAsset(
         isLinkedToSocket: slot.isLinkedToSocket,
         linkedSocketNames: [...slot.linkedSocketNames],
         blockedByModSlotNames: [...slot.blockedByModSlotNames],
+        blockedByModTypes: [...slot.blockedByModTypes],
         variants,
         variantById: Object.fromEntries(variants.map(variant => [variant.id, variant])),
     };

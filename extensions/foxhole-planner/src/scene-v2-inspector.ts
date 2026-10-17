@@ -4,7 +4,7 @@ import assets, { productionOutputsByRecipeId } from '#foxhole-scene-v2-assets';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import { formatFoxholeStockpileLimits } from './stockpile-groups.ts';
 import { usesPipeCurveScale } from './pipe-spline-constraints.ts';
-import { hasFoxholeSameWallModificationConflict } from './modification-wall-conflicts.ts';
+import { hasFoxholeModificationTypeConflict, hasFoxholeSameWallModificationConflict } from './modification-wall-conflicts.ts';
 import { FOXHOLE_TACTICAL_PRESET_FIELDS, FOXHOLE_TACTICAL_PRESET_CHOICES } from './tactical-line-presets.ts';
 
 export const FOXHOLE_INSPECTOR_SYSTEM_ID = 'inspect.structure';
@@ -89,7 +89,8 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
         && asset.modifications[selection.slotId]?.variants[selection.variantId]
         ? [{ slotId: selection.slotId, variantId: selection.variantId }] : []);
     const modifications = Object.entries(asset.modifications).flatMap(([slotId, slot]) => Object.entries(slot.variants)
-        .filter(([variantId]) => !hasFoxholeSameWallModificationConflict(slot, variantId, asset.modifications, wallSelections))
+        .filter(([variantId]) => !hasFoxholeSameWallModificationConflict(slot, variantId, asset.modifications, wallSelections)
+            && !hasFoxholeModificationTypeConflict(slot, variantId, asset.modifications, wallSelections))
         .map(([variantId, variant]) => ({ label: label(`${slotId}: ${variant.label ?? variantId}`), value: { slotId, variantId } })));
     result.set('modification', [{ path: ['selections'], title: 'Modifications',
         description: 'Choose one variant for each slot.', hidden: appearance.destroyed === true || appearance.packaged === true
