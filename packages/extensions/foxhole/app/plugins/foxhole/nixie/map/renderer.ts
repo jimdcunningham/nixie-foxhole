@@ -307,6 +307,7 @@ export class FoxholeMapRenderer {
     private frontlineSegments: FoxholeFrontlineSegment[] = [];
     private lastGridTargetPosition: { x: number; y: number; } | null = null;
     private lastViewportTopLeft: { x: number; y: number; } | null = null;
+    private readonly presentationHoverData = new WeakMap<PIXI.Container, FoxholeMapHoverTooltipData>();
     private hoveredIconName: string | null = null;
     private hoveredTooltipData: FoxholeMapHoverTooltipData | null = null;
     private readonly structureHoverAssetByName: Readonly<Record<string, { categoryName: string; previewUrl: string | null; }>>;
@@ -1264,6 +1265,7 @@ export class FoxholeMapRenderer {
             ? this.resolveModRegionTextureUrl(region)
             : null;
         const texture = await this.loadRegionTexture(initialBaseTexturePath, modTextureUrl);
+        if (!this.isInitializationStillActive(epoch)) return;
 
         const container = new PIXI.Container();
         container.position.set(position.x, position.y);
@@ -2173,7 +2175,13 @@ export class FoxholeMapRenderer {
             container.label = `foxhole-map-icon:${view.region.key}:${iconMeta.key}`;
             container.eventMode = this.pointerInteractionsEnabled ? 'static' : 'none';
             container.data = iconData;
-            const hoverTooltipData = this.resolveMapIconHoverTooltipData(iconMeta);
+            const hoverTooltipData = {
+                ...this.resolveMapIconHoverTooltipData(iconMeta),
+                factionLabel: this.getMapIconFactionLabel(iconData.teamId),
+                factionColor: this.getMapIconFactionLabelColor(iconData.teamId),
+                isScorched: typeof iconData.flags === 'number' && (iconData.flags & FOXHOLE_MAP_FLAG_IS_SCORCHED) !== 0,
+            };
+            this.presentationHoverData.set(container, hoverTooltipData);
             container.on('pointerover', (event: PIXI.FederatedPointerEvent) => {
                 if (
                     !this.pointerInteractionsEnabled
@@ -2182,13 +2190,7 @@ export class FoxholeMapRenderer {
                 ) {
                     return;
                 }
-                this.setHoveredIcon({
-                    ...hoverTooltipData,
-                    factionLabel: this.getMapIconFactionLabel(iconData.teamId),
-                    factionColor: this.getMapIconFactionLabelColor(iconData.teamId),
-                    isScorched: typeof iconData.flags === 'number'
-                        && (iconData.flags & FOXHOLE_MAP_FLAG_IS_SCORCHED) !== 0,
-                }, { x: event.clientX, y: event.clientY });
+                this.setHoveredIcon(hoverTooltipData, { x: event.clientX, y: event.clientY });
             });
             container.on('pointermove', (event: PIXI.FederatedPointerEvent) => {
                 if (
@@ -4160,6 +4162,22 @@ export class FoxholeMapRenderer {
     private getLabelIconScale(): number {
         const safeZoom = Math.max(this.context.getZoom(), 0.0001);
         return Math.min(1 / safeZoom, 200) * 0.7;
+    }
+
+    /** Scene V2 resolves the projected billboard; retain the original card data and owner. */
+    hoverPresentation(source: PIXI.Container | null, point: PIXI.PointData): void {
+        if (!this.context.readMapSettings().enabled || !this.isPointerOverCanvas(point.x, point.y)) {
+            this.clearHoveredIcon();
+            return;
+        }
+        for (let target = source; target && target !== this.root; target = target.parent) {
+            const data = this.presentationHoverData.get(target);
+            if (data) {
+                this.setHoveredIcon(data, point);
+                return;
+            }
+        }
+        this.clearHoveredIcon();
     }
 
     private setHoveredIcon(data: FoxholeMapHoverTooltipData | null, point: { x: number; y: number; }): void {

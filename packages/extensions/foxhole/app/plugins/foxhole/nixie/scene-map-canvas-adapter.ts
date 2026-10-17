@@ -29,6 +29,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         documentRendererIds: ['planning-map', 'planning-grid'],
         ownsViewportConstraints: true,
         updatePresentation: () => plugin.updatePresentation(),
+        hoverPresentation: (source, point) => plugin.hoverPresentation(source, point),
         get root() { return plugin.presentationRoot; },
         navigationBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));
@@ -46,7 +47,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const billboardLabels = new Set(['foxhole-map-labels', 'foxhole-map-major-labels', 'foxhole-map-minor-labels',
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
             const pixelScale = context.zoom();
-            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), pixelScale, clip }));
+            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip }));
         },
         worldBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));

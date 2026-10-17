@@ -9,6 +9,7 @@ const source = readFileSync(new URL('../app/plugins/foxhole/nixie/scene-map-canv
 
 test('the War map adapter uses ECS counts, pointer, camera and lifetime instead of the hidden V1 scene', () => {
     let context: any, destroyed = 0, frames = 0, pointer = { x: 10, y: 20 }, interacting = false;
+    const hovers: unknown[] = [];
     const moves: unknown[] = [], suppression: boolean[] = [];
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const settings = { enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 };
@@ -21,6 +22,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
             presentationRoot = root;
             constructor(_: unknown, value: unknown) { context = value; }
             updatePresentation() { frames++; }
+            hoverPresentation(...args: unknown[]) { hovers.push(args); }
             destroy() { destroyed++; }
         },
     });
@@ -33,6 +35,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(context.manualPresentation, true);
     adapter.updatePresentation();
     assert.equal(frames, 1);
+    adapter.hoverPresentation(icons, pointer);
+    assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
     assert.equal(layers.length, 2);
     assert.equal(layers[0].content, terrain);
@@ -40,6 +44,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(layers[0].pixelScale, 0.025);
     assert.equal(layers[1].pixelScale, 0.025);
     assert.equal(layers[1].billboard, true);
+    assert.equal(layers[0].hoverable, false);
+    assert.equal(layers[1].hoverable, true);
     assert.equal(JSON.stringify(layers[0].clip), JSON.stringify({ minX: -20, minY: -30, maxX: 20, maxY: 30 }));
     assert.ok(adapter.navigationBounds());
     settings.lockCameraToMap = false;

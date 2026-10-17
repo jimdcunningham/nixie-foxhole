@@ -288,6 +288,9 @@ export class FoxholeMapViewportPlugin extends Plugin {
         void this.syncRenderer();
     }
 
+    hoverPresentation(source: PIXI.Container | null, point: PIXI.PointData): void {
+        this.renderer?.hoverPresentation(source, point);
+    }
 
     get presentationRoot(): PIXI.Container | null {
         return this.renderer?.root ?? null;
