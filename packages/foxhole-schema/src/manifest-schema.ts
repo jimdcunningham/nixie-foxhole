@@ -999,6 +999,8 @@ const payloadPoseSchema = z.object({
     pitchSpan: z.number().positive().max(90), maximumOrigin: firingOriginSchema,
 }).refine(value => value.maxInputPitch > value.inputPitch);
 const firingVolumeFrameSchema = z.object({
+    coverage: z.object({ origin: firingOriginSchema,
+        orientation: z.tuple([z.number(),z.number(),z.number(),z.number()]).refine(q => Math.abs(Math.hypot(...q)-1)<0.001) }).optional(),
     muzzleOrigins: z.array(firingOriginSchema).min(1).max(32).optional(),
     payloadPose: payloadPoseSchema.optional(),
     reference: z.object({ origin: z.tuple([z.number().finite(), z.number().finite()]), heading: z.number().finite() }).optional(),

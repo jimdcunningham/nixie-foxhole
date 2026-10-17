@@ -119,3 +119,16 @@ test('payload muzzle arrays and pose diagnostics follow canonical publication ex
     assert.equal(foxholeFiringVolumeSchema.safeParse({...input,muzzleOrigins:Array(33).fill([0,0,0])}).success,false);
     assert.equal(foxholeFiringVolumeSchema.safeParse({...input,muzzleOrigins:[[0,NaN,0]]}).success,false);
 });
+
+
+test('AI component coverage and muzzle FX frames survive canonical publication independently',()=>{
+    const source={source:'ai-turret',coneHalfAngle:35,origin:[2,0,1.1],orientation:[0,0,0,1],originSource:'muzzle-component',
+        reference:{origin:[0,0],heading:0},coverage:{origin:[0,0,0],orientation:[0,0,0,1]}};
+    const aligned=alignFiringVolume({x:10,y:20,r:90},source);
+    assert.deepEqual(aligned.origin,[10,22,1.1]);assert.deepEqual(aligned.coverage.origin,[10,20,0]);
+    assert.ok(Math.abs(aligned.coverage.orientation[2]-Math.SQRT1_2)<1e-6);
+    assert.deepEqual(alignFiringVolume({x:10,y:20,r:90},aligned),aligned);
+    assert.deepEqual(foxholeFiringVolumeSchema.parse(source).coverage,source.coverage);
+    assert.equal(foxholeFiringVolumeSchema.safeParse({...source,coverage:{origin:[0,0,NaN],orientation:[0,0,0,1]}}).success,false);
+    assert.equal(foxholeFiringVolumeSchema.safeParse({...source,coverage:{origin:[0,0,0],orientation:[0,0,0,0]}}).success,false);
+});

@@ -57,8 +57,8 @@ export function createFoxholeNightRangePolygon(range: NightRange, visionRadius: 
     if (Math.hypot(x, y) + max <= visionRadius) {
         return null;
     }
-    // The supported AI families have no minimum range; don't flatten a future
-    // annular range into a filled circle if the asset contract changes.
+    // Annuli keep their graphics path and inner cutout. The caller clips centered
+    // annuli by capping the outer radius instead of flattening them into a polygon.
     if (Number(range.min ?? 0) > 0) {
         return null;
     }

@@ -247,3 +247,21 @@ var lucianGrid=FoxWatchPayloadGrid.CreateOffsets(1,6,0,50.5)!;
 Check(lucianGrid.Length==6 && lucianGrid[5]==new Vector3(0,-252.5f,0),"Lucian payload spacing changed");
 Check(FoxWatchPayloadGrid.CreateOffsets(0,6,0,50.5)==null && FoxWatchPayloadGrid.CreateOffsets(256,1,0,0)==null && FoxWatchPayloadGrid.CreateOffsets(255,255,0,0)==null && FoxWatchPayloadGrid.CreateOffsets(1,1,double.NaN,1)==null,"Malformed payload grid accepted");
 Console.WriteLine("Native rocket payload layout checks passed");
+
+
+// Planner-only pillbox preview clearance must not affect native bunker minimums.
+var minimumPolicy=typeof(FoxWatchManifestAssetExtractor).GetMethod("PlannerAiMinimumRange",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
+foreach(var name in new[]{"BPRiflePillbox_C","BPMGPillbox_C","BPATPillbox_C","BPISGPillbox_C"})
+    Check((double)minimumPolicy.Invoke(null,[name,null])! == 400,"Pillbox display cutoff must be 4 metres");
+Check(minimumPolicy.Invoke(null,["BPMGAIT2_C",null])==null,"Pillbox override leaked into bunker AI");
+Check((double)minimumPolicy.Invoke(null,["BPArtilleryAIT2_C",2500d])! == 2500,"Authored minimum was overwritten");
+var coverageVolume=FoxWatchFiringVolumes.CreateCone([2,0,1.1],Quaternion.Identity,35)!;
+coverageVolume.OriginSource="muzzle-component";
+coverageVolume.Reference=new(){Origin=[0,0],Heading=0};
+coverageVolume.Coverage=new(){Origin=[0,0,0],Orientation=[0,0,0,1]};
+FoxWatchFiringVolumes.RotateLegacyRangeFrame(coverageVolume,90,1,2);
+Check(coverageVolume.Coverage.Origin.SequenceEqual(new double[]{0,0,0}),"Planar-only correction moved model coverage");
+FoxWatchFiringVolumes.Rotate(coverageVolume,90,10,20);
+Check(coverageVolume.Coverage.Origin.SequenceEqual(new double[]{10,20,0}) && coverageVolume.Origin.SequenceEqual(new double[]{10,22,1.1}),"Coverage and muzzle lost their independent frames");
+Check(Math.Abs(coverageVolume.Coverage.Orientation[2]-Math.Sqrt(.5))<1e-6,"Coverage rotation was omitted");
+Console.WriteLine("AI component coverage frame and explicit pillbox display override checks passed");

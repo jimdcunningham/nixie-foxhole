@@ -115,7 +115,7 @@ test('AI artillery cones retain minimum ranges and the nighttime exception',()=>
 
 test('unresolved weapon positions keep ground coverage without inventing a 3D muzzle', () => {
     const asset=assets.mgait2!, appearance={destroyed:false,packaged:false};
-    const unknown={...asset,ranges:asset.ranges!.map(range=>({...range,firingVolume:{...range.firingVolume!,originSource:'firing-component' as const}}))};
+    const unknown={...asset,ranges:asset.ranges!.map(range=>({...range,firingVolume:{...range.firingVolume!,originSource:'firing-component' as const,coverage:undefined}}))};
     assert.deepEqual(renderFoxholeStructureFiringVolumes(unknown,{},appearance),[]);
     assert.ok(renderFoxholeStructureRangeOverlays(unknown,{},appearance).length>0);
 });
@@ -156,4 +156,37 @@ test('rocket salvos use independent firing-ready muzzle origins and calibrated s
     const truck=assets.truckmultic!;
     assert.deepEqual([truck.ranges![0]!.min,truck.ranges![0]!.max],[375,500],'2D coverage changed');
     assert.equal(truck.ranges![0]!.firingVolume!.payloadPose!.inputPitch,65,'native animation input was rewritten as a physical angle');
+});
+
+test('AI coverage uses its component frame while physical muzzle metadata stays independent', () => {
+    const original = assets.mgpillbox!;
+    const asset = {...original,ranges:[{type:'killboxMG',arc:35,min:4,max:30,firingVolume:{source:'ai-turret' as const,coneHalfAngle:35,
+        originSource:'muzzle-component' as const,origin:[2,0,1.1] as [number,number,number],orientation:[0,0,0,1] as [number,number,number,number],
+        coverage:{origin:[0,0,0] as [number,number,number],orientation:[0,0,Math.SQRT1_2,Math.SQRT1_2] as [number,number,number,number]}}}]};
+    const before=structuredClone(asset);
+    const volume=renderFoxholeStructureFiringVolumes(asset,{}, {destroyed:false,packaged:false})[0]!;
+    const offset=asset.model!.blueprintOrigin!;
+    assert.deepEqual(volume.origin,[offset.x,offset.y,offset.z]);
+    assert.deepEqual(volume.orientation,[0,0,Math.SQRT1_2,Math.SQRT1_2]);
+    assert.equal(volume.minRadius,128);assert.equal(volume.maxRadius,960);
+    assert.deepEqual(asset,before,'rendering must not rewrite source muzzle metadata');
+});
+
+
+test('pillbox inner clearance remains four metres in daytime and at midnight in every view',()=>{
+    for(const id of ['riflepillbox','mgpillbox','atpillbox','isgpillbox']) {
+        const asset=assets[id]!,range=asset.ranges!.find(range=>range.firingVolume?.source==='ai-turret')!;
+        assert.equal(range.min,4,id);
+        for(const night of [false,true]) {
+            const volume=renderFoxholeStructureFiringVolumes(asset,{'foxhole.ranges.nighttime':night},{destroyed:false,packaged:false})[0]!;
+            assert.equal(volume.minRadius,128,id);assert.equal(volume.maxRadius,range.max!*32,id);
+            assert.deepEqual(volume.clipCylinder,night?{center:[0,0],radius:480}:undefined,id);
+            const commands=foxholeStructureRangeCommands(range,night?15:null)!;
+            assert.ok(commands.fill.some(command=>(command.op==='arc'||command.op==='circle')&&command.radius===128),id+' missing inner boundary');
+            assert.ok(commands.fill.some(command=>(command.op==='arc'||command.op==='circle')&&command.radius===(night?480:range.max!*32)),id+' incorrect night cap');
+        }
+    }
+    for(const id of ['rifleait1','rifleait2','rifleait3','mgait1','mgait2','mgait3','atgunait1','atgunait2','atgunait3'])
+        assert.equal(assets[id]!.ranges![0]!.min??0,0,id+' must not inherit pillbox clearance');
+    assert.equal(assets.artilleryait1!.ranges![0]!.min,25,'existing artillery minimum must survive');
 });

@@ -376,6 +376,20 @@ public partial class FoxWatchManifestAssetExtractor
         finally { ancestry.Remove(name); }
     }
 
+    // Explicit Planner display override requested for visual comparison with
+    // the in-game placement preview; this is not a claim about gameplay range.
+    private static double? PlannerAiMinimumRange(string blueprint, double? nativeMinimum) => blueprint is
+        "BPRiflePillbox_C" or "BPMGPillbox_C" or "BPATPillbox_C" or "BPISGPillbox_C" ? 400 : nativeMinimum;
+
+    private static FoxWatchManifestFiringVolume? SetAiCoverageFrame(FoxWatchManifestFiringVolume? volume, ManifestComponentTransform component)
+    {
+        if (volume == null) return null;
+        var q = Quaternion.Normalize(component.Rotation);
+        volume.Coverage = new() { Origin = [component.X / 100,component.Y / 100,component.Z / 100],
+            Orientation = [q.X,q.Y,q.Z,q.W] };
+        return volume;
+    }
+
     private static FoxWatchManifestFiringVolume? SetFiringFrame(FoxWatchManifestFiringVolume? volume,
         FiringFrame? muzzle, ManifestComponentTransform rangeFrame, double heading)
     {

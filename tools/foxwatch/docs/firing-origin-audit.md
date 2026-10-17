@@ -72,3 +72,11 @@ The vehicle debug gate, overlay settings and nighttime behavior remain unchanged
 - Production Planner build passed with 812 declared resources verified against the completed artifact. An isolated Windows directory-rename failure was avoided on retry; the completed artifact was mirrored locally behind the normal discovery marker without restarting the running watcher or Studio server.
 - Disposable Studio scene checks: Stinger 3D firing volume follows the vehicle rotation; Harpy renders its recovered volume in 2.5D; Retiarius generates its source-backed long-range volume (375-500 m, beyond the close-up camera). These are static authored reference frames, not live game aiming/deployment poses.
 - Temporary Studio fixtures were removed, the prior view restored, and the vehicle weapon range debug overlay returned to false.
+
+## AI Coverage Origin Correction
+
+AI coverage and physical muzzle FX now carry independent frames. `fv.coverage` records the `AITurretComponent` transform and orientation; `fv.origin` and its provenance retain the physical muzzle frame. The 3D AI cones use coverage, so a center-based 30 m MG pillbox range no longer starts at its muzzle 2 m forward. Vehicle muzzle envelopes and artillery handling are unchanged.
+
+All four pillboxes (Rifle, MG, AT and ISG) have an explicit 4 m Planner display cutoff, requested for comparison with the placement-preview screenshot. This is an authored display assumption, not extracted evidence of a gameplay minimum. Rifle/MG/AT bunker AI keep their source minimums, with no added 4 m cutoff. Existing 25 m artillery minimums remain intact.
+
+Focused extraction verified component origins `[0,0,0]` and identity orientations for all 13 affected assets while preserving their original muzzle offsets. Both 2D annular graphics and 3D cones retain the inner boundary at night; existing category, selection, nighttime and spotlight gates still apply. The schema/publication checks cover independent frame rotation and idempotence. Planner: 1,019 tests; FoxWatch: 260 tests; typecheck and offline C# extraction/policy checks passed.

@@ -9,16 +9,21 @@ export function alignFiringVolume(range, source = range.firingVolume) {
         const heading=range.rotation ?? range.r ?? reference.heading;
         const angle=(heading-reference.heading)*Math.PI/180, c=Math.cos(angle), s=Math.sin(angle);
         const center=[Number(range.x ?? 0),Number(range.y ?? 0)];
-        for (const point of [volume.origin, ...(volume.muzzleOrigins ?? []), ...(volume.payloadPose ? [volume.payloadPose.maximumOrigin] : [])]) {
+        for (const point of [volume.origin, ...(volume.coverage ? [volume.coverage.origin] : []), ...(volume.muzzleOrigins ?? []), ...(volume.payloadPose ? [volume.payloadPose.maximumOrigin] : [])]) {
             const x=point[0]-reference.origin[0], y=point[1]-reference.origin[1];
             point[0]=center[0]+c*x-s*y; point[1]=center[1]+s*x+c*y;
         }
         const [qx,qy,qz,qw]=volume.orientation, ch=Math.cos(angle/2), sh=Math.sin(angle/2);
         volume.orientation=[ch*qx-sh*qy,ch*qy+sh*qx,ch*qz+sh*qw,ch*qw-sh*qz];
+        if (volume.coverage) {
+            const [x,y,z,w]=volume.coverage.orientation;
+            volume.coverage.orientation=[ch*x-sh*y,ch*y+sh*x,ch*z+sh*w,ch*w-sh*z];
+        }
         volume.reference={origin:center,heading};
         return volume;
     }
     // Older catalogs used the ground-range center as their firing origin.
+    if (volume.coverage) throw Error('AI coverage frame requires a publication reference');
     volume.origin[0] = Number(range.x ?? 0);
     volume.origin[1] = Number(range.y ?? 0);
     const heading = range.rotation ?? range.r ?? 0;

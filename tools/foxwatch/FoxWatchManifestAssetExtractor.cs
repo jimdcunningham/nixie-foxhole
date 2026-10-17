@@ -5372,6 +5372,7 @@ public partial class FoxWatchManifestAssetExtractor
                 : componentName;
             var arc = ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "FiringConeAngle"));
 
+            var minimumRange = PlannerAiMinimumRange(GetObjectName(blueprint), ExtractDouble(GetInheritedBlueprintComponentProperty(rootObjects, blueprint, component, "MinimumRange")));
             var muzzle = ResolveWeaponFiringFrame(rootObjects, blueprint, defaultObject, component, componentLookup, vehicle: false);
             var firing = muzzle?.Transform ?? transform;
             return new FoxWatchManifestRange
@@ -5382,10 +5383,11 @@ public partial class FoxWatchManifestAssetExtractor
                 Y = RoundRangeDistance(transform.Y),
                 Rotation = arc is > 0 and < 360 ? RoundRangeValue(NormalizeDegrees(transform.YawDegrees)) : null,
                 Arc = arc is > 0 and < 360 ? RoundRangeValue(arc.Value) : null,
+                Min = minimumRange is > 0 ? RoundRangeDistance(minimumRange) : null,
                 Max = RoundRangeDistance(maximumRange),
-                FiringVolume = SetFiringFrame(FoxWatchFiringVolumes.CreateCone(
+                FiringVolume = SetAiCoverageFrame(SetFiringFrame(FoxWatchFiringVolumes.CreateCone(
                     [firing.X / 100, firing.Y / 100, firing.Z / 100], firing.Rotation,
-                    arc is > 0 ? Math.Min(arc.Value, 180) : 180), muzzle, transform, transform.YawDegrees),
+                    arc is > 0 ? Math.Min(arc.Value, 180) : 180), muzzle, transform, transform.YawDegrees), transform),
             };
         }
 

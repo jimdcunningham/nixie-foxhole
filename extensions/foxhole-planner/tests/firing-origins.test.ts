@@ -3,7 +3,7 @@ import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeStructureFiringVolumes } from '../src/scene-v2-structure-range-overlays.ts';
 
-test('all catalog AI garrisons and pillboxes retain their source gun heights and offsets', () => {
+test('AI coverage uses component origins without discarding physical muzzle coordinates', () => {
     const expected: Record<string, readonly [number, number, number]> = {
         mgait1: [2.68,-0.01067,2.6243], mgait2: [2.68,-0.01067,2.6243], mgait3: [2.61,0,2.01],
         rifleait1: [3,0,2.2], rifleait2: [3,0,2.2], rifleait3: [3,0,2.26],
@@ -18,7 +18,10 @@ test('all catalog AI garrisons and pillboxes retain their source gun heights and
         const volume=renderFoxholeStructureFiringVolumes(asset,{}, {destroyed:false,packaged:false})[0]!;
         assert.ok(volume,`${id} must render its source-backed AI volume`);
         const offset=asset.model!.blueprintOrigin!;
-        origin.forEach((value,i)=>assert.ok(Math.abs(volume.origin[i]!-(value*32+[offset.x,offset.y,offset.z][i]!))<0.004,`${id} model axis ${i}`));
+        const frame=source.source==='ai-turret'?source.coverage!:source;
+        assert.ok(frame,id+' needs a coverage frame');
+        frame.origin.forEach((value,i)=>assert.ok(Math.abs(volume.origin[i]!-(value*32+[offset.x,offset.y,offset.z][i]!))<0.004,`${id} model axis ${i}`));
+        if(source.source==='ai-turret') assert.ok(Math.hypot(source.origin[0]-frame.origin[0],source.origin[1]-frame.origin[1])>1,id+' must retain independent muzzle coordinates');
     }
 });
 

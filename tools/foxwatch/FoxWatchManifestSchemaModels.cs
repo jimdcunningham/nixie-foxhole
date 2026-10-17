@@ -551,8 +551,15 @@ public sealed class FoxWatchManifestPayloadPose
     public double[] MaximumOrigin { get; set; } = [];
 }
 
+public sealed class FoxWatchManifestCoverageFrame
+{
+    public double[] Origin { get; set; } = [];
+    public double[] Orientation { get; set; } = [];
+}
+
 public sealed class FoxWatchManifestFiringVolume
 {
+    public FoxWatchManifestCoverageFrame? Coverage { get; set; }
     public double[][]? MuzzleOrigins { get; set; }
     public FoxWatchManifestPayloadPose? PayloadPose { get; set; }
     public FoxWatchManifestFiringReference? Reference { get; set; }

@@ -281,6 +281,8 @@ interface PublishedFoxholeHoldProfile {
 }
 
 export type FoxholeSceneV2FiringVolume = {
+    /** AI range tests use this component frame, independently of muzzle FX. */
+    coverage?: { origin: [number,number,number]; orientation: [number,number,number,number]; };
     /** Native row-major payload indices in the minimum firing-ready pose. */
     muzzleOrigins?: [number, number, number][];
     payloadPose?: { animation: string; blendSpace: string; bone: string; inputPitch: number; maxInputPitch: number;

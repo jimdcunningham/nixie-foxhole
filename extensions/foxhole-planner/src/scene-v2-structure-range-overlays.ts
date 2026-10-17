@@ -16,7 +16,10 @@ function distance(value: number | null | undefined): number | null {
 export function foxholeStructureRangeCommands(range: FoxholeSceneV2StructureRange, nightVisionRadius: number | null = null): { fill: NixieExtensionGraphicsCommandV1[]; stroke: NixieExtensionGraphicsCommandV1[]; overlapOnly: boolean; } | null {
     const color = foxholeStructureRangeColor(range.type);
     const x = position(range.x), y = position(range.y);
-    const min = distance(range.min), max = distance(range.max), overlap = distance(range.overlap), reach = distance(range.reach);
+    const min = distance(range.min), sourceMax = distance(range.max), overlap = distance(range.overlap), reach = distance(range.reach);
+    const max = min && min > 0 && x === 0 && y === 0 && nightVisionRadius !== null
+        ? Math.min(sourceMax ?? 0,nightVisionRadius * 32) : sourceMax;
+    if (min && max && min >= max) return null;
     const fill: NixieExtensionGraphicsCommandV1[] = [];
     const stroke: NixieExtensionGraphicsCommandV1[] = [];
     const circle = (target: NixieExtensionGraphicsCommandV1[], radius: number) => target.push({ op: 'circle', x, y, radius });
@@ -137,7 +140,7 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
     if (appearance.destroyed || appearance.packaged || !asset.model) return [];
     return (asset.ranges ?? []).flatMap((range, index) => {
         const source = range.firingVolume;
-        if (!source || source.originSource === 'firing-component' || !range.type.startsWith('killbox')
+        if (!source || (source.originSource === 'firing-component' && !source.coverage) || !range.type.startsWith('killbox')
             || !isFoxholeStructureRangeVisible(range, settings, true, asset.isVehicle === true)) return [];
         const max = distance(range.max), min = Math.max(0,distance(range.min) ?? 0);
         if (!max || min >= max || !source.origin.every(Number.isFinite) || source.origin.length !== 3
@@ -152,12 +155,15 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
                 ? { kind: 'angular-envelope' as const, yaw: [source.minYaw,source.maxYaw] as [number,number], pitch: [source.minPitch,source.maxPitch] as [number,number] } : null;
         if (!shape) return [];
         const night = resolveFoxholeNightVisionRadius(asset,range,id => settings[id]);
-        const origins = source.muzzleOrigins ?? [source.origin];
+        const coverage = source.source === 'ai-turret' ? source.coverage : undefined;
+        const orientation = coverage?.orientation ?? source.orientation;
+        if (orientation.length !== 4 || !orientation.every(Number.isFinite) || Math.abs(Math.hypot(...orientation)-1)>0.001) return [];
+        const origins = coverage ? [coverage.origin] : source.muzzleOrigins ?? [source.origin];
         if (!origins.length || origins.length > 32 || origins.some(origin => origin.length !== 3 || !origin.every(Number.isFinite))) return [];
         // Keep the combined opacity of an overlapping salvo equal to one weapon envelope.
         const alpha = origins.length === 1 ? 0.10 : 1 - Math.pow(1 - 0.10, 1 / origins.length);
         return origins.map((origin, muzzleIndex) => ({ id: source.muzzleOrigins ? `firing-volume-${index}-muzzle-${muzzleIndex}` : `firing-volume-${index}`, ...shape,
-            origin: origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(["x","y","z"] as const)[i]!] ?? 0)) as [number,number,number], orientation: [...source.orientation] as [number,number,number,number],
+            origin: origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(["x","y","z"] as const)[i]!] ?? 0)) as [number,number,number], orientation: [...orientation] as [number,number,number,number],
             minRadius: min, maxRadius: max, color: foxholeStructureRangeColor(range.type), alpha,
             selectionOnly: !isFoxholeStructureRangeVisible(range,settings,false,asset.isVehicle === true),
             ...(night === null ? {} : { clipCylinder: { center: [0,0] as [number,number], radius: night * 32 } }),

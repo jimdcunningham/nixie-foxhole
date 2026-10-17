@@ -73,6 +73,12 @@ public static class FoxWatchFiringVolumes
             point[0]=px*Math.Cos(angle)-py*Math.Sin(angle)+offsetX;
             point[1]=px*Math.Sin(angle)+py*Math.Cos(angle)+offsetY;
         }
+        if (volume.Coverage is { } coverage) {
+            RotatePoint(coverage.Origin);
+            var cq = coverage.Orientation;
+            var cr = Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitZ,(float)angle) * new Quaternion((float)cq[0],(float)cq[1],(float)cq[2],(float)cq[3]));
+            coverage.Orientation = [cr.X,cr.Y,cr.Z,cr.W];
+        }
         foreach (var point in volume.MuzzleOrigins ?? []) RotatePoint(point);
         if (volume.PayloadPose is { } pose) RotatePoint(pose.MaximumOrigin);
         var q = volume.Orientation;
