@@ -15,6 +15,7 @@ import {
 import type { FoxholeStructureAsset, FoxholeStructureModificationSlotAsset, FoxholeStructureModificationSlotVariantAsset } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import {
     normalizeFoxholeModificationSelectionMap,
+    reconcileFoxholeTierModificationSelections,
     resolveFoxholeModificationSlotVariantId,
     setFoxholeModificationSlotVariantSelection,
 } from '#foxhole/plugins/foxhole/nixie/modification-slots.ts';
@@ -869,7 +870,7 @@ async function selectTierAsset(nextAsset: FoxholeStructureAsset | null): Promise
         await props.patchNode(
             reconcileFoxholeAssetCargoPatch(catalog.value, state.value, {
                 foxholeKey: nextAsset.foxholeKey,
-                modificationVariantIds: {},
+                modificationVariantIds: reconcileFoxholeTierModificationSelections(nextAsset.modificationSlots, selectionMap.value),
             }),
             'inspector:foxhole-structure-select-tier',
         );

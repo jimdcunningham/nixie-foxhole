@@ -95,3 +95,17 @@ export function getFoxholeSelectedModificationSlotVariants(
         return variant ? [{ slot, variant }] : [];
     });
 }
+
+/** Keep logical choices supported by the destination; its catalog owns tier-specific visuals. */
+export function reconcileFoxholeTierModificationSelections(
+    slots: readonly Pick<FoxholeStructureModificationSlotAsset, 'id' | 'variantById'>[],
+    selections: FoxholeStructureModificationSelectionMap | null | undefined,
+    excludeUpgrades = false,
+): FoxholeStructureModificationSelectionMap {
+    const normalized = normalizeFoxholeModificationSelectionMap(selections);
+    return Object.fromEntries(slots.flatMap(slot => {
+        const variantId = normalized[slot.id];
+        const variant = variantId ? slot.variantById[variantId] : undefined;
+        return variant && (!excludeUpgrades || !variant.isUpgrade) ? [[slot.id, variant.id]] : [];
+    }));
+}

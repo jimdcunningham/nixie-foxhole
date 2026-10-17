@@ -7,6 +7,7 @@ import type { FoxholeStructureAsset, FoxholeStructureCatalog } from './catalog.t
 import {
     getFoxholeSelectedModificationSlotVariants,
     normalizeFoxholeModificationSelectionMap,
+    reconcileFoxholeTierModificationSelections,
 } from './modification-slots.ts';
 import type { FoxholeStructureState } from './types.ts';
 
@@ -224,7 +225,7 @@ export function resolveFoxholeStructureTierMutation(
             targetAsset: currentAsset,
             patch: reconcileFoxholeAssetCargoPatch(catalog, state ?? {}, {
                 foxholeKey: currentAsset.foxholeKey,
-                modificationVariantIds: {},
+                modificationVariantIds: reconcileFoxholeTierModificationSelections(currentAsset.modificationSlots, normalizedSelections, true),
             }),
         };
     }
@@ -243,7 +244,7 @@ export function resolveFoxholeStructureTierMutation(
         targetAsset,
         patch: reconcileFoxholeAssetCargoPatch(catalog, state ?? {}, {
             foxholeKey: targetAsset.foxholeKey,
-            modificationVariantIds: {},
+            modificationVariantIds: reconcileFoxholeTierModificationSelections(targetAsset.modificationSlots, normalizedSelections),
         }),
     };
 }

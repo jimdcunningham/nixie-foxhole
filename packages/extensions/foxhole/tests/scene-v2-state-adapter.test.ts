@@ -741,3 +741,33 @@ test('identity changes create a missing model binding without resetting unrelate
     host.undo();
     assert.deepEqual(host.exportDocument(), document);
 });
+
+test('tier changes carry compatible modifications through canonical SDK state and undo redo', () => {
+    const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
+    const engineMods = { BackDefenseModSlot: 'sandbags', FrontFortStairsModSlot: 'stairs', LeftModSlot: 'powerconnection' };
+    const trenchMods = { BackDefenseModSlot: 'barbedwire', FrontEndModSlot: 'stairs' };
+    for (const [source, direction, target, mods] of [
+        ['engineroomt2', 'up', 'engineroomt3', engineMods], ['engineroomt3', 'down', 'engineroomt2', engineMods],
+        ['trencht1', 'up', 'trencht2', trenchMods], ['trencht2', 'up', 'trencht3', trenchMods],
+        ['trencht3', 'down', 'trencht2', { ...trenchMods, BPTrenchRoofModSlot: 'trenchroof' }],
+    ] as const) {
+        const { host, id, apply, project } = fixture('foxholeAsset', { foxholeKey: source, modificationVariantIds: mods,
+            x: 123, y: -47, rotation: 0.75, scaleX: -1.25, scaleY: 0.8 });
+        const before = host.exportDocument();
+        const retained = host.readEntity(id).components.filter(component => !['asset', 'model', 'modification'].includes(component.componentId));
+        const mutation = resolveFoxholeStructureTierMutation(catalog, project().state, direction)!;
+        apply(mutation.patch);
+        assert.equal(project().state.foxholeKey, target);
+        const expectedMods = source === 'trencht3' ? trenchMods : mods;
+        assert.deepEqual(project().state.modificationVariantIds, expectedMods);
+        const selections = host.readEntity(id).components.find(component => component.componentId === 'modification')!.data.selections as Array<{ slotId: string; variantId: string }>;
+        assert.deepEqual(Object.fromEntries(selections.map(selection => [selection.slotId, selection.variantId])), expectedMods);
+        assert.equal(host.readEntity(id).components.find(component => component.componentId === 'model')!.data.resourceId, 'foxhole.model.' + target);
+        assert.deepEqual(host.readEntity(id).components.filter(component => !['asset', 'model', 'modification'].includes(component.componentId)), retained);
+        const after = host.exportDocument();
+        host.undo();
+        assert.deepEqual(host.exportDocument(), before);
+        host.redo();
+        assert.deepEqual(host.exportDocument(), after);
+    }
+});
