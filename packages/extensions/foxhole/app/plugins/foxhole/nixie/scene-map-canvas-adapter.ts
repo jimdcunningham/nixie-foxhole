@@ -51,7 +51,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
             return root.children.filter(child => child !== root.mask && (context.viewMode() !== '3d' || child.label !== 'foxhole-map-background')).map(content => ({
                 content, billboard: billboardLabels.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip,
-                billboardGroups: context.viewMode() === '3d' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,
+                // Warm 2.5D keeps the layout ready for the first 3D display frame.
+                billboardGroups: context.viewMode() !== 'flat' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,
             }));
         },
         worldBounds() {

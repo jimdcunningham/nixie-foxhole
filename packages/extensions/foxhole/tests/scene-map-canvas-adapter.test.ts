@@ -11,7 +11,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     let context: any, destroyed = 0, frames = 0, pointer = { x: 10, y: 20 }, interacting = false;
     const hovers: unknown[] = [];
     const moves: unknown[] = [], suppression: boolean[] = [];
-    let mode = '2.5d';
+    let mode = '2d';
     const background = { label: 'foxhole-map-background' };
     const summaries = { label: 'foxhole-map-casualty-labels' };
     const summaryGroups = [{ content: {}, anchor: { x: 10, y: 20 }, offset: 30, anchorHalfHeight: 10 }];
@@ -47,7 +47,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
     assert.equal(layers.length, 4);
-    assert.equal(layers[3].billboardGroups, undefined);
+    assert.equal(layers[3].billboardGroups, summaryGroups, '2.5D must retain layout metadata before a budgeted switch to 3D');
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
     assert.equal(layers[0].pixelScale, 0.025);
@@ -62,8 +62,10 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(adapter.spatialLayers().length, 3);
     assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, summaryGroups);
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
-    mode = '2.5d';
+    mode = '2d';
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), true);
+    mode = 'flat';
+    assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, undefined);
     settings.lockCameraToMap = false;
     assert.equal(adapter.navigationBounds(), null);
     root.visible = false;
