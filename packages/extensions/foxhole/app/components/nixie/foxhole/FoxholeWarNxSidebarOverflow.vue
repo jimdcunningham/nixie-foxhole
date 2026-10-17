@@ -38,7 +38,7 @@ const items = computed<ResolvedMenuItem[]>(() => [
         closeOnClick: true,
         adminOnly: false,
         disabled: false,
-        visible: documentSession?.isSceneV2Active.value === true,
+        visible: import.meta.dev && documentSession?.isSceneV2Active.value === true,
         onClick: () => settingsStore.toggle(FOXHOLE_USE_SDK_MAP_SETTING_ID, {
             reason: 'foxhole-war-nx:map-renderer',
         }),

@@ -2,6 +2,14 @@
 
 This is the first-class migration target for Foxhole Planner on the public Nixie extension SDK. It is discovered from a configured local extensions folder like any third-party extension and imports only the published `@nixie/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
 
+## Map Status: Frozen Standalone Fallback
+
+As of October 17, 2026, Studio uses the bundled Foxhole War panel and map controller for both Scene V1 and Scene V2, including 2.5D/3D presentation. The separate SDK `planning-map` and `planning-grid` renderers are frozen reference/fallback implementations. Their missing features, visual parity and performance are not blockers for ECS or Scene V2. Retain their existing tests; further map parity work requires an explicit scope decision and a concrete standalone consumer.
+
+Local development builds expose **Foxhole War → More Options → Use SDK Map** in Scene V2 for comparison. Production omits the setting and menu item and always selects the bundled map, even if a saved local preference requests the SDK renderer. Scene V1 always uses the bundled map. SDK-only development hosts can still use the packaged fallback renderers. This freeze applies to the map, not the Planner's ECS components, products or other SDK capabilities.
+
+## Development
+
 Run `npm run dev --workspace @nixie/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.
 
 The Explorer uses the SDK `assets` provider in both Scene V1 and Scene V2. Language, default/rendered icons, search aliases, categories, filters and upgrade entries come from that provider. The bundled layer no longer contributes an Explorer catalog.

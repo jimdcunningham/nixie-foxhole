@@ -40,7 +40,7 @@ export function registerFoxholeNixieContributions(): void {
 
     const settings = useNixieSettingsStore();
     registerNixieSceneV2CanvasContribution('nixie.foxhole-planner', createFoxholeSceneMapCanvas,
-        () => settings.getValueOr(FOXHOLE_USE_SDK_MAP_SETTING_ID, false) !== true);
+        () => !import.meta.dev || settings.getValueOr(FOXHOLE_USE_SDK_MAP_SETTING_ID, false) !== true);
     registerFoxholeNodeToolBridge();
     registerFoxholeStyleClipboardHandlers();
     registerNixieSceneV1NodeConverter('nixie.foxhole-planner', convertFoxholeSceneV1NodeToV2);

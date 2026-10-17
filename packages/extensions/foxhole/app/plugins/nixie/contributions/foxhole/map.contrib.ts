@@ -29,7 +29,7 @@ function isFoxholeSceneSurfaceActive(): boolean {
 export default defineContribution({
     settings: [
         ...foxholeMapSettings,
-        foxholeSceneMapRendererSetting,
+        ...(import.meta.dev ? [foxholeSceneMapRendererSetting] : []),
         ...foxholeStatsUserSettings,
     ],
     commands: withCommandSettingsPageSection([
