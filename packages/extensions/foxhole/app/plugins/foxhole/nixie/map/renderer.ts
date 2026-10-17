@@ -22,6 +22,7 @@ import {
 } from './constants.ts';
 import type { FoxholeMapRegionRecord } from './constants.ts';
 import { getFoxholeMapModStore } from './mod-store.ts';
+import { drawFoxholeMapHeatCircle } from './heat-geometry.ts';
 
 type FoxholeMapSettingsSnapshot = ReturnType<FoxholeMapContext['readMapSettings']>;
 type FoxholeFrontlineFactionTeamId = 'COLONIALS' | 'WARDENS';
@@ -1961,40 +1962,30 @@ export class FoxholeMapRenderer {
             const middleRadius = outerRadius * 0.68;
             const coreRadius = outerRadius * 0.38;
 
-            view.subregionHeatGraphics
-                .circle(anchor.x, anchor.y, outerRadius)
-                .fill({
-                    color: heatPalette.outerColor,
-                    alpha: heatPalette.outerBaseAlpha + (weightedIntensity * heatPalette.outerAlphaBoost),
-                });
-            view.subregionHeatGraphics
-                .circle(anchor.x, anchor.y, middleRadius)
-                .fill({
-                    color: heatPalette.middleColor,
-                    alpha: heatPalette.middleBaseAlpha + (weightedIntensity * heatPalette.middleAlphaBoost),
-                });
-            view.subregionHeatGraphics
-                .circle(anchor.x, anchor.y, coreRadius)
-                .fill({
-                    color: heatPalette.coreColor,
-                    alpha: heatPalette.coreBaseAlpha + (weightedIntensity * heatPalette.coreAlphaBoost),
-                });
+            drawFoxholeMapHeatCircle(view.subregionHeatGraphics, anchor.x, anchor.y, outerRadius, {
+                color: heatPalette.outerColor,
+                alpha: heatPalette.outerBaseAlpha + (weightedIntensity * heatPalette.outerAlphaBoost),
+            });
+            drawFoxholeMapHeatCircle(view.subregionHeatGraphics, anchor.x, anchor.y, middleRadius, {
+                color: heatPalette.middleColor,
+                alpha: heatPalette.middleBaseAlpha + (weightedIntensity * heatPalette.middleAlphaBoost),
+            });
+            drawFoxholeMapHeatCircle(view.subregionHeatGraphics, anchor.x, anchor.y, coreRadius, {
+                color: heatPalette.coreColor,
+                alpha: heatPalette.coreBaseAlpha + (weightedIntensity * heatPalette.coreAlphaBoost),
+            });
 
             const offsetX = (anchor.weight - 0.35) * 3200;
             const offsetY = (0.6 - anchor.weight) * 2600;
-            view.subregionHeatGraphics
-                .circle(anchor.x + offsetX, anchor.y + offsetY, coreRadius * 0.68)
-                .fill({
-                    color: heatPalette.highlightColor,
-                    alpha: heatPalette.highlightBaseAlpha + (weightedIntensity * heatPalette.highlightAlphaBoost),
-                });
+            drawFoxholeMapHeatCircle(view.subregionHeatGraphics, anchor.x + offsetX, anchor.y + offsetY, coreRadius * 0.68, {
+                color: heatPalette.highlightColor,
+                alpha: heatPalette.highlightBaseAlpha + (weightedIntensity * heatPalette.highlightAlphaBoost),
+            });
 
-            view.subregionHeatGraphics
-                .circle(anchor.x - (offsetX * 0.45), anchor.y + (offsetY * 0.2), middleRadius * 0.72)
-                .fill({
-                    color: heatPalette.accentColor,
-                    alpha: heatPalette.accentBaseAlpha + (weightedIntensity * heatPalette.accentAlphaBoost),
-                });
+            drawFoxholeMapHeatCircle(view.subregionHeatGraphics, anchor.x - (offsetX * 0.45), anchor.y + (offsetY * 0.2), middleRadius * 0.72, {
+                color: heatPalette.accentColor,
+                alpha: heatPalette.accentBaseAlpha + (weightedIntensity * heatPalette.accentAlphaBoost),
+            });
         }
 
         view.subregionHeatGraphics.alpha = this.computeRegionHeatPulse(performance.now(), intensity, view.revealOrder);
