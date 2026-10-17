@@ -606,6 +606,7 @@ export class FoxholeMapRenderer {
     }
 
     async ensureInitialized(): Promise<void> {
+        if (this.root.destroyed) return;
         if (this.initialized) {
             return;
         }
@@ -619,6 +620,7 @@ export class FoxholeMapRenderer {
     }
 
     teardown(): void {
+        if (this.root.destroyed) return;
         this.initializationEpoch += 1;
         this.pendingOverlayRegionKeys.clear();
         this.overlaySyncScheduled = false;
@@ -1104,7 +1106,7 @@ export class FoxholeMapRenderer {
     }
 
     private isInitializationStillActive(epoch: number): boolean {
-        return epoch === this.initializationEpoch
+        return !this.root.destroyed && epoch === this.initializationEpoch
             && this.context.readMapSettings().enabled;
     }
 
@@ -1253,6 +1255,7 @@ export class FoxholeMapRenderer {
     }
 
     private async createRegionView(region: FoxholeMapRegionRecord): Promise<void> {
+        const epoch = this.initializationEpoch;
         const position = getFoxholeRegionPosition(region);
         const settings = this.context.readMapSettings();
         const initialBaseTexturePath = this.resolveBaseRegionTexturePath(region, settings);

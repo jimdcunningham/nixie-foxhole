@@ -29,3 +29,26 @@ test('a destroyed map renderer ignores a late live-data synchronization', () => 
     const sync = runInNewContext(stripTypeScriptTypes(method.replace('sync(): void', 'function sync(): void') + '\nsync;'));
     sync.call({ root: { destroyed: true }, context: { readMapSettings() { throw new Error('Retired context was used'); } } });
 });
+
+
+test('a late initialization abort cannot tear down an already destroyed map twice', () => {
+    const method = renderer.match(/    teardown\(\): void \{[\s\S]*?\n    \}/)![0];
+    const teardown = runInNewContext(stripTypeScriptTypes(method.replace('teardown(): void', 'function teardown(): void') + '\nteardown;'));
+    teardown.call({ root: { destroyed: true } });
+});
+
+test('a region texture finishing after its initialization retires cannot create a detached view', async () => {
+    const method = renderer.match(/    private async createRegionView\([\s\S]*?\n    \}/)![0];
+    const create = runInNewContext(stripTypeScriptTypes(method.replace('private async createRegionView', 'async function createRegionView') + '\ncreateRegionView;'), {
+        getFoxholeRegionPosition: () => ({ x: 0, y: 0 }),
+    });
+    let finish: (value: unknown) => void = () => {};
+    const pending = new Promise(resolve => { finish = resolve; });
+    const state = { initializationEpoch: 1, context: { readMapSettings: () => ({ enabled: true }) },
+        resolveBaseRegionTexturePath: () => 'base', loadRegionTexture: () => pending,
+        isInitializationStillActive(epoch: number) { return epoch === this.initializationEpoch; } };
+    const loading = create.call(state, {});
+    state.initializationEpoch++;
+    finish({});
+    await loading;
+});
