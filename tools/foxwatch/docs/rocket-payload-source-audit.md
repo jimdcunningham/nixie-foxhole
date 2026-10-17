@@ -34,7 +34,7 @@ Squire and Retiarius explicitly require deployment in `DeploymentLogic`; Lucian 
 
 For the static planning envelope, the reference state is minimum permitted firing input with neutral yaw. `payloadPose` preserves the input interval, animation/blend-space paths, gun bone, deployment requirement and maximum-input anchor. The envelope orientation uses the sampled minimum frame; its relative pitch interval is zero through the sampled physical pitch change. This avoids applying elevation twice. All payload indices retain their own composed origins in `muzzleOrigins`.
 
-This is a firing-ready planning state, not a live game simulation. The full envelope uses the minimum-input launch points; the muzzle's small pivot translation as the player aims through the interval is recorded at the maximum input but is not swept into the envelope. Rendered model resources remain in their existing authored pose. Ammunition timing, rocket removal and animated deployment are not played in Studio. Physical payload indices are row-major; no chronological firing order is inferred solely from mesh removal.
+This is a firing-ready planning state, not a live game simulation. The full envelope uses the minimum-input launch points; the muzzle's small pivot translation as the player aims through the interval is recorded at the maximum input but is not swept into the envelope. The three generated model resources now bake the same minimum-input firing-ready pose using the shared source sampler. Vehicle placement roots, wheels and unrelated gun branches keep their reference transforms. Ammunition timing, rocket removal and animated deployment are not played in Studio. Physical payload indices are row-major; no chronological firing order is inferred solely from mesh removal.
 
 Unsupported bindings, additive clips, missing bones/sockets and out-of-domain inputs keep the prior source reference frame rather than inventing a pose. All existing 2D range fields remain unchanged.
 
@@ -45,3 +45,21 @@ Unsupported bindings, additive clips, missing bones/sockets and out-of-domain in
 - All 1,017 Planner tests and 259 FoxWatch tests passed; Planner typecheck and production build passed. The completed artifact declares 812 resources, all verified present.
 - Metadata-only publication changed only the three firing-volume records; every other range field was checked for equality. Canonical-frame regressions preserve all payload points and the maximum-input anchor through publication, including idempotence.
 - Disposable Studio verification observed six GPU volumes with distinct 50.5 cm column spacing for Lucian in both 3D and 2.5D. Turning Vehicle Weapon Ranges off removed all six. The fixture was deleted, and the overlay was restored to false.
+
+
+## Firing-Ready Model Baking
+
+`FoxWatchPayloadPoseSampler` supplies the same local source bone transforms to firing-frame extraction and render-scene generation. The graph's pitch-layer branch filters include the supporting mechanisms: Squire's declared rocket branches (ignoring inherited names absent from its mesh), Retiarius's rack and `piston_bottom`, and Lucian's `MainGunVertical`, `MainGunVerticalPistons` and `MainGunVerticalBase`. No pitch is guessed from the input number.
+
+The exporter converts those transforms into deltas against the imported mesh's own rest skeleton, normalizes their quaternions and uses the existing static skinned-mesh bake. A changed scene/model hash invalidates the persistent resource cache through the existing content identity. No new host or SDK pose API is necessary. This changes the static launcher mechanism; it does not simulate payload ammunition, deployment transitions, live aiming or salvo timing.
+
+Focused local-source checks (Steam build 25730371):
+
+```powershell
+$env:FOXWATCH_TEST_PAK_PATH = '<local Foxhole PAK directory>'
+$env:FOXWATCH_TEST_POSE_PROOF = '<scratch>/payload-source-proof.json'
+dotnet run --project tools/foxwatch/tools/payload-pose-tests/PayloadPoseTests.csproj -p:EnableDefaultContentItems=false
+blender -b --python tools/foxwatch/blender/test_payload_pose_source.py -- '<generated scene root>' '<exported source mesh root>' $env:FOXWATCH_TEST_POSE_PROOF
+```
+
+The source harness checks the three calibrated elevations, unchanged wheel bones and rejection of unverified bindings. The independent Blender check compares the actual skin-deformation matrices against composed source rest/posed matrices for every bone: Squire 18, Retiarius 13 and Lucian 13. Maximum matrix error was below 0.000003. Fresh extraction preserved all three published firing volumes exactly. The existing 259 FoxWatch tests and offline firing-volume harness passed.

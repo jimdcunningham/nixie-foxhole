@@ -4778,6 +4778,20 @@ public sealed class FoxWatchRenderSceneGenerator
             return;
         }
 
+        // Only ranges with a verified source animation binding opt in. Do not
+        // move vehicle roots, wheel poses, or unrelated gunner branches.
+        var payloadPose = structure.Ranges.Select(range => range.FiringVolume?.PayloadPose).FirstOrDefault(pose => pose != null);
+        if (payloadPose != null)
+        {
+            foreach (var mesh in GetPoseOverrideTargetMeshAssets(meshAssetsById))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var pose = _meshAssetExporter.SamplePayloadRenderPose(mesh.SourcePath!, payloadPose);
+                if (pose != null && ApplyPoseToMatchingNodes(roots, mesh.Id, pose) > 0) return;
+            }
+            throw new InvalidOperationException($"Verified payload pose could not be applied to {structure.Id}");
+        }
+
         if (await TryApplyStructurePoseOverrideAsync(structure, roots, meshAssetsById, cancellationToken))
         {
             return;

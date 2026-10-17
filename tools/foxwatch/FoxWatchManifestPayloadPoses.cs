@@ -1,27 +1,17 @@
 using System.Numerics;
 using CUE4Parse.UE4.Assets.Exports.Animation;
 using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
-using CUE4Parse.UE4.Objects.Core.Math;
-using CUE4Parse_Conversion.Animations;
-using CUE4Parse_Conversion.Animations.PSA;
 
 namespace FoxWatchService;
 
 public partial class FoxWatchManifestAssetExtractor
 {
     // These are source graph bindings, not authored coordinates or guessed elevations.
-    private sealed record PayloadPoseBinding(string Blueprint, string Animation, string BlendSpace, string Bone);
-    private static readonly PayloadPoseBinding[] PayloadPoseBindings = [
-        new("BPArmoredCar2MultiW_C", "TerrainVehicles/ArmoredCar/ABP_ArmoredCarOffensiveW", "TerrainVehicles/ArmoredCar/BS_ArmoredCar2MultiW_Vertical", "Rocket_GunPivot"),
-        new("BPTruckMultiC_C", "TruckMulti/ABP_TruckMultiC", "TruckMulti/BS_TuckMultiC_Pitch", "rocketRack_pivot"),
-        new("BPGunboat2C_C", "WaterVehicles/Gunboat/ABP_Gunboat2C", "WaterVehicles/Gunboat/BS_Gunboat2C_MainTurret_Vertical", "MainGunVertical"),
-    ];
-
     private (FiringTransform Frame, FoxWatchManifestPayloadPose Pose)? ResolvePayloadPose(object blueprint,
         FoxWatchBlueprintComponentReference payload, IReadOnlyList<FoxWatchBlueprintComponentReference> references,
         double minimumPitch, double maximumPitch, bool requiresDeployment)
     {
-        var binding = PayloadPoseBindings.SingleOrDefault(value => value.Blueprint == GetObjectName(blueprint));
+        var binding = FoxWatchPayloadPoseSampler.Bindings.SingleOrDefault(value => value.Blueprint == GetObjectName(blueprint));
         var meshReference = references.SingleOrDefault(value => value.ComponentName == payload.AttachParentName && value.MeshType == "skeletal");
         if (binding == null || meshReference == null || string.IsNullOrWhiteSpace(meshReference.MeshPath)) return null;
         var prefix = "War/Content/Animation/";
@@ -56,42 +46,14 @@ public partial class FoxWatchManifestAssetExtractor
             if (mesh == null) return null;
             FiringTransform? At(double input)
             {
-                var low = samples.Last(value => value.Input <= input);
-                var high = samples.First(value => value.Input >= input);
-                var alpha = high.Input == low.Input ? 0 : (float)((input - low.Input) / (high.Input - low.Input));
-                Dictionary<string, FTransform> Read(string path)
-                {
-                    var sequence = _fileProvider.LoadPackage(ResolvePackagePath(path)!).GetExports().OfType<UAnimSequence>().Single();
-                    // Additive clips need a separate base-pose evaluation; never treat their deltas as absolute bones.
-                    if (sequence.AdditiveAnimType != EAdditiveAnimationType.AAT_None) throw new InvalidOperationException("Additive launcher pose");
-                    var skeleton = sequence.Skeleton.Load<USkeleton>() ?? throw new InvalidOperationException("Missing animation skeleton");
-                    var converted = skeleton.ConvertAnims(sequence).Sequences.First();
-                    return FAnimationRuntime.LoadAsPoses(converted, skeleton, 0).Single().Bones.ToDictionary(b => b.Name, b => b.Transform, StringComparer.OrdinalIgnoreCase);
-                }
-                var lower = Read(low.Path!); var upper = Read(high.Path!);
                 var bones = mesh.ReferenceSkeleton.FinalRefBoneInfo;
-                var poses = mesh.ReferenceSkeleton.FinalRefBonePose;
-                var root = Array.FindIndex(bones, value => value.Name.Text == binding.Bone);
-                if (root < 0) return null;
-                bool IsInBranch(int index)
-                {
-                    for (var steps = 0; index >= 0 && steps <= bones.Length; steps++, index = bones[index].ParentIndex)
-                        if (index == root) return true;
-                    return false;
-                }
+                var poses = FoxWatchPayloadPoseSampler.Sample(_fileProvider, mesh, ResolvePackagePath(blendPath)!, input, binding);
                 var frames = new FiringTransform[bones.Length];
                 var points = new Dictionary<string, ManifestComponentTransform>(StringComparer.OrdinalIgnoreCase);
                 for (var index = 0; index < bones.Length; index++)
                 {
                     var name = bones[index].Name.Text;
                     var local = new FiringTransform(CreateComponentTransform(poses[index]), new(poses[index].Scale3D.X, poses[index].Scale3D.Y, poses[index].Scale3D.Z));
-                    if (IsInBranch(index))
-                    {
-                        if (!lower.TryGetValue(name, out var a) || !upper.TryGetValue(name, out var b)) return null;
-                        var qa = CreateComponentTransform(a).Rotation; var qb = CreateComponentTransform(b).Rotation;
-                        var pos = Vector3.Lerp(new(a.Translation.X, a.Translation.Y, a.Translation.Z), new(b.Translation.X, b.Translation.Y, b.Translation.Z), alpha);
-                        local = new(new(pos.X, pos.Y, pos.Z, Quaternion.Lerp(qa, qb, alpha)), Vector3.Lerp(new(a.Scale3D.X,a.Scale3D.Y,a.Scale3D.Z),new(b.Scale3D.X,b.Scale3D.Y,b.Scale3D.Z),alpha));
-                    }
                     frames[index] = bones[index].ParentIndex < 0 ? local : ComposeFiringTransform(frames[bones[index].ParentIndex], local);
                     points[name] = frames[index].Transform;
                 }

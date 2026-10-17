@@ -35,7 +35,7 @@ using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-public sealed class FoxWatchAssetMeshExporter
+public sealed partial class FoxWatchAssetMeshExporter
 {
     private static readonly Regex VectorPattern = new(@"X=(?<x>-?\d+(?:\.\d+)?)\s+Y=(?<y>-?\d+(?:\.\d+)?)\s+Z=(?<z>-?\d+(?:\.\d+)?)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex RotatorPattern = new(@"P=(?<pitch>-?\d+(?:\.\d+)?)\s+Y=(?<yaw>-?\d+(?:\.\d+)?)\s+R=(?<roll>-?\d+(?:\.\d+)?)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
