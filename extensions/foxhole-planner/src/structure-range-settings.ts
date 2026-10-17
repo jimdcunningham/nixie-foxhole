@@ -17,7 +17,7 @@ export const FOXHOLE_STRUCTURE_RANGE_DEFINITIONS = {
 } as const;
 
 export const FOXHOLE_STRUCTURE_RANGE_SETTING_IDS = ['foxhole.ranges.selectionOnly', ...FOXHOLE_NIGHT_RANGE_SETTING_IDS, ...Object.keys(FOXHOLE_STRUCTURE_RANGE_DEFINITIONS).map(key => `foxhole.ranges.${key}`),
-    ...[...new Set(Object.values(FOXHOLE_STRUCTURE_RANGE_DEFINITIONS).map(value => value.legacy))].map(key => `foxhole.ranges.${key}`), 'foxhole.debug.ranges.vehicleWeapons'];
+    ...[...new Set(Object.values(FOXHOLE_STRUCTURE_RANGE_DEFINITIONS).map(value => value.legacy))].map(key => `foxhole.ranges.${key}`), 'foxhole.debug.ranges.vehicleWeapons', 'foxhole.structure.lineOfSight'];
 
 export function isFoxholeStructureRangeVisible(range: FoxholeSceneV2StructureRange, settings: Readonly<Record<string, boolean>>, selected: boolean, isVehicle = false): boolean {
     if (isVehicle && range.type.startsWith('killbox') && settings['foxhole.debug.ranges.vehicleWeapons'] !== true) {

@@ -16,6 +16,8 @@ test('declares real Planner migrations through the public SDK', async () => {
         settingIds: ['nixie.foxhole-planner.stats.scope', 'nixie.foxhole-planner.stats.interval'] }]);
     assert.equal(manifest.contributes.settingsPageSections.length, 7);
     assert.ok(manifest.development?.contributionOverrides.includes('foxhole-browser'));
+    assert.ok(manifest.development?.contributionOverrides.includes('foxhole.structure.lineOfSight'));
+    assert.equal(manifest.contributes.settings.find(setting => setting.id === 'foxhole.structure.lineOfSight')?.defaultValue, false);
     assert.ok(manifest.contributes.experimentalProducts?.some(product => product.id === 'facility.ammo-factory.icon'));
     assert.ok(manifest.contributes.experimentalProducts?.some(product => product.id === 'bunker.artillery-garrison.bunkbed'));
     assert.equal(manifest.contributes.experimentalProductProviders?.[0]?.systemId, 'products.assets');
@@ -38,6 +40,7 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.ok(manifest.contributes.experimentalResourceTemplates?.some(resource => resource.idPrefix === 'foxhole.asset.'));
     assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-icons'));
     assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-assets'));
+    assert.ok(manifest.contributes.experimentalRenderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('foxhole.structure.lineOfSight'));
     const placementWarnings = manifest.contributes.settings.find(setting => setting.id === 'nixie.foxhole-planner.debug.placementWarnings');
     assert.equal(placementWarnings?.defaultValue, false);
     assert.equal(placementWarnings?.accessibleInDev, true);

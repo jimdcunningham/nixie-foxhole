@@ -185,6 +185,6 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
         const source = range.firingVolume!;
         const eye = source.coverage ? source.origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(['x','y','z'] as const)[i]!] ?? 0))
             : volume.origin;
-        return [{ ...volume, alpha: 0.15, groundProjection: { lineOfSightOrigin: [...eye] as [number,number,number] } }];
+        return [{ ...volume, alpha: 0.15, groundProjection: settings['foxhole.structure.lineOfSight'] === true ? { lineOfSightOrigin: [...eye] as [number,number,number] } : {} }];
     });
 }

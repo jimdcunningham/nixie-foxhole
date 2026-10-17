@@ -163,7 +163,7 @@ test('direct-fire ground coverage uses component range frames and physical sight
     const appearance = { destroyed: false, packaged: false };
     for (const id of ['riflepillbox','mgpillbox','atpillbox','isgpillbox','rifleait1','rifleait2','rifleait3','mgait1','mgait2','mgait3','atgunait1','atgunait2','atgunait3']) {
         const asset = assets[id]!, before = structuredClone(asset);
-        const volumes = renderFoxholeStructureFiringVolumes(asset, {}, appearance);
+        const volumes = renderFoxholeStructureFiringVolumes(asset, { 'foxhole.structure.lineOfSight': true }, appearance);
         assert.ok(volumes.length, id);
         const range = asset.ranges!.find(range => range.firingVolume?.source === 'ai-turret')!;
         const source = range.firingVolume!;
@@ -213,4 +213,20 @@ test('pillbox inner clearance remains four metres in daytime and at midnight in 
     for(const id of ['rifleait1','rifleait2','rifleait3','mgait1','mgait2','mgait3','atgunait1','atgunait2','atgunait3'])
         assert.equal(assets[id]!.ranges![0]!.min??0,0,id+' must not inherit pillbox clearance');
     assert.equal(assets.artilleryait1!.ranges![0]!.min,25,'existing artillery minimum must survive');
+});
+
+
+test('existing Line of Sight preference controls model occlusion without changing range geometry', () => {
+    const asset = assets.mgpillbox!, appearance = { destroyed: false, packaged: false };
+    const off = renderFoxholeStructureFiringVolumes(asset, {}, appearance)[0]!;
+    assert.deepEqual(off.groundProjection, {});
+    assert.deepEqual(renderFoxholeStructureFiringVolumes(asset, { 'foxhole.structure.lineOfSight': false }, appearance)[0], off);
+    const on = renderFoxholeStructureFiringVolumes(asset, { 'foxhole.structure.lineOfSight': true }, appearance)[0]!;
+    assert.ok(on.groundProjection!.lineOfSightOrigin);
+    assert.deepEqual({ ...on, groundProjection: {} }, off);
+    const entity = { entityId: 'ai', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: 'mgpillbox' } }] };
+    for (const enabled of [false, true]) {
+        const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings: { 'foxhole.structure.lineOfSight': enabled } }));
+        assert.equal(Boolean(plan.experimentalSpatial!.volumes![0]!.groundProjection!.lineOfSightOrigin), enabled);
+    }
 });
