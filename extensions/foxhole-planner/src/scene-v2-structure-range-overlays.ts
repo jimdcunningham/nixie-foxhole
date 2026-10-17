@@ -116,26 +116,29 @@ export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMe
         return [];
     }
     const always: NixieExtensionRenderNodeV1[] = [], selected: NixieExtensionRenderNodeV1[] = [];
+    const projected = new Set(renderFoxholeStructureFiringVolumes(asset, settings, appearance).map(volume => Number(volume.id.match(/^firing-volume-(\d+)/)?.[1])));
     for (const [index, range] of (asset.ranges ?? []).entries()) {
         if (!isFoxholeStructureRangeVisible(range, settings, true, asset.isVehicle === true)) {
             continue;
         }
         const node = renderFoxholeStructureRange(range, `structure-range-${index}`, resolveFoxholeNightVisionRadius(asset, range, id => settings[id]));
         if (node) {
+            // Keep ordinary 2D artwork, but never draw its unoccluded fill over the spatial cross-section.
+            node.experimentalPresentation = { contractVersion: 1, groundOverlay: !projected.has(index) };
             (isFoxholeStructureRangeVisible(range, settings, false, asset.isVehicle === true) ? always : selected).push(node);
         }
     }
     return [[always, false], [selected, true]].flatMap(([children, selectionOnly], index) => (children as NixieExtensionRenderNodeV1[]).length
         ? [{
             id: index === 0 ? 'structure-ranges' : 'selected-structure-ranges', kind: 'group' as const, ...foxholeRenderLane(FOXHOLE_RANGE_RENDER_LANE),
-            experimentalPresentation: { contractVersion: 1 as const, groundOverlay: true, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
+            experimentalPresentation: { contractVersion: 1 as const, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
         }]
         : []);
 }
 
 
-/** AI uses source firing cones; mounted weapons retain independent source yaw/pitch envelopes. */
-export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
+/** Source envelopes remain available independently of their spatial presentation. */
+export function createFoxholeStructureFiringEnvelopes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
     appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialVolumeV1[] {
     if (appearance.destroyed || appearance.packaged || !asset.model) return [];
     return (asset.ranges ?? []).flatMap((range, index) => {
@@ -168,5 +171,20 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
             selectionOnly: !isFoxholeStructureRangeVisible(range,settings,false,asset.isVehicle === true),
             ...(night === null ? {} : { clipCylinder: { center: [0,0] as [number,number], radius: night * 32 } }),
         }));
+    });
+}
+
+/** Direct-fire coverage is a ground intersection, with model occlusion measured from the physical weapon.
+ * Indirect fire and anti-air retain authored ground bands: straight aiming rays are not landing trajectories.
+ */
+export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
+    appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialVolumeV1[] {
+    return createFoxholeStructureFiringEnvelopes(asset, settings, appearance).flatMap(volume => {
+        const index = Number(volume.id.match(/^firing-volume-(\d+)/)?.[1]), range = asset.ranges?.[index];
+        if (!range || ['killboxArty','killboxRocket','killboxAA'].includes(range.type)) return [];
+        const source = range.firingVolume!;
+        const eye = source.coverage ? source.origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(['x','y','z'] as const)[i]!] ?? 0))
+            : volume.origin;
+        return [{ ...volume, alpha: 0.15, groundProjection: { lineOfSightOrigin: [...eye] as [number,number,number] } }];
     });
 }

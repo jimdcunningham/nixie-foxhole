@@ -10,7 +10,8 @@ test('range visibility separates persistent and selected-only overlays without e
     const before = structuredClone(asset);
     const selected = renderFoxholeStructureRangeOverlays(asset, {}, { destroyed: false, packaged: false });
     assert.equal(selected[0]?.id, 'selected-structure-ranges');
-    assert.deepEqual(selected[0]?.experimentalPresentation, { contractVersion: 1, groundOverlay: true, excludeFromBounds: true, selectionOnly: true });
+    assert.deepEqual(selected[0]?.experimentalPresentation, { contractVersion: 1, excludeFromBounds: true, selectionOnly: true });
+    assert.equal(selected[0]?.kind === 'group' && selected[0].children[0]?.experimentalPresentation?.groundOverlay, true);
     const always = renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.artillery': true }, { destroyed: false, packaged: false });
     assert.equal(always[0]?.id, 'structure-ranges');
     assert.equal(renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.selectionOnly': false }, { destroyed: false, packaged: false }).length, 0);
@@ -41,7 +42,7 @@ test('spatial coverage retains existing category, selection, vehicle and nightti
             const groups = renderFoxholeStructureRangeOverlays(asset, settings, appearance);
             assert.equal(groups.length > 0, isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, true, false), `${type}:${JSON.stringify(settings)}`);
             for (const group of groups) {
-                assert.equal(group.experimentalPresentation?.groundOverlay, true);
+                assert.equal(group.kind === 'group' && group.children[0]?.experimentalPresentation?.groundOverlay, true);
                 assert.equal(group.experimentalPresentation?.selectionOnly, !isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, false, false));
             }
             assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: groups } }));
@@ -49,7 +50,7 @@ test('spatial coverage retains existing category, selection, vehicle and nightti
     }
 });
 
-import { renderFoxholeStructureFiringVolumes } from '../src/scene-v2-structure-range-overlays.ts';
+import { renderFoxholeStructureFiringVolumes, createFoxholeStructureFiringEnvelopes } from '../src/scene-v2-structure-range-overlays.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 
 test('source-backed mounted envelopes use ground-aligned height and existing category/selection gates', () => {
@@ -94,7 +95,7 @@ test('AI uses firing cones with the existing category, selection and nighttime s
     assert.equal(renderFoxholeStructureFiringVolumes(asset,{...night,'foxhole.ranges.poweredSpotlights':false},appearance)[0]!.clipCylinder!.radius,15*32);
     for(const [codeName,type] of [['ArtilleryAIT1','killboxArty'],['CoastalGun','killboxAT'],['AANavalTurret','killboxAA']]){
         const exception={...asset,codeName,ranges:asset.ranges!.map(range=>({...range,type}))};
-        assert.equal(renderFoxholeStructureFiringVolumes(exception,night,appearance)[0]!.clipCylinder,undefined);
+        assert.equal(createFoxholeStructureFiringEnvelopes(exception,night,appearance)[0]!.clipCylinder,undefined);
     }
     assert.equal(renderFoxholeStructureFiringVolumes(asset,night,{destroyed:true,packaged:false}).length,0);
     assert.equal(renderFoxholeStructureFiringVolumes(asset,night,{destroyed:false,packaged:true}).length,0);
@@ -106,7 +107,7 @@ test('AI uses firing cones with the existing category, selection and nighttime s
 
 test('AI artillery cones retain minimum ranges and the nighttime exception',()=>{
     for(const id of ['artilleryait1','artilleryait2','artilleryait3']){
-        const cone=renderFoxholeStructureFiringVolumes(assets[id]!,{'foxhole.ranges.nighttime':true},{destroyed:false,packaged:false})[0];
+        const cone=createFoxholeStructureFiringEnvelopes(assets[id]!,{'foxhole.ranges.nighttime':true},{destroyed:false,packaged:false})[0];
         assert.ok(cone?.kind==='cone');assert.equal(cone.halfAngle,60);assert.equal(cone.minRadius,25*32);
         assert.equal(cone.clipCylinder,undefined);
     }
@@ -136,16 +137,16 @@ test('rocket salvos use independent firing-ready muzzle origins and calibrated s
         assert.ok(Math.abs(source.maxPitch-span)<0.01,id);
         const [x,y,z,w]=source.orientation;
         assert.ok(Math.abs(Math.asin(2*(x*z-w*y))*180/Math.PI-physicalPitch)<0.01,id);
-        const all=renderFoxholeStructureFiringVolumes(asset,settings,appearance);
+        const all=createFoxholeStructureFiringEnvelopes(asset,settings,appearance);
         const volumes=all.filter(volume=>volume.id.includes('-muzzle-'));
         assert.equal(volumes.length,count,id);
         assert.equal(new Set(volumes.map(volume=>volume.origin.join(','))).size,count,id);
         assert.ok(Math.abs(Math.pow(1-volumes[0]!.alpha,count)-0.9)<1e-12,'salvo opacity compounds');
         assert.ok(volumes.every(volume=>volume.selectionOnly));
-        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{...settings,'foxhole.ranges.nighttime':true},appearance),all);
-        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{},appearance),[]);
-        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:true,packaged:false}),[]);
-        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:false,packaged:true}),[]);
+        assert.deepEqual(createFoxholeStructureFiringEnvelopes(asset,{...settings,'foxhole.ranges.nighttime':true},appearance),all);
+        assert.deepEqual(createFoxholeStructureFiringEnvelopes(asset,{},appearance),[]);
+        assert.deepEqual(createFoxholeStructureFiringEnvelopes(asset,settings,{destroyed:true,packaged:false}),[]);
+        assert.deepEqual(createFoxholeStructureFiringEnvelopes(asset,settings,{destroyed:false,packaged:true}),[]);
         volumes.forEach((volume,index)=>source.muzzleOrigins![index]!.forEach((value,axis)=>{
             const offset=asset.model!.blueprintOrigin?.[(['x','y','z'] as const)[axis]!]??0;
             assert.ok(Math.abs(volume.origin[axis]!-(value*32+offset))<1e-7,id);
@@ -156,6 +157,29 @@ test('rocket salvos use independent firing-ready muzzle origins and calibrated s
     const truck=assets.truckmultic!;
     assert.deepEqual([truck.ranges![0]!.min,truck.ranges![0]!.max],[375,500],'2D coverage changed');
     assert.equal(truck.ranges![0]!.firingVolume!.payloadPose!.inputPitch,65,'native animation input was rewritten as a physical angle');
+});
+
+test('direct-fire ground coverage uses component range frames and physical sight origins without duplicate spatial fills', () => {
+    const appearance = { destroyed: false, packaged: false };
+    for (const id of ['riflepillbox','mgpillbox','atpillbox','isgpillbox','rifleait1','rifleait2','rifleait3','mgait1','mgait2','mgait3','atgunait1','atgunait2','atgunait3']) {
+        const asset = assets[id]!, before = structuredClone(asset);
+        const volumes = renderFoxholeStructureFiringVolumes(asset, {}, appearance);
+        assert.ok(volumes.length, id);
+        const range = asset.ranges!.find(range => range.firingVolume?.source === 'ai-turret')!;
+        const source = range.firingVolume!;
+        assert.deepEqual(volumes[0]!.groundProjection!.lineOfSightOrigin, source.origin.map((v,i) => v * 32 + (asset.model!.blueprintOrigin?.[(['x','y','z'] as const)[i]!] ?? 0)), id);
+        const groups = renderFoxholeStructureRangeOverlays(asset, {}, appearance);
+        const node = groups.flatMap(group => group.kind === 'group' ? group.children : []).find(node => node.id === `structure-range-${asset.ranges!.indexOf(range)}`)!;
+        assert.equal(node.experimentalPresentation?.groundOverlay, false, id);
+        assert.deepEqual(asset, before);
+    }
+    for (const id of ['artilleryait1','truckmultic']) {
+        const asset = assets[id]!, settings = { 'foxhole.debug.ranges.vehicleWeapons': true };
+        const volumes = renderFoxholeStructureFiringVolumes(asset, settings, appearance);
+        assert.ok(volumes.every(volume => !volume.id.includes('-muzzle-')), id + ' must not show a straight salvo volume');
+        const groups = renderFoxholeStructureRangeOverlays(asset, settings, appearance);
+        assert.ok(groups.flatMap(group => group.kind === 'group' ? group.children : []).some(node => node.experimentalPresentation?.groundOverlay), id);
+    }
 });
 
 test('AI coverage uses its component frame while physical muzzle metadata stays independent', () => {

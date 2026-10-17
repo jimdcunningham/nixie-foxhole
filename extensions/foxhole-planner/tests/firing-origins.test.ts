@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
-import { renderFoxholeStructureFiringVolumes } from '../src/scene-v2-structure-range-overlays.ts';
+import { createFoxholeStructureFiringEnvelopes } from '../src/scene-v2-structure-range-overlays.ts';
 
 test('AI coverage uses component origins without discarding physical muzzle coordinates', () => {
     const expected: Record<string, readonly [number, number, number]> = {
@@ -15,8 +15,8 @@ test('AI coverage uses component origins without discarding physical muzzle coor
         const asset=assets[id]!, source=asset.ranges!.find(range=>range.firingVolume)!.firingVolume!;
         assert.ok(source.originSource==='muzzle-component' || source.originSource==='gun-bone',id);
         origin.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<0.0001,`${id} source axis ${i}`));
-        const volume=renderFoxholeStructureFiringVolumes(asset,{}, {destroyed:false,packaged:false})[0]!;
-        assert.ok(volume,`${id} must render its source-backed AI volume`);
+        const volume=createFoxholeStructureFiringEnvelopes(asset,{}, {destroyed:false,packaged:false})[0]!;
+        assert.ok(volume,`${id} must retain its source-backed AI envelope`);
         const offset=asset.model!.blueprintOrigin!;
         const frame=source.source==='ai-turret'?source.coverage!:source;
         assert.ok(frame,id+' needs a coverage frame');
@@ -33,7 +33,7 @@ test('tankette gun sockets face forward and do not inherit stale ground-range ce
         assert.ok(Math.abs(source.origin[1]-0.28763)<0.001,id);
         assert.ok(Math.abs(source.orientation[3])>0.99999,`${id} must not acquire a quarter turn`);
         assert.ok(Math.abs(source.origin[0]-(asset.ranges![0]!.x??0))>1,'seat position must not replace the gun');
-        const volume=renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false})[0]!;
+        const volume=createFoxholeStructureFiringEnvelopes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false})[0]!;
         assert.ok(volume);
         assert.ok(Math.abs(volume.origin[0]-source.origin[0]*32)<0.0001);
     }
@@ -58,7 +58,7 @@ test('recovered shared-skeleton and legacy guns retain distinct source muzzle bi
             assert.ok(source,`${id}: missing ${name}`);
             assert.ok(source.originSource==='muzzle-socket'||source.originSource==='muzzle-component',id);
         }
-        assert.ok(renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false}).length>=names.length,id);
+        assert.ok(createFoxholeStructureFiringEnvelopes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false}).length>=names.length,id);
     }
     for(const range of assets.mech!.ranges!) if(range.firingVolume) assert.ok(range.firingVolume.origin[2]>1,'mech muzzle fell back to an uninitialized component');
     const boat=assets.mediumboatw!.ranges!.flatMap(range=>range.firingVolume??[]);
@@ -96,8 +96,8 @@ test('remaining initialization-bound guns retain their source origins and launch
             count++;
         }
         const appearance={destroyed:false,packaged:false};
-        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{},appearance),[],'vehicle debug gate must stay closed');
-        assert.ok(renderFoxholeStructureFiringVolumes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},appearance).length>=frames.length,id);
+        assert.deepEqual(createFoxholeStructureFiringEnvelopes(asset,{},appearance),[],'vehicle debug gate must stay closed');
+        assert.ok(createFoxholeStructureFiringEnvelopes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},appearance).length>=frames.length,id);
     }
     assert.equal(count,14);
     for(const [id,forward] of [['armoredcar2multiw',1],['truckmultic',1],['gunboat2c',-1]] as const) {
