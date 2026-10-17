@@ -152,11 +152,15 @@ export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMe
                 ? { kind: 'angular-envelope' as const, yaw: [source.minYaw,source.maxYaw] as [number,number], pitch: [source.minPitch,source.maxPitch] as [number,number] } : null;
         if (!shape) return [];
         const night = resolveFoxholeNightVisionRadius(asset,range,id => settings[id]);
-        return [{ id: `firing-volume-${index}`, ...shape,
-            origin: source.origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(["x","y","z"] as const)[i]!] ?? 0)) as [number,number,number], orientation: [...source.orientation] as [number,number,number,number],
-            minRadius: min, maxRadius: max, color: foxholeStructureRangeColor(range.type), alpha: 0.10,
+        const origins = source.muzzleOrigins ?? [source.origin];
+        if (!origins.length || origins.length > 32 || origins.some(origin => origin.length !== 3 || !origin.every(Number.isFinite))) return [];
+        // Keep the combined opacity of an overlapping salvo equal to one weapon envelope.
+        const alpha = origins.length === 1 ? 0.10 : 1 - Math.pow(1 - 0.10, 1 / origins.length);
+        return origins.map((origin, muzzleIndex) => ({ id: source.muzzleOrigins ? `firing-volume-${index}-muzzle-${muzzleIndex}` : `firing-volume-${index}`, ...shape,
+            origin: origin.map((v,i) => v * 32 + (asset.model?.blueprintOrigin?.[(["x","y","z"] as const)[i]!] ?? 0)) as [number,number,number], orientation: [...source.orientation] as [number,number,number,number],
+            minRadius: min, maxRadius: max, color: foxholeStructureRangeColor(range.type), alpha,
             selectionOnly: !isFoxholeStructureRangeVisible(range,settings,false,asset.isVehicle === true),
             ...(night === null ? {} : { clipCylinder: { center: [0,0] as [number,number], radius: night * 32 } }),
-        }];
+        }));
     });
 }

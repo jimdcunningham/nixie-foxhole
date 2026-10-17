@@ -119,3 +119,41 @@ test('unresolved weapon positions keep ground coverage without inventing a 3D mu
     assert.deepEqual(renderFoxholeStructureFiringVolumes(unknown,{},appearance),[]);
     assert.ok(renderFoxholeStructureRangeOverlays(unknown,{},appearance).length>0);
 });
+
+test('rocket salvos use independent firing-ready muzzle origins and calibrated source pitch', () => {
+    const appearance={destroyed:false,packaged:false};
+    const settings={'foxhole.debug.ranges.vehicleWeapons':true};
+    for(const [id,count,physicalPitch,span,requiresDeployment] of [
+        ['armoredcar2multiw',10,15,10,true],['truckmultic',16,26,6,true],['gunboat2c',6,20,15,false],
+    ] as const) {
+        const asset=assets[id]!;
+        const range=asset.ranges!.find(range=>range.firingVolume?.payloadPose)!;
+        const source=range.firingVolume!;
+        assert.ok(source.source==='mount-dynamic-data');
+        assert.equal(source.muzzleOrigins?.length,count,id);
+        assert.equal(source.payloadPose?.requiresDeployment,requiresDeployment,id);
+        assert.equal(source.minPitch,0,'source frame already includes firing-ready elevation');
+        assert.ok(Math.abs(source.maxPitch-span)<0.01,id);
+        const [x,y,z,w]=source.orientation;
+        assert.ok(Math.abs(Math.asin(2*(x*z-w*y))*180/Math.PI-physicalPitch)<0.01,id);
+        const all=renderFoxholeStructureFiringVolumes(asset,settings,appearance);
+        const volumes=all.filter(volume=>volume.id.includes('-muzzle-'));
+        assert.equal(volumes.length,count,id);
+        assert.equal(new Set(volumes.map(volume=>volume.origin.join(','))).size,count,id);
+        assert.ok(Math.abs(Math.pow(1-volumes[0]!.alpha,count)-0.9)<1e-12,'salvo opacity compounds');
+        assert.ok(volumes.every(volume=>volume.selectionOnly));
+        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{...settings,'foxhole.ranges.nighttime':true},appearance),all);
+        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,{},appearance),[]);
+        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:true,packaged:false}),[]);
+        assert.deepEqual(renderFoxholeStructureFiringVolumes(asset,settings,{destroyed:false,packaged:true}),[]);
+        volumes.forEach((volume,index)=>source.muzzleOrigins![index]!.forEach((value,axis)=>{
+            const offset=asset.model!.blueprintOrigin?.[(['x','y','z'] as const)[axis]!]??0;
+            assert.ok(Math.abs(volume.origin[axis]!-(value*32+offset))<1e-7,id);
+        }));
+        assert.doesNotThrow(()=>parseNixieExtensionRenderPlanV1({schemaVersion:1,root:{id:'root',kind:'group',children:[]},
+            experimentalSpatial:{contractVersion:1,nodes:[],supplementModel:true,volumes:all}}));
+    }
+    const truck=assets.truckmultic!;
+    assert.deepEqual([truck.ranges![0]!.min,truck.ranges![0]!.max],[375,500],'2D coverage changed');
+    assert.equal(truck.ranges![0]!.firingVolume!.payloadPose!.inputPitch,65,'native animation input was rewritten as a physical angle');
+});

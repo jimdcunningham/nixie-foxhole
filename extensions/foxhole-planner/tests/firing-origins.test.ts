@@ -78,9 +78,9 @@ test('remaining initialization-bound guns retain their source origins and launch
         aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',-0.00393,6.16677,0.28913]],
         aircraftdivec:[['S_AircraftDiveC_Muzzle_L',0.06061,2.0636,0.9044]],
         aircraftbomberc:[['S_Muzzle_Fore_0',0,-7.11152,0.46479],['S_Muzzle_Mid_0',0.00005,7.46581,1.46248],['S_Muzzle_Aft_0',-0.01029,15.62941,0.23921]],
-        armoredcar2multiw:[['PayloadInstancedStaticMesh',-1.79493,-0.56515,0.9297]],
-        truckmultic:[['PayloadInstancedStaticMesh',-3.57564,1.52788,0.99559]],
-        gunboat2c:[['PayloadInstancedStaticMesh',-4.64533,-1.2613,4.94592]],
+        armoredcar2multiw:[['PayloadInstancedStaticMesh',-1.73084,-0.56515,0.8299]],
+        truckmultic:[['PayloadInstancedStaticMesh',-4.00573,1.52788,1.1481]],
+        gunboat2c:[['PayloadInstancedStaticMesh',-4.47388,-1.2613,5.07751]],
     };
     let count=0;
     for(const [id,frames] of Object.entries(expected)) {
@@ -99,6 +99,8 @@ test('remaining initialization-bound guns retain their source origins and launch
     assert.equal(count,14);
     for(const [id,forward] of [['armoredcar2multiw',1],['truckmultic',1],['gunboat2c',-1]] as const) {
         const q=assets[id]!.ranges!.find(range=>range.firingVolume)?.firingVolume!.orientation!;
-        assert.ok(Math.abs(1-2*(q[1]*q[1]+q[2]*q[2])-forward)<0.0001,`${id}: visual mesh rotation changed firing direction`);
+        const x=1-2*(q[1]*q[1]+q[2]*q[2]);
+        assert.equal(Math.sign(x),forward,`${id}: visual mesh rotation changed firing direction`);
+        assert.ok(Math.abs(x)>0.8,`${id}: source firing-ready pose lost its forward axis`);
     }
 });
