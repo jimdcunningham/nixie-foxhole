@@ -94,6 +94,7 @@ for (const id of ids) {
     assert.deepEqual(after.document.asset.extras.nixieModelParts, parts, 'Manifest/GLB dependency mismatch: ' + id);
     assert.deepEqual(after.document.asset.extras.nixieModelAnchor, before.document.asset.extras.nixieModelAnchor, 'Anchor changed: ' + id);
     assert.equal(after.sha256, metadata.sha256, 'Host bytes do not match manifest: ' + id);
+    assert.deepEqual(after.document.asset.extras.nixieStructuralProfile, before.document.asset.extras.nixieStructuralProfile, 'Structural visibility profile changed: ' + id);
     const sourcePattern = /^facility/.test(id) ? /PowerLineAttachment/i : /FortT2Wall01/i;
     assert.ok(!(after.document.meshes ?? []).some(mesh => sourcePattern.test(mesh.name)), 'Redundant embedded shared mesh: ' + id);
     const originalWorlds = worldNodes(before), originalBounds = [];
@@ -142,6 +143,7 @@ for (const id of ids) {
             assert.ok(!after.images.some(image => hashes.has(image.sha256)), 'Redundant embedded connector image: ' + id);
         }
     }
+    assert.equal(originalBounds.length, 0, 'Original shared placements were not all replaced: ' + id);
     report.assets[id] = { beforeBytes: before.bytes, afterBytes: after.bytes, afterSha256: after.sha256, placements: parts.parts.length, maximumPlacementBoundsErrorMetres: Math.max(...placementErrors),
         beforeDecodedGeometryBytes: before.decodedGeometryBytes, afterDecodedGeometryBytes: after.decodedGeometryBytes,
         beforeImages: before.images, afterImages: after.images };

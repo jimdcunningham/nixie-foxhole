@@ -50,3 +50,26 @@ test('incremental publication restores prepassed dependencies for later distinct
     manifest.sharedParts = mergeSharedPartPublications(manifest, publications);
     assert.deepEqual(Object.keys(manifest.sharedParts), ['a', 'b']);
 });
+
+test('four bounded bunker hosts repeat one canonical wall with distinct authored placements', async () => {
+    const input = fixture();
+    input.assets.meshes[0].exportUrl = 'War/Content/Meshes/Structures/FortTrenches/FortT2Wall01.glb';
+    const wall = input.scene.roots[0].children[0];
+    input.scene.roots[0].children.push({ ...structuredClone(wall), id: 'mirrored-wall', scale: [-1, 1, 1],
+        unrealLocationCentimeters: [250, -250, -160], unrealRotationDegrees: [0, 90, 0] });
+    const canonical = new Set();
+    for (const host of ['fortt2', 'fortcornert2', 'mgait2', 'atgunait2']) {
+        const result = await prepareSpatialSharedParts(host, input, options());
+        assert.equal(result.parts.length, 2);
+        assert.deepEqual(result.document.scene.roots[0].children[1].scale, [-1, 1, 1]);
+        assert.deepEqual(result.parts.map(part => part.nodeName), ['shared-part-0000', 'shared-part-0001']);
+        result.parts.forEach(part => canonical.add(part.id));
+    }
+    assert.equal(canonical.size, 1);
+    assert.equal((await prepareSpatialSharedParts('fortt3', input, options())).parts.length, 0);
+});
+test('shared source subtrees fail explicitly instead of dropping authored children', async () => {
+    const input = fixture();
+    input.scene.roots[0].children[0].children.push({ id: 'attached-model', meshId: 'other', children: [] });
+    await assert.rejects(prepareSpatialSharedParts('facilityrefinery1', input, options()), /static source leaf/);
+});

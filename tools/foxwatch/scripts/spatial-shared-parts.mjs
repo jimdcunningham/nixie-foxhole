@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 
 const connectorAssets = new Set(['facilityrefinery1', 'facilityfactoryaircraft', 'facilityfactoryammo', 'facilityvehiclefactory1', 'facilitycrane']);
-const sourcePath = 'War/Content/Meshes/Structures/PowerLineAttachment.glb';
+const wallAssets = new Set(['fortt2', 'fortcornert2', 'mgait2', 'atgunait2']);
+const connectorSourcePath = 'War/Content/Meshes/Structures/PowerLineAttachment.glb';
+const wallSourcePath = 'War/Content/Meshes/Structures/FortTrenches/FortT2Wall01.glb';
 export const MAX_SHARED_MODEL_PARTS = 128;
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
     ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, stable(entry)])) : value;
@@ -9,15 +11,16 @@ export const sharedPartDigest = value => createHash('sha256').update(JSON.string
 
 /** Keep a bounded source-backed trial; no mesh-name-only catalog rollout. */
 export async function prepareSpatialSharedParts(assetId, input, { dependencies, settings }) {
-    if (!connectorAssets.has(assetId)) return { document: input, parts: [] };
+    const sourcePath = connectorAssets.has(assetId) ? connectorSourcePath : wallAssets.has(assetId) ? wallSourcePath : undefined;
+    if (!sourcePath) return { document: input, parts: [] };
     const document = structuredClone(input), parts = [], assets = new Map((document.assets?.meshes ?? []).map(mesh => [mesh.id, mesh]));
     let ordinal = 0;
     const visit = async (node, visible = true) => {
         visible &&= node.visible !== false;
         const mesh = assets.get(node.meshId);
         if (visible && mesh && (mesh.exportUrl || mesh.sourcePath) === sourcePath) {
-            if (node.pose || node.poseVariants || node.attachBoneName || node.debugColor || node.variantIds?.length)
-                throw Error('Shared model trial requires an unposed static source: ' + node.id);
+            if (node.pose || node.poseVariants || node.attachBoneName || node.debugColor || node.variantIds?.length || node.children?.length)
+                throw Error('Shared model trial requires an unposed static source leaf: ' + node.id);
             const canonicalMesh = { ...mesh, id: 'shared-source' };
             const canonical = {
                 structure: { id: 'shared-part', name: 'Shared Part' },

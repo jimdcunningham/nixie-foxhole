@@ -188,3 +188,33 @@ That lets it consume both existing bridge placeholder textures and future FoxWat
 - Icon sizing is no longer a separate Blender mode; publish derives rendered icons from preview PNG masters.
 
 The next FoxWatch-side step is to populate `scene.roots`, `assets.meshes`, and `assets.materials` with real extracted data so Blender can stop using placeholder planes.
+
+
+### Bounded shared spatial model parts
+
+The spatial publisher exports one canonical local-space power connector for
+`facilityrefinery1,facilityfactoryaircraft,facilityfactoryammo,facilityvehiclefactory1,facilitycrane`
+and one canonical `FortT2Wall01` for `fortt2,fortcornert2,mgait2,atgunait2`.
+These explicit source/host pairs are a trial; other models retain the existing
+self-contained GLB behavior. Posed sources, modified mesh geometry, and authored
+source subtrees fail explicitly rather than silently sharing incompatible parts.
+
+Run focused groups with
+`node tools/foxwatch/scripts/publish-spatial-models.mjs --only=<comma-separated-hosts> --spatial-workers=1`.
+The coordinator verifies mesh/material/texture dependency hashes and exports each
+canonical mini scene before workers start. Generated canonical GLBs live under
+the separate assets checkout's `shared/models/`; `models/manifest.v1.json` lists
+them in `sharedParts`. Host metadata and GLB `asset.extras.nixieModelParts` bind
+those owner-local resources to transformed empty nodes. Each part is a leaf;
+the original host bounds, semantic groups, and saved asset IDs remain authoritative.
+
+Preserve the original representative GLBs in an ignored evidence directory before
+regenerating. Then run
+`node tools/foxwatch/scripts/verify-spatial-shared-parts.mjs --only=<hosts> --baseline-root=<original-glb-directory> --report=<report-json>`.
+The check rejects redundant embedded shared meshes, mismatched resource hashes,
+changed anchors/structural profiles/material payloads, missing placeholders, and
+decoded placement bounds differing from the original by more than 3 mm.
+Connector images must disappear from host GLBs. Wall materials can remain where
+other host geometry still uses them; the report measures this residual separately.
+Reported decoded geometry and estimated RGBA8 texture bytes are resource estimates,
+not frame-time or live GPU measurements.
