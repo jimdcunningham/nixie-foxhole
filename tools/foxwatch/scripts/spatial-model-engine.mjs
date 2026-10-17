@@ -1,4 +1,5 @@
 import { spatialModelPath } from './spatial-model-paths.mjs';
+import { prepareSpatialSharedParts, sharedModelPath } from './spatial-shared-parts.mjs';
 import { attachSpatialBlueprintLights } from './spatial-blueprint-lights.mjs';
 import { prepareSpatialTrenchScene, spatialTrenchProfile } from './spatial-trench-profiles.mjs';
 import { readFile, writeFile, mkdir, realpath, readdir } from 'node:fs/promises';
@@ -55,7 +56,7 @@ export async function createSpatialModelExporter(options) {
     const sourceFiles = (await readdir(resolve(foxwatchRoot, 'blender')))
         .filter(name => name.endsWith('.py') && !name.startsWith('test_'))
         .map(name => resolve(foxwatchRoot, 'blender', name));
-    sourceFiles.push(...['spatial-model-engine.mjs', 'spatial-model-paths.mjs', 'spatial-export-catalog.mjs',
+    sourceFiles.push(...['spatial-model-engine.mjs', 'spatial-model-paths.mjs', 'spatial-shared-parts.mjs', 'spatial-export-catalog.mjs',
         'spatial-export-policy.mjs', 'spatial-blueprint-lights.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs',
         'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs', 'modification-storage-policy.mjs']
         .map(name => resolve(foxwatchRoot, 'scripts', name)));
@@ -65,6 +66,12 @@ export async function createSpatialModelExporter(options) {
         sourceFiles, versions);
     const legacy = await legacySpatialCache(cache.directory, sourceFiles, versions, resolve(foxwatchRoot, 'scripts/spatial-cache-compatibility.json'));
     const dependencies = new SpatialDependencies(sourceRoot);
+    const pipelineSha256 = createHash('sha256');
+    for (const path of sourceFiles) pipelineSha256.update(await readFile(path));
+    const sharedOptions = { dependencies, settings: { geometryProfile, maxTextureSize: config.maxTextureSize,
+        webpQuality: config.webpQuality, versions, pipelineSha256: pipelineSha256.digest('hex') } };
+    const canonicalPublications = new Map();
+    const availableSharedParts = options.sharedParts ?? {};
     const preparedStructures = new Map();
     const structuralSharedIds = new Map();
     try {
@@ -102,23 +109,28 @@ export async function createSpatialModelExporter(options) {
         return JSON.stringify({ scene: filtered.scene, assets: filtered.assets.meshes.filter(mesh => meshIds.has(mesh.id)) });
     }
 
-    async function exportRaw(id, scenePath, slice) {
+    async function exportRaw(id, scenePath, slice, canonical = false) {
         const path = resolve(temporaryRoot, `${id}.glb`);
         const preparedPath = resolve(temporaryRoot, `${id}.scene.json`);
         const original = JSON.parse(await readFile(scenePath, 'utf8'));
-        await writeJsonAtomic(preparedPath, prepareSpatialConnectorScene(id.split('.')[0], preparedStructures.get(id) ?? original));
+        const prepared = canonical ? { document: original, parts: [] }
+            : await prepareSpatialSharedParts(id.split('.')[0], prepareSpatialConnectorScene(id.split('.')[0], preparedStructures.get(id) ?? original), sharedOptions);
+        for (const part of prepared.parts) if (!availableSharedParts[part.id])
+            throw Error('Missing canonical shared-part publication: ' + part.resourceId);
+        await writeJsonAtomic(preparedPath, prepared.document);
         if (!args.includes('--repack-existing')) await run(blender, ['--background', '--threads', '2', '--python-exit-code', '1', '--python',
             resolve(foxwatchRoot, 'blender/export_scene_model.py'), '--', '--foxwatch-root', foxwatchRoot, '--asset-root', sourceRoot,
-            '--scene', preparedPath, '--slice', slice, '--max-texture-size', String(config.maxTextureSize), '--output', path, '--temp-dir', temporaryRoot]);
+            '--scene', preparedPath, '--slice', slice, ...(canonical ? ['--canonical-part'] : []), '--max-texture-size', String(config.maxTextureSize), '--output', path, '--temp-dir', temporaryRoot]);
         return { bytes: await readFile(path), exported: JSON.parse(await readFile(`${path}.json`, 'utf8')) };
     }
     async function publish(id, asset, scenePath, raw, groundReference, assembly) {
         const { bytes, exported } = raw;
+        const shared = id.startsWith('shared.');
         const jsonLength = bytes.readUInt32LE(12);
         const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
         const binary = bytes.subarray(28 + jsonLength);
-        const pathProfile = spatialTrenchProfile(preparedStructures.get(asset.id) ?? {}, document, exported) ?? spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
-        const structuralProfile = spatialStructureProfile(preparedStructures.get(id) ?? {}, exported);
+        const pathProfile = shared ? undefined : spatialTrenchProfile(preparedStructures.get(asset.id) ?? {}, document, exported) ?? spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
+        const structuralProfile = shared ? undefined : spatialStructureProfile(preparedStructures.get(id) ?? {}, exported);
         const lightCount = attachSpatialBlueprintLights(document, exported);
         const geometryOptimization = pruneUnusedStaticGltfUvs(document);
         const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
@@ -149,8 +161,8 @@ export async function createSpatialModelExporter(options) {
         const center = exported.boundsCenterMeters;
         if (!center?.every(Number.isFinite) || !Number.isFinite(groundZ)) throw new Error(`Invalid authored origin: ${id}`);
         const anchor = { version: 1, ...exported.sceneDimensions, offsetX: center[0] * 32, offsetY: -center[1] * 32, offsetZ: (center[2] - groundZ) * 32 };
-        document.asset.extras = { ...document.asset.extras, nixieModelAnchor: anchor,
-            nixieBlueprintOrigin: { version: 1, x: 0, y: 0, z: -groundZ * 32 }, ...(structuralProfile ? { nixieStructuralProfile: structuralProfile } : {}), ...(assembly ? { nixieModelAssembly: assembly } : {}) };
+        document.asset.extras = shared ? {} : { ...document.asset.extras, nixieModelAnchor: anchor,
+            nixieBlueprintOrigin: { version: 1, x: 0, y: 0, z: -groundZ * 32 }, ...(structuralProfile ? { nixieStructuralProfile: structuralProfile } : {}), ...(assembly ? { nixieModelAssembly: assembly } : {}), ...(exported.modelParts ? { nixieModelParts: exported.modelParts } : {}) };
         let json = Buffer.from(JSON.stringify(document));
         json = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4, 32)]);
         const header = Buffer.alloc(20);
@@ -159,12 +171,14 @@ export async function createSpatialModelExporter(options) {
         const binHeader = Buffer.alloc(8); binHeader.writeUInt32LE(packed.length); binHeader.writeUInt32LE(0x004e4942, 4);
         const glb = Buffer.concat([header, json, binHeader, packed]);
         if (glb.length > 32 * 1024 * 1024 || compression.decodedGeometryBytes > 128 * 1024 * 1024) throw new Error(`Model exceeds bounded resource limits: ${id} (${glb.length} bytes)`);
-        const outputPath = resolve(outputRoot, spatialModelPath(asset, id));
+        const modelPath = shared ? sharedModelPath(id) : spatialModelPath(asset, id);
+        const outputPath = resolve(outputRoot, modelPath);
         await mkdir(dirname(outputPath), { recursive: true });
         await writeFile(outputPath, glb);
         console.log(`Published ${id}: ${glb.length} bytes; meshopt saved ${compression.bytesSaved}`);
-        return { ...(structuralProfile ? { structuralProfile } : {}), ...(pathProfile ? { pathProfile } : {}), assetId: asset.id, codeName: asset.codeName, resourceId: `foxhole.model.${id}`, path: spatialModelPath(asset, id),
-            ...exported.sceneDimensions, offsetX: anchor.offsetX, offsetY: anchor.offsetY, offsetZ: anchor.offsetZ,
+        return { ...(structuralProfile ? { structuralProfile } : {}), ...(pathProfile ? { pathProfile } : {}), ...(shared ? {} : { assetId: asset.id, codeName: asset.codeName }), resourceId: `foxhole.model.${id}`, path: modelPath,
+            ...exported.sceneDimensions, offsetX: shared ? 0 : anchor.offsetX, offsetY: shared ? 0 : anchor.offsetY, offsetZ: shared ? 0 : anchor.offsetZ,
+            ...(exported.modelParts ? { modelParts: exported.modelParts } : {}),
             blueprintOrigin: { x: 0, y: 0, z: -groundZ * 32 }, groundReference: groundReference ?? { zMetres: 0, basis: 'blueprint-origin' },
             lightCount, triangles: compression.precisionOptimization?.triangles ?? exported.triangles, ...geometryOptimization, meshoptBytesSaved: compression.bytesSaved,
             ...(compression.precisionOptimization ? { geometryProfile, precisionOptimization: compression.precisionOptimization } : {}),
@@ -172,6 +186,33 @@ export async function createSpatialModelExporter(options) {
             bytes: glb.length, sha256: createHash('sha256').update(glb).digest('hex'),
             source: { sceneSha256: createHash('sha256').update(await readFile(scenePath)).digest('hex'), unitsPerMetre: 32,
                 maxTextureSize: config.maxTextureSize, webpQuality: config.webpQuality } };
+    }
+    // The coordinator runs this once before starting workers. Its promise map coalesces
+    // repeated sources across the selected hosts without parallel Blender exports.
+    async function exportSharedParts(ids) {
+        for (const assetId of ids) {
+            const scenePath = resolve(sceneRoot, assetId, 'scene.json');
+            let input;
+            try { input = JSON.parse(await readFile(scenePath, 'utf8')); }
+            catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+            const prepared = await prepareSpatialSharedParts(assetId, prepareSpatialConnectorScene(assetId, input), sharedOptions);
+            for (const part of prepared.parts) {
+                if (!canonicalPublications.has(part.id)) canonicalPublications.set(part.id, (async () => {
+                    const canonicalPath = resolve(temporaryRoot, part.id + '.source.scene.json');
+                    await writeJsonAtomic(canonicalPath, part.canonical);
+                    const asset = { id: part.id, codeName: 'shared-part' };
+                    const identity = cache.identity(part.id, [{ document: part.canonical, settings: sharedOptions.settings }], sharedOptions.settings,
+                        [resolve(outputRoot, sharedModelPath(part.id))]);
+                    const cached = force ? null : await cache.lookup(identity);
+                    if (cached) return cached;
+                    const published = await publish(part.id, asset, canonicalPath, await exportRaw(part.id, canonicalPath, 'whole', true));
+                    await cache.record(identity, published);
+                    return published;
+                })());
+                availableSharedParts[part.id] = await canonicalPublications.get(part.id);
+            }
+        }
+        return availableSharedParts;
     }
     const descriptor = metadata => Object.fromEntries(['resourceId', 'width', 'height', 'depth', 'offsetX', 'offsetY', 'offsetZ'].map(key => [key, metadata[key]]));
 
@@ -309,5 +350,5 @@ export async function createSpatialModelExporter(options) {
         });
     }
 
-    return { exportAsset, cancel() { for(const child of activeChildren) child.kill(); } };
+    return { exportAsset, exportSharedParts, cancel() { for(const child of activeChildren) child.kill(); } };
 }

@@ -21,6 +21,7 @@ parser.add_argument("--output", required=True)
 parser.add_argument("--temp-dir", required=True)
 parser.add_argument("--slice", choices=["whole", "base", "upgrade"], default="whole")
 parser.add_argument("--max-texture-size", type=int, default=1024)
+parser.add_argument("--canonical-part", action="store_true")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
 os.makedirs(args.temp_dir, exist_ok=True)
 tempfile.tempdir = args.temp_dir
@@ -29,6 +30,8 @@ from render_scene_common import collection_world_bounds
 from render_scene_graph import import_render_scene
 from spatial_scene_slice import slice_spatial_scene
 from export_scene_model_geometry import bake_static_mesh_instances
+from export_scene_model_parts import extract_shared_model_parts
+from mathutils import Vector
 from export_scene_lights import collect_blueprint_lights
 
 bpy.ops.object.select_all(action="SELECT")
@@ -51,7 +54,7 @@ if curves:
 bpy.context.view_layer.update()
 low, high = collection_world_bounds(collection)
 dimensions = high - low
-center = (low + high) * 0.5
+center = Vector((0, 0, 0)) if args.canonical_part else (low + high) * 0.5
 
 # Bake the authored blueprint placement and center the model's actual bounds.
 # The host adapter supplies Y-up -> Z-up and places the center above ground.
@@ -77,6 +80,11 @@ for light in blueprint_lights:
     if light.get("group"):
         semantic_members.setdefault(light["group"], [])
 
+bpy.ops.object.select_all(action="DESELECT")
+replacements, shared_parts = extract_shared_model_parts(meshes, collection, center)
+for key, members in semantic_members.items():
+    semantic_members[key] = list(dict.fromkeys(replacements.get(obj, obj) for obj in members))
+meshes = [obj for obj in meshes if obj not in replacements]
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
 semantic_groups = {}
@@ -86,7 +94,10 @@ for key, members in semantic_members.items():
     group.select_set(True)
     semantic_groups[key] = group.name
     for obj in members:
+        # Preserve placeholder placement when attaching its semantic visibility group.
+        world = obj.matrix_world.copy()
         obj.parent = group
+        obj.matrix_world = world
 
 # Keep this experiment reasonably small without changing source textures.
 for image in bpy.data.images:
@@ -113,6 +124,7 @@ metadata = {
     "semanticGroups": semantic_groups,
     "blueprintLights": blueprint_lights,
     "bakedMeshCount": baked_mesh_count,
+    "modelParts": {"version": 1, "parts": shared_parts} if shared_parts else None,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),
 }

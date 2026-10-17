@@ -277,6 +277,8 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
 
     node_object = bpy.data.objects.new(node_document["name"] or node_document["id"], None)
     node_object.empty_display_type = "PLAIN_AXES"
+    if node_document.get("spatialSharedPart") and node_document.get("meshId"):
+        node_object["foxwatchSharedPart"] = node_document["spatialSharedPart"]
     if node_document.get("spatialGroup"):
         node_object["foxwatchSpatialGroup"] = node_document["spatialGroup"]
     if node_document.get("light"):

@@ -8,6 +8,8 @@ import { writeJsonAtomic } from './pipeline-core.mjs';
 import { resolveSpatialExportPolicy, filterSpatialModelManifest } from './spatial-export-policy.mjs';
 import { spatialExportCatalog } from './spatial-export-catalog.mjs';
 import { spatialWorkerCount, runSpatialWorkerPool } from './spatial-worker-pool.mjs';
+import { createSpatialModelExporter } from './spatial-model-engine.mjs';
+import { mergeSharedPartPublications } from './spatial-shared-parts.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const args = process.argv.slice(2);
@@ -27,7 +29,7 @@ const blender = option('blender') ?? process.env.BLENDER_PATH ?? 'blender';
 const blenderVersion = args.includes('--repack-existing') || !ids.length ? 'repack-existing'
     : (await promisify(execFile)(blender, ['--version'], { windowsHide: true })).stdout.trim();
 const manifestPath = resolve(outputRoot, 'models/manifest.v1.json');
-let manifest = { schemaVersion: 1, assets: {}, resources: {} };
+let manifest = { schemaVersion: 1, assets: {}, resources: {}, sharedParts: {} };
 try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 manifest = filterSpatialModelManifest(manifest, policy.allowedIds, { includeDamaged: config.assetSelection === 'catalog' });
 manifest.resources ??= {};
@@ -42,8 +44,12 @@ const emit = event => console.log('FOXWATCH_PROGRESS ' + JSON.stringify({ stage:
 emit({ kind: 'spatial-start', detail: `Exporting ${ids.length} assets with ${count} CPU worker(s).` });
 let failure;
 try {
+    const sharedExporter = await createSpatialModelExporter({ args, catalog, blenderVersion });
+    abort.signal.addEventListener('abort', () => sharedExporter.cancel(), { once: true });
+    const sharedParts = await sharedExporter.exportSharedParts(ids);
+    manifest.sharedParts = { ...manifest.sharedParts, ...sharedParts };
     await runSpatialWorkerPool(ids, { count, workerPath: resolve(root, 'tools/foxwatch/scripts/spatial-model-worker.mjs'),
-        options: { args, catalog, blenderVersion }, signal: abort.signal,
+        options: { args, catalog, blenderVersion, sharedParts }, signal: abort.signal,
         onEvent(event) {
             if (event.kind === 'spatial-asset-start') active.set(event.worker, event.assetId + ' · Preparing');
             if (event.kind === 'spatial-phase') active.set(event.worker, event.modelId + ' · ' + event.phase);
@@ -59,6 +65,7 @@ try {
             for (const [key, model] of Object.entries(manifest.resources)) if (model.assetId === timing.id) delete manifest.resources[key];
             if (asset) manifest.assets[timing.id] = asset;
             Object.assign(manifest.resources, resources);
+            manifest.sharedParts = mergeSharedPartPublications(manifest, sharedParts);
             await writeJsonAtomic(manifestPath, manifest);
             // Remove old locations only after the owning group has a durable new manifest entry.
             for (const model of old) if (asset && model.path?.startsWith('models/') && /^models\/[a-z0-9.-]+\.glb$/.test(model.path))
