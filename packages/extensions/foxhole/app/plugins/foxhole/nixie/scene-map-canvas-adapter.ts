@@ -1,6 +1,7 @@
 import { computed, shallowRef } from 'vue';
 import type { NixieSceneV2CanvasContributionContext, NixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
 import { readFoxholeMapSettings } from './map-settings.ts';
+import { getFoxholeMapRegionBillboardGroups } from './map/region-annotations.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import { getFoxholeMapActiveBounds, FoxholeMapViewportPlugin } from './map/controller.ts';
 
@@ -47,7 +48,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const billboardLabels = new Set(['foxhole-map-labels', 'foxhole-map-major-labels', 'foxhole-map-minor-labels',
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
             const pixelScale = context.zoom();
-            return root.children.filter(child => child !== root.mask && (context.viewMode() !== '3d' || child.label !== 'foxhole-map-background')).map(content => ({ content, billboard: billboardLabels.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip }));
+            const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
+            return root.children.filter(child => child !== root.mask && (context.viewMode() !== '3d' || child.label !== 'foxhole-map-background')).map(content => ({
+                content, billboard: billboardLabels.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip,
+                billboardGroups: context.viewMode() === '3d' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,
+            }));
         },
         worldBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));

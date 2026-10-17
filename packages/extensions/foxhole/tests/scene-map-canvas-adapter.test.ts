@@ -13,10 +13,16 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     const moves: unknown[] = [], suppression: boolean[] = [];
     let mode = '2.5d';
     const background = { label: 'foxhole-map-background' };
+    const summaries = { label: 'foxhole-map-casualty-labels' };
+    const summaryGroups = [{ content: {}, anchor: { x: 10, y: 20 }, offset: 30, anchorHalfHeight: 10 }];
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const settings = { enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 };
-    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
+    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, summaries, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
     const factory = runInNewContext(stripTypeScriptTypes(source.replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
+        getFoxholeMapRegionBillboardGroups: (content: unknown) => {
+            assert.equal(content, summaries);
+            return summaryGroups;
+        },
         computed, shallowRef, useNixieSettingsStore: () => ({ getValue() {} }),
         readFoxholeMapSettings: () => settings,
         getFoxholeMapActiveBounds: () => ({ left: -100, top: -200, right: 300, bottom: 400 }),
@@ -40,7 +46,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     adapter.hoverPresentation(icons, pointer);
     assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
-    assert.equal(layers.length, 3);
+    assert.equal(layers.length, 4);
+    assert.equal(layers[3].billboardGroups, undefined);
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
     assert.equal(layers[0].pixelScale, 0.025);
@@ -52,7 +59,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.ok(adapter.navigationBounds());
     mode = '3d';
     assert.equal(adapter.navigationBounds(), null);
-    assert.equal(adapter.spatialLayers().length, 2);
+    assert.equal(adapter.spatialLayers().length, 3);
+    assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, summaryGroups);
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = '2.5d';
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), true);

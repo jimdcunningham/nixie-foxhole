@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { Container } from 'pixi.js';
+import { foxholeMapRegionAnnotationLabels, getFoxholeMapRegionBillboardGroups } from '../app/plugins/foxhole/nixie/map/region-annotations.ts';
+
+test('native region labels attach victory and KIA groups without copying or moving their artwork', () => {
+    const layer = new Container();
+    const label = new Container({ x: 100, y: 200, scale: 100 });
+    label.getLocalBounds = () => ({ height: 40 }) as ReturnType<Container['getLocalBounds']>;
+    const badge = layer.addChild(new Container({ x: 100, y: -100, scale: 160 }));
+    const card = layer.addChild(new Container({ x: 100, y: 600, scale: 100 }));
+    layer.addChild(new Container());
+    foxholeMapRegionAnnotationLabels.set(badge, label);
+    foxholeMapRegionAnnotationLabels.set(card, label);
+    const [a, b] = getFoxholeMapRegionBillboardGroups(layer);
+    assert.equal(a!.content, badge);
+    assert.equal(b!.content, card);
+    assert.deepEqual(a!.anchor, { x: 100, y: 200 });
+    assert.equal(a!.offset, -300);
+    assert.equal(a!.anchorHalfHeight, 12.5);
+    assert.equal(b!.offset, 400);
+    assert.equal(b!.anchorHalfHeight, 20);
+    label.scale.set(50);
+    badge.scale.set(80);
+    card.scale.set(50);
+    assert.deepEqual(getFoxholeMapRegionBillboardGroups(layer).map(group => group.anchorHalfHeight), [12.5, 20], 'local spacing survives native zoom updates');
+    assert.equal(badge.y, -100);
+    assert.equal(card.y, 600);
+    label.destroy();
+    assert.deepEqual(getFoxholeMapRegionBillboardGroups(layer), []);
+    layer.destroy({ children: true });
+});

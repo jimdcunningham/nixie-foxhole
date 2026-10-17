@@ -23,6 +23,7 @@ import {
 import type { FoxholeMapRegionRecord } from './constants.ts';
 import { getFoxholeMapModStore } from './mod-store.ts';
 import { drawFoxholeMapHeatCircle } from './heat-geometry.ts';
+import { foxholeMapRegionAnnotationLabels } from './region-annotations.ts';
 
 type FoxholeMapSettingsSnapshot = ReturnType<FoxholeMapContext['readMapSettings']>;
 type FoxholeFrontlineFactionTeamId = 'COLONIALS' | 'WARDENS';
@@ -1312,6 +1313,7 @@ export class FoxholeMapRenderer {
         victoryBaseBadge.interactiveChildren = false;
         victoryBaseBadge.visible = false;
         this.victoryBaseBadges.addChild(victoryBaseBadge);
+        foxholeMapRegionAnnotationLabels.set(victoryBaseBadge, label);
 
         const victoryBaseBadgeBackground = new PIXI.Graphics();
         victoryBaseBadge.addChild(victoryBaseBadgeBackground);
@@ -1322,6 +1324,7 @@ export class FoxholeMapRenderer {
         casualtyLabel.interactiveChildren = false;
         casualtyLabel.visible = false;
         this.casualtyLabels.addChild(casualtyLabel);
+        foxholeMapRegionAnnotationLabels.set(casualtyLabel, label);
 
         const casualtyLabelBackground = new PIXI.Graphics();
         casualtyLabel.addChild(casualtyLabelBackground);
