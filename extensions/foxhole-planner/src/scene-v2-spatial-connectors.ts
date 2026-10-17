@@ -33,6 +33,24 @@ export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponent
             motion: { kind: 'spring-sway', amplitude: Math.max(2, Math.min(12, distance * 0.025)), frequency: 0.42, phase },
             ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) }] };
     }
+    if (data.foxholeKey === 'facilitypipeunderground' && asset?.model) {
+        const model = asset.model;
+        const origin = model.blueprintOrigin;
+        const coincident = Math.hypot(data.endX - data.startX, data.endY - data.startY,
+            (data.endZ ?? 0) - (data.startZ ?? 0)) < 1e-8;
+        return { contractVersion: 1, nodes: (coincident ? ['start'] as const : ['start', 'end'] as const).map(endpoint => {
+            const x = data[`${endpoint}X`], y = data[`${endpoint}Y`], z = data[`${endpoint}Z`] ?? 0;
+            // The Blueprint reuses PipeIntersection at both ends, with FrontMesh yawed 180 degrees.
+            // Horizontal local frames keep each terminal upright even when their elevations differ.
+            const rotation = data[`${endpoint}Rotation`] + (endpoint === 'end' ? Math.PI : 0);
+            const binding = data.endpointBindings?.[endpoint];
+            return { id: `underground-pipe-${endpoint}`, kind: 'model-path' as const,
+                resourceId: model.resourceId, unitsPerMetre: 32, meshIndex: 0,
+                points: [x, y, z, x + Math.cos(rotation), y + Math.sin(rotation), z],
+                sourceOrigin: [origin?.x ?? 0, origin?.y ?? 0, origin?.z ?? 0] as [number,number,number],
+                instances: [{ distance: 0 }], ...(binding ? { endpointBindings: { start: binding } } : {}) };
+        }) };
+    }
     if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey)) return renderFoxholeSpatialRepeats(data, asset);
     if (!asset?.model) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);

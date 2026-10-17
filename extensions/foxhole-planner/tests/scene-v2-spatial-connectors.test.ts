@@ -1,3 +1,6 @@
+import type { NixieExperimentalSpatialNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
@@ -83,3 +86,54 @@ for (const id of ['engineroomt2', 'engineroomt3']) {
         assert.deepEqual(entities, before);
     });
 }
+
+test('underground pipe renders both rigid terminals at their authored endpoints during placement and after reload', () => {
+    const pipe = product('facilitypipeunderground');
+    const data = pipe.components.find(c => c.componentId === 'spline-connector')!.data;
+    Object.assign(data, { startX: 35, startY: -20, startRotation: .4, endX: 500, endY: 160, endRotation: -.3 });
+    const before = structuredClone(pipe);
+    const render = (subject: Entity) => renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject] }).experimentalSpatial;
+    const plan = render(pipe);
+    assert.ok(plan, 'a static single-model fallback cannot display the second terminal');
+    assert.equal(plan.supplementModel, undefined, 'the static fallback must be replaced');
+    assert.equal(plan.nodes.length, 2);
+    assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan), plan);
+    for (const [i, prefix] of ['start', 'end'].entries()) {
+        const node: NixieExperimentalSpatialNodeV1 = plan.nodes[i]!;
+        assert.equal(node.kind, 'model-path');
+        if (node.kind !== 'model-path') continue;
+        assert.equal(node.resourceId, assets.facilitypipeunderground!.model!.resourceId);
+        assert.deepEqual(node.points.slice(0, 3), [data[prefix + 'X'], data[prefix + 'Y'], 0]);
+        assert.deepEqual(node.instances, [{ distance: 0 }]);
+        assert.deepEqual(node.sourceOrigin, [0,0,0]);
+        const rotation = Number(data[prefix + 'Rotation']) + (prefix === 'end' ? Math.PI : 0);
+        assert.ok(Math.abs(Math.atan2(node.points[4]! - node.points[1]!, node.points[3]! - node.points[0]!) - rotation) < 1e-8);
+    }
+    assert.deepEqual(render(JSON.parse(JSON.stringify(pipe))), plan);
+    data.endX = 620;
+    assert.equal(render(pipe)!.nodes[1]!.points[0], 620, 'the second terminal follows a live endpoint preview');
+    data.endX = before.components.find(c => c.componentId === 'spline-connector')!.data.endX;
+    assert.deepEqual(pipe, before);
+});
+
+test('underground terminals keep independent heights, upright poses and endpoint preview bindings', () => {
+    const pipe = product('facilitypipeunderground');
+    const data = pipe.components.find(c => c.componentId === 'spline-connector')!.data as unknown as FoxholeSceneV2SplineConnectorData;
+    const bindings = { start: { entityId: 'source', point: [1,2,3] as [number,number,number] },
+        end: { entityId: 'target', point: [4,5,6] as [number,number,number] } };
+    const resolved = { ...data, startX: 10, startY: 20, startZ: 16, startRotation: .7,
+        endX: 500, endY: 230, endZ: 96, endRotation: -.5, endpointBindings: bindings };
+    const before = structuredClone(resolved);
+    const plan = renderFoxholeSpatialConnector(pipe, resolved, assets.facilitypipeunderground)!;
+    assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan), plan);
+    for (const [i, endpoint] of (['start', 'end'] as const).entries()) {
+        const node: NixieExperimentalSpatialNodeV1 = plan.nodes[i]!;
+        assert.ok(node.kind === 'model-path');
+        assert.deepEqual(node.points.slice(0,3), [resolved[`${endpoint}X`], resolved[`${endpoint}Y`], resolved[`${endpoint}Z`]]);
+        assert.equal(node.points[2], node.points[5], 'terminal pose must not tilt along the buried route');
+        assert.deepEqual(node.endpointBindings, { start: bindings[endpoint] });
+    }
+    const collapsed = renderFoxholeSpatialConnector(pipe, { ...resolved, endX: resolved.startX, endY: resolved.startY, endZ: resolved.startZ }, assets.facilitypipeunderground)!;
+    assert.equal(collapsed.nodes.length, 1, 'overlapping pending endpoints must not double-render the same mesh');
+    assert.deepEqual(resolved, before);
+});
