@@ -1015,11 +1015,15 @@ public sealed class FoxWatchManifestModificationSlot
 
     public List<string> BlockedByModSlotNames { get; set; } = [];
 
+    public List<string> BlockedByModTypes { get; set; } = [];
+
     public Dictionary<string, FoxWatchManifestModificationSlotVariant> Variants { get; set; } = [];
 }
 
 public sealed class FoxWatchManifestModificationSlotVariant
 {
+    public List<FoxWatchManifestBuildSocket> BuildSockets { get; set; } = [];
+
     public string Name { get; set; } = string.Empty;
 
     public string CodeName { get; set; } = string.Empty;

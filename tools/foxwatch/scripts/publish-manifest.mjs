@@ -1681,6 +1681,7 @@ function compactModificationSlot(value) {
         isLinkedToSocket: false,
         linkedSocketNames: [],
         blockedByModSlotNames: [],
+        blockedByModTypes: [],
         variants: {},
     }, {
         componentType: compactComponentType,
@@ -7747,6 +7748,7 @@ function stripPublishedModificationSlotNoise(
             isLinkedToSocket: slot.isLinkedToSocket === true,
             linkedSocketNames: Array.isArray(slot.linkedSocketNames) ? slot.linkedSocketNames : [],
             blockedByModSlotNames: Array.isArray(slot.blockedByModSlotNames) ? slot.blockedByModSlotNames : [],
+            blockedByModTypes: Array.isArray(slot.blockedByModTypes) ? slot.blockedByModTypes : [],
             variants: Object.fromEntries(Object.entries(slot.variants ?? {})
                 .filter(([variantId]) => normalizeId(variantId) !== 'default')
                 .map(([variantId, variant]) => {

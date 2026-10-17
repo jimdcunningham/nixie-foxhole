@@ -4242,6 +4242,7 @@ public partial class FoxWatchManifestAssetExtractor
                 IsLinkedToSocket = slot.IsLinkedToSocket,
                 LinkedSocketNames = [.. slot.LinkedSocketNames],
                 BlockedByModSlotNames = [.. slot.BlockedByModSlotNames],
+                BlockedByModTypes = [.. slot.BlockedByModTypes],
                 Variants = slot.Variants.ToDictionary(
                     pair => pair.Key,
                     pair => CloneModificationSlotVariant(pair.Value),
@@ -4253,6 +4254,7 @@ public partial class FoxWatchManifestAssetExtractor
         {
             return new FoxWatchManifestModificationSlotVariant
             {
+                BuildSockets = variant.BuildSockets.Select(CloneBuildSocket).ToList(),
                 Name = variant.Name,
                 CodeName = variant.CodeName,
                 Description = variant.Description,
@@ -7524,7 +7526,7 @@ public partial class FoxWatchManifestAssetExtractor
             }
 
             var pipeType = InferPipeType(componentReference);
-            if (!LooksLikeManifestBuildSocket(componentType, componentName, hasSocketTags: false, pipeType))
+            if (!LooksLikeManifestBuildSocket(componentType, componentName, hasSocketTags: componentReference.SocketTags.Count > 0, pipeType))
             {
                 return null;
             }
@@ -10978,6 +10980,9 @@ public partial class FoxWatchManifestAssetExtractor
                         IsLinkedToSocket = ExtractBoolValue(GetNamedValue(item, "bIsLinkedToSocket")) == true,
                         LinkedSocketNames = linkedSocketNames,
                         BlockedByModSlotNames = blockedByModSlotNames,
+                        BlockedByModTypes = AsEnumerable(GetNamedValue(item, "BlockedByModTypes"))
+                            .Select(value => NormalizeModificationVariantId(ExtractText(value)))
+                            .Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).ToList(),
                         Variants = InspectModificationSlotVariants(
                             dataClassPath,
                             structureId,
@@ -10988,6 +10993,7 @@ public partial class FoxWatchManifestAssetExtractor
                             localizationReferencesById),
                     };
 
+                    PopulateModificationSlotSockets(slot);
                     slots.Add(slot);
                 }
             }
@@ -11006,8 +11012,7 @@ public partial class FoxWatchManifestAssetExtractor
         {
             try
             {
-                var package = _fileProvider.LoadPackage(templateActorPackagePath);
-                var exports = package.GetExports().Cast<dynamic>().ToArray();
+                var exports = LoadPackageExports(templateActorPackagePath).ToArray();
                 var blueprint = FindBlueprintGeneratedClass(exports);
                 if (blueprint == null)
                 {
@@ -11080,7 +11085,7 @@ public partial class FoxWatchManifestAssetExtractor
                     .Select(reference =>
                     {
                         var transform = ResolveComponentReferenceTransform(reference, componentReferences);
-                        return new FoxWatchManifestModificationSlot
+                        var slot = new FoxWatchManifestModificationSlot
                         {
                             Name = NormalizeString(reference.ComponentName),
                             ComponentType = NormalizeString(reference.ComponentType),
@@ -11101,12 +11106,28 @@ public partial class FoxWatchManifestAssetExtractor
                                 englishStrings,
                                 localizationReferencesById),
                         };
+                        PopulateModificationSlotSockets(slot);
+                        return slot;
                     })
                     .ToList();
             }
             catch
             {
                 return [];
+            }
+        }
+
+        // Modification sockets are authored in template-local space, whereas published
+        // overlays must share the host structure's coordinate basis on every wall.
+        private void PopulateModificationSlotSockets(FoxWatchManifestModificationSlot slot)
+        {
+            var transform = CreateComponentTransform(slot.X ?? 0, slot.Y ?? 0, slot.Z ?? 0, yawDegrees: slot.Rotation ?? 0);
+            foreach (var variant in slot.Variants.Values)
+            {
+                if (!variant.UseTemplateActor || string.IsNullOrWhiteSpace(variant.TemplateActorPath)) continue;
+                var overlay = TryExtractModificationOverlay(variant.TemplateActorPath);
+                if (overlay != null)
+                    variant.BuildSockets = ApplyModificationOverlayTransform(overlay, transform).BuildSockets;
             }
         }
 
@@ -11680,7 +11701,7 @@ public partial class FoxWatchManifestAssetExtractor
             }
 
             var pipeType = InferPipeType(componentReference);
-            if (!LooksLikeManifestBuildSocket(componentType, componentName, hasSocketTags: false, pipeType))
+            if (!LooksLikeManifestBuildSocket(componentType, componentName, hasSocketTags: componentReference.SocketTags.Count > 0, pipeType))
             {
                 return null;
             }
@@ -11819,6 +11840,11 @@ public partial class FoxWatchManifestAssetExtractor
             {
                 return true;
             }
+
+            // Native engine rooms keep an unconfigured PowerSocket placeholder; the
+            // optional wall modification supplies the actual tagged attachment socket.
+            if (NormalizeTemplateComponentName(componentName ?? string.Empty).Equals("PowerSocket", StringComparison.OrdinalIgnoreCase))
+                return false;
 
             return (!string.IsNullOrWhiteSpace(componentType) && (
                     componentType.Contains("Socket", StringComparison.OrdinalIgnoreCase)
@@ -12822,6 +12848,16 @@ public partial class FoxWatchManifestAssetExtractor
                     }
                 }
 
+                yield break;
+            }
+
+            if (value is UScriptSet scriptSet)
+            {
+                foreach (var property in scriptSet.Properties)
+                {
+                    var resolved = UnwrapScriptValue(property.GetValue(typeof(object)));
+                    if (resolved != null) yield return resolved;
+                }
                 yield break;
             }
 

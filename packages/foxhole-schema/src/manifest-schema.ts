@@ -1314,6 +1314,7 @@ const modificationSlotManifestSchema = z.object({
     isLinkedToSocket: z.boolean().default(false),
     linkedSocketNames: z.array(z.string()).default([]),
     blockedByModSlotNames: z.array(z.string()).default([]),
+    blockedByModTypes: z.array(z.string()).default([]),
     variants: z.record(z.string(), modificationSlotVariantManifestSchema).default({}),
 });
 

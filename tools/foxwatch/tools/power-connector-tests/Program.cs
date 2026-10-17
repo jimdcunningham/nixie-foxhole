@@ -66,3 +66,40 @@ if (args.Length > 0) {
         Console.WriteLine($"PASS real Blueprint {id} retains one connector under its source socket");
     }
 }
+
+// Socket metadata must use the same hierarchy as the visible connector mesh.
+var socketCandidate = typeof(FoxWatchManifestAssetExtractor).GetMethod("LooksLikeManifestBuildSocket", BindingFlags.Static | BindingFlags.NonPublic)!;
+Check(!(bool)socketCandidate.Invoke(null, ["BuildSocketComponent", "PowerSocket", false, null])!, "Unconfigured native power placeholder was exported");
+Check((bool)socketCandidate.Invoke(null, ["BuildSocketComponent", "PowerSocket", true, null])!, "Tagged modification socket was suppressed");
+Check((bool)socketCandidate.Invoke(null, ["BuildSocketComponent", "FrontFortSocket", false, null])!, "Unrelated fort socket was suppressed");
+Console.WriteLine("PASS unconfigured power placeholders are excluded without dropping configured sockets");
+if (args.Length > 0) {
+    var temp = Path.Combine(Path.GetTempPath(), "foxwatch-engine-socket-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(temp);
+    try {
+        var manifestExtractor = new FoxWatchManifestAssetExtractor(temp, meshExporter);
+        var populate = typeof(FoxWatchManifestAssetExtractor).GetMethod("PopulateModificationSlotSockets", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        foreach (var tier in new[] {2,3}) foreach (var (name,x,y,yaw,expectedX,expectedY) in new[] {
+            ("Back",-250d,0d,90d,-299.42903d,-147.27136d), ("Front",250d,0d,-90d,299.42903d,147.27136d),
+            ("Left",0d,-250d,-180d,147.27136d,-299.42903d), ("Right",0d,250d,0d,-147.27136d,299.42903d) }) {
+            var slot = new FoxWatchManifestModificationSlot { Name=name+"ModSlot", X=x,Y=y,Z=-160,Rotation=yaw,
+                Variants = new() { ["powerconnection"] = new() { UseTemplateActor=true,
+                    TemplateActorPath=$"War/Content/Blueprints/Structures/Forts/Modifications/BPFortT{tier}PowerConnection.uasset" } } };
+            populate.Invoke(manifestExtractor,[slot]);
+            var socket = slot.Variants["powerconnection"].BuildSockets.Single(s=>s.SocketTags.Any(t=>t.Mask==131072));
+            Check(Math.Abs(socket.X!.Value-expectedX)<.005 && Math.Abs(socket.Y!.Value-expectedY)<.005 && Math.Abs(socket.Z!.Value-62.74524)<.005,
+                $"T{tier} {name} socket lost template hierarchy or wall translation");
+            Check(Math.Abs(Math.Sin((socket.Rotation!.Value-yaw-90)*Math.PI/180))<.00001, "Wall rotation was not composed");
+        }
+        Console.WriteLine("PASS real engine-room connection sockets follow all eight tier/wall transforms");
+    } finally { Directory.Delete(temp,true); }
+}
+
+var enumerate = typeof(FoxWatchManifestAssetExtractor).GetMethod("AsEnumerable", BindingFlags.Static | BindingFlags.NonPublic)!;
+var normalizeType = typeof(FoxWatchManifestAssetExtractor).GetMethod("NormalizeModificationVariantId", BindingFlags.Static | BindingFlags.NonPublic)!;
+var nativeSet = new CUE4Parse.UE4.Assets.Objects.UScriptSet([new CUE4Parse.UE4.Assets.Objects.Properties.StrProperty("EFortModificationType::PowerConnection")]);
+foreach (var source in new object[] { nativeSet, Newtonsoft.Json.Linq.JArray.Parse("[\"EFortModificationType::PowerConnection\"]") }) {
+    var types = ((IEnumerable<object>)enumerate.Invoke(null,[source])!).Select(value => (string)normalizeType.Invoke(null,[value.ToString()])!).ToArray();
+    Check(types.SequenceEqual(new[] {"powerconnection"}), "Native or decoded blocking set was discarded");
+}
+Console.WriteLine("PASS native Unreal sets and decoded arrays preserve the same blocking types");
