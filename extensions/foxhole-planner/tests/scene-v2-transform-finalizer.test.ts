@@ -349,3 +349,73 @@ test('detaches reciprocal attachments when a structure is moved out of range', (
         'set' in operation ? operation.set?.attachments : undefined
     )), [[], []]);
 });
+
+
+test('moving foundation pairs ignore internal sockets and connect both stationary neighbors', () => {
+    for (const assetId of ['foundation012x2t1', 'foundation012x2t3']) {
+        const a = structure('moving-a', 326), b = structure('moving-b', 326);
+        const left = structure('target-a', 0), right = structure('target-b', 0);
+        const entities = [a, b, left, right];
+        entities.forEach(entity => { entity.components[1]!.data.assetId = assetId; });
+        a.components[0]!.data.y = 4;
+        b.components[0]!.data.y = 324;
+        right.components[0]!.data.y = 320;
+        const internal = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: a.entityId,
+            transform: { x: 326, y: 4, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [a, b] } });
+        for (const operation of internal.transaction!.operations) {
+            if (operation.op === 'patch') entities.find(entity => entity.entityId === operation.entityId)!.components[2]!.data.attachments = operation.set!.attachments!;
+        }
+        for (const targets of [[left, right], [right]]) {
+            const before = structuredClone(entities);
+            const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: a.entityId,
+                movingEntityIds: [a.entityId, b.entityId], transform: { x: 326, y: 4, rotation: 0, scaleX: 1, scaleY: 1 },
+                context: { contractVersion: 1, entities: [a, b, ...targets] } });
+            assert.deepEqual(result.transform, { x: 320, y: 0 }, assetId);
+            const patches = result.transaction!.operations;
+            for (const target of targets) assert.ok(patches.some(operation => operation.entityId === target.entityId));
+            for (const member of [a, b]) {
+                const patch = patches.find(operation => operation.entityId === member.entityId);
+                if (patch?.op === 'patch') {
+                    const attachments = patch.set!.attachments as Array<{ targetEntityId: string }>;
+                    assert.ok(attachments.some(item => item.targetEntityId === (member === a ? b : a).entityId), 'internal links survive');
+                }
+            }
+            assert.deepEqual(entities, before, 'finalization never mutates the supplied context');
+        }
+    }
+});
+
+
+test('a foundation group shares height correction and detaches external links without losing internal links', () => {
+    const entities = [structure('a', 326), structure('b', 326), structure('left', 0), structure('right', 0)];
+    entities.forEach(entity => { entity.components[1].data.assetId = 'foundation012x2t3'; });
+    entities[0].components[0].data.y = 4;
+    entities[1].components[0].data.y = 324;
+    entities[3].components[0].data.y = 320;
+    for (const target of entities.slice(2)) target.components.push({ ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1,
+        definitionAvailable: true, data: { elevation: 12 } });
+    const apply = (result: ReturnType<typeof finalizeFoxholeSceneV2Transform>) => {
+        for (const operation of result.transaction?.operations ?? []) {
+            if (operation.op === 'patch') entities.find(entity => entity.entityId === operation.entityId)!.components[2].data.attachments = operation.set!.attachments!;
+        }
+    };
+    apply(finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'a', transform: { x: 326, y: 4, rotation: 0, scaleX: 1, scaleY: 1 },
+        context: { contractVersion: 1, entities: entities.slice(0, 2) } }));
+    const snapped = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'a', movingEntityIds: ['a', 'b'],
+        transform: { x: 326, y: 4, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities } });
+    assert.deepEqual(snapped.transform, { x: 320, y: 0, elevation: 12 });
+    apply(snapped);
+    for (const [index, member] of entities.slice(0, 2).entries()) {
+        Object.assign(member.components[0].data, { x: 1000, y: index * 320 });
+        member.components.push({ ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1, definitionAvailable: true, data: { elevation: 12 } });
+    }
+    const detached = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'a', movingEntityIds: ['a', 'b'],
+        transform: { x: 1000, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities } });
+    apply(detached);
+    for (const [index, member] of entities.slice(0, 2).entries()) {
+        const attachments = member.components[2].data.attachments as Array<{ targetEntityId: string }>;
+        assert.equal(attachments.length, 2);
+        assert.ok(attachments.every(item => item.targetEntityId === entities[1 - index].entityId));
+    }
+    for (const target of entities.slice(2)) assert.deepEqual(target.components[2].data.attachments, []);
+});

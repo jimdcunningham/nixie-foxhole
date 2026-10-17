@@ -527,20 +527,22 @@ export function finalizeFoxholeSceneV2Transform(
     if (!moved || !resolveFoxholeEntityStructureSockets(moved, assetMetadata(moved)).length) {
         return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
     }
+    const movingIds = new Set(request.movingEntityIds ?? [moved.entityId]);
+    const movers = entities.filter(entity => movingIds.has(entity.entityId));
     const matrices = worldMatrices(entities, moved.entityId, request.transform);
-    const movingSockets = sockets(moved, matrices.get(moved.entityId) ?? localMatrix(moved, request.transform), projection);
+    const movingSockets = movers.flatMap(entity => sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection));
     const attachmentsByEntity = new Map(entities.map(entity => [entity.entityId, readAttachments(entity)]));
     let best: { moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; }> = [];
     for (const entity of entities) {
-        if (entity.entityId === moved.entityId) {
+        if (movingIds.has(entity.entityId)) {
             continue;
         }
         const targetAttachments = attachmentsByEntity.get(entity.entityId) ?? [];
         for (const target of sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection)) {
             const occupied = attachmentAt(targetAttachments, target.socket.name) ?? endpointAttachmentAt(entity, target.socket.name);
             for (const moving of movingSockets) {
-                if (occupied && occupied.targetEntityId !== moved.entityId) {
+                if (occupied && occupied.targetEntityId !== moving.entityId) {
                     continue;
                 }
                 const overlap = compatible(moving, target);
@@ -564,24 +566,28 @@ export function finalizeFoxholeSceneV2Transform(
 
     const nextByEntity = new Map<string, Attachment[]>();
     const setAttachments = (entityId: string, value: Attachment[]) => nextByEntity.set(entityId, value);
-    const movedBefore = attachmentsByEntity.get(moved.entityId) ?? [];
-    const attachedConnectors = movedBefore.filter(attachment => entities.some(entity => entity.entityId === attachment.targetEntityId && connectorComponent(entity)));
-    setAttachments(moved.entityId, [...attachedConnectors]);
-    for (const previous of movedBefore) {
-        if (attachedConnectors.includes(previous)) {
-            continue;
+    for (const member of movers) {
+        const previousAttachments = attachmentsByEntity.get(member.entityId) ?? [];
+        // Internal links move rigidly with the selection. External connectors keep
+        // following their sockets; only stationary structure links are re-evaluated.
+        const retained = previousAttachments.filter(attachment => movingIds.has(attachment.targetEntityId)
+            || entities.some(entity => entity.entityId === attachment.targetEntityId && connectorComponent(entity)));
+        setAttachments(member.entityId, [...retained]);
+        for (const previous of previousAttachments) {
+            if (retained.includes(previous)) continue;
+            const priorTarget = nextByEntity.get(previous.targetEntityId) ?? attachmentsByEntity.get(previous.targetEntityId) ?? [];
+            setAttachments(previous.targetEntityId, priorTarget.filter(item => !(
+                normalizedName(item.localSocketName) === normalizedName(previous.targetSocketName)
+                && item.targetEntityId === member.entityId
+                && normalizedName(item.targetSocketName) === normalizedName(previous.localSocketName)
+            )));
         }
-        const priorTarget = nextByEntity.get(previous.targetEntityId) ?? attachmentsByEntity.get(previous.targetEntityId) ?? [];
-        setAttachments(previous.targetEntityId, priorTarget.filter(item => !(
-            normalizedName(item.localSocketName) === normalizedName(previous.targetSocketName)
-            && item.targetEntityId === moved.entityId
-            && normalizedName(item.targetSocketName) === normalizedName(previous.localSocketName)
-        )));
     }
 
     let x = request.transform.x;
     let y = request.transform.y;
     let elevation: number | undefined;
+    let translation = [0, 0, 0];
     if (best) {
         const parent = parentId(moved);
         const parentEntity = entities.find(entity => entity.entityId === parent);
@@ -595,20 +601,20 @@ export function finalizeFoxholeSceneV2Transform(
             if (Math.abs(local[2] - oldElevation) > 1e-6) elevation = local[2];
             // One pair determines the pose; every compatible pair aligned at that
             // pose owns a reciprocal link, including both sockets on a foundation edge.
-            const translation = best.target.world.map((value, axis) => value - best!.moving.world[axis]!);
+            translation = best.target.world.map((value, axis) => value - best!.moving.world[axis]!);
             const aligned = candidates.map(candidate => ({ ...candidate, distance: Math.hypot(...candidate.target.world
                 .map((value, axis) => value - candidate.moving.world[axis]! - translation[axis]!)) }))
                 .filter(candidate => candidate.distance <= 1)
                 .sort((left, right) => left.distance - right.distance || right.overlap - left.overlap);
-            const claimedMoving = new Set(attachedConnectors.map(attachment => normalizedName(attachment.localSocketName)));
+            const claimedMoving = new Set(movers.flatMap(member => (nextByEntity.get(member.entityId) ?? []).map(attachment => member.entityId + ':' + normalizedName(attachment.localSocketName))));
             const claimedTargets = new Set<string>();
             for (const match of aligned) {
-                const movingName = normalizedName(match.moving.socket.name);
+                const movingName = match.moving.entityId + ':' + normalizedName(match.moving.socket.name);
                 const targetKey = `${match.target.entityId}:${normalizedName(match.target.socket.name)}`;
                 if (claimedMoving.has(movingName) || claimedTargets.has(targetKey)) continue;
                 claimedMoving.add(movingName);
                 claimedTargets.add(targetKey);
-                nextByEntity.get(moved.entityId)!.push({
+                nextByEntity.get(match.moving.entityId)!.push({
                     localSocketName: match.moving.socket.name,
                     targetEntityId: match.target.entityId,
                     targetSocketName: match.target.socket.name,
@@ -617,7 +623,7 @@ export function finalizeFoxholeSceneV2Transform(
                 setAttachments(match.target.entityId, [...targetCurrent.filter(item => normalizedName(item.localSocketName)
                     !== normalizedName(match.target.socket.name)), {
                     localSocketName: match.target.socket.name,
-                    targetEntityId: moved.entityId,
+                    targetEntityId: match.moving.entityId,
                     targetSocketName: match.moving.socket.name,
                 }]);
             }
@@ -625,9 +631,26 @@ export function finalizeFoxholeSceneV2Transform(
     }
 
     const operations: NixieExperimentalComponentOperationV1[] = [];
-    const finalizedMatrices = worldMatrices(entities, moved.entityId, { ...request.transform, x, y });
-    const finalizedSockets = sockets(moved, finalizedMatrices.get(moved.entityId)!);
-    const connectorPatches = carriedConnectorPatches(moved, entities, finalizedMatrices, finalizedSockets);
+    const finalizedEntities = entities.map(entity => {
+        if (!movingIds.has(entity.entityId)) return entity;
+        const parent = entities.find(candidate => candidate.entityId === parentId(entity));
+        const origin = projection.toWorld(entity, [0, 0, 0]);
+        const desired = origin.map((value, axis) => value + translation[axis]!) as [number, number, number];
+        const local = parent ? projection.toLocal(parent, desired) : desired;
+        const spatial = component(entity, CORE_OWNER_ID, 'spatial-transform');
+        return { ...entity, components: [...entity.components.map(entry => entry.ownerId === CORE_OWNER_ID && entry.componentId === 'transform'
+            ? { ...entry, data: { ...entry.data, x: local[0], y: local[1] } } : entry.ownerId === CORE_OWNER_ID && entry.componentId === 'spatial-transform'
+                ? { ...entry, data: { ...entry.data, elevation: local[2] } } : entry),
+            ...(spatial ? [] : [{ ownerId: CORE_OWNER_ID, componentId: 'spatial-transform', version: 1, definitionAvailable: true, data: { elevation: local[2] } }])] };
+    });
+    const finalizedMatrices = worldMatrices(finalizedEntities, moved.entityId, { ...request.transform, x, y });
+    const connectorPatches = new Map<string, NixieExperimentalComponentJsonObjectV1>();
+    for (const member of finalizedEntities.filter(entity => movingIds.has(entity.entityId))) {
+        for (const [id, patch] of carriedConnectorPatches(member, finalizedEntities, finalizedMatrices, sockets(member, finalizedMatrices.get(member.entityId)!))) {
+            // Selected connectors already share the rigid movement.
+            if (!movingIds.has(id)) connectorPatches.set(id, { ...connectorPatches.get(id), ...patch });
+        }
+    }
     for (const [entityId, set] of connectorPatches) {
         const entity = entities.find(candidate => candidate.entityId === entityId)!;
         operations.push({ op: 'patch', entityId, componentId: connectorComponent(entity)!.componentId, set });
