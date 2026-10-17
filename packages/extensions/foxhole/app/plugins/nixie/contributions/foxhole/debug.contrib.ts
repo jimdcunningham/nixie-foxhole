@@ -938,6 +938,7 @@ export default defineContribution({
             order: 10,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Hitboxes',
                 icon: 'ph:polygon',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes) === true,
@@ -951,6 +952,7 @@ export default defineContribution({
             order: 15,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Placement Warnings',
                 icon: 'ph:warning',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings) === true,
@@ -964,6 +966,7 @@ export default defineContribution({
             order: 20,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Line of Sight',
                 icon: 'ph:eye',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight) === true,
@@ -977,6 +980,7 @@ export default defineContribution({
             order: 22,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Vehicle Weapon Ranges',
                 icon: 'ph:crosshair-simple',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_RANGE_DEBUG_SETTING_KEYS.vehicleWeapons) === true,
@@ -990,6 +994,7 @@ export default defineContribution({
             order: 30,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'All Sockets',
                 icon: 'ph:plugs-connected',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
@@ -1003,6 +1008,7 @@ export default defineContribution({
             order: 25,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Socket Labels',
                 icon: 'ph:text-t',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels) === true,
@@ -1016,6 +1022,7 @@ export default defineContribution({
             order: 30,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Modification Slots',
                 icon: 'ph:square',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots) === true,
@@ -1029,6 +1036,7 @@ export default defineContribution({
             order: 40,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Vehicle Seats',
                 icon: 'ph:seat',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats) === true,
@@ -1042,6 +1050,7 @@ export default defineContribution({
             order: 50,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Spotlights',
                 icon: 'ph:flashlight',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights) === true,
@@ -1055,6 +1064,7 @@ export default defineContribution({
             order: 53,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Use Static Render',
                 icon: 'ph:image-square',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender) === true,
@@ -1068,6 +1078,7 @@ export default defineContribution({
             order: 54,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Hide Floor',
                 icon: 'ph:selection-background',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors) === true,
@@ -1081,6 +1092,7 @@ export default defineContribution({
             order: 55,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Hide Walls',
                 icon: 'ph:wall',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls) === true,
@@ -1094,6 +1106,7 @@ export default defineContribution({
             order: 56,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Hide Dirt',
                 icon: 'ph:mountains',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt) === true,
@@ -1107,6 +1120,7 @@ export default defineContribution({
             order: 57,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'Hide Corners',
                 icon: 'ph:corner-down-right',
                 checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners) === true,
@@ -1125,15 +1139,20 @@ export default defineContribution({
         {
             menu: NIXIE_OVERLAYS_DEBUG_MENU_ID,
             order: 70,
-            item: submenu('Structure Volumes', NIXIE_OVERLAYS_DEBUG_VOLUMES_MENU_ID, {
+            item: {
+                type: 'submenu',
+                label: 'Structure Volumes',
+                menu: NIXIE_OVERLAYS_DEBUG_VOLUMES_MENU_ID,
+                accessibleInDev: true,
                 icon: 'ph:cube-focus',
-            }),
+            },
         },
         {
             menu: NIXIE_OVERLAYS_DEBUG_VOLUMES_MENU_ID,
             order: 10,
             item: {
                 type: 'checkbox',
+                accessibleInDev: true,
                 label: 'All Structure Volumes',
                 icon: 'ph:cube-focus',
                 checked: () => areAllStructureVolumesEnabled(),
@@ -1154,6 +1173,7 @@ export default defineContribution({
             order: 30 + index,
             item: {
                 type: 'checkbox' as const,
+                accessibleInDev: true,
                 label: definition.label,
                 icon: definition.icon,
                 checked: () => useNixieSettingsStore().getValue(definition.settingId) === true,
@@ -1230,9 +1250,13 @@ export default defineContribution({
         {
             menu: 'debug',
             order: 100,
-            item: submenu('Foxhole', FOXHOLE_DEBUG_MENU_ID, {
+            item: {
+                type: 'submenu',
+                label: 'Foxhole',
+                menu: FOXHOLE_DEBUG_MENU_ID,
+                accessibleInDev: true,
                 icon: 'nx:hexagon-bars',
-            }),
+            },
         },
         {
             menu: FOXHOLE_DEBUG_MENU_ID,
@@ -1240,17 +1264,20 @@ export default defineContribution({
             item: {
                 type: 'submenu',
                 label: 'Foxhole War Panel',
+                accessibleInDev: true,
                 icon: 'ph:pulse',
                 children: [
                     {
                         type: 'submenu',
                         label: 'Presets',
+                        accessibleInDev: true,
                         icon: 'ph:tree-structure',
                         availableWhen: { when: 'project' },
                         children: [
                             {
                                 type: 'checkbox',
                                 label: 'Live Data',
+                                accessibleInDev: true,
                                 icon: 'ph:radio',
                                 checked: () => foxholeWarDebugPreset.value === null,
                                 onClick: () => {
@@ -1260,6 +1287,7 @@ export default defineContribution({
                             ...FOXHOLE_WAR_DEBUG_PRESET_DEFINITIONS.map(definition => ({
                                 type: 'checkbox' as const,
                                 label: definition.label,
+                                accessibleInDev: true,
                                 icon: 'ph:film-slate',
                                 checked: () => foxholeWarDebugPreset.value?.id === definition.id,
                                 onClick: () => {
@@ -1271,9 +1299,11 @@ export default defineContribution({
                     {
                         type: 'submenu',
                         label: 'Toast Preview',
+                        accessibleInDev: true,
                         icon: 'ph:bell-ringing',
                         children: FOXHOLE_WAR_DEBUG_TOAST_PREVIEW_DEFINITIONS.map(definition => ({
                             label: definition.label,
+                            accessibleInDev: true,
                             icon: 'ph:bell',
                             closeOnClick: false,
                             onClick: () => {
