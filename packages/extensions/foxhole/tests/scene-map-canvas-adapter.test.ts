@@ -33,6 +33,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(layers.length, 2);
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
+    assert.equal(layers[0].pixelScale, 0.025);
+    assert.equal(layers[1].pixelScale, 0.025);
     assert.equal(layers[1].billboard, true);
     assert.equal(JSON.stringify(layers[0].clip), JSON.stringify({ minX: -20, minY: -30, maxX: 20, maxY: 30 }));
     assert.ok(adapter.navigationBounds());

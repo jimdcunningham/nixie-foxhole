@@ -43,7 +43,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 : undefined;
             const billboardLabels = new Set(['foxhole-map-labels', 'foxhole-map-major-labels', 'foxhole-map-minor-labels',
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
-            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), clip }));
+            return root.children.filter(child => child !== root.mask).map(content => ({ content, billboard: billboardLabels.has(content.label), pixelScale: context.zoom(), clip }));
         },
         worldBounds() {
             const settings = readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id));
