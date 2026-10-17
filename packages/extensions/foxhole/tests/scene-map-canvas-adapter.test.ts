@@ -11,9 +11,11 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     let context: any, destroyed = 0, frames = 0, pointer = { x: 10, y: 20 }, interacting = false;
     const hovers: unknown[] = [];
     const moves: unknown[] = [], suppression: boolean[] = [];
+    let mode = '2.5d';
+    const background = { label: 'foxhole-map-background' };
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const settings = { enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 };
-    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
+    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
     const factory = runInNewContext(stripTypeScriptTypes(source.replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
         computed, shallowRef, useNixieSettingsStore: () => ({ getValue() {} }),
         readFoxholeMapSettings: () => settings,
@@ -27,7 +29,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         },
     });
     const adapter = factory({ app: {}, viewport: {}, before: {}, runtime,
-        nodeCount: () => 17, zoom: () => 0.025, pointer: () => pointer, interacting: () => interacting,
+        viewMode: () => mode, nodeCount: () => 17, zoom: () => 0.025, pointer: () => pointer, interacting: () => interacting,
         suppressGrid: (value: boolean) => suppression.push(value),
         cameraTo: (...args: unknown[]) => moves.push(args) });
     assert.equal(context.getSceneNodeCount(), 17);
@@ -38,7 +40,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     adapter.hoverPresentation(icons, pointer);
     assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
-    assert.equal(layers.length, 2);
+    assert.equal(layers.length, 3);
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
     assert.equal(layers[0].pixelScale, 0.025);
@@ -48,6 +50,12 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(layers[1].hoverable, true);
     assert.equal(JSON.stringify(layers[0].clip), JSON.stringify({ minX: -20, minY: -30, maxX: 20, maxY: 30 }));
     assert.ok(adapter.navigationBounds());
+    mode = '3d';
+    assert.equal(adapter.navigationBounds(), null);
+    assert.equal(adapter.spatialLayers().length, 2);
+    assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
+    mode = '2.5d';
+    assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), true);
     settings.lockCameraToMap = false;
     assert.equal(adapter.navigationBounds(), null);
     root.visible = false;
