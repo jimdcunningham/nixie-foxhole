@@ -37,3 +37,11 @@ For the static planning envelope, the reference state is minimum permitted firin
 This is a firing-ready planning state, not a live game simulation. The full envelope uses the minimum-input launch points; the muzzle's small pivot translation as the player aims through the interval is recorded at the maximum input but is not swept into the envelope. Rendered model resources remain in their existing authored pose. Ammunition timing, rocket removal and animated deployment are not played in Studio. Physical payload indices are row-major; no chronological firing order is inferred solely from mesh removal.
 
 Unsupported bindings, additive clips, missing bones/sockets and out-of-domain inputs keep the prior source reference frame rather than inventing a pose. All existing 2D range fields remain unchanged.
+
+## Verification
+
+- Native local-layout and socket-composition regressions passed in the offline C# firing-volume harness.
+- Focused extraction of Squire, Retiarius and Lucian produced 10, 16 and 6 distinct origins, with source animation input intervals and calibrated physical pitch spans.
+- All 1,017 Planner tests and 259 FoxWatch tests passed; Planner typecheck and production build passed. The completed artifact declares 812 resources, all verified present.
+- Metadata-only publication changed only the three firing-volume records; every other range field was checked for equality. Canonical-frame regressions preserve all payload points and the maximum-input anchor through publication, including idempotence.
+- Disposable Studio verification observed six GPU volumes with distinct 50.5 cm column spacing for Lucian in both 3D and 2.5D. Turning Vehicle Weapon Ranges off removed all six. The fixture was deleted, and the overlay was restored to false.
