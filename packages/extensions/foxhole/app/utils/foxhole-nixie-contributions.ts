@@ -27,6 +27,9 @@ import { prepareFoxholeSceneV2RenderPresentation, FOXHOLE_SCENE_V2_PRESENTATION_
 import { registerNixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
 import { createFoxholeSceneMapCanvas } from '#foxhole/plugins/foxhole/nixie/scene-map-canvas-adapter.ts';
 
+import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
+import { FOXHOLE_USE_SDK_MAP_SETTING_ID } from '#foxhole/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
+
 let registered = false;
 
 export function registerFoxholeNixieContributions(): void {
@@ -35,7 +38,9 @@ export function registerFoxholeNixieContributions(): void {
     }
     registered = true;
 
-    registerNixieSceneV2CanvasContribution('nixie.foxhole-planner', createFoxholeSceneMapCanvas);
+    const settings = useNixieSettingsStore();
+    registerNixieSceneV2CanvasContribution('nixie.foxhole-planner', createFoxholeSceneMapCanvas,
+        () => settings.getValueOr(FOXHOLE_USE_SDK_MAP_SETTING_ID, false) !== true);
     registerFoxholeNodeToolBridge();
     registerFoxholeStyleClipboardHandlers();
     registerNixieSceneV1NodeConverter('nixie.foxhole-planner', convertFoxholeSceneV1NodeToV2);

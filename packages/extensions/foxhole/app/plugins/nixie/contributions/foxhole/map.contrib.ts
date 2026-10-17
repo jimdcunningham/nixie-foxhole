@@ -18,6 +18,7 @@ import {
 } from '#foxhole/plugins/foxhole/nixie/settings-page-sections.ts';
 import { FOXHOLE_MAP_SETTING_KEYS, foxholeMapSettings, readFoxholeMapSettings } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
 import { FoxholeMapViewportPlugin, getFoxholeMapActiveBounds } from '#foxhole/plugins/foxhole/nixie/map/controller.ts';
+import { foxholeSceneMapRendererSetting } from '#foxhole/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
 import { foxholeStatsUserSettings } from '#foxhole/plugins/foxhole/nixie/stats-settings.ts';
 
 function isFoxholeSceneSurfaceActive(): boolean {
@@ -28,6 +29,7 @@ function isFoxholeSceneSurfaceActive(): boolean {
 export default defineContribution({
     settings: [
         ...foxholeMapSettings,
+        foxholeSceneMapRendererSetting,
         ...foxholeStatsUserSettings,
     ],
     commands: withCommandSettingsPageSection([

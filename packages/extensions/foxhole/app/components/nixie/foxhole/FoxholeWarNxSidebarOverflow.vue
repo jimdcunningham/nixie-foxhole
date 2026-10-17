@@ -6,6 +6,9 @@ import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
 
+import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNixieEditorDocumentSession.ts';
+import { FOXHOLE_USE_SDK_MAP_SETTING_ID } from '#foxhole/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
+
 interface FoxholeShardOption {
     id: string;
     name: string;
@@ -17,6 +20,7 @@ const emit = defineEmits<{
 }>();
 
 const runtime = useNixieRuntime();
+const documentSession = useNixieEditorDocumentSessionOptional();
 const settingsStore = useNixieSettingsStore();
 const shards = ref<FoxholeShardOption[]>([]);
 const mapSettings = computed(() => readFoxholeMapSettings(
@@ -26,6 +30,19 @@ const mapSettings = computed(() => readFoxholeMapSettings(
 const notificationsEnabled = computed(() => Boolean(mapSettings.value.eventFeedToasts));
 
 const items = computed<ResolvedMenuItem[]>(() => [
+    {
+        type: 'checkbox',
+        label: 'Use SDK Map',
+        icon: 'ph:code',
+        checked: settingsStore.getValueOr(FOXHOLE_USE_SDK_MAP_SETTING_ID, false) === true,
+        closeOnClick: true,
+        adminOnly: false,
+        disabled: false,
+        visible: documentSession?.isSceneV2Active.value === true,
+        onClick: () => settingsStore.toggle(FOXHOLE_USE_SDK_MAP_SETTING_ID, {
+            reason: 'foxhole-war-nx:map-renderer',
+        }),
+    },
     {
         type: 'submenu',
         label: 'Switch Shard',
