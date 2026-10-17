@@ -77,6 +77,76 @@ function combineBounds(bounds) {
         .concat([3, 4, 5].map(axis => Math.max(...bounds.map(bound => bound[axis]))));
 }
 
+function meshSamples(artifact, world, meshId) {
+    const a = world[0], b = world[4], c = world[8], d = world[1], e = world[5], f = world[9], g = world[2], h = world[6], i = world[10];
+    const normalMatrix = [e*i-f*h, f*g-d*i, d*h-e*g, c*h-b*i, a*i-c*g, b*g-a*h, b*f-c*e, c*d-a*f, a*e-b*d];
+    const determinant = a*(e*i-f*h) + b*(f*g-d*i) + c*(d*h-e*g);
+    return artifact.document.meshes[meshId].primitives.flatMap(primitive => {
+        const points = positions(artifact, primitive.attributes.POSITION), normals = positions(artifact, primitive.attributes.NORMAL);
+        const material = materialSignature(artifact, primitive.material);
+        return points.map((point, index) => {
+            const position = [0, 1, 2].map(axis => world[axis]*point[0] + world[4+axis]*point[1] + world[8+axis]*point[2] + world[12+axis]);
+            const input = normals[index], direction = [0, 1, 2].map(axis => (normalMatrix[axis*3]*input[0] + normalMatrix[axis*3+1]*input[1] + normalMatrix[axis*3+2]*input[2]) / determinant);
+            const length = Math.hypot(...direction);
+            return { position, normal: direction.map(value => value / length), material };
+        });
+    });
+}
+function compareSamples(before, after, label) {
+    assert.equal(after.length, before.length, 'Canonical vertex count changed: ' + label);
+    const tolerance = 0.003, buckets = new Map(), used = new Set();
+    const cell = point => point.map(value => Math.floor(value / tolerance));
+    before.forEach((sample, index) => { const key = cell(sample.position).join(','); if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(index); });
+    let maximumPointErrorMetres = 0, minimumNormalDot = 1;
+    for (const sample of after) {
+        const origin = cell(sample.position); let best, bestDistance = Infinity, bestDot = -1;
+        for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++)
+            for (const index of buckets.get([origin[0]+x, origin[1]+y, origin[2]+z].join(',')) ?? []) {
+                if (used.has(index) || before[index].material !== sample.material) continue;
+                const candidate = before[index], distance = Math.hypot(...sample.position.map((value, axis) => value - candidate.position[axis]));
+                const dot = sample.normal.reduce((sum, value, axis) => sum + value*candidate.normal[axis], 0);
+                if (distance < tolerance && dot > 0.999 && (distance < bestDistance - 1e-8 || Math.abs(distance - bestDistance) <= 1e-8 && dot > bestDot))
+                    { best = index; bestDistance = distance; bestDot = dot; }
+            }
+        assert.notEqual(best, undefined, 'No original point/normal/material match: ' + label);
+        used.add(best); maximumPointErrorMetres = Math.max(maximumPointErrorMetres, bestDistance); minimumNormalDot = Math.min(minimumNormalDot, bestDot);
+    }
+    return { maximumPointErrorMetres, minimumNormalDot };
+}
+function semanticAncestry(artifact, nodeIndex) {
+    const profile = artifact.document.asset.extras?.nixieStructuralProfile, parents = new Map();
+    const groups = new Set([...Object.values(profile?.layers ?? {}).flat(), ...(profile?.modifications ?? []).flatMap(part => part.nodeNames)]);
+    for (const [index, node] of artifact.document.nodes.entries()) for (const child of node.children ?? []) parents.set(child, index);
+    const names = [];
+    for (let index = nodeIndex; index !== undefined; index = parents.get(index)) {
+        const name = artifact.document.nodes[index].name;
+        if (groups.has(name)) names.push(name);
+    }
+    return names;
+}
+function materialSignature(artifact, materialId) {
+    const doc = artifact.document;
+    const normalize = (value, key = '') => {
+        if (Array.isArray(value)) return value.map(entry => normalize(entry));
+        if (!value || typeof value !== 'object') return value;
+        if (/Texture$/.test(key) && Number.isInteger(value.index)) {
+            const texture = doc.textures[value.index], imageIndex = texture.extensions?.EXT_texture_webp?.source ?? texture.source;
+            const extensions = { ...texture.extensions }; delete extensions.EXT_texture_webp;
+            const { index, ...binding } = value;
+            return normalize({ ...binding, texture: { imageSha256: artifact.images[imageIndex].sha256,
+                sampler: doc.samplers?.[texture.sampler] ?? {}, ...(Object.keys(extensions).length ? { extensions } : {}) } });
+        }
+        return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, entry]) => [key, normalize(entry, key)]));
+    };
+    const { name, ...material } = doc.materials?.[materialId] ?? {};
+    return JSON.stringify(normalize(material));
+}
+function meshMaterialSignatures(artifact, meshIds) {
+    return [...new Set(meshIds.flatMap(meshId => artifact.document.meshes[meshId].primitives
+        .map(primitive => materialSignature(artifact, primitive.material))))].sort();
+}
+
 const args = process.argv.slice(2);
 const option = key => args.find(arg => arg.startsWith('--' + key + '='))?.slice(key.length + 3)
     ?? (args.includes('--' + key) ? args[args.indexOf('--' + key) + 1] : undefined);
@@ -97,13 +167,13 @@ for (const id of ids) {
     assert.deepEqual(after.document.asset.extras.nixieStructuralProfile, before.document.asset.extras.nixieStructuralProfile, 'Structural visibility profile changed: ' + id);
     const sourcePattern = /^facility/.test(id) ? /PowerLineAttachment/i : /FortT2Wall01/i;
     assert.ok(!(after.document.meshes ?? []).some(mesh => sourcePattern.test(mesh.name)), 'Redundant embedded shared mesh: ' + id);
-    const originalWorlds = worldNodes(before), originalBounds = [];
+    const originalWorlds = worldNodes(before), originalBounds = [], originalMaterials = [], originalSemantics = [], originalSamples = [];
     for (const [index, world] of originalWorlds) {
         const node = before.document.nodes[index];
         if (node.mesh !== undefined && sourcePattern.test(before.document.meshes[node.mesh].name))
-            originalBounds.push(meshBounds(before, world, node.mesh));
+            { originalBounds.push(meshBounds(before, world, node.mesh)); originalMaterials.push(meshMaterialSignatures(before, [node.mesh])); originalSemantics.push(semanticAncestry(before, index)); originalSamples.push(meshSamples(before, world, node.mesh)); }
     }
-    const afterWorlds = worldNodes(after), placementErrors = [];
+    const afterWorlds = worldNodes(after), placementErrors = [], sampleComparisons = [];
     for (const part of parts.parts) {
         const nodes = (after.document.nodes ?? []).filter(node => node.name === part.nodeName);
         assert.equal(nodes.length, 1, 'Placeholder must resolve exactly once: ' + part.nodeName);
@@ -122,17 +192,25 @@ for (const id of ids) {
             report.totals.afterSharedDecodedGeometryBytes += artifact.decodedGeometryBytes;
             report.totals.afterSharedTextureRgbaBytes += artifact.images.reduce((sum, image) => sum + image.estimatedRgbaBytes, 0);
         }
-        const canonical = await inspect(resolve(outputRoot, shared.path)), canonicalBounds = [];
+        const canonical = await inspect(resolve(outputRoot, shared.path)), canonicalBounds = [], canonicalSamples = [];
         const hostIndex = after.document.nodes.indexOf(nodes[0]), placement = afterWorlds.get(hostIndex);
         for (const [index, world] of worldNodes(canonical)) {
             const node = canonical.document.nodes[index];
-            if (node.mesh !== undefined) canonicalBounds.push(meshBounds(canonical, multiply(placement, world), node.mesh));
+            if (node.mesh !== undefined) { canonicalBounds.push(meshBounds(canonical, multiply(placement, world), node.mesh)); canonicalSamples.push(...meshSamples(canonical, multiply(placement, world), node.mesh)); }
         }
         const actual = combineBounds(canonicalBounds);
         const errors = originalBounds.map(bound => Math.max(...bound.map((value, axis) => Math.abs(value - actual[axis]))));
         const error = Math.min(...errors);
         assert.ok(error < 0.003, 'Canonical placement differs from original geometry by ' + error + ' metres: ' + id + ':' + part.nodeName);
-        originalBounds.splice(errors.indexOf(error), 1);
+        const matched = errors.indexOf(error);
+        assert.deepEqual(meshMaterialSignatures(canonical, canonical.document.meshes.map((_, index) => index)),
+            originalMaterials[matched], 'Canonical PBR/material texture bindings changed: ' + id + ':' + part.nodeName);
+        assert.deepEqual(semanticAncestry(after, hostIndex), originalSemantics[matched], 'Shared placeholder changed semantic visibility ownership: ' + id);
+        sampleComparisons.push(compareSamples(originalSamples[matched], canonicalSamples, id + ':' + part.nodeName));
+        originalBounds.splice(matched, 1);
+        originalMaterials.splice(matched, 1);
+        originalSemantics.splice(matched, 1);
+        originalSamples.splice(matched, 1);
         placementErrors.push(error);
         const beforeImages = new Set(before.images.map(image => image.sha256));
         assert.ok(canonical.images.every(image => beforeImages.has(image.sha256)), 'Canonical material/image payload changed: ' + id);
@@ -144,7 +222,9 @@ for (const id of ids) {
         }
     }
     assert.equal(originalBounds.length, 0, 'Original shared placements were not all replaced: ' + id);
-    report.assets[id] = { beforeBytes: before.bytes, afterBytes: after.bytes, afterSha256: after.sha256, placements: parts.parts.length, maximumPlacementBoundsErrorMetres: Math.max(...placementErrors),
+    report.assets[id] = { beforeBytes: before.bytes, afterBytes: after.bytes, afterSha256: after.sha256, placements: parts.parts.length, maximumPlacementBoundsErrorMetres: Math.max(...placementErrors), materialsMatch: true, semanticOwnershipMatch: true,
+        maximumPointErrorMetres: Math.max(...sampleComparisons.map(result => result.maximumPointErrorMetres)),
+        minimumNormalDot: Math.min(...sampleComparisons.map(result => result.minimumNormalDot)),
         beforeDecodedGeometryBytes: before.decodedGeometryBytes, afterDecodedGeometryBytes: after.decodedGeometryBytes,
         beforeImages: before.images, afterImages: after.images };
     report.totals.beforeBytes += before.bytes;

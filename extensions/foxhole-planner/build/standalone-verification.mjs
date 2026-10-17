@@ -14,9 +14,16 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     await fs.copyFile(join(foxholeAssetsRoot, 'models', 'manifest.v1.json'), join(fixtureInputRoot, 'models.v1.json'));
     const modelInput = JSON.parse(await fs.readFile(join(fixtureInputRoot, 'models.v1.json'), 'utf8'));
     await fs.mkdir(join(fixtureInputRoot, 'models'), { recursive: true });
-    for (const [assetId, model] of Object.entries({ ...modelInput.assets, ...modelInput.resources })) {
-        if (!/^[a-z0-9.-]+$/.test(assetId) || !isFoxholeGeneratedModelPath({ id: assetId, assetId: model.assetId ?? assetId, path: model.path })) {
-            throw new Error(`Invalid standalone model input: ${assetId}`);
+    const modelSources = [
+        ...Object.entries({ ...modelInput.assets, ...modelInput.resources })
+            .map(([id, model]) => ({ id, assetId: model.assetId ?? id, path: model.path, resourceId: model.resourceId,
+                dependencyIds: (model.modelParts?.parts ?? []).map(part => part.resourceId) })),
+        ...Object.entries(modelInput.sharedParts ?? {})
+            .map(([id, model]) => ({ id, assetId: 'shared', path: model.path, resourceId: model.resourceId, sharedPart: true })),
+    ];
+    for (const model of modelSources) {
+        if (!/^[a-z0-9.-]+$/.test(model.id) || !isFoxholeGeneratedModelPath(model)) {
+            throw new Error(`Invalid standalone model input: ${model.id}`);
         }
         await fs.mkdir(join(fixtureInputRoot, model.path, '..'), { recursive: true });
         await fs.copyFile(join(foxholeAssetsRoot, model.path), join(fixtureInputRoot, model.path));
@@ -24,16 +31,18 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     await fs.cp(join(foxholeAssetsRoot, 'localizations'), join(fixtureInputRoot, 'localizations'), { recursive: true });
     // The live watcher may intentionally declare only a development model selection.
     // The detached fixture consumes its complete model input, so derive declarations from that input too.
+    // Build-input preparation precedes npm install in the detached fixture.
     const { isFoxholeSceneV2ModelAllowed, getFoxholeSceneV2PackagedModelPath } = await import(
-        pathToFileURL(join(fixtureRoot, 'src', 'scene-v2-models.ts')).href);
+        pathToFileURL(join(extensionSource, 'src', 'scene-v2-models.ts')).href);
+    const selectedModels = modelSources.filter(model => !model.sharedPart && isFoxholeSceneV2ModelAllowed(model.assetId));
+    const dependencies = new Set(selectedModels.flatMap(model => model.dependencyIds));
+    const packagedModels = [...selectedModels, ...modelSources.filter(model => model.sharedPart && dependencies.has(model.resourceId))];
     const manifestPath = join(fixtureRoot, 'nixie.extension.json');
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
     manifest.contributes.experimentalResources = [
         ...manifest.contributes.experimentalResources.filter(resource => resource.kind !== 'model'),
-        ...Object.entries({ ...modelInput.assets, ...modelInput.resources })
-            .filter(([id, model]) => isFoxholeSceneV2ModelAllowed(model.assetId ?? id))
-            .map(([id, model]) => ({ contractVersion: 1, id: model.resourceId, kind: 'model',
-                path: 'dist/assets/scene-v2/' + getFoxholeSceneV2PackagedModelPath({ id, assetId: model.assetId ?? id, path: model.path }) })),
+        ...packagedModels.map(model => ({ contractVersion: 1, id: model.resourceId, kind: 'model',
+            path: 'dist/assets/scene-v2/' + getFoxholeSceneV2PackagedModelPath(model) })),
     ];
     await fs.writeFile(manifestPath, JSON.stringify(manifest) + '\n', 'utf8');
     const nodeAssetsPath = join(fixtureRoot, 'src', 'scene-v2-assets-node.ts');
