@@ -2888,7 +2888,16 @@ public sealed class FoxWatchRenderBlueprintSceneExtractor
 
     private static bool IsHiddenFromSceneGraph(FoxWatchBlueprintComponentReference componentReference)
     {
-        return componentReference.Light == null && (!componentReference.IsVisible || componentReference.IsHiddenInGame)
+        // A power socket is a transform/helper, not visible geometry. Its local
+        // bVisible=false does not hide the separately visible connector attached
+        // to it (for example refinery and factory Blueprints). Keep the parent
+        // frame without resurrecting explicitly hidden meshes or hidden-in-game
+        // subtrees.
+        var hiddenPowerSocketMarker = IsPowerSocketComponent(componentReference)
+            && string.IsNullOrWhiteSpace(componentReference.MeshPath)
+            && !componentReference.IsHiddenInGame;
+        return componentReference.Light == null && !hiddenPowerSocketMarker
+            && (!componentReference.IsVisible || componentReference.IsHiddenInGame)
             && !ShouldIncludeHiddenAircraftRoofComponent(componentReference)
             && !ShouldIncludeHiddenTrenchOpenWallComponent(componentReference);
     }

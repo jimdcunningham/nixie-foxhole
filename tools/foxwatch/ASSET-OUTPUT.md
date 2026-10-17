@@ -88,6 +88,14 @@ Each renderable asset has a bundle folder containing:
 
 Blueprint default icon sources for the asset (when extracted) travel with the mesh/material export and are referenced from manifest `iconUrl` / slot variant icons until publish co-locates them.
 
+A meshless `BuildSocketComponent` named `PowerSocket` is retained as a transform
+parent even when its local `bVisible` flag is false. That flag hides the socket
+helper, not an independently visible `PowerLineConnector` child. The connector
+keeps its source mesh and socket-relative transform. Explicitly hidden connector
+meshes, hidden-in-game sockets, and ordinary hidden mesh subtrees remain excluded.
+Run the focused regression with `dotnet run --project tools/foxwatch/tools/power-connector-tests`;
+optionally pass the active decoded inspection snapshot after `--` to check the
+seven affected facility Blueprints and the vehicle factory/crane controls.
 Resource-field node populations are texture-only scene content. Their base `scene.json`
 renders the top-down board texture, while `preview.scene.json` excludes the generated
 nodes so preview framing and the derived rendered icon remain focused on the center island.
