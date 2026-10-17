@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { transformSync } from 'esbuild';
 import { computed, ref } from 'vue';
+import { foxholeSceneMapRendererSetting } from '../../app/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
 
 const read = (path: string) => readFileSync(new URL(`../../app/${path}`, import.meta.url), 'utf8');
 const policySource = read('utils/foxhole-nixie-contributions.ts');
@@ -19,7 +20,8 @@ function evaluate(source: string, development: boolean, globals: Record<string, 
 
 for (const development of [false, true]) {
     test(`${development ? 'local development exposes' : 'production excludes'} the SDK map comparison setting and menu`, () => {
-        const definition = { id: settingId };
+        const definition = foxholeSceneMapRendererSetting;
+        assert.equal(definition.accessibleInDev, true, 'settings rows must display the existing dev indicator');
         const settings = evaluate(`const result = [${contributionSource.match(/ {4}settings: \[([\s\S]*?)\n {4}\],/)![1]}]; result;`, development, {
             foxholeMapSettings: [], foxholeStatsUserSettings: [], foxholeSceneMapRendererSetting: definition,
         });
@@ -32,6 +34,8 @@ for (const development of [false, true]) {
             notificationsEnabled: ref(true), shards: ref([]),
         });
         assert.equal(items.value.find((item: { label: string; }) => item.label === 'Use SDK Map').visible, development);
+        assert.equal(items.value.find((item: { label: string; }) => item.label === 'Use SDK Map').accessibleInDev, true,
+            'checkbox menu rows must display the existing dev badge');
         sceneV2.value = false;
         assert.equal(items.value.find((item: { label: string; }) => item.label === 'Use SDK Map').visible, false);
     });

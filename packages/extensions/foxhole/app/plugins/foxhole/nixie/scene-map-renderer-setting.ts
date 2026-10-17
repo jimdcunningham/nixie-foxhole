@@ -9,6 +9,7 @@ export const foxholeSceneMapRendererSetting: UserSettingDefinition = {
     persist: 'local',
     type: 'boolean',
     name: 'Use SDK Map',
+    accessibleInDev: true,
     description: 'Compare the standalone SDK map renderer with the bundled map in Scene V2. Scene V1 keeps its bundled map.',
     icon: 'ph:code',
     group: 'general',

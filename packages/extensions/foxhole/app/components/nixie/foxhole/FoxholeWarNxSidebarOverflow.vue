@@ -33,6 +33,7 @@ const items = computed<ResolvedMenuItem[]>(() => [
     {
         type: 'checkbox',
         label: 'Use SDK Map',
+        accessibleInDev: true,
         icon: 'ph:code',
         checked: settingsStore.getValueOr(FOXHOLE_USE_SDK_MAP_SETTING_ID, false) === true,
         closeOnClick: true,
