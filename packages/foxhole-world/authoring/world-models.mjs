@@ -24,7 +24,7 @@ export {attributeReader} from './geometry-attributes.mjs';
 
 export async function loadWorldModels({region,json,status,root,flagTexture,teamAt,batchLayout='category',assetUrl=url=>url,loadModel=url=>Assets.load(url),signal,concurrency=24,catalogResourceFields=false,catalog,progressive=false,optimize=true,vegetationDensity='full',vegetationShadows=true,priorityPosition,onLayout=()=>{},publishBatch=build=>build(),categories,bridgesOnly=false,worldData,visibilityData,actorVisibility:sharedActorVisibility}){
  const [data,lodManifest,nightManifest]=await Promise.all([Promise.resolve(worldData||json(`${region}/world.json`)).then(normalizeWorldModelLayers),!optimize||new URLSearchParams(location.search).has("atlasBake")?Promise.resolve({assets:{}}):json(`${region}/lod-manifest.json`),json(`${region}/night-materials.json`)]),layers={};for(const k of worldModelLayers){layers[k]=new Container3D({label:k});root.addChild(layers[k]);}
- // Legacy blueprint-component exports mark embedded foliage opaque and use an
+ // Legacy component and rock exports mark embedded foliage opaque and use an
  // RGB-only copy of its albedo. Reuse alpha from an explicitly masked native
  // foliage prototype with the same logical texture; never infer it from RGB.
  const foliageAlphaSources=new Map();
@@ -50,10 +50,11 @@ export async function loadWorldModels({region,json,status,root,flagTexture,teamA
   }visit(model,new Matrix4());model.destroy({children:true});return parts;
  }
  async function partsFor(p){const nightEntry=eligibleNightPrototype(p.name)?nightManifest.assets[p.file]:null,key=p.file+JSON.stringify(p.anchor||null)+!!nightEntry;if(partsCache.has(key))return partsCache.get(key);const promise=(async()=>{const url=assetUrl(`${region}/${nightEntry?.file||p.file}`),source=await loadModel(url);sources.push({source,url});if(nightEntry)for(const [name,config]of Object.entries(nightEntry.materials)){const material=source.material[name];if(!material?.emissive)throw Error('Night material has no emissive group: '+name);nightMaterials.set(material,config.strength);}for(const material of source.materials)material.vertexColors=false;
- if(/\/Foliage\//i.test(p.path||'')){
+ if(/\/Foliage\//i.test(p.path||'')||p.materials?.some(m=>/\/Foliage\//i.test(m.source||''))){
   const names=modelMaterialNames(source,p.materials?.map(m=>m.name));
   for(const row of p.materials||[]){
-   const peer=row.masked===false&&foliageAlphaSources.get(row.diffuse);
+   const foliage=/\/Foliage\//i.test(p.path||'')||/\/Foliage\//i.test(row.source||'');
+   const peer=foliage&&row.masked===false&&foliageAlphaSources.get(row.diffuse);
    if(!peer||peer.prototype===p)continue;
    const reference=(await partsFor(peer.prototype)).find(part=>part.materialName===peer.name)?.material;
    if(reference?.alphaMode!=='mask')continue;

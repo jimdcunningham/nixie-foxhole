@@ -27,3 +27,22 @@ test('building foliage restores the existing cutout texture without changing sol
   assert.ok(world.batches.every(b=>b.items.every(i=>(i._lastRenderPass&RenderPassBit.OPAQUE)!==0)));
  }finally{world?.dispose();root.destroy({children:true});for(const {s} of sources)s.destroy();globalThis.location=saved;}
 });
+
+test('rock overgrowth restores only the material with a foliage source',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};const root=new Container3D(),sources=[];let world;
+ const rock={name:'RockShorlineCliffIvy',path:'War/Content/Meshes/Environment/Props/RockShorlineCliffIvy.uasset',file:'rock.gltf',kind:'environment',category:'rocks',materials:[{name:'Ivy',diffuse:'model-textures/IvyC.png',masked:false,source:'War/Content/Meshes/Environment/Foliage/Textures/IvyC.IvyC'},{name:'Frame',diffuse:'model-textures/IvyC.png',masked:false,source:'War/Content/Textures/Environment/Rock.Rock'}],placements:[{matrix}]};
+ const peer={name:'Ivy05',path:'War/Content/Meshes/Environment/Foliage/Ivy05.uasset',file:'reference.gltf',kind:'environment',category:'vegetation',materials:[{name:'Ivy',diffuse:'model-textures/IvyC.png',masked:true}],placements:[]};
+ try{
+  world=await loadWorldModels({region:'fixture',root,status(){},teamAt:()=> 'NONE',worldData:{prototypes:[rock]},visibilityData:{prototypes:[rock,peer]},optimize:false,json:async()=>({assets:{}}),loadModel:async url=>{const s=await model(url.endsWith('reference.gltf'));s.materials[1].textures.baseColor=Texture.EMPTY;sources.push({url,s});return s;}});
+  assert.deepEqual(world.counts.failed,[]);
+  const source=sources.find(x=>x.url.endsWith('rock.gltf')).s;
+  assert.equal(source.materials[0].alphaMode,'mask');
+  assert.equal(source.materials[0].alphaCutoff,0.35);
+  assert.equal(source.materials[0].textures.baseColor,Texture.WHITE);
+  assert.equal(source.materials[1].alphaMode,'opaque','solid rock stays opaque even when its texture key matches');
+  assert.equal(source.materials[1].textures.baseColor,Texture.EMPTY);
+  assert.equal(world.counts.placements,1,'reference foliage adds no placements');
+  assert.equal(world.batches.length,1);
+  assert.ok(world.layers.rocks.children.length);
+ }finally{world?.dispose();root.destroy({children:true});for(const {s}of sources)s.destroy();globalThis.location=saved;}
+});
