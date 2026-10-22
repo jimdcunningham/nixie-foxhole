@@ -1265,7 +1265,7 @@ public sealed class FoxWatchRenderSceneGenerator
         var referencedMeshIds = CollectReferencedMeshIds(orientedRoots);
         var prunedMeshAssets = CloneMeshAssets((blueprintScene?.Meshes ?? [])
             .Where(mesh => referencedMeshIds.Contains(mesh.Id)));
-        ApplyTownFoliageMaterialBindings(structure, prunedMeshAssets);
+        ApplyNativeIvyMaterialBindings(prunedMeshAssets);
 
         return new FoxWatchRenderSceneDocument
         {
@@ -3235,52 +3235,49 @@ public sealed class FoxWatchRenderSceneGenerator
             || string.Equals(structure.Id, "smallrailtracksplinebiarc", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void ApplyTownFoliageMaterialBindings(
-        FoxWatchManifestStructure structure, IEnumerable<FoxWatchRenderSceneMeshAsset> meshes)
+    private static void ApplyNativeIvyMaterialBindings(IEnumerable<FoxWatchRenderSceneMeshAsset> meshes)
     {
-        var isDestroyedWatermill = string.Equals(structure.Id, "uniquewwatermillg1destroyed", StringComparison.OrdinalIgnoreCase);
-        var isDestroyedWindmill = string.Equals(structure.Id, "uniquewwindmillg1destroyed", StringComparison.OrdinalIgnoreCase);
-        var isColonialChurch = string.Equals(structure.Id, "uniquecchurchg1", StringComparison.OrdinalIgnoreCase);
-        if (!string.Equals(structure.Id, "townwmedg1", StringComparison.OrdinalIgnoreCase) && !isDestroyedWatermill && !isDestroyedWindmill && !isColonialChurch)
-        {
-            return;
-        }
-
         foreach (var mesh in meshes)
         {
-            // These are the native StaticMaterials slot identities, not component
-            // overrides. Props/Ivy and Environment/IVy are different packages.
-            var source = (mesh.SourcePath ?? string.Empty).Replace('\\', '/');
-            Dictionary<int, string>? paths = source.ToLowerInvariant() switch
+            // Native StaticMaterials identities verified from the ivy mesh packages.
+            // Bind the shared mesh for every building: bare Ivy is ambiguous with
+            // Environment/IVy, and cannot safely identify Environment/Props/Ivy.
+            var source = (mesh.SourcePath ?? string.Empty).Replace('\\', '/').ToLowerInvariant();
+            Dictionary<int, string>? paths = source switch
             {
-                "war/content/meshes/environment/foliage/ivy06.glb" when !isColonialChurch => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy05.glb" when !isDestroyedWatermill && !isDestroyedWindmill && !isColonialChurch => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy09.glb"
-                    or "war/content/meshes/environment/foliage/ivy15.glb" when isDestroyedWatermill => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy11.glb" when isDestroyedWatermill || isColonialChurch => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy12.glb" when isColonialChurch => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy10.glb" when isDestroyedWatermill || isDestroyedWindmill => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy14corner.glb" when isDestroyedWatermill || isDestroyedWindmill || isColonialChurch => new()
-                    { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
-                "war/content/meshes/environment/foliage/ivy03.glb" when !isDestroyedWatermill && !isDestroyedWindmill && !isColonialChurch => new()
+                "war/content/meshes/environment/foliage/ivy01.glb"
+                    or "war/content/meshes/environment/foliage/ivy03.glb"
+                    or "war/content/meshes/environment/foliage/ivy04.glb" => new()
                     { [0] = "War/Content/Materials/Environment/IVy.uasset",
                       [1] = "War/Content/Materials/Environment/IVy2.uasset" },
+                "war/content/meshes/environment/foliage/ivy02.glb" => new()
+                    { [0] = "War/Content/Materials/Environment/IVy.uasset" },
+                "war/content/meshes/environment/foliage/ivy05.glb"
+                    or "war/content/meshes/environment/foliage/ivy06.glb"
+                    or "war/content/meshes/environment/foliage/ivy07.glb"
+                    or "war/content/meshes/environment/foliage/ivy08.glb"
+                    or "war/content/meshes/environment/foliage/ivy09.glb"
+                    or "war/content/meshes/environment/foliage/ivy10.glb"
+                    or "war/content/meshes/environment/foliage/ivy11.glb"
+                    or "war/content/meshes/environment/foliage/ivy12.glb"
+                    or "war/content/meshes/environment/foliage/ivy13.glb"
+                    or "war/content/meshes/environment/foliage/ivy14corner.glb"
+                    or "war/content/meshes/environment/foliage/ivy14cornerb.glb"
+                    or "war/content/meshes/environment/foliage/ivy15.glb"
+                    or "war/content/meshes/environment/foliage/ivy15b.glb"
+                    or "war/content/meshes/environment/foliage/ivy16.glb"
+                    or "war/content/meshes/environment/foliage/ivy16pillar.glb"
+                    or "war/content/meshes/environment/foliage/ivy17.glb"
+                    => new() { [0] = "War/Content/Materials/Environment/Props/Ivy.uasset" },
                 _ => null,
             };
-            if (paths == null)
-            {
-                continue;
-            }
+            if (paths == null) continue;
             mesh.MaterialSidecarNameOverridesByVariant ??= new(StringComparer.OrdinalIgnoreCase);
-            mesh.MaterialSidecarNameOverridesByVariant["default"] = paths;
+            if (!mesh.MaterialSidecarNameOverridesByVariant.TryGetValue("default", out var defaults))
+                mesh.MaterialSidecarNameOverridesByVariant["default"] = defaults = new();
+            foreach (var (slot, path) in paths) defaults.TryAdd(slot, path);
             mesh.MaterialPackagePathsByVariant ??= new(StringComparer.OrdinalIgnoreCase);
-            mesh.MaterialPackagePathsByVariant["default"] = paths.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            mesh.MaterialPackagePathsByVariant["default"] = defaults.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
     }
 

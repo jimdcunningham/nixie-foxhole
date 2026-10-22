@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
 import NxButton from '#nixie/components/NxButton.vue';
 import NxIconButton from '#nixie/components/NxIconButton.vue';
 import NxProgress from '#nixie/components/NxProgress.vue';
+import NxSelect from '#nixie/components/NxSelect.vue';
 import NxToggleGrid from '#nixie/components/NxToggleGrid.vue';
-import type { NxToggleGridOption } from '#nixie/components/NxToggleGrid.vue';
+import type { NxToggleGridOption, NxToggleGridOptionClick } from '#nixie/components/NxToggleGrid.vue';
 import { requestNxConfirmDialog } from '#nixie/composables/useNxConfirmDialog.ts';
 import { showNxToast } from '#nixie/composables/useNxToast.ts';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
@@ -20,6 +22,7 @@ import {
     serializeFoxholeMapStringList,
 } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
 import type { FoxholeMapIconCategoryKey, FoxholeMapLayerKey } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
+import { FOXHOLE_WORLD_LAYER_GROUPS, activeWorldLayerGroups, worldLayerGroupPatch } from '#foxhole/plugins/foxhole/nixie/map/world-layer-groups.ts';
 import { rawFoxholePublishedMapIcons } from '#foxhole/plugins/foxhole/nixie/map/data.ts';
 import { createFoxholeAssetsBaseUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import {
@@ -99,6 +102,24 @@ const pakImportDisplayFile = computed(() => pakImportStatus.value.fileName || 'm
 const pakImportCurrentFile = computed(() => pakImportStatus.value.currentFile || 'Preparing files…');
 
 const layerGroups = FOXHOLE_MAP_LAYER_GROUPS;
+const showRoadTour = import.meta.dev;
+const roadTourRegions = computed(() => [{ value: '', label: 'Nearest Loaded Region' }, ...plannerRoadTourStatus.value.regions.map(region => ({ value: region.id, label: region.label }))]);
+const roadTourViews = [{ value: 'variety', label: 'Variety' }, { value: 'close', label: 'Close' }, { value: 'scenic', label: 'Scenic' }, { value: 'high', label: 'High' }];
+const roadTourSpeeds = [{ value: '6', label: '6 m/s' }, { value: '12', label: '12 m/s' }, { value: '24', label: '24 m/s' }, { value: '48', label: '48 m/s' }];
+function setRoadTourOption(key: 'region' | 'speed' | 'view', value: unknown): void {
+    plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' ? Number(value) : String(value) };
+}
+const terrainSurfaceOptions = [{ value: 'plain', label: 'Plain' }, { value: 'map', label: 'Map' }, { value: 'native', label: 'Detailed' }];
+const worldLayerOptions: NxToggleGridOption[] = FOXHOLE_WORLD_LAYER_GROUPS.map(group => ({ id: group.id, label: group.label }));
+const terrainOverlayOptions: NxToggleGridOption[] = [{ id: 'rdz', label: 'RDZ' }, { id: 'topo', label: 'Topo' }];
+const activeTerrainOverlays = computed(() => [mapSettings.value.terrainRdz ? 'rdz' : '', mapSettings.value.terrainTopo ? 'topo' : ''].filter(Boolean));
+function onTerrainOverlaysChange(ids: string[]): void {
+    patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainRdz]: ids.includes('rdz'), [FOXHOLE_MAP_SETTING_KEYS.terrainTopo]: ids.includes('topo') }, 'foxhole-war-nx-map:terrain-overlays');
+}
+const activeWorldLayers = computed(() => activeWorldLayerGroups(mapSettings.value.worldLayers));
+function onWorldLayerClick({ id, nextIds }: NxToggleGridOptionClick): void {
+    patchSettings(worldLayerGroupPatch(id, nextIds.includes(id)), 'foxhole-war-nx-map:world-layers');
+}
 const layerDefinitions = FOXHOLE_MAP_LAYER_DEFINITIONS;
 const rawMapIcons = rawFoxholePublishedMapIcons as Record<string, RawFoxholeMapIcon>;
 
@@ -686,23 +707,70 @@ const mapModVisibilityDisabled = computed(() => (
 
 <template>
     <div class="nixie-sidebar-form">
-        <NixieSidebarFormSection
-            v-for="group in layerGroups"
-            :key="group.heading"
-            :title="getLayerGroupTitle(group)"
-            :sectionKey="getLayerGroupSectionKey(group)"
-            collapsible
-            :defaultOpen="getLayerGroupDefaultOpen(group)"
-        >
-            <NxToggleGrid
-                :modelValue="getLayerGroupActiveIds(group)"
-                :options="getLayerGroupOptions(group)"
-                :disabled="mapControlsDisabled"
-                :aria-label="getLayerGroupTitle(group)"
-                preserveLabelCase
-                @update:model-value="onLayerGroupChange(group, $event)"
-            />
-        </NixieSidebarFormSection>
+        <template v-for="group in layerGroups" :key="group.heading">
+            <NixieSidebarFormSection
+                v-if="group.heading === 'Improved Map Mod'"
+                title="2.5D / 3D Layers"
+                sectionKey="foxhole-war-nx.map.world-layers"
+                collapsible
+                :defaultOpen="true"
+            >
+                <NxSelect
+                    label="Terrain Surface"
+                    :modelValue="mapSettings.terrainSurface"
+                    :options="terrainSurfaceOptions"
+                    @update:modelValue="patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainSurface]: $event }, 'foxhole-war-nx-map:terrain-surface')"
+                />
+
+                <NxToggleGrid
+                    class="foxhole-war-nx-map-tab__world-layers"
+                    :modelValue="activeWorldLayers"
+                    :options="worldLayerOptions"
+                    :disabled="mapControlsDisabled"
+                    aria-label="2.5D / 3D Layers"
+                    @option-click="onWorldLayerClick"
+                />
+
+                <NxToggleGrid
+                    :modelValue="activeTerrainOverlays"
+                    :options="terrainOverlayOptions"
+                    :disabled="mapControlsDisabled"
+                    aria-label="Terrain Overlays"
+                    title="RDZ shows the 150 m border zone and known 50 m resource/world-base exemptions. Conditional border-base protection is not included. Topo shows 10 m elevation contours, with stronger 50 m lines."
+                    @update:model-value="onTerrainOverlaysChange"
+                />
+
+                <div v-if="showRoadTour && plannerRoadTourStatus.attached" class="foxhole-war-nx-map-tab__road-tour" role="group" aria-label="Road Tour">
+                    <NxSelect label="Tour Region" :modelValue="plannerRoadTourOptions.region" :options="roadTourRegions" :disabled="plannerRoadTourStatus.state !== 'idle'" @update:modelValue="setRoadTourOption('region', $event)" />
+                    <div class="foxhole-war-nx-map-tab__tour-options">
+                        <NxSelect label="Speed" :modelValue="String(plannerRoadTourOptions.speed)" :options="roadTourSpeeds" @update:modelValue="setRoadTourOption('speed', $event)" />
+                        <NxSelect label="View" :modelValue="plannerRoadTourOptions.view" :options="roadTourViews" @update:modelValue="setRoadTourOption('view', $event)" />
+                    </div>
+                    <div class="foxhole-war-nx-map-tab__tour-actions">
+                        <NxButton size="sm" :label="plannerRoadTourStatus.state === 'running' ? 'Pause Tour' : plannerRoadTourStatus.state === 'paused' ? 'Resume Tour' : 'Start Tour'" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.start()" />
+                        <NxButton size="sm" variant="secondary" label="Next Road" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.next()" />
+                        <NxButton size="sm" variant="secondary" label="Stop Tour" :disabled="plannerRoadTourStatus.state === 'idle'" @click="plannerRoadTourActions?.stop()" />
+                    </div>
+                    <p v-if="plannerRoadTourStatus.error" role="alert" class="text-xs opacity-70">{{ plannerRoadTourStatus.error }}</p>
+                </div>
+            </NixieSidebarFormSection>
+            <NixieSidebarFormSection
+                :title="getLayerGroupTitle(group)"
+                :sectionKey="getLayerGroupSectionKey(group)"
+                collapsible
+                :defaultOpen="getLayerGroupDefaultOpen(group)"
+            >
+                <NxToggleGrid
+                    :modelValue="getLayerGroupActiveIds(group)"
+                    :options="getLayerGroupOptions(group)"
+                    :disabled="mapControlsDisabled"
+                    :aria-label="getLayerGroupTitle(group)"
+                    preserveLabelCase
+                    @update:model-value="onLayerGroupChange(group, $event)"
+                />
+            </NixieSidebarFormSection>
+
+        </template>
 
         <NixieSidebarFormSection
             title="Custom Map Mod"
@@ -825,6 +893,32 @@ const mapModVisibilityDisabled = computed(() => (
 </template>
 
 <style scoped>
+
+.foxhole-war-nx-map-tab__road-tour {
+    display: grid;
+    gap: var(--nx-space-2);
+    margin-top: var(--nx-space-2);
+    padding-top: var(--nx-space-2);
+    border-top: 1px solid var(--nx-border);
+    min-width: 0;
+}
+
+.foxhole-war-nx-map-tab__tour-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--nx-space-2);
+}
+
+.foxhole-war-nx-map-tab__tour-options > * {
+    min-width: 0;
+}
+
+.foxhole-war-nx-map-tab__tour-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--nx-space-1);
+}
+
 .foxhole-war-nx-map-tab__icon-grid.is-category-muted {
     opacity: 0.45;
 }

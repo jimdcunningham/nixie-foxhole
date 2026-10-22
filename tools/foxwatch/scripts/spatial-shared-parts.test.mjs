@@ -73,3 +73,16 @@ test('shared source subtrees fail explicitly instead of dropping authored childr
     input.scene.roots[0].children[0].children.push({ id: 'attached-model', meshId: 'other', children: [] });
     await assert.rejects(prepareSpatialSharedParts('facilityrefinery1', input, options()), /static source leaf/);
 });
+
+test('posed stationary cranes share geometry across catalog hosts while retaining spawn transforms',async()=>{
+ const input=fixture();input.assets.meshes[0].exportUrl='War/Content/Meshes/Structures/SK_StaticCrane.glb';
+ const node=input.scene.roots[0].children[0];node.pose={type:'foxhole-bone-pose',bones:[{name:'arm',rotationQuaternion:[0,0,0,1]}]};
+ node.children=[{id:'audio-helper',children:[]}];
+ const a=await prepareSpatialSharedParts('refinery',input,options()),b=await prepareSpatialSharedParts('staticcrane',input,options());
+ assert.equal(a.parts.length,1);assert.equal(a.parts[0].id,b.parts[0].id);
+ assert.deepEqual(a.parts[0].canonical.scene.roots[0].pose,node.pose);
+ assert.deepEqual(a.document.scene.roots[0].children[0].unrealRotationDegrees,node.unrealRotationDegrees);
+ assert.equal(a.document.scene.roots[0].children[0].spatialSharedPart.posed,true);
+ node.pose.bones[0].rotationQuaternion=[0,0,1,0];
+ assert.notEqual((await prepareSpatialSharedParts('seaport',input,options())).parts[0].id,a.parts[0].id);
+});

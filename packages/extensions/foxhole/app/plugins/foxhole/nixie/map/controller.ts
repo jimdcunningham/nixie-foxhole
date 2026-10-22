@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js';
 import { useRuntimeConfig } from '#imports';
 import { Plugin } from '#nixie/utils/nixie-pixi-viewport.ts';
 import type { Viewport } from 'pixi-viewport';
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import type { WatchStopHandle } from 'vue';
 import { createFoxholeAssetsBaseUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import { readFoxholeMapSettings } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
@@ -172,6 +172,7 @@ export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginConte
     getSceneNodeCount?: () => number;
     getZoom?: () => number;
     manualPresentation?: boolean;
+    needsSpatialWorldData?(): boolean;
     session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
         pointerTrackerRef: { readonly value: { pointer: { readonly value: { world: PIXI.PointData | null; }; }; } | null; };
     };
@@ -212,6 +213,10 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private readonly playbackPreviewRef = getFoxholeMapPlaybackPreviewRef();
     private readonly assistantHighlightsRef = getFoxholeMapAssistantHighlightsRef();
     private readonly settingsStore = useNixieSettingsStore();
+    private readonly mapSettings = computed(() => readFoxholeMapSettings(
+        this.pluginContext.projectStore.settings,
+        settingId => this.settingsStore.getValue(settingId),
+    ));
 
     readonly updatePresentation = (): void => {
         if (!this.readMapSettings().enabled || !this.pluginContext.session.sceneViewActive.value) {
@@ -228,7 +233,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         void this.ensureRenderer();
         if (!pluginContext.manualPresentation) this.pluginContext.session.appRef.value?.ticker.add(this.updatePresentation);
         this.stopSettingsWatch = watch(
-            () => this.readMapSettings(),
+            () => ({ ...this.readMapSettings(), spatialWorldData: this.pluginContext.needsSpatialWorldData?.() === true }),
             (settings, previousSettings) => {
                 const project = this.pluginContext.project ?? this.pluginContext.projectStore.project;
                 const sceneNodeCount = this.pluginContext.getSceneNodeCount?.() ?? project?.getSelectableNodeIds({
@@ -362,7 +367,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
                 world,
                 getProjectSettings: () => this.pluginContext.projectStore.settings,
                 patchProjectSettings: (patch, reason) => this.pluginContext.projectStore.patchSettings(patch, reason),
-                readMapSettings: () => this.readMapSettings(),
+                readMapSettings: () => ({ ...this.readMapSettings(), spatialWorldData: this.pluginContext.needsSpatialWorldData?.() === true }),
                 getWarData: () => this.playbackPreviewWarData ?? this.warData,
                 getPlaybackTimestamp: () => {
                     const preview = this.getActivePlaybackPreview();
@@ -540,10 +545,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     private readMapSettings() {
-        return readFoxholeMapSettings(
-            this.pluginContext.projectStore.settings,
-            settingId => this.settingsStore.getValue(settingId),
-        );
+        return this.mapSettings.value;
     }
 
     private async ensureCacheLoaded(): Promise<void> {
@@ -766,8 +768,13 @@ export class FoxholeMapViewportPlugin extends Plugin {
         return settings.voronoi || settings.faction || settings.frontline || settings.frontAlt || settings.majorLabels || settings.minorLabels;
     }
 
+    getSpatialWarState(regionKey: string) {
+        const preview = this.getActivePlaybackPreview();
+        return preview ? preview.icons?.[regionKey] ?? null : this.cachedMaps[regionKey]?.icons ?? null;
+    }
+
     private needsLiveIcons(settings: ReturnType<typeof readFoxholeMapSettings>): boolean {
-        return settings.icons;
+        return settings.icons || (settings.enabled && settings.regionKeys.length > 0 && this.pluginContext.needsSpatialWorldData?.() === true);
     }
 
     private needsLiveReports(settings: ReturnType<typeof readFoxholeMapSettings>): boolean {

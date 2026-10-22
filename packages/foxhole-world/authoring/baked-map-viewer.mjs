@@ -1,0 +1,35 @@
+export function mapBakeSize(metadata){
+ const source=metadata.textures?.find(t=>t.name==='terrain');
+ if(!source||!Number.isInteger(source.width)||!Number.isInteger(source.height)||source.width<1||source.height<1)throw Error('Native terrain texture dimensions are missing.');
+ return{width:source.width,height:source.height};
+}
+export class BitmapViewport{
+ constructor(imageWidth,imageHeight){this.imageWidth=imageWidth;this.imageHeight=imageHeight;this.width=1;this.height=1;this.dpr=1;this.scale=1;this.x=0;this.y=0;this.fitted=true;this.topInset=0;}
+ resize(width,height,dpr=1){const dx=(width-this.width)/2,dy=(height-this.height)/2;this.width=width;this.height=height;this.dpr=dpr;if(this.fitted)this.fit();else{this.x+=dx;this.y+=dy;}}
+ fit(){const availableHeight=Math.max(1,this.height-this.topInset);this.scale=Math.min(this.width/this.imageWidth,availableHeight/this.imageHeight)*.84;this.x=(this.width-this.imageWidth*this.scale)/2;this.y=this.topInset+(availableHeight-this.imageHeight*this.scale)/2;this.fitted=true;}
+ zoomTo(scale,x=this.width/2,y=this.height/2){const old=this.scale;this.scale=Math.max(.05/this.dpr,Math.min(16/this.dpr,scale));this.x=x-(x-this.x)*this.scale/old;this.y=y-(y-this.y)*this.scale/old;this.fitted=false;}
+ pan(dx,dy){this.x+=dx;this.y+=dy;this.fitted=false;}
+ get pixelPercent(){return this.scale*this.dpr*100;}
+}
+export function imagePixelPercent(viewport,sourceWidth){return viewport.pixelPercent*viewport.imageWidth/sourceWidth;}
+export function createBakedMapViewer(){
+ const $=id=>document.getElementById(id),canvas=$('bakedMapCanvas'),ctx=canvas.getContext('2d'),image=$('bakedSource'),reference=$('foxholeSource');let viewport=null,url=null,referenceUrl=null,blob=null,referenceBlob=null,drag=null,info=null,selected='a';
+ const current=()=>selected==='b'?reference:image;
+ function draw(){if(!viewport||!image.complete)return;const source=current(),percent=imagePixelPercent(viewport,source.naturalWidth),dpr=viewport.dpr;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=percent<100;ctx.imageSmoothingQuality='high';ctx.drawImage(source,viewport.x,viewport.y,viewport.imageWidth*viewport.scale,viewport.imageHeight*viewport.scale);$('bakeReadout').textContent=`${source.naturalWidth} × ${source.naturalHeight} · ${selected==='b'?'Original Game Texture':(info.finish==='clean'?'Cleaned PNG · 2× AA':'Raw PNG · 2× AA')} · ${Math.round(percent)}% · ${((selected==='b'?referenceBlob:blob).size/1048576).toFixed(2)} MiB`;$('bakeReadout').dataset.zoom=percent.toFixed(3);$('bakeReadout').dataset.view=JSON.stringify({x:viewport.x,y:viewport.y,scale:viewport.scale,selected});$('bakeCompare').textContent=selected==='b'?'B · Foxhole':'A · Our Bake';$('bakeCompare').setAttribute('aria-pressed',String(selected==='b'));$('bakeCompare').title=selected==='b'?'Click to show our bake':'Click to show the original Foxhole map';}
+ function select(value){if(!viewport)return;selected=value;draw();}
+ function actualSize(){if(viewport){viewport.zoomTo(current().naturalWidth/viewport.imageWidth/viewport.dpr);draw();}}
+ function resize(){if(!viewport)return;const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);viewport.topInset=Math.min(rect.height*.4,$('topDownBar').getBoundingClientRect().bottom+12);viewport.resize(rect.width,rect.height,dpr);draw();}
+ function fit(){if(viewport){viewport.fit();draw();}}
+ function zoom(factor,x,y){if(viewport){viewport.zoomTo(viewport.scale*factor,x,y);draw();}}
+ canvas.addEventListener('wheel',e=>{e.preventDefault();if(!viewport)return;const r=canvas.getBoundingClientRect();if(e.shiftKey){viewport.pan(-e.deltaX,-e.deltaY);draw();}else zoom(Math.exp(-Math.max(-200,Math.min(200,e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?r.height:1)))*.008),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+ canvas.addEventListener('pointerdown',e=>{if(e.button!==0&&e.button!==1)return;drag={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);canvas.classList.add('dragging');});
+ canvas.addEventListener('pointermove',e=>{if(!drag||!viewport||drag.id!==e.pointerId)return;viewport.pan(e.clientX-drag.x,e.clientY-drag.y);drag.x=e.clientX;drag.y=e.clientY;draw();});
+ const end=e=>{if(drag?.id===e.pointerId){drag=null;canvas.classList.remove('dragging');}};
+ canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
+ canvas.addEventListener('dblclick',actualSize);
+ $('bakeFit').onclick=fit;$('bakeActual').onclick=actualSize;$('bakeIn').onclick=()=>zoom(1.5);$('bakeOut').onclick=()=>zoom(1/1.5);$('bakeCompare').onclick=()=>select(selected==='a'?'b':'a');
+ document.addEventListener('keydown',e=>{if(!viewport||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.('input,select,textarea,[contenteditable]'))return;if(e.code==='KeyA'||e.code==='KeyB'){e.preventDefault();select(e.code==='KeyA'?'a':'b');}});
+ $('bakeDownload').onclick=()=>{if(!url)return;const source=current(),a=document.createElement('a');a.href=selected==='b'?referenceUrl:url;a.download=`${info.region}-${selected==='b'?'foxhole-original':'topdown'}-${source.naturalWidth}x${source.naturalHeight}.png`;a.click();};
+ return{resize,async replaceBake(nextBlob,metadata){const nextUrl=URL.createObjectURL(nextBlob);image.src=nextUrl;await image.decode();if(url)URL.revokeObjectURL(url);url=nextUrl;blob=nextBlob;info={...metadata,reference:info.reference};$('bakeMetadata').textContent=JSON.stringify(info,null,2);draw();},async show(nextBlob,metadata){blob=nextBlob;info=metadata;viewport=null;selected='a';if(url)URL.revokeObjectURL(url);if(referenceUrl)URL.revokeObjectURL(referenceUrl);url=URL.createObjectURL(blob);image.src=url;const response=await fetch(info.reference.url);if(!response.ok)throw Error('Original Foxhole map unavailable: '+response.status);referenceBlob=await response.blob();referenceUrl=URL.createObjectURL(referenceBlob);reference.src=referenceUrl;await Promise.all([image.decode(),reference.decode()]);if(Math.abs(image.naturalWidth/image.naturalHeight-reference.naturalWidth/reference.naturalHeight)>.001)throw Error('Map comparison aspect ratios disagree');viewport=new BitmapViewport(image.naturalWidth,image.naturalHeight);info.reference={...info.reference,width:reference.naturalWidth,height:reference.naturalHeight,bytes:referenceBlob.size};$('bakeMetadata').textContent=JSON.stringify(info,null,2);$('bakedViewport').hidden=false;for(const id of ['bakeFit','bakeActual','bakeIn','bakeOut','bakeDownload'])$(id).disabled=false;resize();},
+ hide(){drag=null;viewport=null;$('bakedViewport').hidden=true;if(url)URL.revokeObjectURL(url);if(referenceUrl)URL.revokeObjectURL(referenceUrl);url=null;referenceUrl=null;image.removeAttribute('src');reference.removeAttribute('src');blob=null;referenceBlob=null;},snapshot(){return info?{...info,...(viewport?{selected,zoomPercent:imagePixelPercent(viewport,current().naturalWidth),panX:viewport.x,panY:viewport.y}:{})}:null;}};
+}

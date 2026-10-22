@@ -1,0 +1,7 @@
+export const isWaterStencil=p=>/\/BPWaterStencilComponent$/.test(p.name);
+export function stencilContains(mask,x,y,z){return mask.triangles.some((t,k)=>{const p=mask.triangleHeights?.[k],height=p?p[0]*x+p[1]*z+p[2]:mask.height;if(!(y>height-2&&y<height+.1))return false;const side=Math.sign((t[2]-t[0])*(t[5]-t[1])-(t[3]-t[1])*(t[4]-t[0]));return[0,1,2].every(i=>{const j=(i+1)%3;return side*((t[j*2]-t[i*2])*(z-t[i*2+1])-(t[j*2+1]-t[i*2+1])*(x-t[i*2]))>=-1e-5;});});}
+export function waterStencilBit(masks){
+ const num=n=>'('+Number(n).toFixed(7)+')',body=masks.map(m=>{const tris=m.triangles.map((t,k)=>{const p=m.triangleHeights?.[k],height=p?`${num(p[0])}*vPosition.x+${num(p[1])}*vPosition.z+${num(p[2])}`:num(m.height),side=Math.sign((t[2]-t[0])*(t[5]-t[1])-(t[3]-t[1])*(t[4]-t[0])),edges=[0,1,2].map(i=>{const j=(i+1)%3;return`(${num(side*(t[j*2]-t[i*2]))}*(vPosition.z-${num(t[i*2+1])})-${num(side*(t[j*2+1]-t[i*2+1]))}*(vPosition.x-${num(t[i*2])}))>=-0.00001`;});return`if(${edges.join('&&')}&&vPosition.y>(${height})-2.0&&vPosition.y<(${height})+0.1){discard;}`;}).join('\n');return`if(vPosition.x>${num(m.bounds[0])}&&vPosition.x<${num(m.bounds[2])}&&vPosition.z>${num(m.bounds[1])}&&vPosition.z<${num(m.bounds[3])}){${tris}}`;}).join('\n');
+ let hash=2166136261;for(const c of body)hash=Math.imul(hash^c.charCodeAt(0),16777619);
+ return{name:'nativeBoatWaterStencils'+(hash>>>0).toString(16),gl:{fragment:{material:body}},gpu:{fragment:{material:body.replaceAll('vPosition','input.vPosition')}}};
+}

@@ -1,4 +1,5 @@
 from render_light_beam import build_light_beam_material
+from render_native_ivy import is_native_ivy, build_native_ivy_material
 from render_material_identity import resolve_material_sidecar_identity
 import json
 import hashlib
@@ -1463,6 +1464,9 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
         material = bpy.data.materials.new(name=material_name)
 
     material_document = load_json(material_sidecar_path)
+    if is_native_ivy(material_sidecar_path):
+        return build_native_ivy_material(material, material_document, search_roots, resolve_exported_texture_path)
+
     textures = material_document.get("Textures", {})
     parameters = material_document.get("Parameters", {})
     property_overrides = parameters.get("Properties", {}).get("BasePropertyOverrides", {})

@@ -1,0 +1,36 @@
+using System.Numerics;
+using System.Text;
+using System.Text.Json;
+using CUE4Parse.UE4.Assets.Exports.Material;
+using CUE4Parse.UE4.Assets.Exports.StaticMesh;
+using CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
+using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse_Conversion;
+using CUE4Parse_Conversion.Meshes;
+using CUE4Parse_Conversion.Meshes.PSK;
+// Static native buffers go straight into GLB accessors, avoiding per-triangle
+// scene-builder objects and vertex deduplication. No simplification or resizing.
+public sealed class DirectMesh {
+ public readonly List<Mesh> MeshLods=[];
+ public DirectMesh(USkeletalMesh mesh,ExporterOptions options){MeshLods.AddRange(new MeshExporter(mesh,options).MeshLods);}
+ public DirectMesh(UStaticMesh mesh,ExporterOptions options){
+  if(!mesh.TryConvert(null,out var converted)||converted.LODs.Count==0)throw new Exception("No native mesh LOD");
+  var path=mesh.GetPathName().Split('.')[0].TrimStart('/');int index=0;
+  foreach(var lod in converted.LODs){if(lod.SkipLod)continue;var name=path+(options.LodFormat==ELodFormat.AllLods?"_LOD"+index:"")+".glb";MeshLods.Add(new Mesh(name,Write(mesh.Name,lod),[]));index++;if(options.LodFormat==ELodFormat.FirstLod)break;}
+ }
+ public bool TryWriteToDir(DirectoryInfo directory,out string label,out string saved){saved="";label="";foreach(var lod in MeshLods){saved=Path.GetFullPath(Path.Combine(directory.FullName,lod.FileName));if(!saved.StartsWith(directory.FullName+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new Exception("Unsafe native mesh path");Directory.CreateDirectory(Path.GetDirectoryName(saved)!);File.WriteAllBytes(saved,lod.FileData);label=Path.GetFileName(saved);}return MeshLods.Count>0;}
+ public static byte[] Write(string name,CStaticMeshLod lod){
+  var vertices=lod.Verts??throw new Exception("No vertices");var n=vertices.Length;using var binary=new MemoryStream();using var writer=new BinaryWriter(binary);var views=new List<object>();var accessors=new List<object>();
+  int Attribute(string type,int count,int components,Action fill,float[]? min=null,float[]? max=null){var offset=(int)binary.Position;fill();var view=views.Count;views.Add(new{buffer=0,byteOffset=offset,byteLength=(int)binary.Position-offset});var index=accessors.Count;var entry=new Dictionary<string,object>{{"bufferView",view},{"componentType",5126},{"count",count},{"type",type}};if(min!=null)entry["min"]=min;if(max!=null)entry["max"]=max;accessors.Add(entry);return index;}
+  var lo=new[]{float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity};var hi=new[]{float.NegativeInfinity,float.NegativeInfinity,float.NegativeInfinity};foreach(var v in vertices){var p=v.Position*.01f;float[] q=[p.X,p.Z,p.Y];for(int k=0;k<3;k++){lo[k]=Math.Min(lo[k],q[k]);hi[k]=Math.Max(hi[k],q[k]);}}
+  var attrs=new Dictionary<string,int>();attrs["POSITION"]=Attribute("VEC3",n,3,()=>{foreach(var v in vertices){var p=v.Position*.01f;writer.Write(p.X);writer.Write(p.Z);writer.Write(p.Y);}},lo,hi);
+  attrs["NORMAL"]=Attribute("VEC3",n,3,()=>{foreach(var v in vertices){var normal=new FVector(v.Normal.X,v.Normal.Z,v.Normal.Y);normal.Normalize();var unit=Vector3.Normalize(new Vector3(normal.X,normal.Y,normal.Z));writer.Write(unit.X);writer.Write(unit.Y);writer.Write(unit.Z);}});
+  attrs["TANGENT"]=Attribute("VEC4",n,4,()=>{foreach(var v in vertices){var tangent=Vector4.Normalize(new Vector4(v.Tangent.X,v.Tangent.Z,v.Tangent.Y,v.Tangent.W));writer.Write(tangent.X);writer.Write(tangent.Y);writer.Write(tangent.Z);writer.Write(tangent.W);}});
+  attrs["TEXCOORD_0"]=Attribute("VEC2",n,2,()=>{foreach(var v in vertices){writer.Write(v.UV.U);writer.Write(v.UV.V);}});
+  int uv=1;foreach(var extra in lod.ExtraUV!.Value){attrs["TEXCOORD_"+uv++]=Attribute("VEC2",n,2,()=>{foreach(var v in extra){writer.Write(v.U);writer.Write(v.V);}});}
+  // Match the reference exporter's quantized vertex-color representation.
+  var colorOffset=(int)binary.Position;for(int i=0;i<n;i++){var c=lod.VertexColors?[i]??default;writer.Write((byte)(c.R/255));writer.Write((byte)(c.G/255));writer.Write((byte)(c.B/255));writer.Write((byte)(c.A/255));}var colorView=views.Count;views.Add(new{buffer=0,byteOffset=colorOffset,byteLength=n*4});attrs["COLOR_0"]=accessors.Count;accessors.Add(new{bufferView=colorView,componentType=5121,normalized=true,count=n,type="VEC4"});
+  var materials=new List<object>();var primitives=new List<object>();int materialIndex=0;foreach(var section in lod.Sections!.Value){var materialName=section.Material?.Load<UMaterialInterface>()?.Name.ToString()??section.MaterialName??"material_"+materialIndex;materials.Add(new{name=materialName,pbrMetallicRoughness=new{baseColorFactor=new[]{1f,1f,1f,1f},metallicFactor=1f,roughnessFactor=1f}});var first=uint.MaxValue;var last=0u;var partLo=new[]{float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity};var partHi=new[]{float.NegativeInfinity,float.NegativeInfinity,float.NegativeInfinity};for(int i=0;i<section.NumFaces*3;i++){var sourceIndex=lod.Indices!.Value[section.FirstIndex+i];first=Math.Min(first,sourceIndex);last=Math.Max(last,sourceIndex);var pos=vertices[sourceIndex].Position*.01f;float[] q=[pos.X,pos.Z,pos.Y];for(int k=0;k<3;k++){partLo[k]=Math.Min(partLo[k],q[k]);partHi[k]=Math.Max(partHi[k],q[k]);}}if(first==uint.MaxValue)continue;var partAttrs=new Dictionary<string,int>();foreach(var entry in attrs){var original=JsonSerializer.SerializeToElement(accessors[entry.Value]);var component=original.GetProperty("componentType").GetInt32();var type=original.GetProperty("type").GetString()!;var components=type=="VEC2"?2:type=="VEC3"?3:4;var item=new Dictionary<string,object>{{"bufferView",original.GetProperty("bufferView").GetInt32()},{"componentType",component},{"type",type},{"byteOffset",first*components*(component==5121?1:4)},{"count",last-first+1}};if(component==5121)item["normalized"]=true;if(entry.Key=="POSITION"){item["min"]=partLo;item["max"]=partHi;}partAttrs[entry.Key]=accessors.Count;accessors.Add(item);}var offset=(int)binary.Position;for(int i=0;i<section.NumFaces*3;i++)writer.Write(lod.Indices!.Value[section.FirstIndex+i]-first);var view=views.Count;views.Add(new{buffer=0,byteOffset=offset,byteLength=(int)binary.Position-offset});var ix=accessors.Count;accessors.Add(new{bufferView=view,componentType=5125,count=section.NumFaces*3,type="SCALAR"});primitives.Add(new{attributes=partAttrs,indices=ix,material=materialIndex++});}
+  var json=JsonSerializer.SerializeToUtf8Bytes(new{asset=new{version="2.0",generator="Nixie native buffer probe"},scene=0,scenes=new[]{new{nodes=new[]{0}}},nodes=new[]{new{name,mesh=0}},meshes=new[]{new{name,primitives}},materials,buffers=new[]{new{byteLength=(int)binary.Length}},bufferViews=views,accessors});int padding=(4-json.Length%4)%4;using var glb=new MemoryStream();using var outWriter=new BinaryWriter(glb);outWriter.Write(0x46546C67);outWriter.Write(2);outWriter.Write(28+json.Length+padding+(int)binary.Length);outWriter.Write(json.Length+padding);outWriter.Write(0x4E4F534A);outWriter.Write(json);for(int i=0;i<padding;i++)outWriter.Write((byte)32);outWriter.Write((int)binary.Length);outWriter.Write(0x004E4942);binary.WriteTo(glb);return glb.ToArray();
+ }
+}

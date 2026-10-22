@@ -16,9 +16,10 @@ def extract_shared_model_parts(meshes, collection, center):
     replacements = {}
     parts = []
     for source, members in shared.items():
-        if any(obj.modifiers for obj in members):
-            raise RuntimeError("Shared model trial does not support evaluated mesh modifiers")
         marker = dict(source["foxwatchSharedPart"])
+        if any(modifier.type != "ARMATURE" or not marker.get("posed")
+               for obj in members for modifier in obj.modifiers):
+            raise RuntimeError("Shared model trial does not support evaluated mesh modifiers")
         placeholder = bpy.data.objects.new(marker["nodeName"], None)
         collection.objects.link(placeholder)
         placeholder.matrix_world = Matrix.Translation(-center) @ source.matrix_world

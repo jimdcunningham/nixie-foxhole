@@ -129,6 +129,11 @@ export async function createSpatialModelExporter(options) {
         const jsonLength = bytes.readUInt32LE(12);
         const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
         const binary = bytes.subarray(28 + jsonLength);
+        // A model made entirely of shared placements still has a valid empty buffer.
+        document.buffers ??= [{ byteLength: 0 }];
+        document.bufferViews ??= [];
+        document.accessors ??= [];
+        document.meshes ??= [];
         const pathProfile = shared ? undefined : spatialTrenchProfile(preparedStructures.get(asset.id) ?? {}, document, exported) ?? spatialConnectorProfile(asset.id, document, exported, JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'scene.json'), 'utf8')));
         const structuralProfile = shared ? undefined : spatialStructureProfile(preparedStructures.get(id) ?? {}, exported);
         const lightCount = attachSpatialBlueprintLights(document, exported);
@@ -136,7 +141,7 @@ export async function createSpatialModelExporter(options) {
         const imageViews = new Map((document.images ?? []).map(image => [image.bufferView, image]));
         const chunks = [];
         let length = 0;
-        for (const [index, view] of document.bufferViews.entries()) {
+        for (const [index, view] of (document.bufferViews ?? []).entries()) {
             let content = binary.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
             if (imageViews.has(index)) {
                 content = await sharp(content).resize(config.maxTextureSize, config.maxTextureSize, { fit: 'inside', withoutEnlargement: true }).webp({ quality: config.webpQuality, alphaQuality: 100, effort: 6 }).toBuffer();

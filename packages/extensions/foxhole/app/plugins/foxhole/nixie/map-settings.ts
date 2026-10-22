@@ -185,7 +185,83 @@ export const FOXHOLE_MAP_ICON_CATEGORY_KEYS = ['bases', 'resources', 'structures
 
 export type FoxholeMapIconCategoryKey = typeof FOXHOLE_MAP_ICON_CATEGORY_KEYS[number];
 
+export const FOXHOLE_WORLD_LAYER_DEFINITIONS = [
+    {
+        "id": "terrain",
+        "label": "Terrain",
+        "settingId": "foxhole.map.world.terrain"
+    },
+    {
+        "id": "building",
+        "label": "Buildings",
+        "settingId": "foxhole.map.world.building"
+    },
+    {
+        "id": "structures",
+        "label": "Props and Structures",
+        "settingId": "foxhole.map.world.structures"
+    },
+    {
+        "id": "rocks",
+        "label": "Rocks",
+        "settingId": "foxhole.map.world.rocks"
+    },
+    {
+        "id": "vegetation",
+        "label": "Trees and Ground Cover",
+        "settingId": "foxhole.map.world.vegetation"
+    },
+    {
+        "id": "infrastructure",
+        "label": "Infrastructure",
+        "settingId": "foxhole.map.world.infrastructure"
+    },
+    {
+        "id": "roads",
+        "label": "Roads and Tracks",
+        "settingId": "foxhole.map.world.roads"
+    },
+    {
+        "id": "decals",
+        "label": "Surface Decals",
+        "settingId": "foxhole.map.world.decals"
+    },
+    {
+        "id": "puddles",
+        "label": "Puddles",
+        "settingId": "foxhole.map.world.puddles"
+    },
+    {
+        "id": "water",
+        "label": "Water",
+        "settingId": "foxhole.map.world.water"
+    },
+    {
+        "id": "effects",
+        "label": "Smoke and Effects",
+        "settingId": "foxhole.map.world.effects"
+    },
+    {
+        "id": "shell",
+        "label": "Border Walls and Floor",
+        "settingId": "foxhole.map.world.shell"
+    }
+] as const;
+export type FoxholeWorldLayerKey = typeof FOXHOLE_WORLD_LAYER_DEFINITIONS[number]['id'];
+
 export interface FoxholeMapSettings {
+    worldLayers: Record<FoxholeWorldLayerKey, boolean>;
+    modelLod: boolean;
+    terrainLod: boolean;
+    adaptiveTextures: boolean;
+    ambientOcclusion: boolean;
+    vegetationDensity: 'full' | 'reduced' | 'minimal';
+    shadowQuality: 'off' | 'low' | 'medium' | 'high';
+    adaptiveStreaming: boolean;
+    frustumCulling: boolean;
+    terrainRdz: boolean;
+    terrainTopo: boolean;
+    terrainSurface: 'native' | 'map' | 'plain';
     enabled: boolean;
     shardId: string;
     regionKeys: string[];
@@ -231,6 +307,17 @@ export interface FoxholeMapSettings {
 }
 
 export const FOXHOLE_MAP_SETTING_KEYS = {
+    modelLod: 'foxhole.map.modelLod',
+    terrainLod: 'foxhole.map.terrainLod',
+    adaptiveTextures: 'foxhole.map.adaptiveTextures',
+    ambientOcclusion: 'foxhole.map.ambientOcclusion',
+    vegetationDensity: 'foxhole.map.vegetationDensity',
+    shadowQuality: 'foxhole.map.shadowQuality',
+    adaptiveStreaming: 'foxhole.map.adaptiveStreaming',
+    frustumCulling: 'foxhole.map.frustumCulling',
+    terrainRdz: 'foxhole.map.terrainRdz',
+    terrainTopo: 'foxhole.map.terrainTopo',
+    terrainSurface: 'foxhole.map.terrainSurface',
     enabled: 'foxhole.map.enabled',
     shardId: 'foxhole.map.shardId',
     regionKeys: 'foxhole.map.regionKeys',
@@ -353,7 +440,7 @@ function createStringUserSetting(
     icon: string,
     order: number,
     defaultValue = '',
-): UserSettingDefinition {
+): Extract<UserSettingDefinition, { type: 'string' }> {
     return {
         id: settingId,
         scope: 'user',
@@ -761,6 +848,25 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
         231,
         true,
     ),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.frustumCulling, 'Frustum Culling', 'Skip drawing objects outside each camera view without unloading assets or changing model detail.', 'ph:bounding-box', 238, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveStreaming, 'Adaptive Streaming', 'Load nearby assets and unload distant assets. Model and terrain detail are controlled separately. Changing this reloads selected regions.', 'ph:arrows-clockwise', 237, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.modelLod, 'Model LOD', 'Reduce distant model detail, including catalog models. Off keeps source geometry. Changing this reloads selected regions.', 'ph:cube', 240, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainLod, 'Terrain LOD', 'Simplify distant terrain geometry and refine it near the camera. Off keeps source geometry. Changing this reloads selected regions.', 'ph:mountains', 241, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, 'Adaptive Terrain Textures', 'Resize detailed terrain textures with camera distance. Off keeps source resolution. Plain and map surfaces are unaffected. Changing this reloads selected regions.', 'ph:image', 242, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, 'Ambient Occlusion', 'Shade contacts and crevices. Colour correction stays active when this is off. Changes apply without reloading regions.', 'ph:circle-half-tilt', 243, true, { persist: 'local' }),
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity, 'Vegetation Density', 'Keep all small foliage, about half, or about 15 percent. Trees, rocks and climbing vines remain. Changing this reloads selected regions.', 'ph:plant', 244, 'full'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }, { value: 'minimal', label: 'Minimal' }] },
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality, 'Shadow Quality', 'Choose off, low, medium or high shadow quality. Medium preserves the existing appearance. Changes apply without reloading regions.', 'ph:sun-dim', 245, 'medium'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'off', label: 'Off' }, { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }] },
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'Terrain Surface', 'Choose plain, processed map or detailed terrain. Changing this reloads selected regions.', 'ph:mountains', 238, 'native'), persist: 'local' },
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, 'Terrain RDZ', 'Shade the 150 m rapid decay zone on terrain, with known 50 m resource and world-base exemptions. Conditional border-base protection is not included.', 'ph:warning-circle', 256, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, 'Terrain Contours', 'Draw elevation contours every 10 m, with stronger lines every 50 m, on 2.5D and 3D terrain.', 'ph:mountains', 257, false, { persist: 'local' }),
+    ...FOXHOLE_WORLD_LAYER_DEFINITIONS.map((layer, index) => createBooleanUserSetting(
+        layer.settingId,
+        'Foxhole World ' + layer.label,
+        'Show ' + layer.label.toLowerCase() + ' in every region in 2.5D and 3D.',
+        'ph:cube',
+        240 + index,
+        true,
+    )),
 ], FOXHOLE_MAP_VIEW_SETTINGS_PAGE_SECTION);
 
 export const foxholeMapSettings: readonly NixieSettingDefinition[] = [
@@ -834,6 +940,20 @@ export function readFoxholeMapSettings(
     const frontline = !frontAlt && readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.frontline, false);
 
     return {
+        terrainRdz: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, false),
+        terrainTopo: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, false),
+        terrainSurface: (['plain', 'map'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface) : 'native') as FoxholeMapSettings['terrainSurface'],
+        modelLod: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.modelLod, false),
+        terrainLod: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainLod, false),
+        adaptiveTextures: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, false),
+        ambientOcclusion: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, true),
+        vegetationDensity: (['reduced', 'minimal'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity) : 'full') as FoxholeMapSettings['vegetationDensity'],
+        shadowQuality: (['off', 'low', 'high'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality) : 'medium') as FoxholeMapSettings['shadowQuality'],
+        adaptiveStreaming: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveStreaming, false),
+        frustumCulling: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.frustumCulling, true),
+        worldLayers: Object.fromEntries(FOXHOLE_WORLD_LAYER_DEFINITIONS.map(layer => [
+            layer.id, readBooleanSetting(layer.settingId, true),
+        ])) as Record<FoxholeWorldLayerKey, boolean>,
         enabled: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.enabled, false),
         shardId: readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shardId),
         regionKeys: readStringListSetting(FOXHOLE_MAP_SETTING_KEYS.regionKeys),

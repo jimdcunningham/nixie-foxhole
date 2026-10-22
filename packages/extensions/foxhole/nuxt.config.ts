@@ -26,6 +26,9 @@ export default defineNuxtConfig({
     name: 'foxhole',
   },
   css: [join(currentDir, './app/assets/css/host-compat.css')],
+  // Nuxt's builder and Nitro watchers must also ignore generated asset writes.
+  // This does not remove the public directory from static asset serving.
+  ignore: ['public/foxhole/assets/**'],
   // Do not set global app.head brand tags here — they would pollute Studio hosts.
   runtimeConfig: {
     foxholeRealtimeAutostartEnabled: readBooleanEnv(
@@ -56,6 +59,23 @@ export default defineNuxtConfig({
     '#nixie-internal': nixieLayerDir,
     '#foxhole': join(currentDir, './app'),
     '#foxhole-server': join(currentDir, './server'),
+  },
+  routeRules: {
+    '/foxhole/assets/world/content/br/**': { headers: { 'Content-Encoding': 'br', 'Cache-Control': 'public, max-age=31536000, immutable' } },
+    '/foxhole/assets/world/content/raw/**': { headers: { 'Cache-Control': 'public, max-age=31536000, immutable' } },
+  },
+  // Linked world workers are URL-loaded; Vite cannot infer their package from imports.
+  vite: {
+    server: {
+      watch: {
+        // FoxWatch rewrites generated manifests during exports. Keep serving
+        // them, but do not restart loaded regions for every asset write.
+        ignored: [/[/\\]public[/\\]foxhole[/\\]assets(?:[/\\]|$)/],
+      },
+      fs: {
+        allow: [join(nixieLayerDir, '../..'), currentDir, join(currentDir, '../../foxhole-world')],
+      },
+    },
   },
   nitro: {
     tasks: {

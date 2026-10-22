@@ -564,3 +564,17 @@ Shared-skeleton candidates are ranked by render-section bone ownership: a mesh u
 `firingVolume.originSource` and `originName` record this provenance. `reference` preserves the ground range frame so authored corrections do not erase muzzle offsets. Legacy seat/ground-frame corrections do not rotate a resolved model-space muzzle. An unresolved native constructor frame stays `firing-component`; Planner keeps its ground coverage but does not present that position as a 3D muzzle. Generate against the PAK-addressed decoded package and inspection bundle used for the models.
 
 For a metadata-only migration from the current source manifest, use `publish-firing-volumes.mjs --source-frame <source> <catalog> [catalog...]`. This preserves every existing 2D range field and replaces only firing metadata; old generated ground offsets are not applied to the new muzzle frame.
+
+## Region World Assets
+
+The authored world publisher, native importer/audit tools, compact runtime and retained viewers live in [packages/foxhole-world](../../packages/foxhole-world/README.md). Generated world content is published under the private assets repository's `world/` directory. It is not added to the catalog as unnamed mesh-only entries.
+
+Publish an existing verified prepared cache without re-extracting the game:
+
+```powershell
+node tools/foxwatch/run-foxwatch.mjs export-world --world-input <prepared-cache>
+```
+
+Compact recipes are the default. This keeps existing texture encodings and reconstructs lossless road/terrain/decal geometry in browser workers. The expanded baked candidate is research only. Configure `FOXWATCH_WORLD_INPUT` to include compact world publication in complete, unlimited `refresh` runs. Targeted catalog refreshes do not touch world data. The configured cache must already contain the verified region preparation and recipe outputs; fresh-game Node preparation orchestration is still separate from this publisher.
+
+Serve `world/content/br/**` with only `Content-Encoding: br`, and immutable caching for both `content/br/**` and `content/raw/**`. The Nuxt layer applies these headers. Files use payload-appropriate extensions rather than legacy `.gz` names so static hosting cannot infer a second encoding. The small root index is revalidated; content-addressed dependencies are reused across regions and cached locally.

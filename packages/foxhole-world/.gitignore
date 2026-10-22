@@ -1,0 +1,8 @@
+dist/
+output/
+authoring/generation-entry.mjs
+node_modules/
+importer/bin/
+importer/obj/
+audit/bin/
+audit/obj/

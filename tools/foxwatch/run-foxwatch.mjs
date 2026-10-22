@@ -1,3 +1,4 @@
+import { worldRefreshArguments } from './scripts/world-refresh.mjs';
 import { runAssetGenerationStages } from './scripts/asset-generation-stages.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -70,6 +71,7 @@ const workflowCommands = [
     'refresh-modifications',
     'publish-manifest',
     'export-3d',
+    'export-world',
     'clear-cache',
     'open-asset-manifest',
     'open-pose-editor',
@@ -155,7 +157,7 @@ if (steamMonitorCommands.includes(command)) {
     process.exit(0);
 }
 
-if (['publish-manifest', 'export-3d', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
+if (['publish-manifest', 'export-3d', 'export-world', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
     const releaseRefreshLock = acquireProcessLock(refreshLockPath, 'FoxWatch refresh/publish pipeline');
     process.on('exit', releaseRefreshLock);
 }
@@ -190,6 +192,11 @@ if (command === 'clear-cache') {
 
 if (command === 'benchmark-manifest-source') {
     await runManifestSourceBenchmark(parsedFoxwatchArgs);
+    process.exit(0);
+}
+
+if (command === 'export-world') {
+    await run('node', [path.join(repoRoot, 'packages/foxhole-world/export-world.mjs'), ...args]);
     process.exit(0);
 }
 
@@ -340,6 +347,15 @@ if (command === 'refresh') {
         overallPercent: 92,
     });
     await run('node', ['--experimental-strip-types', publishManifestScriptPath, ...refreshExecution.publishArgs]);
+    const worldArgs = worldRefreshArguments({
+        input: process.env.FOXWATCH_WORLD_INPUT,
+        onlyIds: refreshExecution.onlyIds,
+        limited: hasCliFlag(parsedArgs, 'limit'),
+    });
+    if (worldArgs) {
+        emitFoxWatchProgress({ kind: 'pipeline', stage: 'Publishing World', detail: 'Publishing compact region dependencies into the assets bundle.', overallPercent: 96 });
+        await run('node', [path.join(repoRoot, 'packages/foxhole-world/export-world.mjs'), ...worldArgs]);
+    }
     await publishPlannerCompat();
     await syncMissingStructureDefaultIcons(rawFoxWatchManifestPath, refreshExecution.onlyIds, {
         skipExistingAssets: hasCliFlag(parsedArgs, 'skip-existing-assets'),

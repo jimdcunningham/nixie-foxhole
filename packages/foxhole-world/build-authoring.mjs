@@ -1,0 +1,17 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {build} from 'esbuild';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const here=import.meta.dirname;
+await fs.mkdir(path.join(here,'dist'),{recursive:true});
+let entry=await fs.readFile(path.join(here,'authoring/world-entry.mjs'),'utf8');
+entry+="\nwindow.preparedWorldContext=()=>({root,view,region,world,terrainPass:liveTerrainPass,roadShoulders});window.capturePreparedWorld=async()=>{const {capturePreparedRegion}=await import('/ab-built/capture.mjs?time='+Date.now());return capturePreparedRegion(window.preparedWorldContext());};\n";
+await fs.writeFile(path.join(here,'authoring/generation-entry.mjs'),entry);
+let models=await fs.readFile(path.join(here,'authoring/world-models.mjs'),'utf8');
+models=models.replace('return{bridgeRoadSeams,layers','return{lodRecords,bridgeRoadSeams,layers');
+models=models.replaceAll('new Promise(requestAnimationFrame)','new Promise(resolve=>setTimeout(resolve,0))');
+await fs.writeFile(path.join(here,'authoring/world-models.mjs'),models);
+await build({entryPoints:{world:path.join(here,'authoring/generation-entry.mjs'),'decode-worker':path.join(here,'authoring/decode-worker.mjs'),'geometry-recipe-worker':path.join(here,'authoring/geometry-recipe-worker.mjs')},outdir:path.join(here,'dist'),outExtension:{'.js':'.mjs'},bundle:true,format:'esm',platform:'browser',target:'es2022',loader:{'.wasm':'file'},assetNames:'[name]-[hash]',logLevel:'warning',plugins:[{name:'terrain-worker-url',setup(api){api.onLoad({filter:/terrain-texture-pool\.mjs$/},async args=>({contents:(await fs.readFile(args.path,'utf8')).replaceAll("'../authoring/decode-worker.mjs'","'./decode-worker.mjs'"),loader:'js',resolveDir:path.dirname(args.path)}));}},{name:'wasm-urls',setup(api){api.onResolve({filter:/\.wasm\?url$/},args=>({path:require.resolve(args.path.slice(0,-4))}));}},{name:'canonical-model-dependencies',setup(api){api.onLoad({filter:/(loadGltf|loadImages|loadCubemap)\.mjs$/},async args=>{let contents=await fs.readFile(args.path,'utf8');for(const uri of ['buffer.uri','image.uri','json[key]'])contents=contents.replaceAll('basePath + '+uri,'(globalThis.__canonicalWorldAssetUrl?.(new URL('+uri+', new URL(basePath, location.href)).href)??new URL('+uri+', new URL(basePath, location.href)).href)');return{contents,loader:'js',resolveDir:path.dirname(args.path)};});}}]});
+await fs.copyFile(path.join(here,'authoring/world.html'),path.join(here,'dist/world.html'));
+await fs.copyFile(path.join(here,'capture.mjs'),path.join(here,'dist/capture.mjs'));

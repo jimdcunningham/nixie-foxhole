@@ -46,6 +46,7 @@
     "pixi.js": "8.22.0",
     "voronoi": "1.0.0",
     "vue": "3.5.41",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@nixie/foxhole-world": "0.1.0"
   }
 }

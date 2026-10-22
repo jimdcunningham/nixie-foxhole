@@ -33,6 +33,7 @@ from export_scene_model_geometry import bake_static_mesh_instances
 from export_scene_model_parts import extract_shared_model_parts
 from mathutils import Vector
 from export_scene_lights import collect_blueprint_lights
+from export_scene_materials import prepare_gltf_base_colors
 
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
@@ -104,6 +105,8 @@ for image in bpy.data.images:
     if image.source == "FILE" and max(image.size) > args.max_texture_size:
         factor = args.max_texture_size / max(image.size)
         image.scale(max(1, round(image.size[0] * factor)), max(1, round(image.size[1] * factor)))
+
+prepare_gltf_base_colors(slot.material for obj in meshes for slot in obj.material_slots)
 
 os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=args.output, export_format="GLB", use_selection=True,

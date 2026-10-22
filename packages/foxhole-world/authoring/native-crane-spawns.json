@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "source": "FoxWatch native CraneSpawnLocationComponent transforms, matching catalog render scenes",
+  "blueprints": {
+    "BPAircraftDepot_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -897.9509887695312,
+        "y": -2727.014892578125,
+        "z": 28,
+        "rotation": 90.00000683018835
+      },
+      {
+        "name": "CraneSpawnLocationComponent2",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 900.0809936523438,
+        "y": -2728.16796875,
+        "z": 28,
+        "rotation": 90.00000683018835
+      }
+    ],
+    "BPAircraftDepotDestroyed_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -897.9509887695312,
+        "y": -2727.014892578125,
+        "z": 30,
+        "rotation": 90.00000683018835
+      },
+      {
+        "name": "CraneSpawnLocationComponent2",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 900.0809936523438,
+        "y": -2728.16796875,
+        "z": 0,
+        "rotation": 90.00000683018835
+      }
+    ],
+    "BPAircraftFactoryDestroyed_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -897.9509887695312,
+        "y": -2727.014892578125,
+        "z": 30,
+        "rotation": 90.00000683018835
+      }
+    ],
+    "BPConstructionYard_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -122.64099884033203,
+        "y": -946.1690063476562,
+        "z": 0,
+        "rotation": 90.00000683018835
+      }
+    ],
+    "BPDestroyedSeaport_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -842,
+        "y": -1136,
+        "z": 307,
+        "rotation": 0
+      },
+      {
+        "name": "CraneSpawnLocationComponent2",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 872.2479858398438,
+        "y": 2810,
+        "z": 307,
+        "rotation": 179.99988570802284
+      }
+    ],
+    "BPFacilityMineOilRig_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 0,
+        "y": 642.5479736328125,
+        "z": 127.9749984741211,
+        "rotation": -179.99999499104388
+      }
+    ],
+    "BPMassProduction_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -2131.471923828125,
+        "y": 870.9840087890625,
+        "z": 0.004000000189989805,
+        "rotation": 0
+      }
+    ],
+    "BPRefinery_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 100.23200225830078,
+        "y": -1577.1729736328125,
+        "z": 0,
+        "rotation": 90.00000683018835
+      }
+    ],
+    "BPSeaport_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -842,
+        "y": 2810,
+        "z": 307,
+        "rotation": 0
+      },
+      {
+        "name": "CraneSpawnLocationComponent2",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": 872.2479858398438,
+        "y": 2810,
+        "z": 307,
+        "rotation": 179.99988570802284
+      }
+    ],
+    "BPStorageFacility_C": [
+      {
+        "name": "CraneSpawnLocationComponent",
+        "componentType": "CraneSpawnLocationComponent",
+        "structureId": "staticcrane",
+        "x": -2011.9720458984375,
+        "y": -111.0739974975586,
+        "z": 0,
+        "rotation": 0
+      }
+    ]
+  }
+}

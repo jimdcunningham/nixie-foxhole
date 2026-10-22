@@ -622,3 +622,11 @@ The pipeline implements the target design for:
 - `modifications.json` override lookup by `structureId/slotName/variantId`, `structureId/variantId`, `renderId`, or `variantId`
 
 Remaining convergence work is mostly operational validation across a full FoxWatch refresh cycle.
+
+## Region World Delivery
+
+`packages/foxhole-world` publishes prepared terrain, road and decal recipes plus their model/material dependencies to the private assets repository under `world/`. The lightweight `world/index.json` selects one region; `world/content/br/<sha256>/asset.*` and `world/content/raw/<sha256>/asset.*` store deduplicated immutable payloads. Brotli payloads require only `Content-Encoding: br`; legacy logical `.gz` resources are published as `.bin` to prevent static hosting from adding gzip a second time.
+
+Compact recipes are the default. Encoded textures stay unchanged, geometry reconstruction is hash-verified in browser workers, and the cache is shared across region selections. The runtime is loaded only for a visible map with one selected region in a spatial view. Expanded GPU buffers remain an explicit research format.
+
+Release packaging includes `models/` and the current world dependency closure, excluding superseded immutable objects. Large archives use a checksummed multipart index and 1 GiB parts; the Nixie CI resolver joins and verifies them. This does not make browsers download a full archive.
