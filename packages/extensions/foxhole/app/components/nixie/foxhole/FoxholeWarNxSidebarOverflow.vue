@@ -31,6 +31,13 @@ const notificationsEnabled = computed(() => Boolean(mapSettings.value.eventFeedT
 
 const items = computed<ResolvedMenuItem[]>(() => [
     {
+        type: 'checkbox', label: 'Colored Map Icons', icon: 'ph:palette',
+        description: 'Use the classic planner colors for resource fields, mines, and wells.',
+        checked: mapSettings.value.coloredIcons, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.coloredIcons, !mapSettings.value.coloredIcons, { reason: 'foxhole-war-nx:colored-icons' }),
+    },
+    {
         type: 'checkbox',
         label: 'Adaptive Streaming',
         icon: 'ph:arrows-clockwise',

@@ -65,7 +65,7 @@ test('published planning markers and synthetic icon families retain Native posit
         const values = { 'foxhole.map.enabled': true, ...settings };
         const native = Object.create(FoxholeMapRenderer.prototype) as NativeIconRenderer;
         Object.assign(native, { context: { readMapSettings: () => readFoxholeMapSettings(values), getZoom: () => 1 / 25, getWarData: () => null },
-            pointerInteractionsEnabled: false, loadMapIconTexture: async () => texture, resolveMapIconHoverTooltipData: () => ({}) });
+            presentationHoverData: new WeakMap(), pointerInteractionsEnabled: false, loadMapIconTexture: async () => texture, resolveMapIconHoverTooltipData: () => ({}) });
         const layer = new PIXI.Container();
         // Exercise the actual Native static-marker branch with a settled empty cached icon bucket.
         const view = { region: { ...FOXHOLE_MAP_REGIONS.find(value => value.key === region.key), staticIcons: region.staticIcons }, liveIcons: layer, liveIconsVersion: undefined };
