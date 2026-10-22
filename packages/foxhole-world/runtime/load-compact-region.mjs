@@ -1,3 +1,4 @@
+import {createVegetationWind} from '../authoring/vegetation-wind.mjs';
 import {nativeFactionFlagTexture} from './catalog-flag-materials.mjs';
 import {catalogLightBudgetFor} from './catalog-lights.mjs';
 import {normalizeWorldModelLayers,worldModelLayers} from '../authoring/world-model-layers.mjs';
@@ -41,11 +42,12 @@ import {buildRegionShell,shellDepthBit,REGION_SHELL_COLOR} from '../authoring/re
 import {framedMaterialBits,createRegionFramePreparation} from './spatial-frame.mjs';
 
 function properties(value){const keys=new Set();for(let p=value;p&&p!==Object.prototype;p=Object.getPrototypeOf(p))for(const key of Object.getOwnPropertyNames(p))if(!key.startsWith('_')&&key!=='constructor')keys.add(key);return keys;}
-export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},terrainSurface='native',onSceneCreated=()=>{},scheduleModelTask}){
+export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},terrainSurface='native',onSceneCreated=()=>{},scheduleModelTask}){
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  const provider=await createCompactProvider({baseUrl,entry,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const shellWalls=[];let shellEdgeFlags=[];
  if(!modelLod)Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
  let roads,roadTransitions,waterMat,weatherTextures={},packedWeather,disposed=false,cleaned=false,loading=true,terrainLoaded=false,terrainPreview,terrainChunks,sourceMaxHeight=256,environment,warState=null,sharedActorVisibility,layerFlags=layers,revealedBatches=0;
+ const windMaterials=createVegetationWind({frame,enabled:vegetationWind});
  const catalogLights=catalogLightBudgetFor(renderer||root),lightCamera=new Float64Array(3);
  const modelGroups=new Map(),detailGroups=new Map(),modelStreams=new Map();let detailCamera=priorityPosition?{position:priorityPosition}:null;let demand,initialComplete=false,layerCycleStarted=null,preparedMs=0;
  const geo=g=>(ownedGeometry.add(g),g);
@@ -70,7 +72,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const loadFlags=()=>adaptiveStreaming?layerFlags:progressive?residentFlags:{};
  function prepareNode(node=root){setRegionFrustumCulling(node,frustumCulling);framePreparation?.prepare(node);}
  const streamingBusy=()=>[...modelStreams.values()].some(stream=>stream.busy);
- function cleanup(){if(cleaned)return;cleaned=true;signal.removeEventListener('abort',destroy);reveal?.dispose();demand?.dispose();releasePreparation?.();releaseEnvironmentPreparation?.();provider.destroy();terrainChunks?.destroy();for(const pass of passes)pass.destroy();for(const group of modelGroups.values()){group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();}root.removeFromParent();root.destroy({children:true});for(const g of ownedGeometry)if(!g.destroyed)g.destroy(true);for(const m of ownedMaterial)if(!m.destroyed)m.destroy();excavationMask.destroy();packedWeather?.destroy(true);}
+ function cleanup(){if(cleaned)return;cleaned=true;signal.removeEventListener('abort',destroy);reveal?.dispose();demand?.dispose();releasePreparation?.();releaseEnvironmentPreparation?.();provider.destroy();terrainChunks?.destroy();for(const pass of passes)pass.destroy();for(const group of modelGroups.values()){group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();}windMaterials.destroy();root.removeFromParent();root.destroy({children:true});for(const g of ownedGeometry)if(!g.destroyed)g.destroy(true);for(const m of ownedMaterial)if(!m.destroyed)m.destroy();excavationMask.destroy();packedWeather?.destroy(true);}
  function destroy(){if(disposed)return;disposed=true;root.removeFromParent();const busy=demand?.busy||streamingBusy();lifetime.abort();const streams=[...modelStreams.values()].map(stream=>stream.dispose());if(!loading){if(busy)void Promise.all([demand?.whenSettled(),...streams]).then(cleanup);else cleanup();}}
  signal.addEventListener('abort',destroy,{once:true});
  const framePreparation=frame?createRegionFramePreparation({root,materials:ownedMaterial,terrainPass:liveTerrainPass},frame):null;
@@ -93,6 +95,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   setWarState(state){if(state===warState)return;warState=state;liveTerrainPass.setPlanningOverlays?.(terrainOverlays,warState);applyWarState(true);},
   setPlanningOverlays(options={}){terrainOverlays=options;liveTerrainPass.setPlanningOverlays?.(options,warState);},
   setWaterReflections(enabled){waterReflections=enabled!==false;if(waterMat)waterMat.data.waterReflectionStrength=waterReflections?1:0;},
+  setVegetationWind:enabled=>windMaterials.setEnabled(enabled),
   setVegetationShadows(enabled){vegetationShadows=enabled!==false;for(const group of modelGroups.values())group.world?.setVegetationShadows?.(vegetationShadows);},
   setAmbientOcclusion(enabled){ambientOcclusion=enabled;passes[3].enabled=enabled;passes[4].enabled=!enabled;scene.metrics.ambientOcclusion=enabled;},
   setFrustumCulling(enabled){if(frustumCulling===enabled)return;frustumCulling=enabled;setRegionFrustumCulling(root,enabled);if(terrainChunks)terrainChunks.frustumCulling=enabled;scene.metrics.frustumCulling=enabled;},
@@ -102,7 +105,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   sampleWater(x,y){if(disposed||!sampleWater||layerFlags.water===false)return null;const nx=frame?(x-frame.x)/frame.scale:x,nz=frame?-(y-frame.y)/frame.scale:y;if(Math.abs(nz)>945||Math.abs(nx)+Math.abs(nz)*.577777778>1092)return null;const height=sampleWater(nx,nz);return height===null?null:height*(frame?.scale||1);},
   sampleGround(x,y){if(disposed||!terrainLoaded)return null;const nx=frame?(x-frame.x)/frame.scale:x,nz=frame?-(y-frame.y)/frame.scale:y;if(Math.abs(nz)>945||Math.abs(nx)+Math.abs(nz)*.577777778>1092)return null;const height=sample(nx,nz);return height===null?null:height*(frame?.scale||1);},
   prepareFirstFrame(renderer,node=root){releasePreparation=prepareFirstFrameMaterials(renderer,renderedModelGeometries(node),root);},
-  update({camera,wind,deltaMS=16.67}={}){time+=deltaMS/1000;if(waterMat){waterMat.data.waterTime=time;waterMat.data.waterReflectionStrength=waterReflections?1:0;}for(const detail of detailGroups.values())detail.update(time,wind);if(camera){detailCamera=camera;const p=camera.position,s=frame?.scale||1;lightCamera[0]=frame?p[0]*s+frame.x:p[0];lightCamera[1]=frame?p[2]*s-frame.y:p[1];lightCamera[2]=frame?p[1]*s:p[2];catalogLights.update(lightCamera,camera.planes);if(adaptiveStreaming)for(const stream of modelStreams.values())stream.update(camera);if(terrainLod)terrainChunks?.update(camera,liveTerrainPass.visible);if(adaptiveTextures)liveTerrainPass.updateQuality?.(camera);if(modelLod)for(const group of modelGroups.values())group.world?.lod?.update(camera);}},destroy};let time=0;
+  update({camera,wind,deltaMS=16.67}={}){time+=deltaMS/1000;windMaterials.update(time,wind);if(waterMat){waterMat.data.waterTime=time;waterMat.data.waterReflectionStrength=waterReflections?1:0;}for(const detail of detailGroups.values())detail.update(time,wind);if(camera){detailCamera=camera;const p=camera.position,s=frame?.scale||1;lightCamera[0]=frame?p[0]*s+frame.x:p[0];lightCamera[1]=frame?p[2]*s-frame.y:p[1];lightCamera[2]=frame?p[1]*s:p[2];catalogLights.update(lightCamera,camera.planes);if(adaptiveStreaming)for(const stream of modelStreams.values())stream.update(camera);if(terrainLod)terrainChunks?.update(camera,liveTerrainPass.visible);if(adaptiveTextures)liveTerrainPass.updateQuality?.(camera);if(modelLod)for(const group of modelGroups.values())group.world?.lod?.update(camera);}},destroy};let time=0;
  scene.metrics.catalogLights=catalogLights.metrics;
  onSceneCreated(scene);
  // Every task checks its own lifetime before asking the shared provider for more
@@ -126,7 +129,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   const ctx=taskContext(taskSignal,'World '+key),group={};modelGroups.set(key,group);
   try{taskSignal.throwIfAborted();const manifest=bridgesOnly?undefined:await catalog();
    const visibilityData=await metadata();sharedActorVisibility??=createWorldActorVisibility({region,prototypes:visibilityData.prototypes});
-   group.world=await loadWorldModels({region,json:async id=>{taskSignal.throwIfAborted();const value=await modelJson(id);taskSignal.throwIfAborted();return value;},status,root:ctx.root,assetUrl:provider.url,loadModel:ctx.model,signal:taskSignal,batchLayout:'category',catalogResourceFields:true,catalog:manifest,worldData:cellData||await metadata(),visibilityData,actorVisibility:sharedActorVisibility,categories:bridgesOnly?undefined:[category],bridgesOnly,progressive,optimize:modelLod,vegetationDensity,vegetationShadows,priorityPosition,
+   group.world=await loadWorldModels({region,json:async id=>{taskSignal.throwIfAborted();const value=await modelJson(id);taskSignal.throwIfAborted();return value;},status,root:ctx.root,assetUrl:provider.url,loadModel:ctx.model,signal:taskSignal,batchLayout:'category',catalogResourceFields:true,catalog:manifest,worldData:cellData||await metadata(),visibilityData,actorVisibility:sharedActorVisibility,categories:bridgesOnly?undefined:[category],bridgesOnly,progressive,optimize:modelLod,vegetationDensity,vegetationShadows,windMaterials,priorityPosition,
     publishBatch:build=>publishBatch(()=>{taskSignal.throwIfAborted();return build();}),
     onLayout(value){group.world=value;if(!bridgesOnly){targets[category]??=[];targets[category].push(value.layers[category]);}refresh();},teamAt:()=> 'NONE',
     flagTexture:team=>nativeFactionFlagTexture(baseUrl,team,{onAsset:provider.trackExternalAsset})});

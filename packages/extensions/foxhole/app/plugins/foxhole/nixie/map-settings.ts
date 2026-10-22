@@ -262,6 +262,7 @@ export interface FoxholeMapSettings {
     ambientOcclusion: boolean;
     waterReflections: boolean;
     vegetationShadows: boolean;
+    vegetationWind: boolean;
     softShadows: boolean;
     shadowStrength: 'light' | 'medium' | 'strong';
     vegetationDensity: 'full' | 'reduced' | 'minimal';
@@ -322,6 +323,7 @@ export const FOXHOLE_MAP_SETTING_KEYS = {
     ambientOcclusion: 'foxhole.map.ambientOcclusion',
     waterReflections: 'foxhole.map.waterReflections',
     vegetationShadows: 'foxhole.map.vegetationShadows',
+    vegetationWind: 'foxhole.map.vegetationWind',
     softShadows: 'foxhole.map.softShadows',
     shadowStrength: 'foxhole.map.shadowStrength',
     vegetationDensity: 'foxhole.map.vegetationDensity',
@@ -868,6 +870,7 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, 'Adaptive Terrain Textures', 'Resize detailed terrain textures with camera distance. Off keeps source resolution. Plain and map surfaces are unaffected. Changing this reloads selected regions.', 'ph:image', 242, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, 'Ambient Occlusion', 'Shade contacts and crevices. Colour correction stays active when this is off. Changes apply without reloading regions.', 'ph:circle-half-tilt', 243, true, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.waterReflections, 'Water Reflections', 'Reflect visible objects in water. Changes apply without reloading regions.', 'ph:drop', 246, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationWind, 'Vegetation Wind', 'Let plants and trees sway with the scene wind. Changes apply without reloading regions.', 'ph:wind', 248, true, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, 'Vegetation Shadows', 'Allow vegetation to cast shadows. Changes apply without reloading regions.', 'ph:tree', 247, true, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.softShadows, 'Soft Shadows', 'Widen shadow filtering independently of map resolution. Changes apply without reloading regions.', 'ph:sun-dim', 248, true, { persist: 'local' }),
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength, 'Shadow Strength', 'Choose how strongly cast shadows darken surfaces. Changes apply without reloading regions.', 'ph:circle-half-tilt', 249, 'light'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'light', label: 'Light' }, { value: 'medium', label: 'Medium' }, { value: 'strong', label: 'Strong' }] },
@@ -966,6 +969,7 @@ export function readFoxholeMapSettings(
         ambientOcclusion: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, true),
         waterReflections: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.waterReflections, true),
         vegetationShadows: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, true),
+        vegetationWind: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationWind, true),
         softShadows: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.softShadows, true),
         shadowStrength: (['medium', 'strong'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength) : 'light') as FoxholeMapSettings['shadowStrength'],
         vegetationDensity: (['reduced', 'minimal'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity) : 'full') as FoxholeMapSettings['vegetationDensity'],

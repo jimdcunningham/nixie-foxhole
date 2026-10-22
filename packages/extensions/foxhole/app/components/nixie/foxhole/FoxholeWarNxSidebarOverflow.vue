@@ -108,6 +108,12 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.waterReflections, !mapSettings.value.waterReflections, { reason: 'foxhole-war-nx:water-reflections' }),
     },
     {
+        type: 'checkbox', label: 'Vegetation Wind', icon: 'ph:wind',
+        checked: mapSettings.value.vegetationWind, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.vegetationWind, !mapSettings.value.vegetationWind, { reason: 'foxhole-war-nx:vegetation-wind' }),
+    },
+    {
         type: 'checkbox', label: 'Vegetation Shadows', icon: 'ph:tree',
         checked: mapSettings.value.vegetationShadows, closeOnClick: false,
         adminOnly: false, disabled: false, visible: true,

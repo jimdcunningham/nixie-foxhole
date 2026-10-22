@@ -200,3 +200,11 @@ Chimney smoke and steam remain available. WaterMist's existing exclusion remains
 The details summary reports unsupportedMaterialParticleComponents separately.
 
 Legacy published `BirchBushSmall` models also restore the exact qualified native cutout before decoding. Regenerate its immutable compatibility texture with `node tools/foxwatch/scripts/publish-world-foliage-mask.mjs --input <focused-material-textures-export>`; export `BirchBushThinA` and `BirchBranchThinM` first. The texture stays in the asset repository. Normalized models retain their own opacity metadata and need no override.
+
+### Vegetation Wind
+
+Native upright Nature and Trees placements use a shared vertex shader for gentle wind bending. Roots remain anchored, tree trunks bend less than small plants, and per-instance phases avoid synchronized motion. Scene wind controls direction and strength; calm wind and the live Vegetation Wind overflow toggle restore the rest pose. Dead/fallen timber, rocks and buildings stay rigid. Material leases preserve native colours, cutouts, textures and geometry, reuse the same wind variant for model LOD, and retire with their last streamed cell. This is bounded visual deformation, not a reconstruction of Unreal wind painting or physical collision motion.
+
+The browser fixture `tests/browser/vegetation-wind.mjs` loads a real native bush and compares rendered frames on both backends, with shadows enabled: animated frames must differ, while disabled frames remain identical.
+
+The current Pixi shadow pass draws its existing static caster geometry; material deformation affects the visible foliage and its normals, while shadows retain that renderer behavior. Displacement is deliberately small.
