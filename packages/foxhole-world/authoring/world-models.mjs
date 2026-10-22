@@ -1,3 +1,4 @@
+import {nativeMaterialPeer,nativeMaterialOverrides} from './native-material-peer.mjs';
 import {normalizeWorldModelLayers,worldModelLayers,isVegetationLayer} from './world-model-layers.mjs';
 import {filterVegetationPlacements} from './vegetation-density.mjs';
 import {leaseFlattenedGeometry} from './shared-model-geometry.mjs';
@@ -36,10 +37,10 @@ export async function loadWorldModels({region,json,status,root,flagTexture,teamA
  const counts={prototypes:0,resources:0,placements:0,parts:0,inside:0,crossing:0,outside:0,triangles:0,minY:Infinity,maxY:-Infinity,byCategory:{},failed:[],flagBuildings:0,riverPlacementsInWaterPass:0,waterStencilPlacements:0,hiddenLightEffectParts:0,lodResources:0,lodParts:0,lodFailures:[]},bridgeRoadSeams=new BridgeRoadSeams(),sources=[],owned=[],batches=[],flagSlots=[],sites=[],partsCache=new Map(),lodCache=new Map(),lodRecords=[],clearanceBatches=[],mirroredGeometry=createMirroredGeometryCache(),pooledGeometry=new Set(),geometryLeases=[],nightMaterials=new Map(),emitters=[];const pendingSlots=new Map();let next=0,done=0,lastStatus=0,disposed=false;
  async function addBatch(slots,category,label,level=0){return publishBatch(()=>{const batch=new BatchedMesh3D({size:slots.length,cull:'gpu',label});batch.lodOnly=level>0;if(progressive&&level>0)batch.visible=level===2;const dirty=new Map();for(let i=0;i<slots.length;i++){const s=slots[i];batch.setGeometryAt(i,s.geometry);batch.setMaterialAt(i,s.material);batch.setMatrixAt(i,s.matrix);batch.items[i].receiveShadow=true;actorSlots.push({batch,index:i,actor:s.row?.actor,flag:s.flag,category,mask:(s.material.alphaMode==='blend'?RenderPassBit.TRANSPARENT:RenderPassBit.OPAQUE)|(!isVegetationLayer(category)||vegetationShadows?RenderPassBit.SHADOW:0)});batch.setItemActive(i,actorVisibility.visible(s.row?.actor)&&!s.flag?(s.material.alphaMode==='blend'?RenderPassBit.TRANSPARENT:RenderPassBit.OPAQUE)|(!isVegetationLayer(category)||vegetationShadows?RenderPassBit.SHADOW:0):0);if(s.record){s.record.levels[level].push({batch,index:i,triangles:s.geometry.indexBuffer.data.length/3});if(progressive){const near=priorityPosition&&Math.hypot(...s.record.center.map((value,i)=>value-priorityPosition[i]))-s.record.radius<180;setLodSlotVisible(batch,i,level===(near?0:2),dirty);}}if(s.flag)flagSlots.push({batch,index:i,source:s.material,name:s.flagName,key:s.key,team:teamAt(s.row.matrix[12],s.row.matrix[14])});}for(const [changed,[min,max,rows]]of dirty){uploadLodVisibility(changed.batch.storeBuffer,min,max,rows);changed.batch._visibilityDirtyId++;}layers[category]?.addChild(batch);batches.push(batch);if(level===0)clearanceBatches.push(batch);return batch;});}
  function flatten(source,p,override){const model=new Model3D(source),parts=[],names=modelMaterialNames(source,p.materials?.map(material=>material.name));model.scale.z=-1;if(p.anchor)model.position.set(p.anchor.x,p.anchor.y,p.anchor.z);
-  function visit(node,parent){node.updateLocalTransform();const matrix=parent.clone().multiply(node.localTransform);if(node instanceof Mesh3D){const g=node.geometry,materialName=names.get(node.material)||'';
+  function visit(node,parent){node.updateLocalTransform();const matrix=parent.clone().multiply(node.localTransform);if(node instanceof Mesh3D){const g=node.geometry,replacement=override?.get(node.material),materialName=replacement?.name||names.get(node.material)||'';
     if(hideViewerEffect(materialName)){counts.hiddenLightEffectParts++;for(const child of node.children)visit(child,matrix);return;}
 
-    const material=override?.get(materialName)||node.material,keepColors=material.vertexColors;
+    const material=replacement?.material||override?.get(materialName)||node.material,keepColors=material.vertexColors;
     // Native model materials disable vertex colors; retain color data only
     // for a material that actually consumes it. Positions/normals/UVs stay exact.
     const lease=leaseFlattenedGeometry(g,matrix,keepColors),flat=lease.geometry,box=lease.bounds,index=flat.indexBuffer.data;
@@ -63,7 +64,9 @@ export async function loadWorldModels({region,json,status,root,flagTexture,teamA
    }
   }
  }
- const parts=flatten(source,p);counts.resources++;return parts;})();partsCache.set(key,promise);return promise;}
+ const peer=nativeMaterialPeer(p,(visibilityData||data).prototypes);
+ const overrides=peer?nativeMaterialOverrides(source,peer,await partsFor(peer)):null;
+ const parts=flatten(source,p,overrides);counts.resources++;return parts;})();partsCache.set(key,promise);return promise;}
  async function lodsFor(p,base){const entry=lodManifest.assets[p.file];if(!entry||p.kind==='building'||!['vegetation','trees','structures','rocks'].includes(p.category))return null;const key=p.file+JSON.stringify(p.anchor||null)+!!(eligibleNightPrototype(p.name)&&nightManifest.assets[p.file]);if(lodCache.has(key))return lodCache.get(key);const promise=(async()=>{try{const materialMap=new Map(base.map(part=>[part.materialName,part.material])),levels=[];for(const level of entry.levels){const source=await loadModel(assetUrl(level.file));sources.push({source,url:assetUrl(level.file)});const parts=flatten(source,p,materialMap);if(parts.some(part=>!materialMap.has(part.materialName)))throw Error('LOD material cannot be matched to native full-detail material');levels.push(parts);counts.lodResources++;}return levels;}catch(e){counts.lodFailures.push({name:p.name,error:String(e)});return null;}})();lodCache.set(key,promise);return promise;}
  let lastPublish=0;
  async function flushBuckets(all=false){for(const [key,slots]of pendingSlots){while(slots.length&&(all||slots.length>=512)){const [category,level]=key.split(':');await addBatch(slots.splice(0,progressive?512:slots.length),category,category+' LOD'+level,+level);}}}
