@@ -2112,7 +2112,8 @@ public sealed partial class FoxWatchAssetMeshExporter
         }
 
         var material = export.GetOrDefault<ResolvedObject?[]>("OverrideMaterials", []).FirstOrDefault();
-        var materialPath = ConvertObjectPathToPackagePath(material?.GetPathName()) ?? string.Empty;
+        var materialPath = ConvertObjectPathToPackagePath(material?.GetPathName())
+            ?? "War/Content/Materials/Structures/FlagHangingColonials.uasset";
         if (!string.IsNullOrWhiteSpace(materialPath))
         {
             targetReference.MaterialSidecarNameOverride = Path.GetFileNameWithoutExtension(materialPath);

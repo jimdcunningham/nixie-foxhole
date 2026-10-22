@@ -1,3 +1,4 @@
+import {nativeFactionFlagTexture} from './catalog-flag-materials.mjs';
 import {catalogLightBudgetFor} from './catalog-lights.mjs';
 import {normalizeWorldModelLayers,worldModelLayers} from '../authoring/world-model-layers.mjs';
 import {setRegionFrustumCulling} from './frustum-culling.mjs';
@@ -128,7 +129,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
    group.world=await loadWorldModels({region,json:async id=>{taskSignal.throwIfAborted();const value=await modelJson(id);taskSignal.throwIfAborted();return value;},status,root:ctx.root,assetUrl:provider.url,loadModel:ctx.model,signal:taskSignal,batchLayout:'category',catalogResourceFields:true,catalog:manifest,worldData:cellData||await metadata(),visibilityData,actorVisibility:sharedActorVisibility,categories:bridgesOnly?undefined:[category],bridgesOnly,progressive,optimize:modelLod,vegetationDensity,vegetationShadows,priorityPosition,
     publishBatch:build=>publishBatch(()=>{taskSignal.throwIfAborted();return build();}),
     onLayout(value){group.world=value;if(!bridgesOnly){targets[category]??=[];targets[category].push(value.layers[category]);}refresh();},teamAt:()=> 'NONE',
-    flagTexture:async(team,material,name)=>{const flags=await ctx.json('flags/flags.json'),faction=team==='WARDENS'?'Wardens':'Colonials',row=flags.find(x=>x.material.includes(faction)&&(!/TownHall/.test(name)||x.material.includes('TownHall')));return row?ctx.texture('flags/'+row.file):material.textures.baseColor;}});
+    flagTexture:team=>nativeFactionFlagTexture(baseUrl,team,{onAsset:provider.trackExternalAsset})});
    if(group.world.counts.failed.length||group.world.counts.lodFailures.length)throw Error('Region model load incomplete: '+JSON.stringify([...group.world.counts.failed,...group.world.counts.lodFailures].slice(0,3)));
    group.dispose=()=>{group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();modelGroups.delete(key);if(!bridgesOnly)targets[category]=(targets[category]||[]).filter(layer=>layer!==group.world?.layers[category]);ctx.rollback();};
    if(bridgesOnly){ctx.root.visible=false;return;}

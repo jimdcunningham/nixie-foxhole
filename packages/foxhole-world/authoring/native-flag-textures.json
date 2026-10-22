@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "textures": {
+    "COLONIALS": {
+      "path": "shared/flags/1e51879bbc62a30a5d00a2016c240c3a4e7278524e535c13d3ccf484979ae40c.webp",
+      "sha256": "1e51879bbc62a30a5d00a2016c240c3a4e7278524e535c13d3ccf484979ae40c",
+      "source": "War/Content/Textures/Structures/HangingFlagColonialA.HangingFlagColonialA"
+    },
+    "WARDENS": {
+      "path": "shared/flags/f09e27eaaadf26380ae2adb1443969df545e6ec1010b8477f27e97f914190360.webp",
+      "sha256": "f09e27eaaadf26380ae2adb1443969df545e6ec1010b8477f27e97f914190360",
+      "source": "War/Content/Textures/Structures/HangingFlagWardensA.HangingFlagWardensA"
+    }
+  }
+}
