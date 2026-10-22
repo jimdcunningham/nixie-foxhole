@@ -92,6 +92,34 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, !mapSettings.value.ambientOcclusion, { reason: 'foxhole-war-nx:ambient-occlusion' }),
     },
     {
+        type: 'checkbox', label: 'Water Reflections', icon: 'ph:drop',
+        checked: mapSettings.value.waterReflections, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.waterReflections, !mapSettings.value.waterReflections, { reason: 'foxhole-war-nx:water-reflections' }),
+    },
+    {
+        type: 'checkbox', label: 'Vegetation Shadows', icon: 'ph:tree',
+        checked: mapSettings.value.vegetationShadows, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, !mapSettings.value.vegetationShadows, { reason: 'foxhole-war-nx:vegetation-shadows' }),
+    },
+    {
+        type: 'checkbox', label: 'Soft Shadows', icon: 'ph:sun-dim',
+        checked: mapSettings.value.softShadows, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.softShadows, !mapSettings.value.softShadows, { reason: 'foxhole-war-nx:soft-shadows' }),
+    },
+    {
+        type: 'submenu', label: 'Shadow Strength', icon: 'ph:circle-half-tilt',
+        badge: { light: 'Light', medium: 'Medium', strong: 'Strong' }[mapSettings.value.shadowStrength],
+        adminOnly: false, disabled: false, visible: true,
+        children: ([['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']] as const).map(([value, label]) => ({
+            type: 'checkbox', label, checked: mapSettings.value.shadowStrength === value,
+            closeOnClick: false, adminOnly: false, disabled: false, visible: true,
+            onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.shadowStrength, value, { reason: 'foxhole-war-nx:shadow-strength' }),
+        })),
+    },
+    {
         type: 'submenu', label: 'Vegetation', icon: 'ph:plant',
         badge: { full: 'Full', reduced: 'Reduced', minimal: 'Minimal' }[mapSettings.value.vegetationDensity],
         adminOnly: false, disabled: false, visible: true,
@@ -102,10 +130,10 @@ const items = computed<ResolvedMenuItem[]>(() => [
         })),
     },
     {
-        type: 'submenu', label: 'Shadows', icon: 'ph:sun-dim',
+        type: 'submenu', label: 'Shadow Quality', icon: 'ph:sun-dim',
         badge: { off: 'Off', low: 'Low', medium: 'Medium', high: 'High' }[mapSettings.value.shadowQuality],
         adminOnly: false, disabled: false, visible: true,
-        children: ([['off', 'Off', 'ph:prohibit', 'Keep lighting; skip cast shadows.'], ['low', 'Low', 'ph:sun-dim', '512 px maps and simple filtering.'], ['medium', 'Medium', 'ph:sun', '1024 px maps; the existing appearance.'], ['high', 'High', 'ph:sun-horizon', '2048 px maps and soft filtering.']] as const).map(([value, label, icon, description]) => ({
+        children: ([['off', 'Off', 'ph:prohibit', 'Keep lighting; skip cast shadows.'], ['low', 'Low', 'ph:sun-dim', '512 px maps and simple filtering.'], ['medium', 'Medium', 'ph:sun', '1024 px shadow maps.'], ['high', 'High', 'ph:sun-horizon', '2048 px shadow maps.']] as const).map(([value, label, icon, description]) => ({
             type: 'checkbox', label, icon, description, checked: mapSettings.value.shadowQuality === value,
             closeOnClick: false, adminOnly: false, disabled: false, visible: true,
             onClick: () => { if (mapSettings.value.shadowQuality !== value) settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.shadowQuality, value, { reason: 'foxhole-war-nx:shadow-quality' }); },

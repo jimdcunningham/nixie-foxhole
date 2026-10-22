@@ -255,6 +255,10 @@ export interface FoxholeMapSettings {
     terrainLod: boolean;
     adaptiveTextures: boolean;
     ambientOcclusion: boolean;
+    waterReflections: boolean;
+    vegetationShadows: boolean;
+    softShadows: boolean;
+    shadowStrength: 'light' | 'medium' | 'strong';
     vegetationDensity: 'full' | 'reduced' | 'minimal';
     shadowQuality: 'off' | 'low' | 'medium' | 'high';
     adaptiveStreaming: boolean;
@@ -311,6 +315,10 @@ export const FOXHOLE_MAP_SETTING_KEYS = {
     terrainLod: 'foxhole.map.terrainLod',
     adaptiveTextures: 'foxhole.map.adaptiveTextures',
     ambientOcclusion: 'foxhole.map.ambientOcclusion',
+    waterReflections: 'foxhole.map.waterReflections',
+    vegetationShadows: 'foxhole.map.vegetationShadows',
+    softShadows: 'foxhole.map.softShadows',
+    shadowStrength: 'foxhole.map.shadowStrength',
     vegetationDensity: 'foxhole.map.vegetationDensity',
     shadowQuality: 'foxhole.map.shadowQuality',
     adaptiveStreaming: 'foxhole.map.adaptiveStreaming',
@@ -854,8 +862,12 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainLod, 'Terrain LOD', 'Simplify distant terrain geometry and refine it near the camera. Off keeps source geometry. Changing this reloads selected regions.', 'ph:mountains', 241, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, 'Adaptive Terrain Textures', 'Resize detailed terrain textures with camera distance. Off keeps source resolution. Plain and map surfaces are unaffected. Changing this reloads selected regions.', 'ph:image', 242, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, 'Ambient Occlusion', 'Shade contacts and crevices. Colour correction stays active when this is off. Changes apply without reloading regions.', 'ph:circle-half-tilt', 243, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.waterReflections, 'Water Reflections', 'Reflect visible objects in water. Changes apply without reloading regions.', 'ph:drop', 246, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, 'Vegetation Shadows', 'Allow vegetation to cast shadows. Changes apply without reloading regions.', 'ph:tree', 247, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.softShadows, 'Soft Shadows', 'Widen shadow filtering independently of map resolution. Changes apply without reloading regions.', 'ph:sun-dim', 248, true, { persist: 'local' }),
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength, 'Shadow Strength', 'Choose how strongly cast shadows darken surfaces. Changes apply without reloading regions.', 'ph:circle-half-tilt', 249, 'light'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'light', label: 'Light' }, { value: 'medium', label: 'Medium' }, { value: 'strong', label: 'Strong' }] },
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity, 'Vegetation Density', 'Keep all small foliage, about half, or about 15 percent. Trees, rocks and climbing vines remain. Changing this reloads selected regions.', 'ph:plant', 244, 'full'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }, { value: 'minimal', label: 'Minimal' }] },
-    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality, 'Shadow Quality', 'Choose off, low, medium or high shadow quality. Medium preserves the existing appearance. Changes apply without reloading regions.', 'ph:sun-dim', 245, 'medium'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'off', label: 'Off' }, { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }] },
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality, 'Shadow Quality', 'Choose off, low, medium or high shadow quality. Map resolution is independent of softness and strength. Changes apply without reloading regions.', 'ph:sun-dim', 245, 'medium'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'off', label: 'Off' }, { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }] },
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'Terrain Surface', 'Choose plain, processed map or detailed terrain. Changing this reloads selected regions.', 'ph:mountains', 238, 'native'), persist: 'local' },
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, 'Terrain RDZ', 'Shade the 150 m rapid decay zone on terrain, with known 50 m resource and world-base exemptions. Conditional border-base protection is not included.', 'ph:warning-circle', 256, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, 'Terrain Contours', 'Draw elevation contours every 10 m, with stronger lines every 50 m, on 2.5D and 3D terrain.', 'ph:mountains', 257, false, { persist: 'local' }),
@@ -947,6 +959,10 @@ export function readFoxholeMapSettings(
         terrainLod: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainLod, false),
         adaptiveTextures: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, false),
         ambientOcclusion: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.ambientOcclusion, true),
+        waterReflections: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.waterReflections, true),
+        vegetationShadows: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, true),
+        softShadows: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.softShadows, true),
+        shadowStrength: (['medium', 'strong'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength) : 'light') as FoxholeMapSettings['shadowStrength'],
         vegetationDensity: (['reduced', 'minimal'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity) : 'full') as FoxholeMapSettings['vegetationDensity'],
         shadowQuality: (['off', 'low', 'high'].includes(readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality)) ? readStringSetting(FOXHOLE_MAP_SETTING_KEYS.shadowQuality) : 'medium') as FoxholeMapSettings['shadowQuality'],
         adaptiveStreaming: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveStreaming, false),

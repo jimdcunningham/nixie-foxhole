@@ -1,3 +1,4 @@
+import {worldShadowBit,shadowAppearanceId} from './shadow-appearance.mjs';
 import {createTerrainPlanningOverlays} from './terrain-planning-overlays.mjs';
 import {simpleTerrainBit} from './simple-terrain-shader.mjs';
 import {terrainTextureTier} from '../runtime/terrain-texture-quality.mjs';
@@ -11,10 +12,10 @@ class NativeTerrainDraw extends RenderPass {
  constructor(renderer,owner){super({renderer,name:'native-terrain-surface'});this.owner=owner;this.shader=null;this.key='';this.state=new State();this.state.depthTest=true;this.state.depthMask=true;this.state.culling=false;this.state.blend=false;}
  setup(b){b.writeColor(b.targetColor);b.writeDepth(b.targetDepth);}
  condition(){return this.owner.visible&&!!this.owner.current?.geometry;}
- render(session){const current=this.owner.current;if(!this.owner.visible||!current)return;const gl='gl' in session.renderer,env=session.view3d.environment instanceof CubeTexture?'cube':session.view3d.environment?'hemisphere':'none',filter=session.view3d.shadowFilter||'pcf',key=current.meta.region+env+filter+(current.surface||'native')+this.owner.generation;
+ render(session){const current=this.owner.current;if(!this.owner.visible||!current)return;const gl='gl' in session.renderer,env=session.view3d.environment instanceof CubeTexture?'cube':session.view3d.environment?'hemisphere':'none',filter=session.view3d.shadowFilter||'pcf',key=shadowAppearanceId(session.view3d)+current.meta.region+env+filter+(current.surface||'native')+this.owner.generation;
   if(!this.shader||key!==this.key){this.shader?.destroy();const shadows=(gl?shadowBitsGl:shadowBitsGpu)[filter]||(gl?shadowBitsGl:shadowBitsGpu).pcf;
    const mask=this.owner.excavationMask,base=mask?{...liveTerrainTemplate,bindGroups:[...liveTerrainTemplate.bindGroups,'excavation']}:liveTerrainTemplate,bits=[current.surface&&current.surface!=='native'?simpleTerrainBit(current.surface):liveTerrainBit(current.meta),...(mask?[mask.nativeBit]:[])];
-   this.shader=compileNativeTerrainShader(this.pipe.renderer,[...(this.owner.frame?framedMaterialBits(bits,'terrain'):bits),shadows,env==='cube'?envSourceCubeBit:env==='hemisphere'?envSourceHemisphereBit:envSourceDefaultBit,iblBit,pbrLightingBit,acesToneMappingBit,...(this.owner.frame?framedMaterialBits([this.owner.planning.bit],'terrain'):[this.owner.planning.bit])],this.owner.frame?framedTerrainTemplate(base):base);this.key=key;
+   this.shader=compileNativeTerrainShader(this.pipe.renderer,[...(this.owner.frame?framedMaterialBits(bits,'terrain'):bits),worldShadowBit(shadows,session.view3d),env==='cube'?envSourceCubeBit:env==='hemisphere'?envSourceHemisphereBit:envSourceDefaultBit,iblBit,worldShadowBit(pbrLightingBit,session.view3d),acesToneMappingBit,...(this.owner.frame?framedMaterialBits([this.owner.planning.bit],'terrain'):[this.owner.planning.bit])],this.owner.frame?framedTerrainTemplate(base):base);this.key=key;
   }
   if(current.uniforms.uniforms.weather){current.uniforms.uniforms.weather[0]=this.owner.weather.wetness;current.uniforms.uniforms.weather[1]=this.owner.weather.snow;current.uniforms.update();}
   

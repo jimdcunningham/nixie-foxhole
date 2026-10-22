@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Container3D,parseGltf} from '@pixi/3d';
+import {Container3D,parseGltf,BatchedMesh3D,RenderPassBit} from '@pixi/3d';
 import {loadWorldModels} from '../authoring/world-models.mjs';
 import {loadWorldDetails} from '../authoring/world-details.mjs';
 const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
@@ -14,4 +14,16 @@ test('model category filtering skips other categories and their LOD resources be
 test('disabled detail types do not fetch geometry, recipes or textures',async()=>{
  const root=new Container3D(),requests=[],bit={name:'fixture',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
  try{await loadWorldDetails({region:'fixture',root,layers:{decals:false,puddles:false,effects:false},hexBit:bit,json:async path=>{requests.push(path);assert.equal(path,'fixture/world-fixes/complete.json');return {};},texture:async()=>{throw Error('unexpected texture');},zipped:async()=>{throw Error('unexpected geometry');}});assert.equal(root.children.length,0);assert.deepEqual(requests,['fixture/world-fixes/complete.json']);}finally{root.destroy({children:true});}
+});
+
+test('vegetation shadow changes preserve colour passes and hidden actor state',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};const root=new Container3D(),sources=[],masks=new Map(),original=BatchedMesh3D.prototype.setItemActive;let world,visible=true,revision=0;
+ BatchedMesh3D.prototype.setItemActive=function(index,mask){masks.set(this.label+':'+index,mask);return original.call(this,index,mask);};
+ const policy={get revision(){return revision;},summary:{},visible:()=>visible,setWarState(){revision++;}};
+ const prototypes=[{name:'Bush',kind:'environment',category:'vegetation',file:'bush.gltf',placements:[{actor:'bush',matrix:identity}]}];
+ try{world=await loadWorldModels({region:'fixture',root,vegetationShadows:false,optimize:false,actorVisibility:policy,status(){},teamAt:()=> 'NONE',json:async path=>path.endsWith('world.json')?{prototypes}:{assets:{}},loadModel:async()=>{const source=await triangle();sources.push(source);return source;}});
+  assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE]);world.setVegetationShadows(true);assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE|RenderPassBit.SHADOW]);
+  visible=false;world.setWarState({});world.setVegetationShadows(false);world.setVegetationShadows(true);assert.deepEqual([...masks.values()],[0]);
+  visible=true;world.setWarState({});assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE|RenderPassBit.SHADOW]);world.setVegetationShadows(false);world.setWarState({});assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE]);
+ }finally{BatchedMesh3D.prototype.setItemActive=original;world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());globalThis.location=saved;}
 });

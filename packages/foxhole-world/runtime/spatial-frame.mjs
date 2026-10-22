@@ -11,6 +11,12 @@ export function framedMaterialBits(bits,group='material') {
  const end=gpu=>`normal=${gpu?'vec3<f32>':'vec3'}(normal.x,normal.z,normal.y);viewDir=${gpu?'vec3<f32>':'vec3'}(viewDir.x,viewDir.z,viewDir.y);specularNormal=${gpu?'vec3<f32>':'vec3'}(specularNormal.x,specularNormal.z,specularNormal.y);`;
  const converted=bits.map(bit=>{
   const result=structuredClone(bit);result.name=bit.name+':foxhole-frame:'+group;
+  // Reflections run after material-frame restoration and deliberately use world
+  // positions/normals. Only the unit scale and water-plane up axis change.
+  if(bit.name==='foxholeWaterScreenReflections'){
+   for(const backend of ['gpu','gl']){const stage=result[backend];if(!stage?.fragment?.lighting)continue;stage.fragment.lighting=stage.fragment.lighting.replace(backend==='gpu'?'vec3<f32>(0.0,1.0,0.0),roughness,1.0':'vec3(0.0,1.0,0.0),roughness,1.0',backend==='gpu'?`vec3<f32>(0.0,0.0,1.0),roughness,${f}.z`:`vec3(0.0,0.0,1.0),roughness,${glF}.z`);}
+   return result;
+  }
   if(bit.name==='regionShellCutDepth')for(const backend of ['gpu','gl'])if(result[backend]?.vertex?.end)result[backend].vertex.end=result[backend].vertex.end.replaceAll('worldNormal.y','worldNormal.z');
   for(const [backend,gpu]of [['gpu',true],['gl',false]]){
    const stage=result[backend];if(!stage)continue;
