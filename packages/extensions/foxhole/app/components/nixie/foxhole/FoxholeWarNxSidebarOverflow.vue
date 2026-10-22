@@ -53,6 +53,16 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.modelLod, !mapSettings.value.modelLod, { reason: 'foxhole-war-nx:model-lod' }),
     },
     {
+        type: 'submenu', label: 'Terrain Surface', icon: 'ph:mountains',
+        badge: { plain: 'Plain', map: 'Map', native: 'Detailed' }[mapSettings.value.terrainSurface],
+        adminOnly: false, disabled: false, visible: true,
+        children: ([['plain', 'Plain'], ['map', 'Map'], ['native', 'Detailed']] as const).map(([value, label]) => ({
+            type: 'checkbox', label, checked: mapSettings.value.terrainSurface === value,
+            closeOnClick: false, adminOnly: false, disabled: false, visible: true,
+            onClick: () => { if (mapSettings.value.terrainSurface !== value) settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, value, { reason: 'foxhole-war-nx:terrain-surface' }); },
+        })),
+    },
+    {
         type: 'checkbox',
         label: 'Terrain LOD',
         icon: 'ph:mountains',

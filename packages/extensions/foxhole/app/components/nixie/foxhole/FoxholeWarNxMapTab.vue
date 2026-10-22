@@ -118,7 +118,6 @@ const roadTourShakeStrengths = [{ value: '0.35', label: 'Gentle' }, { value: '1'
 function setRoadTourOption(key: 'region' | 'speed' | 'view' | 'shakeStrength', value: unknown): void {
     plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' || key === 'shakeStrength' ? Number(value) : String(value) };
 }
-const terrainSurfaceOptions = [{ value: 'plain', label: 'Plain' }, { value: 'map', label: 'Map' }, { value: 'native', label: 'Detailed' }];
 const worldLayerOptions: NxToggleGridOption[] = FOXHOLE_WORLD_LAYER_GROUPS.map(group => ({ id: group.id, label: group.label }));
 const terrainOverlayOptions: NxToggleGridOption[] = [{ id: 'rdz', label: 'RDZ' }, { id: 'topo', label: 'Topo' }];
 const activeTerrainOverlays = computed(() => [mapSettings.value.terrainRdz ? 'rdz' : '', mapSettings.value.terrainTopo ? 'topo' : ''].filter(Boolean));
@@ -724,13 +723,6 @@ const mapModVisibilityDisabled = computed(() => (
                 collapsible
                 :defaultOpen="true"
             >
-                <NxSelect
-                    label="Terrain Surface"
-                    :modelValue="mapSettings.terrainSurface"
-                    :options="terrainSurfaceOptions"
-                    @update:modelValue="patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainSurface]: $event }, 'foxhole-war-nx-map:terrain-surface')"
-                />
-
                 <div class="foxhole-war-nx-map-tab__layer-controls">
                     <NxToggleGrid
                         class="foxhole-war-nx-map-tab__world-layers"
