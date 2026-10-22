@@ -1,4 +1,5 @@
 import {catalogLightBudgetFor} from './catalog-lights.mjs';
+import {normalizeWorldModelLayers,worldModelLayers} from '../authoring/world-model-layers.mjs';
 import {setRegionFrustumCulling} from './frustum-culling.mjs';
 import {createWorldActorVisibility} from '../authoring/world-actor-visibility.mjs';
 import {modelCells,createModelCellStream} from './model-cells.mjs';
@@ -64,7 +65,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  function terrainGeometry(parsed){const p=parsed.view(0),n=parsed.view(1),indices=parsed.view(2),uv=new Float32Array(p.length/3*2);for(let i=0;i<p.length/3;i++){uv[i*2]=(p[i*3]+WIDTH/2)/WIDTH;uv[i*2+1]=(HEIGHT/2-p[i*3+2])/HEIGHT;}return geo(new Geometry3D({positions:p,normals:n,indices,uvs:uv,quantizeNormals:false}));}
  // Progressive publication is independent of camera-driven residency. Retain
  // enabled layers after their first request in the progressive resident mode.
- const residentFlags=Object.fromEntries(['terrain','water','shell','building','structures','rocks','vegetation','infrastructure','roads','decals','puddles','effects'].map(key=>[key,layers[key]!==false]));
+ const residentFlags=Object.fromEntries(['terrain','water','shell','building','structures','rocks','trees','vegetation','infrastructure','roads','decals','puddles','effects'].map(key=>[key,layers[key]!==false]));
  const loadFlags=()=>adaptiveStreaming?layerFlags:progressive?residentFlags:{};
  function prepareNode(node=root){setRegionFrustumCulling(node,frustumCulling);framePreparation?.prepare(node);}
  const streamingBusy=()=>[...modelStreams.values()].some(stream=>stream.busy);
@@ -116,7 +117,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  }
  let catalogReady,worldData,effectMetadataReady,retireRoads,retireDecals;const modelMetadata=new Map();
  const modelJson=id=>{if(!/\/(?:lod-manifest|night-materials)\.json$/.test(id))return json(id);if(!modelMetadata.has(id))modelMetadata.set(id,json(id).catch(error=>{modelMetadata.delete(id);throw error;}));return modelMetadata.get(id);};
- const metadata=()=>worldData??=json(region+'/world.json');
+ const metadata=()=>worldData??=json(region+'/world.json').then(normalizeWorldModelLayers);
  async function weather(taskSignal){for(const [slot,file]of Object.entries({weatherSnow:'snow',weatherBump:'normal',weatherMask:'mask',weatherNoise:'noise'})){taskSignal.throwIfAborted();weatherTextures[slot]=await texture(region+'/terrain-live/weather/'+file+'.png',true);taskSignal.throwIfAborted();}packedWeather=packWeatherSurfaceTextures(weatherTextures.weatherSnow,weatherTextures.weatherMask);weatherTextures.weatherSnow=packedWeather;}
 
  const catalog=()=>catalogReady??=readWorldCatalog({baseUrl,signal,onAsset:provider.trackExternalAsset});
@@ -223,7 +224,7 @@ async function loadRoads(seamsReady,ctx){
    water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const prepared=await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit});waterMat=ctx.mat(prepared.material);waterMat.data.waterReflectionStrength=waterReflections?1:0;targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
    weather:{needed:()=>false,load:weather},
    bridges:{needed:()=>false,load:taskSignal=>models('bridges',taskSignal,true),unload:()=>modelGroups.get('bridges')?.dispose?.()},
-   ...Object.fromEntries(['building','structures','rocks','vegetation','infrastructure'].map(key=>[key,{needed:f=>enabled(f,key),load:taskSignal=>streamModels(key,taskSignal),unload:()=>retireModels(key)}])),
+   ...Object.fromEntries(worldModelLayers.map(key=>[key,{needed:f=>enabled(f,key),load:taskSignal=>streamModels(key,taskSignal),unload:()=>retireModels(key)}])),
    roads:{needed:f=>enabled(f,'roads'),dependencies:['weather','bridges'],load:async taskSignal=>{const ctx=taskContext(taskSignal,'Transport');try{roadCacheReady=provider.readRoadAssembly().then(bytes=>bytes?unpackRoadAssembly(bytes):null);await loadRoads(modelGroups.get('bridges').world.bridgeRoadSeams,ctx);taskSignal.throwIfAborted();framePreparation?.prepare();refresh();retireRoads=()=>{targets.roads=[];roadShoulders.clear?.();ctx.rollback();};}catch(error){targets.roads=[];roadShoulders.parts=[];ctx.rollback();throw error;}},unload:()=>{retireRoads?.();retireRoads=null;}},
    decals:{needed:f=>enabled(f,'decals'),dependencies:['weather','bridges'],load:async taskSignal=>{const ctx=taskContext(taskSignal,'Surface Decals');let detail;try{detail=await loadDetails('decals',taskSignal,{decals:true,puddles:false,effects:false});await loadRoadDecals({region,...ctx,root:ctx.root,terrain:sample,hexBit,weatherSurfaceBit,weatherMaterial,groundBit:excavationMask.bit,bridgeRoadSeams:modelGroups.get('bridges').world.bridgeRoadSeams,includeRails:false});taskSignal.throwIfAborted();targets.decals=[ctx.root];framePreparation?.prepare();refresh();retireDecals=()=>{detail?.dispose();targets.decals=[];ctx.rollback();};}catch(error){detail?.dispose();targets.decals=[];ctx.rollback();throw error;}},unload:()=>{retireDecals?.();retireDecals=null;}},
    puddles:{needed:f=>enabled(f,'puddles'),dependencies:['weather'],load:taskSignal=>loadDetails('puddles',taskSignal,{decals:false,puddles:true,effects:false}),unload:()=>detailGroups.get('puddles')?.dispose()},

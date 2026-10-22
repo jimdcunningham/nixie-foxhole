@@ -1,6 +1,6 @@
 /** Keep layer switches independent of per-instance LOD visibility and the render graph. */
 export function createRegionLayerVisibility({targets, details, terrain, shoulders}) {
- const keys=["terrain","building","structures","rocks","vegetation","infrastructure","roads","decals","puddles","water","effects","shell"];
+ const keys=["terrain","building","structures","rocks","trees","vegetation","infrastructure","roads","decals","puddles","water","effects","shell"];
  let previous;
  return (layers={},force=false)=>{
   if(!force&&previous&&keys.every(key=>(layers[key]!==false)===previous[key]))return;

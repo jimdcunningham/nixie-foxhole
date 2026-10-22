@@ -4,7 +4,7 @@ import {FOXHOLE_WORLD_LAYER_DEFINITIONS,foxholeMapUserSettings,isFoxholeMapUserS
 
 test('spatial layers default to full quality and persist as region independent user preferences',()=>{
  const defaults=readFoxholeMapSettings({});
- assert.equal(FOXHOLE_WORLD_LAYER_DEFINITIONS.length,12);
+ assert.equal(FOXHOLE_WORLD_LAYER_DEFINITIONS.length,13);
  assert.ok(Object.values(defaults.worldLayers).every(Boolean));
  for(const layer of FOXHOLE_WORLD_LAYER_DEFINITIONS){
   assert.equal(isFoxholeMapUserSettingKey(layer.settingId),true);

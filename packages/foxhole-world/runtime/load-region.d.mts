@@ -17,7 +17,7 @@ export interface BakedRegion {
     setVegetationShadows?(enabled: boolean): void;
     setAmbientOcclusion?(enabled: boolean): void;
     setFrustumCulling?(enabled: boolean): void;
-    setLayers?(layers?: Partial<Record<'terrain' | 'building' | 'structures' | 'rocks' | 'vegetation' | 'infrastructure' | 'roads' | 'decals' | 'puddles' | 'water' | 'effects' | 'shell', boolean>>): void;
+    setLayers?(layers?: Partial<Record<'terrain' | 'building' | 'structures' | 'rocks' | 'trees' | 'vegetation' | 'infrastructure' | 'roads' | 'decals' | 'puddles' | 'water' | 'effects' | 'shell', boolean>>): void;
     createRoadTour?(): Promise<{ state: string; speed: number; view: string; viewStyle: string; pose: { position: number[]; target: number[]; }; start(pose: { position: number[]; target: number[]; }): boolean; next(pose: { position: number[]; target: number[]; }): boolean; pause(): void; stop(): void; update(seconds: number): { position: number[]; target: number[]; }; snapshot(): Record<string, unknown>; }>;
     sampleGround?(x: number, y: number): number | null;
     sampleWater?(x: number, y: number): number | null;

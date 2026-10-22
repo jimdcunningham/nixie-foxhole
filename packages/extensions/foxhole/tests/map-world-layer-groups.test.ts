@@ -3,8 +3,8 @@ import test from 'node:test';
 import { FOXHOLE_WORLD_LAYER_DEFINITIONS, readFoxholeMapSettings } from '../app/plugins/foxhole/nixie/map-settings.ts';
 import { FOXHOLE_WORLD_LAYER_GROUPS, activeWorldLayerGroups, worldLayerGroupPatch } from '../app/plugins/foxhole/nixie/map/world-layer-groups.ts';
 
-test('eight panel groups cover every existing renderer preference exactly once', () => {
-    assert.deepEqual(FOXHOLE_WORLD_LAYER_GROUPS.map(group => group.label), ['Terrain', 'Buildings', 'Props', 'Nature', 'Transport', 'Water', 'Surface Detail', 'Effects']);
+test('ten panel groups cover every renderer preference exactly once', () => {
+    assert.deepEqual(FOXHOLE_WORLD_LAYER_GROUPS.map(group => group.label), ['Terrain', 'Buildings', 'Props', 'Nature', 'Trees', 'Rocks', 'Transport', 'Water', 'Surface Detail', 'Effects']);
     const members = FOXHOLE_WORLD_LAYER_GROUPS.flatMap(group => [...group.layers]);
     assert.equal(new Set(members).size, members.length);
     assert.deepEqual([...members].sort(), FOXHOLE_WORLD_LAYER_DEFINITIONS.map(layer => layer.id).sort());
@@ -24,6 +24,9 @@ test('partly visible saved groups stay active and unrelated toggles preserve the
     const hidden = read({ ...after, ...worldLayerGroupPatch('nature', false) });
     assert.equal(hidden.rocks, false);assert.equal(hidden.vegetation, false);assert.ok(!activeWorldLayerGroups(hidden).includes('nature'));
     const shown = read({ ...after, ...worldLayerGroupPatch('nature', true) });
-    assert.equal(shown.rocks, true);assert.equal(shown.vegetation, true);
+    assert.equal(shown.rocks, false);assert.equal(shown.vegetation, true);
+    const treesHidden = read({ ...after, ...worldLayerGroupPatch('trees', false) });
+    assert.equal(treesHidden.trees, false);assert.equal(treesHidden.vegetation, true);assert.equal(treesHidden.rocks, false);
+    assert.deepEqual(worldLayerGroupPatch('rocks', true), { 'foxhole.map.world.rocks': true });
     assert.deepEqual(worldLayerGroupPatch('unknown', false), {});
 });

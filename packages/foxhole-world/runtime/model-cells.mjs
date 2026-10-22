@@ -1,9 +1,11 @@
+import {normalizeWorldModelLayers} from '../authoring/world-model-layers.mjs';
 import {createLayerDemand} from './layer-demand.mjs';
 
 const partitions=new WeakMap();
 
 /** Assign an actor and all attached blueprint components to one cell. */
 export function modelCells(data,category,{size=256}={}) {
+ data=normalizeWorldModelLayers(data);
  let sizes=partitions.get(data);if(!sizes)partitions.set(data,sizes=new Map());
  let cached=sizes.get(size);if(!cached)sizes.set(size,cached={actors:null,categories:new Map()});
  if(cached.categories.has(category))return cached.categories.get(category);

@@ -207,8 +207,13 @@ export const FOXHOLE_WORLD_LAYER_DEFINITIONS = [
         "settingId": "foxhole.map.world.rocks"
     },
     {
+        "id": "trees",
+        "label": "Trees",
+        "settingId": "foxhole.map.world.trees"
+    },
+    {
         "id": "vegetation",
-        "label": "Trees and Ground Cover",
+        "label": "Nature",
         "settingId": "foxhole.map.world.vegetation"
     },
     {

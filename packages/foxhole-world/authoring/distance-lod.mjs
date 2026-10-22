@@ -3,7 +3,7 @@ import {uploadLodVisibility} from './lod-visibility-upload.mjs';
 export function chooseLod({distance,radius,height,fov,category,cover,previous=0,tinyCover=true,orthographicHeight=null}){
  return chooseLodValues(distance,radius,orthographicHeight?height/orthographicHeight:height/(2*Math.tan(fov*Math.PI/360)),category,cover,previous,tinyCover,!!orthographicHeight);
 }
-function chooseLodValues(distance,radius,projection,category,cover,previous,tinyCover,orthographic=false){ const near=category==='vegetation'?120:180,d=Math.max(0,distance-radius),diameter=2*radius*projection/(orthographic?1:Math.max(1,distance));
+function chooseLodValues(distance,radius,projection,category,cover,previous,tinyCover,orthographic=false){ const near=(category==='vegetation'||category==='trees')?120:180,d=Math.max(0,distance-radius),diameter=2*radius*projection/(orthographic?1:Math.max(1,distance));
  // Small ground-cover cards need detail according to their on-screen size,
  // including orthographic views. The tree proximity floor would otherwise keep
  // a nine-pixel grass tuft at full geometry throughout the nearest 130 metres.

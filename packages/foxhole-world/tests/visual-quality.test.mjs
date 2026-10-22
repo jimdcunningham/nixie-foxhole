@@ -37,7 +37,7 @@ test('the real world loader applies density before loading small foliage and ret
  const positions=new Float32Array([0,0,0,1,0,0,0,1,0]),source=await parseGltf({asset:{version:'2.0'},buffers:[{byteLength:positions.byteLength}],bufferViews:[{buffer:0,byteLength:positions.byteLength}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]}],materials:[{name:'Body'}],meshes:[{primitives:[{attributes:{POSITION:0},material:0}]}],nodes:[{mesh:0}],scenes:[{nodes:[0]}],scene:0},[positions.buffer]);
  try{for(const density of ['full','reduced','minimal']){
   const root=new Container3D(),tree={...grass,name:'PineTree',file:'tree.glb',placements:rows.slice(0,3)},expected=rows.filter(row=>vegetationPlacementVisible(grass,row,density)).length;let world;
-  try{world=await loadWorldModels({region:'fixture',root,optimize:false,vegetationDensity:density,worldData:{prototypes:[grass,tree]},json:async()=>({assets:{}}),status(){},teamAt:()=> 'NONE',loadModel:async()=>source});assert.deepEqual(world.counts.failed,[]);assert.equal(world.counts.placements,expected+3);assert.equal(world.counts.byCategory.vegetation,expected+3);}finally{world?.dispose();root.destroy({children:true});}
+  try{world=await loadWorldModels({region:'fixture',root,optimize:false,vegetationDensity:density,worldData:{prototypes:[grass,tree]},json:async()=>({assets:{}}),status(){},teamAt:()=> 'NONE',loadModel:async()=>source});assert.deepEqual(world.counts.failed,[]);assert.equal(world.counts.placements,expected+3);assert.equal(world.counts.byCategory.vegetation,expected);assert.equal(world.counts.byCategory.trees,3);}finally{world?.dispose();root.destroy({children:true});}
  }}finally{source.destroy();}
 });
 

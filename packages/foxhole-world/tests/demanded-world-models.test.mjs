@@ -27,3 +27,14 @@ test('vegetation shadow changes preserve colour passes and hidden actor state',a
   visible=true;world.setWarState({});assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE|RenderPassBit.SHADOW]);world.setVegetationShadows(false);world.setWarState({});assert.deepEqual([...masks.values()],[RenderPassBit.OPAQUE]);
  }finally{BatchedMesh3D.prototype.setItemActive=original;world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());globalThis.location=saved;}
 });
+
+test('tree, nature and blueprint rock requests load only their own native meshes',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};
+ const prototypes=[{name:'Fir02',category:'vegetation',file:'tree.glb'},{name:'Bush',category:'vegetation',file:'bush.glb'},{name:'Cluster_C/StaticMesh',path:'War/Content/Meshes/Environment/Props/RockShorlineCliff.uasset',category:'structures',file:'rock.glb'},{name:'Crate',category:'structures',file:'crate.glb'}].map(p=>({...p,kind:'environment',placements:[{actor:p.name,matrix:identity}]}));
+ try{for(const [category,file]of [['trees','tree.glb'],['vegetation','bush.glb'],['rocks','rock.glb'],['structures','crate.glb']]){
+  const root=new Container3D(),sources=[],requests=[];let world;
+  try{world=await loadWorldModels({region:'fixture',root,categories:[category],optimize:false,status(){},teamAt:()=> 'NONE',json:async path=>path.endsWith('world.json')?{prototypes}:{assets:{}},loadModel:async path=>{requests.push(path);const source=await triangle();sources.push(source);return source;}});
+   assert.deepEqual(requests,['fixture/'+file]);assert.deepEqual(world.counts.failed,[]);assert.equal(world.layers[category].children.length,1);assert.equal(world.counts.placements,1);
+  }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());}
+ }}finally{globalThis.location=saved;}
+});

@@ -1,3 +1,4 @@
+import {normalizeWorldModelLayers,worldModelLayers} from '../authoring/world-model-layers.mjs';
 import {waterSurfaceSampler} from '../runtime/water-surface.mjs';
 import {catalogLightBudgetFor} from '../runtime/catalog-lights.mjs';
 import {effectLayers} from '../authoring/world-effect-policy.mjs';
@@ -36,7 +37,7 @@ function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adap
  class Terrain extends Pass {async load(_region,geometry,options){texturePolicies.push({descriptor:!!options.terrainDescriptor,pool:!!options.texturePool});options.status('Loading terrain textures');await surface.promise;this.current={geometry};}updateQuality(){updates.textures++;}}
  class Shoulders extends Pass {constructor(){super();this.summary={sourceTriangles:0};}async prepare(){}finish(){}}
  const provider={terrainDescriptor:()=>({}),metrics:{},json:async path=>{requests.push(path);return path.endsWith('roads/tour-source.json')?{curves:[{id:'road',mesh:'road',points:[[0,8,0],[400,8,0]]}]}:path.endsWith('terrain.json')?{min:[0,8,0],max:[1,8,1],components:[{name:'fixture',size:2,offset:0}]}:path.endsWith('world.json')?{prototypes:[{name:'House',file:'house.gltf',kind:'building',category:'building',placements:[{actor:'house',matrix:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}]}]}:path.endsWith('flags.json')?[]:path.endsWith('roads/render.json')?{materials:{},chunks:[]}:{};},binary:async path=>{requests.push(path);return path.endsWith('terrain.bin')?new Float32Array([0,8,0,1,8,0,0,8,1,1,8,1]).buffer:path;},zipped:async()=>new ArrayBuffer(0),texture:async()=>({}),environment:async()=>({}),readRoadAssembly:async()=>({}),writeRoadAssembly:async()=>{},stage(){},report(){},url:path=>path,trackExternalAsset(){},async measure(_name,fn){return fn();},finish(){finished++;return{readyMs:100};},destroy(){disposed++;}};
- const load=runInNewContext(source,{waterSurfaceSampler,modelCells,createModelCellStream,RoadTour,buildRoadNetwork,buildClearanceSampler,performance,AbortController,AbortSignal,DOMException,Float64Array,Float32Array,Uint32Array,ArrayBuffer,Map,Set,Math,Promise,
+ const load=runInNewContext(source,{normalizeWorldModelLayers,worldModelLayers,waterSurfaceSampler,modelCells,createModelCellStream,RoadTour,buildRoadNetwork,buildClearanceSampler,performance,AbortController,AbortSignal,DOMException,Float64Array,Float32Array,Uint32Array,ArrayBuffer,Map,Set,Math,Promise,
   createCompactProvider:async()=>provider,Container3D:Container,Geometry3D:Geometry,Material3D:Material,Mesh3D:Mesh,
   createTerrainExcavationMask:()=>({bind(){},set(){},destroy(){}}),LiveTerrainPass:Terrain,RoadShoulderPass:Shoulders,SurfaceDecalPass:Pass,SafeSsaoEffect:Pass,SceneColorFinishEffect:Pass,
   catalogLightBudgetFor,effectLayers,setRegionFrustumCulling,createWorldActorVisibility,buildTerrainPreview,terrainTexturePoolFor:()=>({}),createChunkedTerrainLod:options=>{terrainPolicies.push(options.adaptive);const chunks=createChunkedTerrainLod(options),update=chunks.update.bind(chunks);chunks.update=(...args)=>{updates.terrain++;return update(...args);};return chunks;},createRegionRevealQueue,createRegionLayerVisibility,completeLoadTasks,createLayerDemand,craneSpawnPlacements:()=>[],catalogBindingFor:()=>null,loadRailGeometry:async()=>({}),
@@ -69,7 +70,7 @@ test('atomic loading returns no partial scene and waits for complete materials',
 test('atomic mode preloads hidden layers once and keeps the complete region across camera and layer changes',async()=>{
  const f=fixture(false,terrainWater);await f.layout.promise;assert.equal(f.partial,undefined);f.models.resolve();f.surface.resolve();const scene=await f.pending;
  assert.equal(scene.metrics.resident,true);assert.equal(scene.metrics.terrainGeometry.step,1);
- const requested=f.modelRequests.map(row=>row.join(',')).sort();assert.deepEqual(requested,['bridges','building','infrastructure','rocks','structures','vegetation']);
+ const requested=f.modelRequests.map(row=>row.join(',')).sort();assert.deepEqual(requested,['bridges','building','infrastructure','rocks','structures','trees','vegetation']);
  const root=scene.root,geometry=scene.passes[0].current.geometry,count=f.modelRequests.length;
  const building=root.children.find(child=>child.label==='World building');assert.ok(building);assert.equal(building.children[0].visible,false,'hidden buildings are loaded, but layer visibility still applies');
  for(const position of [[0,0,0],[0,100000,0]])scene.update({camera:{position,height:800,fov:45},deltaMS:1000});
@@ -84,7 +85,7 @@ test('retiring a partial load defers resource destruction until asynchronous sta
  scene.destroy();assert.equal(scene.root.destroyed,false);f.models.resolve();f.surface.resolve();await rejected;assert.equal(scene.root.destroyed,true);assert.equal(f.disposed,1);scene.destroy();assert.equal(f.disposed,1);
 });
 
-const terrainWater={terrain:true,water:true,shell:true,building:false,structures:false,rocks:false,vegetation:false,infrastructure:false,roads:false,decals:false,puddles:false,effects:false};
+const terrainWater={terrain:true,water:true,shell:true,building:false,structures:false,rocks:false,trees:false,vegetation:false,infrastructure:false,roads:false,decals:false,puddles:false,effects:false};
 test('terrain and water never start model, catalog, road or detail loading; a later layer preserves terrain',async()=>{
  const f=fixture(true,terrainWater);f.surface.resolve();const scene=await f.pending;
  assert.deepEqual(f.modelRequests,[]);assert.ok(!f.requests.some(path=>path.endsWith('terrain-lod1.glb')),'distant terrain uses source heights without reconstructing full native GLB');assert.equal(scene.metrics.terrainGeometry.step,32);
@@ -115,7 +116,7 @@ test('road tour metadata loads on demand without enabling road or model layers',
 });
 
 test('unchanged war state does not republish every resident cell visibility',async()=>{
- const f=fixture(false,{terrain:true,building:true,water:false,roads:false,structures:false,rocks:false,vegetation:false,infrastructure:false,decals:false,puddles:false,effects:false});
+ const f=fixture(false,{terrain:true,building:true,water:false,roads:false,structures:false,rocks:false,trees:false,vegetation:false,infrastructure:false,decals:false,puddles:false,effects:false});
  await f.layout.promise;f.models.resolve();f.surface.resolve();const scene=await f.pending;
  const war={items:[]};scene.setWarState(war);const calls=f.states.length;
  for(let i=0;i<60;i++)scene.setWarState(war);

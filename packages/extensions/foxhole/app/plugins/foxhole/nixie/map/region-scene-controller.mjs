@@ -54,7 +54,7 @@ export class FoxholeRegionSceneController {
   const now=performance.now(),near=distance<(record.detailResident?1500:1100)&&(!ortho||ortho<3500);
   if(near)record.detailSeen=now;
   record.detailResident=near||!!record.detailResident&&now-(record.detailSeen??-Infinity)<8000;
-  return record.detailResident?this.layers:{...this.layers,building:false,structures:false,rocks:false,vegetation:false,infrastructure:false,roads:false,decals:false,puddles:false,effects:false};
+  return record.detailResident?this.layers:{...this.layers,building:false,structures:false,rocks:false,trees:false,vegetation:false,infrastructure:false,roads:false,decals:false,puddles:false,effects:false};
  }
  sync({view,settings,mode,regions,position={x:0,y:0},deltaMS,warState}){
   if(this.disposed)return;
