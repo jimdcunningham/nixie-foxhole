@@ -1,4 +1,13 @@
 const shadowQualityKey=Symbol.for('nixie.spatial.shadow-quality');
+const lightingProfileKey=Symbol.for('nixie.spatial.lighting-profile');
+
+// Match the native viewer's key/fill ratio. The host still animates its sun and moon.
+export function worldLightingProfile(view){
+ const camera=view.camera,p=camera?.position,ortho=camera?.mode==='orthographic'?(camera.orthographicSize||0)*(camera.zoom||1):0;
+ const reach=Math.min(camera?.far||128000,128000,Math.max(2048,Math.abs(p?.z||0)*4,(camera?.near||0)*150,ortho*4));
+ return {sunIntensity:7,ambientIntensity:.12,environmentIntensity:.4,nightAmbientIntensity:.025,nightEnvironmentIntensity:.025,
+  shadow:{cascades:3,maxDistance:reach,lambda:.7,bias:.00015,normalBias:.8,update:1}};
+}
 import {combineRegionPasses} from './region-render-passes.mjs';
 const aliases={callahanspassagehex:'callahans',deadlandshex:'deadlands',lochmorhex:'lochmor',fishermansrowhex:'fishermans',weatheredexpansehex:'weathered'};
 export function regionIdForKey(key){return aliases[key.toLowerCase()]||key.replace(/Hex$/i,'').toLowerCase();}
@@ -29,9 +38,11 @@ export class FoxholeRegionSceneController {
  }
  remove(record){record.retired=true;record.controller.abort();this.records.delete(record.id);this.reconcile();this.disposeScene(record.scene);}
  restoreCull(){if(this.cullView){this.cullView.cull=this.previousCull;if(this.cullView._sceneBatch)this.cullView._sceneBatch.cull=this.previousSceneCull;this.cullView=null;}}
+ restoreLighting(){if(!this.lightingView)return;const view=this.lightingView;view.toneMapping=this.previousToneMapping;if(this.hadLightingProfile)view[lightingProfileKey]=this.previousLightingProfile;else delete view[lightingProfileKey];this.lightingView=null;}
+ applyLighting(view){if(!this.lightingView){this.lightingView=view;this.previousToneMapping=view.toneMapping;this.hadLightingProfile=Object.hasOwn(view,lightingProfileKey);this.previousLightingProfile=view[lightingProfileKey];}view[lightingProfileKey]=worldLightingProfile(view);view.toneMapping='aces';}
  restoreShadows(){if(!this.shadowView)return;const view=this.shadowView;view.shadowQuality=this.previousShadowQuality;view.shadowFilter=this.previousShadowFilter;if(this.hadShadowOverride)view[shadowQualityKey]=this.previousShadowOverride;else delete view[shadowQualityKey];this.shadowView=null;}
  applyShadows(view,quality){if(!this.shadowView){this.shadowView=view;this.previousShadowQuality=view.shadowQuality;this.previousShadowFilter=view.shadowFilter;this.hadShadowOverride=Object.hasOwn(view,shadowQualityKey);this.previousShadowOverride=view[shadowQualityKey];}view[shadowQualityKey]=quality;view.shadowQuality=quality==='off'?'medium':quality;view.shadowFilter=quality==='low'?'hard':'pcf-high';}
- retire(){for(const record of [...this.records.values()])this.remove(record);this.selectionKey='';this.restoreCull();this.restoreShadows();}
+ retire(){for(const record of [...this.records.values()])this.remove(record);this.selectionKey='';this.restoreCull();this.restoreShadows();this.restoreLighting();}
  detailLayers(record){
   if(!this.adaptiveStreaming)return this.layers;
   const camera=this.view?.camera,p=camera?.position;if(!p)return this.layers;
@@ -49,7 +60,7 @@ export class FoxholeRegionSceneController {
   this.layers=settings.worldLayers;this.frustumCulling=settings.frustumCulling!==false;this.ambientOcclusion=settings.ambientOcclusion!==false;this.shadowQuality=['off','low','high'].includes(settings.shadowQuality)?settings.shadowQuality:'medium';const vegetationDensity=['reduced','minimal'].includes(settings.vegetationDensity)?settings.vegetationDensity:'full',adaptiveStreaming=settings.adaptiveStreaming===true,modelLod=settings.modelLod===true,terrainLod=settings.terrainLod===true,adaptiveTextures=settings.adaptiveTextures===true,terrainSurface=['plain','map'].includes(settings.terrainSurface)?settings.terrainSurface:'native';
   if(this.view!==view||this.adaptiveStreaming!==adaptiveStreaming||this.modelLod!==modelLod||this.terrainLod!==terrainLod||this.adaptiveTextures!==adaptiveTextures||this.vegetationDensity!==vegetationDensity||this.terrainSurface!==terrainSurface){this.retire();this.view=view;this.adaptiveStreaming=adaptiveStreaming;this.modelLod=modelLod;this.terrainLod=terrainLod;this.adaptiveTextures=adaptiveTextures;this.vegetationDensity=vegetationDensity;this.terrainSurface=terrainSurface;}
   const ids=selectedSpatialRegions({...settings,mode}),sources=regions||ids.map(id=>({id,position,warState}));
-  if(ids.length)this.applyShadows(view,this.shadowQuality);else this.restoreShadows();
+  if(ids.length){this.applyShadows(view,this.shadowQuality);this.applyLighting(view);}else{this.restoreShadows();this.restoreLighting();}
   if(ids.length){if(!this.cullView){this.cullView=view;this.previousCull=view.cull;this.previousSceneCull=view._sceneBatch?.cull;}view.cull=this.frustumCulling?'gpu':'off';if(view._sceneBatch)view._sceneBatch.cull=view.cull;}else this.restoreCull();
   const desired=new Map(sources.filter(r=>ids.includes(r.id)).map(r=>[r.id,r]));
   const key=[...desired.keys()].sort().join('|'),selectionChanged=key!==this.selectionKey;if(selectionChanged){this.selectionKey=key;this.started=performance.now();}

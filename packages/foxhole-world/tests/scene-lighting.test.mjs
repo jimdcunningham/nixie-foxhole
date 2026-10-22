@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {CubeTexture} from 'pixi.js';
 import {Container3D,View3D} from '@pixi/3d';
-import {FoxholeRegionSceneController} from '../../extensions/foxhole/app/plugins/foxhole/nixie/map/region-scene-controller.mjs';
+import {FoxholeRegionSceneController,worldLightingProfile} from '../../extensions/foxhole/app/plugins/foxhole/nixie/map/region-scene-controller.mjs';
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
 
 test('host-managed time of day survives region arrival, reconciliation and removal',async()=>{
@@ -31,4 +31,29 @@ for(const filename of ['live-terrain','road-shoulders'])test(filename+' selects 
  assert.equal(resolve({skyColor:0x394c73,intensity:.025}),'hemisphere');
  assert.equal(resolve(null),'none');
  assert.equal(resolve(Object.create(CubeTexture.prototype)),'cube');
+});
+
+const lightingProfileKey=Symbol.for('nixie.spatial.lighting-profile');
+test('world appearance follows camera scale and restores a prior view calibration on release',async()=>{
+ const previous={sunIntensity:5},view=new View3D({toneMapping:'none'});view[lightingProfileKey]=previous;
+ const controller=new FoxholeRegionSceneController({baseUrl:'https://world.test/',manageEnvironment:false,
+  fetcher:async()=>new Response(JSON.stringify({version:1,regions:{fixture:{id:'fixture'}}})),
+  loadRegion:async()=>({root:new Container3D(),passes:[],metrics:{},destroy(){}})});
+ const sync=enabled=>controller.sync({view,settings:{enabled,regionKeys:['fixtureHex']},mode:'3d'});
+ try{
+  view.camera.position.z=400;view.camera.near=10;view.camera.far=150000;
+  sync(true);await flush();assert.equal(view.toneMapping,'aces');
+  assert.equal(view[lightingProfileKey].shadow.cascades,3);
+  assert.equal(view[lightingProfileKey].shadow.maxDistance,2048);
+  view.camera.position.z=2000;sync(true);assert.equal(view[lightingProfileKey].shadow.maxDistance,8000);
+  view.camera.mode='orthographic';view.camera.orthographicSize=12000;view.camera.zoom=1;
+  sync(true);assert.equal(view[lightingProfileKey].shadow.maxDistance,48000);
+  sync(false);assert.equal(view.toneMapping,'none');assert.equal(view[lightingProfileKey],previous);
+  sync(true);controller.destroy();assert.equal(view.toneMapping,'none');assert.equal(view[lightingProfileKey],previous);
+ }finally{controller.destroy();view.destroy({children:true});}
+});
+test('shadow reach covers oblique camera focus without exceeding its far plane',()=>{
+ assert.equal(worldLightingProfile({camera:{near:300,far:100000,position:{z:10}}}).shadow.maxDistance,45000);
+ assert.equal(worldLightingProfile({camera:{near:10000,far:200000,position:{z:100000}}}).shadow.maxDistance,128000);
+ assert.equal(worldLightingProfile({camera:{near:100,far:10000,position:{z:10000}}}).shadow.maxDistance,10000);
 });
