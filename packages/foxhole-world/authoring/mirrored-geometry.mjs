@@ -16,7 +16,8 @@ export function createMirroredGeometryCache(){
    let entry=variants.get(original);
    if(entry&&!entry.geometry.indexBuffer){release(original);entry=null;}
    if(!entry){
-    const geometry=new Geometry3D({attributes:original.attributes,indices:reverseTriangleWinding(original.indexBuffer.data),topology:original.topology,indexCount:original.indexCount,bounds3D:original.bounds3D.clone()});
+    // Particle buffers must retain their direct draw path after reflection.
+    const geometry=new Geometry3D({dynamic:original.dynamic,attributes:original.attributes,indices:reverseTriangleWinding(original.indexBuffer.data),topology:original.topology,indexCount:original.indexCount,bounds3D:original.bounds3D.clone()});
     entry={geometry,indices:geometry.indexBuffer,release:()=>release(original)};
     variants.set(original,entry);original.once('destroy',entry.release);
    }

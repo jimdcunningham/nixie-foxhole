@@ -21,6 +21,7 @@ test('framed effects retain native particle motion but use pixel-sized world bil
    const launch=p.toGlobal({x:0,y:0,z:0});
    assert.ok(Math.abs(launch.x-4200)<.001&&Math.abs(launch.y+3600)<.001&&Math.abs(launch.z-640)<.001,'anchoring preserves framed launch coordinates');
   }
+  assert.equal(p.geometry.dynamic,true,'framing must keep particle buffers out of static geometry atlases');
   assert.equal(p.material.state.depthTest,true);
   assert.equal(p.material.state.depthMask,false);
   assert.equal(p.data.f32[p._sizeRotIndex],spatialFrame?64:2);
