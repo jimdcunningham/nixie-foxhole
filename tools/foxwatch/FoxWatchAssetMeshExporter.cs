@@ -2106,8 +2106,7 @@ public sealed partial class FoxWatchAssetMeshExporter
     {
         // These authored one-slot Flag planes replace Measurement/Plane's debug
         // material; retain the actual cloth sidecar rather than its emissive fallback.
-        if (!string.Equals(targetReference.ComponentName, "Flag", StringComparison.OrdinalIgnoreCase)
-            || !targetReference.MeshPath.EndsWith("/Meshes/Measurement/Plane.uasset", StringComparison.OrdinalIgnoreCase))
+        if (!FoxWatchFlagMaterialPolicy.IsAuthoredPlane(targetReference.ComponentName, targetReference.MeshPath))
         {
             return;
         }
