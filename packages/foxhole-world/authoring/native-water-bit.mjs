@@ -41,9 +41,10 @@ vec3 absorption = exp(-vec3(.50,.28,.36)*opticalDepth/max(.5,abs(refractedRay.y)
 float fresnelWater = .02037+.97963*pow(1.0-max(dot(normal,viewDir),0.0),5.0);
 float transmitWater = exp(-opticalDepth*.27)*(1.0-fresnelWater)*(1.0-foam);
 vec3 bodyColor = mix(material.waterBody.rgb,material.waterShallow.rgb,shallows);
-emissive = behind*absorption*transmitWater+bodyColor*(1.0-transmitWater)*.28;
-albedo = mix(bodyColor*(1.0-transmitWater)*.32,material.waterFoamColor.rgb,foam);
-roughness = mix(mix(.13,.20,pond),.78,foam);
+// Only transmitted scene light is emissive. Body colour must darken with the sun.
+emissive = behind*absorption*transmitWater;
+albedo = mix(bodyColor*(1.0-transmitWater)*1.2,material.waterFoamColor.rgb,foam);
+roughness = mix(mix(.18,.24,pond),.78,foam);
 metallic = 0.0;
 occlusion = 1.0;
 fresnelF0 = vec3(.02037);
