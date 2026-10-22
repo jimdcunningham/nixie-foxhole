@@ -10,8 +10,10 @@ export function waterOpticsHeader(gpu){const body=`
  vec3 v=(-b+sqrt(b*b-4.0*a*c))/(2.0*a);
  return max(vec3(0.0),${mat(inverse3(acesIn))}*v*(0.6/max(${gpu?'global.uExposure':'uExposure'},0.001)));
  `;
- if(gpu)return `fn waterDecodeScene(rgb:vec3<f32>)->vec3<f32>{${body.replace(/vec3 (\w+)=/g,'let $1=').replaceAll('vec3(','vec3<f32>(').replaceAll('mat3(','mat3x3<f32>(')}}
+ if(gpu)return `fn waterViewDirection(p:vec3<f32>)->vec3<f32>{if(abs(camera.uProjectionMatrix[3][3])>0.5){return normalize(vec3<f32>(camera.uViewMatrix[0][2],camera.uViewMatrix[1][2],camera.uViewMatrix[2][2]));}return normalize(camera.uCameraPosition-p);}
+ fn waterDecodeScene(rgb:vec3<f32>)->vec3<f32>{${body.replace(/vec3 (\w+)=/g,'let $1=').replaceAll('vec3(','vec3<f32>(').replaceAll('mat3(','mat3x3<f32>(')}}
  fn waterSceneDepth(p:vec3<f32>)->f32{let size=vec2<i32>(textureDimensions(uOpaqueDepthTexture));let pixel=clamp(vec2<i32>(screenUVFromWorld(p)*vec2<f32>(size)),vec2<i32>(0),size-vec2<i32>(1));let d=textureLoad(uOpaqueDepthTexture,pixel,0);let projection=camera.uProjectionMatrix;return abs((projection[3][2]-d*projection[3][3])/(d*projection[2][3]-projection[2][2]));}`;
- return `vec3 waterDecodeScene(vec3 rgb){${body}}
+ return `vec3 waterViewDirection(vec3 p){if(abs(uProjectionMatrix[3][3])>0.5){return normalize(vec3(uViewMatrix[0][2],uViewMatrix[1][2],uViewMatrix[2][2]));}return normalize(uCameraPosition-p);}
+ vec3 waterDecodeScene(vec3 rgb){${body}}
  float waterSceneDepth(vec3 p){ivec2 size=textureSize(uOpaqueDepthTexture,0);ivec2 pixel=clamp(ivec2(screenUVFromWorld(p)*vec2(size)),ivec2(0),size-ivec2(1));float d=texelFetch(uOpaqueDepthTexture,pixel,0).r*2.0-1.0;return abs((uProjectionMatrix[3][2]-d*uProjectionMatrix[3][3])/(d*uProjectionMatrix[2][3]-uProjectionMatrix[2][2]));}`;
 }

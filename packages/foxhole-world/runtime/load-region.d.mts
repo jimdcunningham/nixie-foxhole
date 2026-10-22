@@ -14,6 +14,7 @@ export interface BakedRegion {
     setWarState?(state?: { items?: readonly unknown[]; } | null): void;
     setPlanningOverlays?(options: { rdz?: boolean; topo?: boolean; }): void;
     setWaterReflections?(enabled: boolean): void;
+    prepareWaterSurfaceDepth?(view: import('@pixi/3d').View3D): void;
     prepareWindShadows?(view: import('@pixi/3d').View3D): void;
     setVegetationWind?(enabled: boolean): void;
     setVegetationShadows?(enabled: boolean): void;

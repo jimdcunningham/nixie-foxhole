@@ -1,3 +1,4 @@
+import {prepareWaterSurfaceDepth} from './water-surface-depth.mjs';
 import {prepareVegetationWindShadows} from './vegetation-wind-shadows.mjs';
 import {createVegetationWind} from '../authoring/vegetation-wind.mjs';
 import {nativeFactionFlagTexture} from './catalog-flag-materials.mjs';
@@ -97,6 +98,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   setPlanningOverlays(options={}){terrainOverlays=options;liveTerrainPass.setPlanningOverlays?.(options,warState);},
   setWaterReflections(enabled){waterReflections=enabled!==false;if(waterMat)waterMat.data.waterReflectionStrength=waterReflections?1:0;},
   prepareWindShadows:prepareVegetationWindShadows,
+  prepareWaterSurfaceDepth,
   setVegetationWind:enabled=>windMaterials.setEnabled(enabled),
   setVegetationShadows(enabled){vegetationShadows=enabled!==false;for(const group of modelGroups.values())group.world?.setVegetationShadows?.(vegetationShadows);},
   setAmbientOcclusion(enabled){ambientOcclusion=enabled;passes[3].enabled=enabled;passes[4].enabled=!enabled;scene.metrics.ambientOcclusion=enabled;},

@@ -26,7 +26,7 @@ test('native water publishes the reflection controls and retains its refractive 
  try{
   assert.equal(material.data.waterReflectionStrength,1);
   assert.equal(material._passBit,32,'colour and depth copies must bind in the blended-refraction pass');
-  assert.equal(material.state.depthMask,false);
+  assert.equal(material.state.depthMask,true,'postprocessing must see the water surface instead of the submerged terrain');
   const descriptor=material.getPrimaryDescriptor(view);
   for(const bits of [descriptor.bitsGpu,descriptor.bitsGl])assert.ok(bits.some(bit=>bit.name==='foxholeWaterScreenReflections'));
   material.data.waterReflectionStrength=0;

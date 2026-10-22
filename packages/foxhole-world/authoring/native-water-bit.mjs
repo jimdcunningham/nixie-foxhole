@@ -3,6 +3,8 @@ import {waterOpticsHeader} from './water-optics.mjs';
 // Four-way moving normals, refracted opaque color, scene-depth shoreline foam
 // and native boat stencils run in Pixi PBR. UE flow painting/SSR remain incomplete.
 const materialGL=`
+// Orthographic rays are parallel, regardless of zoom or distance from the camera.
+viewDir = waterViewDirection(vPosition);
 vec2 waterXZ = vPosition.xz;
 float pond = step(.5,material.hasPonds)*step(0.0,vPosition.y);
 float waterTime = material.waterTime*mix(1.0,.2,pond);

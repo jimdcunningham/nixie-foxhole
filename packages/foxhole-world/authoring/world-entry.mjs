@@ -30,6 +30,7 @@ import{captureMapBake,finishMapBake}from'./capture-map-bake.mjs';
 
 import{createBakedMapViewer,mapBakeSize}from'./baked-map-viewer.mjs';
 
+import {prepareWaterSurfaceDepth} from '../runtime/water-surface-depth.mjs';
 import{createNativeWaterMaterial}from'./native-water-material.mjs';import{SafeSsaoEffect}from'./safe-ssao.mjs';
 
 import{parseGlb,WIDTH,HEIGHT,mapPoint,inHex,planes}from'./terrain-tools.mjs';import{loadWorldModels}from'./world-models.mjs';import{hex,transform,classify}from'./world-geometry.mjs';
@@ -95,7 +96,7 @@ function buildWalls(){
  walls=new Mesh3D({label:'Region Cutaway Shell',geometry:geo(new Geometry3D({positions:shell.positions,normals:shell.normals,indices:shell.indices})),material:mat(new Material3D({baseColor:REGION_SHELL_COLOR,roughness:.95,metallic:0,doubleSided:true,extraBits:[shellDepthBit]})),castShadow:false,receiveShadow:false});walls.material.data.shellDepthBias=0.000001;root.addChild(walls);
 
 }
-async function loadWater(){const parsed=parseGlb(await binary(`${region}/water-visible.glb`));if(!parsed.view(2).length){waterMat=null;waterMaterialInfo={surfaces:0,reason:'No visible native water geometry'};water=new Container3D({label:'No Native Water'});root.addChild(water);return;}const g=terrainGeometry(parsed),prepared=await createNativeWaterMaterial({region,json,texture,hexBit});waterMat=mat(prepared.material);waterMaterialInfo=prepared.info;water=new Mesh3D({label:'Foxhole Refractive Water',geometry:g,material:waterMat,castShadow:false});root.addChild(water);}
+async function loadWater(){prepareWaterSurfaceDepth(view);const parsed=parseGlb(await binary(`${region}/water-visible.glb`));if(!parsed.view(2).length){waterMat=null;waterMaterialInfo={surfaces:0,reason:'No visible native water geometry'};water=new Container3D({label:'No Native Water'});root.addChild(water);return;}const g=terrainGeometry(parsed),prepared=await createNativeWaterMaterial({region,json,texture,hexBit});waterMat=mat(prepared.material);waterMaterialInfo=prepared.info;water=new Mesh3D({label:'Foxhole Refractive Water',geometry:g,material:waterMat,castShadow:false});root.addChild(water);}
 
 
 
