@@ -1,3 +1,4 @@
+import {nativeSmokeOutlet} from './native-smoke-outlet.mjs';
 import {hideViewerParticleEffect,unsupportedParticleMaterialReason} from './viewer-effects-policy.mjs';
 import {surfaceDecalMaterial} from './surface-decal-pass.mjs';
 import {splitVertices} from './split-vertices.mjs';
@@ -7,7 +8,7 @@ import {effectOwnerLayer} from './world-effect-policy.mjs';
 import {Geometry3D,Material3D,Mesh3D,Matrix4,BatchedMesh3D} from '@pixi/3d';
 const isRoadBlend=key=>/\/(RoadBlend(?:Dirt(?:PackedDirt)?|Gravel(?:Dirt)?|PackedDirt)\d+)\.\1$/i.test(key);
 const puddleBit={name:'nativePuddleTerrainIntersection',textures:['puddleBed'],bindings:{material:{puddleDepthScale:'f32'}},gpu:{fragment:{material:'let bedUV=vec2<f32>((input.vPosition.x+1092.0)/2184.0,(945.0-input.vPosition.z)/1890.0);let bed=samplePuddleBed(bedUV).rg;let bedHeight=dot(bed,vec2<f32>(65280.0,255.0))/65535.0*256.0-128.0;alpha*=smoothstep(0.0,0.2,max(0.0,input.vPosition.y-bedHeight)*material.puddleDepthScale);'}},gl:{fragment:{material:'vec2 bedUV=vec2((vPosition.x+1092.0)/2184.0,(945.0-vPosition.z)/1890.0);vec2 bed=samplePuddleBed(bedUV).rg;float bedHeight=dot(bed,vec2(65280.0,255.0))/65535.0*256.0-128.0;alpha*=smoothstep(0.0,0.2,max(0.0,vPosition.y-bedHeight)*material.puddleDepthScale);'}}};
-export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weatherSurfaceBit,weatherMaterial,groundBit,json:loadJson,zipped:loadZipped,bridgeRoadSeams,frame,layers={},nativeRoadTransitions=false,effectLayer,worldData,effectData}){
+export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weatherSurfaceBit,weatherMaterial,groundBit,json:loadJson,zipped:loadZipped,bridgeRoadSeams,frame,layers={},nativeRoadTransitions=false,effectLayer,worldData,effectData,smokeCloudTexture}){
  if(region!=='deadlands')await loadJson(region+'/world-fixes/complete.json');
  const prefix=region+'/world-fixes/',json=f=>loadJson(prefix+f),unzip=f=>loadZipped(prefix+f),[meta,source,effects]=await Promise.all([layers.decals===false?{chunks:[],coverage:[]}:json('details/render.json'),layers.decals===false?{}:json('details/materials.json'),layers.effects===false?{materials:{},placements:[],emitters:{},unsupported:[]}:effectData||json('effects/render.json')]);
  // Native road meshes blend adjacent materials, and the shoulder pass blends
@@ -20,6 +21,7 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
  const layerFor=p=>effectOwnerLayer(p,{region,worldData});
  const effectPlacements=effects.placements.filter(p=>!effectLayer||layerFor(p)===effectLayer);
  const effectMaterials=new Set(effectPlacements.flatMap(p=>persistentParticleEmitters(p,effects).map(e=>e.material)));
+ const smokeCloud=effectMaterials.has('SmokeStacks')&&smokeCloudTexture?await smokeCloudTexture():undefined;
  const sprites=new Map(await Promise.all([...effectMaterials].map(async name=>[name,await texture(region+'/world-fixes/effects/'+effects.materials[name].file)])));
  await Promise.all(Object.values(utility.materials).flatMap(m=>[m.file?texture(region+'/world-fixes/utility/'+m.file):undefined,m.normalFile?texture(region+'/world-fixes/utility/'+m.normalFile,true):undefined]));
  const [vb,ib]=await Promise.all(layers.decals===false?[new ArrayBuffer(0),new ArrayBuffer(0)]:[unzip('details/vertices.bin.gz'),unzip('details/indices.bin.gz')]);const indices=new Uint32Array(ib),batch=new BatchedMesh3D({size:chunks.length,cull:'gpu',label:'Projected Native Decals'});
@@ -39,7 +41,7 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
   if(available.some(e=>nativeEmitterModules(placement.system,e)?.loops>0))summary.transientParticleComponents++;
   if(!available.length){summary.unsupportedParticleComponents++;continue;}
   for(const e of emitters){
-   const container=buildNativeParticleEmitter({placement,emitter:e,material:effects.materials[e.material],texture:sprites.get(e.material),particleHex,frame,region});
+   const container=buildNativeParticleEmitter({placement,emitter:e,material:effects.materials[e.material],texture:sprites.get(e.material),particleHex,frame,region,smokeCloudTexture:smokeCloud,outlet:nativeSmokeOutlet(placement,worldData)});
    root.addChild(container);container.nativeLayer=layerFor(placement);particles.push(container);summary.particleComponents++;summary.particles+=container.capacity;
    if(nativeEmitterModules(placement.system,e)?.unsupportedModules?.length)summary.approximatedParticleComponents++;
   }

@@ -1,3 +1,4 @@
+import {nativeSmokeCloudTexture} from './native-smoke-texture.mjs';
 import {prepareWaterSurfaceDepth} from './water-surface-depth.mjs';
 import {prepareVegetationWindShadows} from './vegetation-wind-shadows.mjs';
 import {createVegetationWind} from '../authoring/vegetation-wind.mjs';
@@ -156,7 +157,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  }
  async function retireModels(category){const stream=modelStreams.get(category);if(stream){await stream.dispose();modelStreams.delete(category);}else modelGroups.get(category)?.dispose?.();}
  async function loadDetails(key,taskSignal,flags,effectLayer){const ctx=taskContext(taskSignal,'Details '+key);
-  try{const effectData=effectLayer?await (effectMetadataReady??=json(region+'/world-fixes/effects/render.json')):undefined;taskSignal.throwIfAborted();const effectWorldData=effectLayer&&effectLayer!=='water'?await metadata():undefined;taskSignal.throwIfAborted();if(effectWorldData)sharedActorVisibility??=createWorldActorVisibility({region,prototypes:effectWorldData.prototypes});const detail=await loadWorldDetails({region,...ctx,layers:flags,effectLayer,effectData,worldData:effectWorldData,hexBit,weatherSurfaceBit,weatherMaterial,groundBit:excavationMask.bit,bridgeRoadSeams:modelGroups.get('bridges')?.world?.bridgeRoadSeams,frame,nativeRoadTransitions:true});taskSignal.throwIfAborted();detail.dispose=()=>{detailGroups.delete(key);ctx.rollback();};detailGroups.set(key,detail);framePreparation?.prepare();refresh();return detail;}
+  try{const effectData=effectLayer?await (effectMetadataReady??=json(region+'/world-fixes/effects/render.json')):undefined;taskSignal.throwIfAborted();const effectWorldData=effectLayer&&effectLayer!=='water'?await metadata():undefined;taskSignal.throwIfAborted();if(effectWorldData)sharedActorVisibility??=createWorldActorVisibility({region,prototypes:effectWorldData.prototypes});const detail=await loadWorldDetails({region,...ctx,layers:flags,effectLayer,effectData,worldData:effectWorldData,smokeCloudTexture:()=>nativeSmokeCloudTexture(baseUrl,{onAsset:provider.trackExternalAsset}),hexBit,weatherSurfaceBit,weatherMaterial,groundBit:excavationMask.bit,bridgeRoadSeams:modelGroups.get('bridges')?.world?.bridgeRoadSeams,frame,nativeRoadTransitions:true});taskSignal.throwIfAborted();detail.dispose=()=>{detailGroups.delete(key);ctx.rollback();};detailGroups.set(key,detail);framePreparation?.prepare();refresh();return detail;}
   catch(error){detailGroups.delete(key);ctx.rollback();throw error;}
  }
 

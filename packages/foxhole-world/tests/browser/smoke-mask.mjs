@@ -1,0 +1,26 @@
+// Run backend=webgl/webgpu and both native/host frames with the world harness.
+import {Application,Texture,Assets} from 'pixi.js';import {View3D,Camera3D,Container3D} from '@pixi/3d';import '@pixi/3d/webgl';import '@pixi/3d/webgpu';
+import {buildNativeParticleEmitter} from '../../authoring/native-particle-runtime.mjs';import {applyRegionFrame} from '../../runtime/spatial-frame.mjs';import native from '../../authoring/native-smoke-texture.json';
+const output=document.querySelector('pre'),params=new URLSearchParams(location.search),backend=params.get('backend')||'webgl',framed=params.get('frame')==='host',errors=[];
+try{
+ let webgpu;if(backend==='webgpu'){const adapter=await navigator.gpu.requestAdapter(),device=await adapter.requestDevice({requiredFeatures:['indirect-first-instance']});device.addEventListener('uncapturederror',e=>errors.push(e.error.message));webgpu={gpu:{adapter,device}};}
+ const app=new Application();await app.init({width:600,height:400,resolution:1,autoStart:false,antialias:false,preference:backend,webgpu,background:0});document.body.append(app.canvas);
+ const view=new View3D({width:600,height:400,camera:new Camera3D({mode:'orthographic',near:.1,far:100}),environment:null,toneMapping:'none'});app.stage.addChild(view);view.camera.orthographicSize=4;view.camera.position.set(0,0,5);view.camera.lookAt({x:0,y:0,z:0});
+ const root=new Container3D();view.root.addChild(root);const cloud=await Assets.load(new URL('../../../extensions/foxhole/public/foxhole/assets/'+native.path,import.meta.url).href);cloud.source.alphaMode='no-premultiply-alpha';cloud.source.style.addressMode='repeat';
+ const frame=framed?{x:100000,y:-200000,scale:32}:undefined;
+ const p=buildNativeParticleEmitter({region:'fixture',placement:{actor:'chimney',name:'smoke',system:'War/Content/FX/smokestack.smokestack',matrix:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},emitter:{name:'ParticleSpriteEmitter_3',material:'SmokeStacks',count:1,rate:[.1,.1],lifetime:[10,10],location:[[0,0,0],[0,0,0]],origin:[0,0,0],velocity:[[0,0,0],[0,0,0]],acceleration:[[0,0,0],[0,0,0]],size:[[300,300,300],[300,300,300]],color:[[1,1,1],[1,1,1]],alpha:[1,1]},material:{color:[1,1,1],opacity:1.5},texture:Texture.WHITE,smokeCloudTexture:cloud,particleHex:{name:'fixture',gpu:{},gl:{}},outlet:{position:[0,0,0],up:[0,1,0]},frame});root.addChild(p);p.setParticle(0,{aBirth:0,aLife:10,aNativeSpin:0});p.uniforms.uParticleTime=1;
+ if(framed){applyRegionFrame({root,materials:[],terrainPass:{}},frame);view.camera.near=3.2;view.camera.far=3200;view.camera.orthographicSize=128;view.camera.position.set(100000,200160,0);view.camera.lookAt({x:100000,y:200000,z:0},{x:0,y:0,z:1});}
+   const read=async()=>{app.render();app.render();let data;
+  if(backend==='webgl'){const gl=app.renderer.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,null);data=new Uint8Array(600*400*4);gl.readPixels(0,0,600,400,gl.RGBA,gl.UNSIGNED_BYTE,data);return data;}
+  const device=webgpu.gpu.device,target=app.renderer.renderTarget.getGpuRenderTarget(app.renderer.renderTarget.rootRenderTarget).canvasTextures[0],stride=Math.ceil(600*4/256)*256,buffer=device.createBuffer({size:stride*400,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}),encoder=device.createCommandEncoder();encoder.copyTextureToBuffer({texture:target},{buffer,bytesPerRow:stride},{width:600,height:400});device.queue.submit([encoder.finish()]);await buffer.mapAsync(GPUMapMode.READ);const source=new Uint8Array(buffer.getMappedRange());data=new Uint8Array(600*400*4);for(let y=0;y<400;y++)data.set(source.subarray(y*stride,y*stride+600*4),y*600*4);buffer.unmap();buffer.destroy();if(target.format.startsWith('bgra'))for(let i=0;i<data.length;i+=4){const r=data[i];data[i]=data[i+2];data[i+2]=r;}return data;
+ };
+
+
+ const pixel=(data,x,y)=>data[((backend==='webgl'?399-y:y)*600+x)*4],changed=(a,b)=>{let n=0;for(let i=0;i<a.length;i+=4)if(Math.abs(a[i]-b[i])>2)n++;return n;};
+ const a=await read();p.uniforms.uParticleTime=4;const b=await read(),motion=changed(a,b);if(motion<1000)throw Error('Native cloud mask did not animate: '+motion);const repeated=await read();if(changed(b,repeated))throw Error('Fixed-time mask is unstable');
+ if(pixel(b,300,250)>1||pixel(b,300,150)<20)throw Error('Smoke must emerge above the outlet plane: '+JSON.stringify({below:pixel(b,300,250),above:pixel(b,300,150)}));
+ p.material.textures.smokeClouds=Texture.WHITE;p.uniforms.uParticleTime=1;const flat=await read();p.uniforms.uParticleTime=4;const flatLater=await read();if(changed(flat,flatLater))throw Error('Animation test moved geometry instead of the mask');p.material.textures.smokeClouds=cloud;
+ view.passes=[...view.passes];const rebuilt=await read();view.unload();const reloaded=await read();if(changed(b,rebuilt)||changed(b,reloaded))throw Error('Graph rebuild changed the native mask');
+ if(webgpu)await webgpu.gpu.device.queue.onSubmittedWorkDone();if(errors.length)throw Error(errors.join('\n'));
+ output.textContent=JSON.stringify({verified:true,backend,frame:framed?'host':'native',animatedPixels:motion,belowOutlet:pixel(b,300,250),aboveOutlet:pixel(b,300,150),errors},null,2);document.title='Native Smoke Masks Verified '+backend;
+}catch(error){output.textContent=error.stack+'\n'+errors.join('\n');document.title='Native Smoke Masks Failed';}

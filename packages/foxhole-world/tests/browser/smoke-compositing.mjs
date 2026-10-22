@@ -23,10 +23,10 @@ try{
  // Looking from the back exposes the old spawn-order failure: the far white
  // puff must not cover a nearer dark puff. Then reverse the camera.
  camera(-1);const old=sample(await read());
- for(const sign of [-1,1,-1]){camera(sign);const planes=new Float32Array(24);if(framed)planes[21]=-sign;else planes[22]=-sign;p.nativeDepthSort.update({planes},framed?{scale:32}:undefined);const value=sample(await read()),expected=sign<0?64:128;if(Math.abs(value-expected)>2)throw Error('Incorrect animated particle order: '+JSON.stringify({old,sign,value,expected,order:p.nativeDepthSort.order}));results.push({sign,value,expected});}
- if(old<120)throw Error('Fixture did not expose the old spawn ordering: '+old);
- camera(1);p.setParticle(1,{aVel:{x:0,y:0,z:-2}});p.upload();p.uniforms.uParticleTime=2;p.nativeDepthSort.update({direction:[0,0,-1]});const moved=sample(await read());if(Math.abs(moved-64)>2)throw Error('Animated centre sorting failed: '+moved);
- view.passes=[...view.passes];const rebuilt=sample(await read());view.unload();const reloaded=sample(await read());if(Math.abs(rebuilt-64)>2||Math.abs(reloaded-64)>2)throw Error('Rebuild lost sorted smoke');
+ for(const sign of [-1,1,-1]){camera(sign);const planes=new Float32Array(24);if(framed)planes[21]=-sign;else planes[22]=-sign;p.nativeDepthSort.update({planes},framed?{scale:32}:undefined);const value=sample(await read()),expected=sign<0?34:41;if(Math.abs(value-expected)>2)throw Error('Incorrect animated particle order: '+JSON.stringify({old,sign,value,expected,order:p.nativeDepthSort.order}));results.push({sign,value,expected});}
+ if(old<38)throw Error('Fixture did not expose the old spawn ordering: '+old);
+ camera(1);p.setParticle(1,{aVel:{x:0,y:0,z:-2}});p.upload();p.uniforms.uParticleTime=2;p.nativeDepthSort.update({direction:[0,0,-1]});const moved=sample(await read());if(Math.abs(moved-34)>2)throw Error('Animated centre sorting failed: '+moved);
+ view.passes=[...view.passes];const rebuilt=sample(await read());view.unload();const reloaded=sample(await read());if(Math.abs(rebuilt-34)>2||Math.abs(reloaded-34)>2)throw Error('Rebuild lost sorted smoke');
  if(webgpu)await webgpu.gpu.device.queue.onSubmittedWorkDone();if(errors.length)throw Error(errors.join('\n'));
  output.textContent=JSON.stringify({verified:true,backend,frame:framed?'host':'native',old,results,moved,rebuilt,reloaded,errors},null,2);document.title='Smoke Compositing Verified '+backend;
 }catch(error){output.textContent=error.stack+'\n'+errors.join('\n');document.title='Smoke Compositing Failed';}

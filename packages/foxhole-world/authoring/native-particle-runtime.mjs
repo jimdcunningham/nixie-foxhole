@@ -1,3 +1,4 @@
+import {nativeSmokeMaskBit} from './native-smoke-mask.mjs';
 import {prepareNativeParticleSort} from './native-particle-sort.mjs';
 import {isLanternFlame,lanternFlameColor,lanternFlameBit} from './lantern-flame.mjs';
 import {ParticleContainer3D,particleMotionBit} from '@pixi/3d';
@@ -26,26 +27,34 @@ export function updateNativeParticleWind(container,wind){
  const angle=(Number.isFinite(wind?.directionDeg)?wind.directionDeg:0)*Math.PI/180,speed=strength*6;
  container.uniforms.uSceneWind=speed?[Math.cos(angle)*speed,0,-Math.sin(angle)*speed]:[0,0,0];
 }
-export function buildNativeParticleEmitter({placement,emitter:e,material:m,texture,particleHex,frame,region}){
+// A visual coverage adjustment after native material opacity/curves; keep
+// particle count, plume size and native RGB untouched. Flames stay independent.
+const atmosphericCoverage={name:'nativeAtmosphericCoverage_v1',bindings:{material:{uAtmosphericCoverage:'f32'}},gpu:{fragment:{material:'alpha*=material.uAtmosphericCoverage;'}},gl:{fragment:{material:'alpha*=material.uAtmosphericCoverage;'}}};
+export function buildNativeParticleEmitter({placement,emitter:e,material:m,texture,particleHex,frame,region,smokeCloudTexture,outlet}){
  const lantern=isLanternFlame(placement,m),native=nativeEmitterModules(placement.system,e),schedule=nativeEmissionSchedule(e),random=nativeParticleSeed([region,placement.actor,placement.name,placement.matrix.join(','),e.name].join('|'));
  const windResponsive=!lantern&&!m.fire&&/smoke|steam|mist|dust/i.test(placement.system+' '+e.name+' '+e.material);
- const bits=[nativeEmissionLifetime,particleMotionBit,...(windResponsive?[nativeParticleWind]:[]),nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),...(lantern?[lanternFlameBit]:[]),particleHex];
+ const cloudMask=!!smokeCloudTexture&&e.material==='SmokeStacks';
+ const bits=[nativeEmissionLifetime,particleMotionBit,...(windResponsive?[nativeParticleWind]:[]),nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),...(lantern?[lanternFlameBit]:[]),...(cloudMask?[nativeSmokeMaskBit(frame)]:[]),...(windResponsive&&placement.system.startsWith('War/Content/FX/')?[atmosphericCoverage]:[]),particleHex];
  const container=new ParticleContainer3D({texture,capacity:schedule.count,billboard:'spherical',space:frame?'local':'world',blendMode:m.fire&&!lantern?'add':'normal',extraBits:bits,label:placement.actor+'/'+placement.name});
  // The origin remains the sorting anchor; board-frame local centers retain
  // their metre-space launch/motion, while quad diameter is in board world units.
- const anchor=placement.matrix.slice(12,15);container.position.set(...anchor);
+ if(windResponsive&&placement.system.startsWith('War/Content/FX/'))container.uniforms.uAtmosphericCoverage=e.material==='SmokeStacks'?.32:.72;
+ const sourceAnchor=placement.matrix.slice(12,15),anchor=outlet?.position||sourceAnchor;container.position.set(...anchor);
  container.uniforms.uGravity=vector(placement.matrix,ue(e.acceleration[0]));container.uniforms.uDrag=Math.max(0,sample(native?.drag||[0,0],random));
  container.uniforms.uParticleTime=0;container.uniforms.uEmissionPeriod=schedule.period;
  if(native?.orbit)for(const [i,axis]of ['X','Y','Z'].entries()){const basis=[0,0,0];basis[i]=100;container.uniforms['uNativeOrbit'+axis]=vector(placement.matrix,ue(basis));}
+ if(cloudMask){container.material.textures.smokeClouds=smokeCloudTexture;container.uniforms.uSmokeOpacity=m.opacity;container.uniforms.uSmokeOutlet=[...(outlet?.position||[0,0,0]),outlet?1:0];container.uniforms.uSmokeUp=[...(outlet?.up||[0,1,0]),0];container.uniforms.uSmokeFrame=frame?[frame.x,-frame.y,frame.scale,0]:[0,0,1,0];}
+ const maskRandom=nativeParticleSeed(region+'|'+placement.actor+'|'+e.name+'|cloudOffsets');
  const phase=random()*schedule.period;
  for(let i=0;i<schedule.count;i++){
   const local=sampleVector(e.location,random).map((v,k)=>v+e.origin[k]),velocity=sampleVector(e.velocity,random);
   for(const shape of native?.volumes||[]){const sample=sampleNativeParticleShape(shape,random);for(let k=0;k<3;k++){local[k]+=sample.position[k];velocity[k]+=sample.velocity[k];}}
   const p=point(placement.matrix,ue(local)),v=vector(placement.matrix,ue(velocity)),size=Math.max(.001,Math.abs(sampleVector(e.size,random)[0])*(frame?.scale||1)/100),life=Math.max(.01,sample(e.lifetime,random));
-  const linear=sampleVector(e.color,random).map((v,k)=>v*m.color[k]),color=(lantern?lanternFlameColor(linear):linear).map(srgb),alpha=Math.min(1,Math.max(0,sample(e.alpha,random)*m.opacity));
+  const linear=sampleVector(e.color,random).map((v,k)=>v*m.color[k]),color=(lantern?lanternFlameColor(linear):linear).map(srgb),alpha=Math.min(1,Math.max(0,sample(e.alpha,random)*(cloudMask?1:m.opacity)));
   const rotation=sample(native?.rotation||[0,1],random)*Math.PI*2;
-  container.setParticleAt(i,...(frame?p.map((v,k)=>v-anchor[k]):p),size,rotation,(color[0]<<16)|(color[1]<<8)|color[2],alpha);
-  container.setParticle(i,{aBirth:-((i/schedule.count*schedule.period+phase)%schedule.period),aLife:life,aVel:xyz(v),aNativeSpin:sample(native?.rotationRate||[0,0],random)*Math.PI*2,
+  const launch=p.map((v,k)=>v+anchor[k]-sourceAnchor[k]);
+  container.setParticleAt(i,...(frame?launch.map((v,k)=>v-anchor[k]):launch),size,rotation,(color[0]<<16)|(color[1]<<8)|color[2],alpha);
+  container.setParticle(i,{...(cloudMask?{aSmokeOffset:{x:maskRandom(),y:maskRandom(),z:1-maskRandom(),w:maskRandom()}}:{}),aBirth:-((i/schedule.count*schedule.period+phase)%schedule.period),aLife:life,aVel:xyz(v),aNativeSpin:sample(native?.rotationRate||[0,0],random)*Math.PI*2,
    ...(native?.orbit?{aNativeOrbitOffset:xyz(sampleVector(native.orbit.offset,random).map(v=>v/100)),aNativeOrbitRotation:xyz(sampleVector(native.orbit.rotation,random)),aNativeOrbitRate:xyz(sampleVector(native.orbit.rate,random))}:{})});
  }
  container.nativeWindResponsive=windResponsive;if(windResponsive)container.uniforms.uSceneWind=[0,0,0];
