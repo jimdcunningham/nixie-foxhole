@@ -8,7 +8,7 @@ function fixture() {
     canvas.ownerDocument = new EventTarget();
     const initial = { position: { x: 160, y: -320, z: 3200 }, target: { x: 160, y: -320, z: 0 }, projection: 'perspective' };
     let pose = structuredClone(initial), status, time = 0, hidden = false, mode = '3d', requests = 0;
-    const writes = [], publications = [];
+    const writes = [], publications = [], shakeWrites = [];
     const scene = { async createRoadTour() {
         requests++;
         return new RoadTour(buildRoadNetwork({ curves: [{ id: 'road', mesh: 'road', points: [[0, 0, 0], [300, 0, 0], [600, 0, 0]] }] }), { terrain: () => 0, random: () => 0.4 });
@@ -17,8 +17,8 @@ function fixture() {
     const options = { region: '', speed: 12, view: 'close' };
     const control = createPlannerRoadTour({ canvas, getRegions: () => regions, getOptions: () => options,
         readPose: () => pose, writePose: value => { writes.push(value); if (value) pose = { ...structuredClone(value), projection: 'perspective' }; return true; },
-        viewMode: () => mode, onStatus: value => { status = value; publications.push(value); }, hidden: () => hidden, now: () => time });
-    return { canvas, initial, scene, control, options, writes, publications, rename(label) { regions[0].label = label; }, get status() { return status; }, get requests() { return requests; },
+        setCameraShake: value => shakeWrites.push(value), viewMode: () => mode, onStatus: value => { status = value; publications.push(value); }, hidden: () => hidden, now: () => time });
+    return { canvas, initial, scene, control, options, writes, publications, shakeWrites, rename(label) { regions[0].label = label; }, get status() { return status; }, get requests() { return requests; },
         step(ms) { time += ms; control.update(16); }, setHidden(value) { hidden = value; }, setMode(value) { mode = value; }, retire() { regions = []; } };
 }
 
@@ -95,4 +95,28 @@ test('manual keyboard camera navigation pauses automation and removes its listen
  const count=f.writes.length;f.step(1000);assert.equal(f.writes.length,count);
  f.control.destroy();const after=f.writes.length;
  f.canvas.dispatchEvent(new Event('nixie-camera-navigation'));assert.equal(f.writes.length,after);
+});
+
+
+
+test('shake keeps running during canvas input and road tours without owning the camera pose',async()=>{
+ const f=fixture();f.control.toggleCameraShake();assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),.35);
+ assert.equal(f.writes.length,0,'shake never writes or restores a navigation pose');
+ for(const event of ['pointerdown','wheel','nixie-camera-navigation']){f.canvas.dispatchEvent(new Event(event));assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),.35);}
+ await f.control.start();assert.equal(f.status.state,'running');assert.equal(f.status.shaking,true);
+ const publications=f.publications.length;for(let i=0;i<100;i++)f.step(16);assert.equal(f.publications.length,publications);
+ f.options.shakeStrength=2;f.step(16);assert.equal(f.shakeWrites.at(-1),2);assert.equal(f.status.state,'running');
+ f.control.stop();assert.equal(f.status.shaking,true,'stopping the tour leaves shake enabled');
+ const writes=f.writes.length;f.control.toggleCameraShake();assert.equal(f.status.shaking,false);assert.equal(f.shakeWrites.at(-1),0);assert.equal(f.writes.length,writes);
+ f.control.destroy();
+});
+
+test('Escape, leaving 3D and destruction release shake without leaving a pose offset',()=>{
+ for(const action of ['escape','mode','destroy']){
+  const f=fixture();f.control.toggleCameraShake();
+  if(action==='escape'){const e=new Event('keydown');Object.defineProperty(e,'key',{value:'Escape'});f.canvas.ownerDocument.dispatchEvent(e);}
+  else if(action==='mode'){f.setMode('flat');f.step(16);}
+  else f.control.destroy();
+  assert.equal(f.status.shaking,false,action);assert.equal(f.shakeWrites.at(-1),0,action);f.control.destroy();
+ }
 });

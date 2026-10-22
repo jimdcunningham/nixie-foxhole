@@ -10,11 +10,12 @@ export function plannerTourPose(pose: NativePose, position: RegionPosition): Pos
 export function createPlannerRoadTour(options: {
     canvas: HTMLCanvasElement;
     getRegions(): { id: string; label?: string; position: RegionPosition; scene: BakedRegion; }[];
-    getOptions(): { region: string; speed: number; view: string; };
+    getOptions(): { region: string; speed: number; view: string; shakeStrength?: number; };
     readPose(): (Pose & { projection: string; }) | null;
     writePose(pose: Pose | null): boolean;
+    setCameraShake?(strength: number): void;
     viewMode(): 'flat' | '2d' | '3d';
     onStatus(status: PlannerRoadTourStatus): void;
     hidden?(): boolean;
     now?(): number;
-}): { start(): Promise<void>; pause(): void; next(): void; stop(): void; restore(): void; update(deltaMS: number): void; destroy(): void; };
+}): { toggleCameraShake(): void; start(): Promise<void>; pause(): void; next(): void; stop(): void; restore(): void; update(deltaMS: number): void; destroy(): void; };
