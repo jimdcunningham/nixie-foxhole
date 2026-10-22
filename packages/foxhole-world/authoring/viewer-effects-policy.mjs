@@ -1,6 +1,8 @@
 // These Unreal FX materials need their volumetric shader; rendering their
 // helper geometry with ordinary PBR produces the large opaque white cones.
-export function hideViewerEffect(materialName){return /^(LightBeam|LightBeamSpotlight)$/i.test(materialName);}
+// WaterMeasurement is an Unreal helper/null material. The catalog exporter
+// synthesized an opaque emissive light card; it is not a visible building surface.
+export function hideViewerEffect(materialName){return /^(LightBeam|LightBeamSpotlight|WaterMeasurement(?::parameter-light)?)$/i.test(materialName);}
 
 // WaterMist needs its native animated CloudShapes mask and dynamic offsets.
 // The prepared recipe only contains the circular ParticleAlpha texture; drawing
