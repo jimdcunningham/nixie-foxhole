@@ -9,4 +9,4 @@ position.xyz+=uNativeOrbitX*orbitOffset.x+uNativeOrbitY*orbitOffset.y+uNativeOrb
 const gpu=rotate.replaceAll('vec3 ','var ').replaceAll('vec3(','vec3<f32>(')
  .replaceAll(/\baNativeOrbit\w+/g,name=>'input.'+name).replaceAll(/\buNativeOrbit\w+/g,name=>'material.'+name)
  .replace('position.xyz+=','position=vec4<f32>(position.xyz+').replace(/;$/ ,',1.0);');
-export const nativeParticleOrbit={name:'nativeParticleOrbit_v1',attributes:{aNativeOrbitOffset:'float32x3',aNativeOrbitRotation:'float32x3',aNativeOrbitRate:'float32x3'},bindings:{material:{uNativeOrbitX:'vec3<f32>',uNativeOrbitY:'vec3<f32>',uNativeOrbitZ:'vec3<f32>'}},gpu:{vertex:{beforeTransform:gpu}},gl:{vertex:{beforeTransform:rotate}}};
+export const nativeParticleOrbit={name:'nativeParticleOrbit_v2',attributes:{aNativeOrbitOffset:'float32x3',aNativeOrbitRotation:'float32x3',aNativeOrbitRate:'float32x3'},bindings:{material:{uNativeOrbitX:'vec3<f32>',uNativeOrbitY:'vec3<f32>',uNativeOrbitZ:'vec3<f32>'}},gpu:{vertex:{beforeTransform:gpu}},gl:{vertex:{beforeTransform:rotate.replaceAll(/\buNativeOrbit\w+/g,name=>'material.'+name)}}};

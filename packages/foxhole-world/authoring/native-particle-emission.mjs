@@ -34,9 +34,9 @@ export function nativeEmissionSchedule(emitter){
 
 // Empty gaps in a slot's emission period retain native dead-particle clipping.
 // All slots are immutable after construction; only system time changes per frame.
-export const nativeEmissionLifetime={...particleLifetimeBit,name:'nativeRateLifetime_v1',bindings:{material:{...particleLifetimeBit.bindings.material,uEmissionPeriod:'f32'}},
+export const nativeEmissionLifetime={...particleLifetimeBit,name:'nativeRateLifetime_v2',bindings:{material:{...particleLifetimeBit.bindings.material,uEmissionPeriod:'f32'}},
  gpu:{vertex:{...particleLifetimeBit.gpu.vertex,beforeTransform:'let ageUnwrapped=material.uParticleTime-input.aBirth; let period=max(material.uEmissionPeriod,1e-6); let particleAge=ageUnwrapped-floor(ageUnwrapped/period)*period; let particleProgress=clamp(particleAge/max(input.aLife,1e-6),0.0,1.0);'}},
- gl:{vertex:{...particleLifetimeBit.gl.vertex,beforeTransform:'float ageUnwrapped=material.uParticleTime-aBirth; float period=max(uEmissionPeriod,1e-6); float particleAge=ageUnwrapped-floor(ageUnwrapped/period)*period; float particleProgress=clamp(particleAge/max(aLife,1e-6),0.0,1.0);'}}};
+ gl:{vertex:{...particleLifetimeBit.gl.vertex,beforeTransform:'float ageUnwrapped=material.uParticleTime-aBirth; float period=max(material.uEmissionPeriod,1e-6); float particleAge=ageUnwrapped-floor(ageUnwrapped/period)*period; float particleProgress=clamp(particleAge/max(aLife,1e-6),0.0,1.0);'}}};
 
 export const nativeParticleSpin={name:'nativeParticleSpin_v1',attributes:{aNativeSpin:'float32'},gpu:{vertex:{beforeTransform:'particleRotation+=input.aNativeSpin*particleAge;'}},gl:{vertex:{beforeTransform:'particleRotation+=aNativeSpin*particleAge;'}}};
 

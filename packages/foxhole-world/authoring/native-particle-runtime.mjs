@@ -1,3 +1,4 @@
+import {isLanternFlame,lanternFlameColor,lanternFlameBit} from './lantern-flame.mjs';
 import {ParticleContainer3D,particleMotionBit} from '@pixi/3d';
 import modules from './native-particle-modules.json' with {type:'json'};
 import {nativeParticleCurveBit} from './native-particle-curves.mjs';
@@ -15,9 +16,9 @@ export function persistentParticleEmitters(placement,effects){
  return (effects.emitters[placement.system]||[]).filter(e=>!unsupportedParticleMaterialReason(e.material,effects.materials[e.material])&&e.count&&isPersistentParticleEmitter(nativeEmitterModules(placement.system,e))&&nativeEmissionSchedule(e).count);
 }
 export function buildNativeParticleEmitter({placement,emitter:e,material:m,texture,particleHex,frame,region}){
- const native=nativeEmitterModules(placement.system,e),schedule=nativeEmissionSchedule(e),random=nativeParticleSeed([region,placement.actor,placement.name,placement.matrix.join(','),e.name].join('|'));
- const bits=[nativeEmissionLifetime,particleMotionBit,nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),particleHex];
- const container=new ParticleContainer3D({texture,capacity:schedule.count,billboard:'spherical',space:frame?'local':'world',blendMode:m.fire?'add':'normal',extraBits:bits,label:placement.actor+'/'+placement.name});
+ const lantern=isLanternFlame(placement,m),native=nativeEmitterModules(placement.system,e),schedule=nativeEmissionSchedule(e),random=nativeParticleSeed([region,placement.actor,placement.name,placement.matrix.join(','),e.name].join('|'));
+ const bits=[nativeEmissionLifetime,particleMotionBit,nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),...(lantern?[lanternFlameBit]:[]),particleHex];
+ const container=new ParticleContainer3D({texture,capacity:schedule.count,billboard:'spherical',space:frame?'local':'world',blendMode:m.fire&&!lantern?'add':'normal',extraBits:bits,label:placement.actor+'/'+placement.name});
  // The origin remains the sorting anchor; board-frame local centers retain
  // their metre-space launch/motion, while quad diameter is in board world units.
  const anchor=placement.matrix.slice(12,15);container.position.set(...anchor);
@@ -29,7 +30,7 @@ export function buildNativeParticleEmitter({placement,emitter:e,material:m,textu
   const local=sampleVector(e.location,random).map((v,k)=>v+e.origin[k]),velocity=sampleVector(e.velocity,random);
   for(const shape of native?.volumes||[]){const sample=sampleNativeParticleShape(shape,random);for(let k=0;k<3;k++){local[k]+=sample.position[k];velocity[k]+=sample.velocity[k];}}
   const p=point(placement.matrix,ue(local)),v=vector(placement.matrix,ue(velocity)),size=Math.max(.001,Math.abs(sampleVector(e.size,random)[0])*(frame?.scale||1)/100),life=Math.max(.01,sample(e.lifetime,random));
-  const color=sampleVector(e.color,random).map((v,k)=>srgb(v*m.color[k])),alpha=Math.min(1,Math.max(0,sample(e.alpha,random)*m.opacity));
+  const linear=sampleVector(e.color,random).map((v,k)=>v*m.color[k]),color=(lantern?lanternFlameColor(linear):linear).map(srgb),alpha=Math.min(1,Math.max(0,sample(e.alpha,random)*m.opacity));
   const rotation=sample(native?.rotation||[0,1],random)*Math.PI*2;
   container.setParticleAt(i,...(frame?p.map((v,k)=>v-anchor[k]):p),size,rotation,(color[0]<<16)|(color[1]<<8)|color[2],alpha);
   container.setParticle(i,{aBirth:-((i/schedule.count*schedule.period+phase)%schedule.period),aLife:life,aVel:xyz(v),aNativeSpin:sample(native?.rotationRate||[0,0],random)*Math.PI*2,
