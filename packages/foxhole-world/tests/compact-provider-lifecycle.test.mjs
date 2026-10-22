@@ -1,3 +1,4 @@
+import {restoreNativeSmallWaterMaterials} from '../runtime/native-small-water.mjs';
 import {createSourceLeasePool} from '../runtime/source-leases.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +8,7 @@ const source=readFileSync(new URL('../runtime/compact-provider.mjs',import.meta.
 test('idle providers stop decoder workers and restart them for a later requested layer',async()=>{
  const workers=[],manifest={version:1,format:'compact-recipes-v1',region:'fixture',resources:{'fixture/first.json':{resource:{path:'first'}},'fixture/next.json':{resource:{path:'next'}}},recipes:{},physicalResources:[]};
  class Worker {constructor(){workers.push(this);queueMicrotask(()=>this.onmessage?.({data:{kind:'foxhole-worker-ready'}}));}postMessage(message){queueMicrotask(()=>this.onmessage({data:{id:message.id,result:new TextEncoder().encode(JSON.stringify({file:message.ref.path})).buffer}}));}terminate(){this.stopped=true;}}
- const create=runInNewContext(source,{createSourceLeasePool,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,queueMicrotask,TextDecoder,TextEncoder,console,fetchCompactResource:async()=>new TextEncoder().encode(JSON.stringify(manifest)).buffer});
+ const create=runInNewContext(source,{createSourceLeasePool,restoreNativeSmallWaterMaterials,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,queueMicrotask,TextDecoder,TextEncoder,console,fetchCompactResource:async()=>new TextEncoder().encode(JSON.stringify(manifest)).buffer});
  const provider=await create({baseUrl:'https://fixture.test/world/',entry:{id:'fixture',manifest:{path:'manifest'}}});
  assert.equal(workers.length,0,'no decoder is started until it is needed');assert.equal((await provider.json('fixture/first.json')).file,'first');assert.equal(workers.length,3);
  provider.finish();assert.ok(workers.every(w=>w.stopped));assert.equal((await provider.json('fixture/next.json')).file,'next');assert.equal(workers.length,6);assert.ok(workers.slice(3).every(w=>!w.stopped));
@@ -17,9 +18,29 @@ test('idle providers stop decoder workers and restart them for a later requested
 test('native model leases share sources and release the final cell without retiring the region',async()=>{
  let decoded=0,destroyed=0;const manifest={version:1,format:'compact-recipes-v1',region:'fixture',resources:{},recipes:{},physicalResources:[{path:'native.gltf'}]};
  class Worker {constructor(){queueMicrotask(()=>this.onmessage?.({data:{kind:'foxhole-worker-ready'}}));}postMessage(message){queueMicrotask(()=>this.onmessage({data:{id:message.id,result:new TextEncoder().encode('{}').buffer}}));}terminate(){}}
- const create=runInNewContext(source,{createSourceLeasePool,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,queueMicrotask,TextDecoder,TextEncoder,console,
+ const create=runInNewContext(source,{createSourceLeasePool,restoreNativeSmallWaterMaterials,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,queueMicrotask,TextDecoder,TextEncoder,console,
   normalizeMeshopt:async()=>{},retainModelMaterialNames:s=>s,parseGltf:async()=>{decoded++;return{textures:[],destroyed:false,destroy(){if(!this.destroyed){this.destroyed=true;destroyed++;}}};},fetchCompactResource:async()=>new TextEncoder().encode(JSON.stringify(manifest)).buffer});
  const provider=await create({baseUrl:'https://fixture.test/world/',entry:{id:'fixture',manifest:{path:'manifest'}}}),a=provider.createModelLease(),b=provider.createModelLease(),url='https://fixture.test/world/native.gltf';
  const first=await a.get(url);assert.equal(await b.get(url),first);assert.equal(decoded,1);a.release();await new Promise(r=>setTimeout(r,0));assert.equal(destroyed,0);b.release();await new Promise(r=>setTimeout(r,0));assert.equal(destroyed,1);
  const c=provider.createModelLease();assert.notEqual(await c.get(url),first);assert.equal(decoded,2);c.release();await new Promise(r=>setTimeout(r,0));provider.destroy();
+});
+
+
+test('the actual compact model loader restores native well water tint and opacity before parsing',async()=>{
+ const material={name:'SmallPuddle',pbrMetallicRoughness:{baseColorFactor:[1,1,1,1],roughnessFactor:.1,metallicFactor:0},alphaMode:'BLEND',normalTexture:{index:0,scale:1},extras:{foxholeMaterialSource:'War/Content/Materials/SmallPuddle.uasset'}};
+ const doc={asset:{version:'2.0'},materials:[material,{...structuredClone(material),extras:{foxholeMaterialSource:'Other/SmallPuddle.uasset'}}]};
+ const manifest={version:1,format:'compact-recipes-v1',region:'fixture',resources:{},recipes:{},physicalResources:[{path:'well.gltf'}]};
+ let parsed;
+ class Worker {constructor(){queueMicrotask(()=>this.onmessage?.({data:{kind:'foxhole-worker-ready'}}));}postMessage(message){queueMicrotask(()=>this.onmessage({data:{id:message.id,result:new TextEncoder().encode(JSON.stringify(doc)).buffer}}));}terminate(){}}
+ const create=runInNewContext(source,{createSourceLeasePool,restoreNativeSmallWaterMaterials,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,queueMicrotask,TextDecoder,TextEncoder,console,
+  normalizeMeshopt:async()=>{},retainModelMaterialNames:s=>s,parseGltf:async document=>{parsed=document;return{textures:[],destroy(){}};},fetchCompactResource:async()=>new TextEncoder().encode(JSON.stringify(manifest)).buffer});
+ const provider=await create({baseUrl:'https://fixture.test/world/',entry:{id:'fixture',manifest:{path:'manifest'}}});
+ try{
+  await provider.model('https://fixture.test/world/well.gltf');
+  assert.deepEqual(Array.from(parsed.materials[0].pbrMetallicRoughness.baseColorFactor),[.02,.016119,.011275,.945872]);
+  assert.equal(parsed.materials[0].normalTexture.scale,.688991);
+  assert.equal(parsed.materials[0].extensions.KHR_materials_specular.specularFactor,.6);
+  assert.deepEqual(Array.from(parsed.materials[1].pbrMetallicRoughness.baseColorFactor),[1,1,1,1],'same-basename unrelated materials stay intact');
+  assert.deepEqual(material.pbrMetallicRoughness.baseColorFactor,[1,1,1,1],'source files stay intact');
+ }finally{provider.destroy();}
 });
