@@ -4,9 +4,15 @@ function vertex(gpu){const m='material.',decl=(name,value)=>gpu?'let '+name+' = 
  decl('fwHeight','clamp((position.y-'+m+'foliageShape.x)/'+m+'foliageShape.y,0.0,1.0)'),
  decl('fwPhase','dot(modelMatrix[3].xyz/'+m+'foliageScale,'+vec+'(0.173,0.119,0.137))'),
  decl('fwTime',m+'foliageUp.w'),
- decl('fwGust','0.55+0.28*sin(fwTime*0.9+fwPhase)+0.17*sin(fwTime*1.7+fwPhase*0.63)'),
+ // Sample a shared horizontal field at each plant anchor, before camera-relative projection.
+ // x - speed*t advects both wave bands downwind at 5 metres/second. Strength
+ // controls bending, so changing it cannot teleport an already passing front.
+ decl('fwFront','dot(modelMatrix[3].xyz/'+m+'foliageScale,'+m+'foliageWind.xyz)-fwTime*5.0'),
+ decl('fwBroad','0.5+0.5*sin(fwFront*0.157079633)'),
+ decl('fwDetail','0.5+0.5*sin(fwFront*0.369599136+1.3)'),
+ decl('fwGust','0.25+0.5*fwBroad*fwBroad+0.25*fwDetail*fwDetail'),
  decl('fwFlutter','sin(fwTime*3.4+fwPhase+position.x*2.1+position.z*1.7)*'+m+'foliageShape.w'),
- (gpu?'let fwOffset = ':'vec3 fwOffset = ')+m+'foliageWind.xyz*'+m+'foliageWind.w*('+m+'foliageShape.z*fwGust+fwFlutter);',
+ (gpu?'let fwOffset = ':'vec3 fwOffset = ')+m+'foliageWind.xyz*'+m+'foliageWind.w*('+m+'foliageShape.z+fwFlutter)*fwGust;',
  'worldPosition = '+(gpu?'vec4<f32>':'vec4')+'(worldPosition.xyz+fwOffset*fwHeight*fwHeight,worldPosition.w);',
  'worldNormal = normalize(worldNormal-'+m+'foliageUp.xyz*dot(worldNormal,fwOffset)*(2.0*fwHeight/('+m+'foliageShape.y*'+m+'foliageScale)));',
  gpu?'clipPosition = camera.uViewProjectionMatrix * worldPosition;':'gl_Position = uViewProjectionMatrix * worldPosition;',
