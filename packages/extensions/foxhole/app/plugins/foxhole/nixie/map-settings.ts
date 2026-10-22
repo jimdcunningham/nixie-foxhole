@@ -889,7 +889,7 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
 export const foxholeMapSettings: readonly NixieSettingDefinition[] = [
     ...foxholeMapProjectSettings,
     ...foxholeMapUserSettings,
-];
+].map(setting => ({ ...setting, viewpoint: true }));
 
 const FOXHOLE_MAP_USER_SETTING_KEYS = new Set<string>(foxholeMapUserSettings.map(definition => definition.id));
 

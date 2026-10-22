@@ -1,4 +1,5 @@
-import { consumeViewpointRegionCamera } from './map/viewpoint-region-camera.mjs';
+import { subscribeSceneViewpointRestore } from '#nixie/plugins/nixie/scene-viewpoints.ts';
+import { preserveViewpointRegionCamera, consumeViewpointRegionCamera } from './map/viewpoint-region-camera.mjs';
 import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
@@ -8,7 +9,7 @@ import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.t
 import { FoxholeRegionSceneController, regionIdForKey, selectedSpatialRegions } from './map/region-scene-controller.mjs';
 import { computed, shallowRef } from 'vue';
 import type { NixieSceneV2CanvasContributionContext, NixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
-import { readFoxholeMapSettings } from './map-settings.ts';
+import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from './map-settings.ts';
 import { getFoxholeMapRegionBillboardGroups } from './map/region-annotations.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import { getFoxholeMapActiveBounds, FoxholeMapViewportPlugin } from './map/controller.ts';
@@ -36,6 +37,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         onStatus: status => { plannerRoadTourStatus.value = status; },
     }) : null;
     if (roadTour) plannerRoadTourActions.value = roadTour;
+    const unsubscribeViewpoints = subscribeSceneViewpointRestore(context.runtime, settings => {
+        roadTour?.stop();
+        if (plannerRoadTourStatus.value.shaking) roadTour?.toggleCameraShake();
+        preserveViewpointRegionCamera(context.runtime, String(settings[FOXHOLE_MAP_SETTING_KEYS.regionKeys] ?? ''));
+    });
     const plugin = new FoxholeMapViewportPlugin(context.viewport, {
         viewport: context.viewport,
         project: context.runtime.project,
@@ -135,6 +141,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             ];
         },
         destroy() {
+            unsubscribeViewpoints();
             roadTour?.destroy();
             if (plannerRoadTourActions.value === roadTour) {
                 plannerRoadTourActions.value = null;
