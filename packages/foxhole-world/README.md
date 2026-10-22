@@ -221,3 +221,9 @@ The same fixture isolates AO over solid-colour water: raising a submerged cliff 
 World views draw masked faction cloth once after projected surface decals and before water and airborne transparency. This keeps wall moss and leaks off hanging flags while retaining cloth cutouts, foreground occlusion and shadow membership. Compact regions and the authoring viewer enable this automatically; standalone catalog/native model callers can opt in with `flagSurfacePass: true` when their view includes `SurfaceDecalPass`. Callers without the pass retain ordinary opaque flags.
 
 The browser fixture `tests/browser/faction-flag-decals.mjs` compares a decal-covered flag with the corrected phase on WebGL and WebGPU, in native and reflected host frames. It checks solid cloth, an alpha cutout, the adjacent wall and foreground occlusion, then repeats after graph rebuild and resource unload/reload.
+
+### Smoke Compositing
+
+Native smokestack sprites retain view-depth sorting, and the Smoke/Steam variants retain their authored oldest-first order. Small smoke uses view-distance order. Each emitter owns a small dynamic index buffer; sort keys follow the same ballistic drag, gravity, particle age and scene wind as the shader. Spawn attributes and shared quad buffers stay immutable, and unchanged order does not upload again. Camera-facing billboards retain their live indices through the reflected board frame. The standalone viewer supplies its camera direction as well.
+
+The rendered `tests/browser/smoke-compositing.mjs` fixture exposes the original incorrect dark/pale overlap, reverses the camera, moves particles across depth, and checks graph rebuild and unload/reload on WebGL and WebGPU in both native and board frames. The native dark-to-light colour, opacity curves, rate and lifetime remain intact. This corrects ordering; the prepared single sprite still approximates the native animated CloudShapes material rather than reconstructing its complete Unreal graph.

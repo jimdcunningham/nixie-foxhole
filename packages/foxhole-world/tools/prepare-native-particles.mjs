@@ -36,7 +36,7 @@ export function compileNativeParticleModules(exports){
     positive:['X','Y','Z'].map(a=>v['Positive_'+a]!==false),negative:['X','Y','Z'].map(a=>v['Negative_'+a]!==false),surface:v.SurfaceOnly===true,location:vector(v.StartLocation),velocity:v.Velocity===true,velocityScale:scalar(v.VelocityScale),radialVelocity:v.RadialVelocity!==false};
   });
   const orbit=find('ParticleModuleOrbit');
-  emitters[emitter.Name]={enabled:p.bEnabled!==false,loops:required.EmitterLoops??0,duration:required.EmitterDuration??1,delay:required.EmitterDelay??0,bursts:(spawn.BurstList||[]).map(b=>({count:b.Count??0,countLow:b.CountLow??-1,time:b.Time??0})),volumes:volume,
+  emitters[emitter.Name]={enabled:p.bEnabled!==false,...(required.SortMode?{sortMode:required.SortMode}:{}),loops:required.EmitterLoops??0,duration:required.EmitterDuration??1,delay:required.EmitterDelay??0,bursts:(spawn.BurstList||[]).map(b=>({count:b.Count??0,countLow:b.CountLow??-1,time:b.Time??0})),volumes:volume,
    drag:scalar(find('ParticleModuleAccelerationDrag')?.DragCoefficientRaw),rotation:scalar(find('ParticleModuleRotation')?.StartRotation),rotationRate:scalar(find('ParticleModuleRotationRate')?.StartRotationRate),
    ...(orbit?{orbit:{offset:vector(orbit.OffsetAmount),rotation:vector(orbit.RotationAmount),rate:vector(orbit.RotationRateAmount)}}:{}),
    unsupportedModules:[...new Set([...modules.filter(o=>/ParameterDynamic|AxisLock|SubUV|LocationEmitter|MeshRotation/.test(o.Type)).map(o=>o.Type),...(modules.filter(o=>o.Type==='ParticleModuleOrbit').length>1?['ChainedParticleOrbit']:[]),...(required.ScreenAlignment&&required.ScreenAlignment!=='PSA_Square'?['ScreenAlignment:'+required.ScreenAlignment]:[])])]};

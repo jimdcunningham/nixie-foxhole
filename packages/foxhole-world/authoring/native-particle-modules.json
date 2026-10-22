@@ -1802,7 +1802,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_DistanceToView"
       },
       "ParticleSpriteEmitter_2": {
         "enabled": false,
@@ -1868,7 +1869,8 @@
         "unsupportedModules": [
           "ParticleModuleParameterDynamic",
           "ScreenAlignment:PSA_Rectangle"
-        ]
+        ],
+        "sortMode": "PSORTMODE_DistanceToView"
       },
       "ParticleSpriteEmitter_1": {
         "enabled": false,
@@ -1933,7 +1935,8 @@
         ],
         "unsupportedModules": [
           "ScreenAlignment:PSA_Velocity"
-        ]
+        ],
+        "sortMode": "PSORTMODE_DistanceToView"
       },
       "ParticleSpriteEmitter_3": {
         "enabled": true,
@@ -1998,7 +2001,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_DistanceToView"
       }
     },
     "War/Content/FX/Fireflies.Fireflies": {
@@ -4281,7 +4285,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_DistanceToView"
       }
     },
     "War/Content/FX/Smoke.Smoke": {
@@ -4306,7 +4311,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_Age_OldestFirst"
       }
     },
     "War/Content/FX/SnowBlowing.SnowBlowing": {
@@ -4585,7 +4591,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_Age_OldestFirst"
       }
     },
     "War/Content/FX/Steam2.Steam2": {
@@ -5437,7 +5444,8 @@
         ],
         "unsupportedModules": [
           "ParticleModuleParameterDynamic"
-        ]
+        ],
+        "sortMode": "PSORTMODE_ViewProjDepth"
       }
     }
   }

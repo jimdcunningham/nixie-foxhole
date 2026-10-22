@@ -1,4 +1,4 @@
-import {Mesh3D,BatchedMesh3D} from '@pixi/3d';
+import {Mesh3D,BatchedMesh3D,ParticleContainer3D} from '@pixi/3d';
 import {prepareCameraRelativeMaterial} from './camera-relative-material.mjs';
 import {cameraRelativeClipPosition} from './camera-relative-position.mjs';
 import {createMirroredGeometryCache} from '../authoring/mirrored-geometry.mjs';
@@ -56,7 +56,9 @@ export function createRegionFramePreparation(region,{x=0,y=0,scale=32}={}){
   // arriving cell must not reflect that derived geometry a second time.
   let source=g;for(let depth=0;source&&depth<16;depth++,source=source[derivedSource])if(prepared.has(source)){prepared.add(g);return g;}
   const result=winding.get(g);prepared.add(result);return result;
- };const visit=node=>{if(node instanceof BatchedMesh3D){node.items.forEach((item,i)=>{if(item.material)prepareCameraRelativeMaterial(item.material);if(item.geometry){const next=geometry(item.geometry);if(next!==item.geometry)node.setGeometryAt(i,next);}});}else if(node instanceof Mesh3D&&node.geometry){if(node.material)prepareCameraRelativeMaterial(node.material);const next=geometry(node.geometry);if(next!==node.geometry)node.geometry=next;}for(const child of node.children)visit(child);};region.root.once('destroyed',()=>winding.destroy());
+ };const visit=node=>{if(node instanceof BatchedMesh3D){node.items.forEach((item,i)=>{if(item.material)prepareCameraRelativeMaterial(item.material);if(item.geometry){const next=geometry(item.geometry);if(next!==item.geometry)node.setGeometryAt(i,next);}});}else if(node instanceof Mesh3D&&node.geometry){if(node.material)prepareCameraRelativeMaterial(node.material);// Camera-facing particle quads are built in world axes after the frame;
+  // reflecting their indices freezes per-frame smoke ordering into a copy.
+  if(!(node instanceof ParticleContainer3D)){const next=geometry(node.geometry);if(next!==node.geometry)node.geometry=next;}}for(const child of node.children)visit(child);};region.root.once('destroyed',()=>winding.destroy());
  const frame=new Float32Array([x,-y,scale,0]);
  region.terrainPass.frame=frame;
  return {frame,prepare(node=region.root){visit(node);for(const material of region.materials)material.data.foxholeFrame=frame;}};

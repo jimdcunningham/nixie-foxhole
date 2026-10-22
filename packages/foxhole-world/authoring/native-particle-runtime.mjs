@@ -1,3 +1,4 @@
+import {prepareNativeParticleSort} from './native-particle-sort.mjs';
 import {isLanternFlame,lanternFlameColor,lanternFlameBit} from './lantern-flame.mjs';
 import {ParticleContainer3D,particleMotionBit} from '@pixi/3d';
 import modules from './native-particle-modules.json' with {type:'json'};
@@ -18,7 +19,7 @@ export function persistentParticleEmitters(placement,effects){
 /** Advection is in the shared native metre frame, independent of emitter rotation. */
 const nativeParticleWind={name:'nativeParticleWind',bindings:{material:{uSceneWind:'vec3<f32>'}},
  gpu:{vertex:{beforeTransform:'position=vec4<f32>(position.xyz+material.uSceneWind*(particleAge-(1.0-exp(-particleAge))),1.0);'}},
- gl:{vertex:{beforeTransform:'position=vec4(position.xyz+uSceneWind*(particleAge-(1.0-exp(-particleAge))),1.0);'}}};
+ gl:{vertex:{beforeTransform:'position=vec4(position.xyz+material.uSceneWind*(particleAge-(1.0-exp(-particleAge))),1.0);'}}};
 export function updateNativeParticleWind(container,wind){
  if(!container.nativeWindResponsive)return;
  const strength=Number.isFinite(wind?.strength)?Math.max(0,Math.min(1,wind.strength)):0;
@@ -48,6 +49,7 @@ export function buildNativeParticleEmitter({placement,emitter:e,material:m,textu
    ...(native?.orbit?{aNativeOrbitOffset:xyz(sampleVector(native.orbit.offset,random).map(v=>v/100)),aNativeOrbitRotation:xyz(sampleVector(native.orbit.rotation,random)),aNativeOrbitRate:xyz(sampleVector(native.orbit.rate,random))}:{})});
  }
  container.nativeWindResponsive=windResponsive;if(windResponsive)container.uniforms.uSceneWind=[0,0,0];
+ if(!m.fire&&['PSORTMODE_ViewProjDepth','PSORTMODE_DistanceToView','PSORTMODE_Age_OldestFirst'].includes(native?.sortMode)&&!native.orbit)container.nativeDepthSort=prepareNativeParticleSort(container,native.sortMode);
  container.nativeActor=placement.actor;container.nativeSchedule=schedule;
  return container;
 }

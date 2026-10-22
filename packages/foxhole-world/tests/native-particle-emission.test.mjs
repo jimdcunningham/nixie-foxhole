@@ -11,13 +11,13 @@ test('native extraction follows the highest-detail emitter references, shapes, d
  const ref=name=>({ObjectName:`Object'System:outer.${name}'`});
  const native=[{Type:'ParticleSystem',Properties:{Emitters:[ref('emitter')]}},{Name:'emitter',Properties:{LODLevels:[ref('lod')]}},
   {Name:'lod',Properties:{RequiredModule:ref('required'),SpawnModule:ref('spawn'),Modules:[ref('sphere'),ref('drag'),ref('rotation')]}},
-  {Name:'required',Properties:{EmitterLoops:1,EmitterDuration:2}},
+  {Name:'required',Properties:{EmitterLoops:1,EmitterDuration:2,SortMode:'PSORTMODE_ViewProjDepth'}},
   {Name:'spawn',Properties:{BurstList:[{Count:20,CountLow:10,Time:.25}]}},
   {Name:'sphere',Type:'ParticleModuleLocationPrimitiveSphere',Properties:{StartRadius:{MinValue:600,MaxValue:600},Negative_Z:false,Velocity:true,VelocityScale:{MinValue:-.1,MaxValue:.1}}},
   {Name:'drag',Type:'ParticleModuleAccelerationDrag',Properties:{DragCoefficientRaw:{MinValue:.5,MaxValue:.5}}},
   {Name:'rotation',Type:'ParticleModuleRotationRate',Properties:{StartRotationRate:{MinValue:-.1,MaxValue:.1}}}];
  const e=compileNativeParticleModules(native).emitter;
- assert.equal(e.loops,1);assert.equal(e.duration,2);assert.deepEqual(e.drag,[.5,.5]);assert.deepEqual(e.rotationRate,[-.1,.1]);
+ assert.equal(e.sortMode,'PSORTMODE_ViewProjDepth');assert.equal(e.loops,1);assert.equal(e.duration,2);assert.deepEqual(e.drag,[.5,.5]);assert.deepEqual(e.rotationRate,[-.1,.1]);
  assert.equal(e.volumes[0].negative[2],false);assert.deepEqual(e.volumes[0].radius,[600,600]);assert.equal(isPersistentParticleEmitter(e),false);assert.deepEqual(e.bursts,[{count:20,countLow:10,time:.25}]);
 });
 
