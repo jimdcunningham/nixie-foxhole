@@ -11,7 +11,7 @@ export function regionShellEdges(position,others){return neighbors.map(([x,z])=>
 
 /** Region residency follows explicit selection. Only preparation is queued. */
 export class FoxholeRegionSceneController {
- constructor({baseUrl,loadRegion,fetcher=fetch,onStatus=null,concurrency=2}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,onStatus,concurrency});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.cutouts=[];}
+ constructor({baseUrl,loadRegion,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.cutouts=[];}
  disposeScene(scene){if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);scene.root.removeFromParent();scene.destroy();}
  reconcile(){
   if(!this.view||this.view.destroyed)return;
@@ -22,7 +22,7 @@ export class FoxholeRegionSceneController {
   passes.push(...shared.values());
   const attached=[...this.records.values()].filter(r=>r.scene);for(const r of attached)r.scene.setShellEdges?.(regionShellEdges(r.position,attached.filter(other=>other!==r).map(other=>other.position)));
   if(passes.length!==this.attachedPasses.length||passes.some((pass,i)=>pass!==this.attachedPasses[i])){this.view.passes=[...this.view.passes.filter(pass=>!this.attachedPasses.includes(pass)),...passes];this.attachedPasses=passes;}
-  const environment=scenes.find(scene=>scene.environment)?.environment;
+  const environment=this.manageEnvironment?scenes.find(scene=>scene.environment)?.environment:undefined;
   if(environment&&!this.ownsEnvironment){this.previousEnvironment=this.view.environment;this.ownsEnvironment=true;}
   if(this.ownsEnvironment)this.view.environment=environment||this.previousEnvironment;
   if(!environment)this.ownsEnvironment=false;

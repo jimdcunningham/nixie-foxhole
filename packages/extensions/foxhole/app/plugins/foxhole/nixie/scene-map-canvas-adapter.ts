@@ -21,6 +21,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id)));
     const config = useRuntimeConfig();
     const world = new FoxholeRegionSceneController({
+        // Scene time of day owns the shared sky; a region must not install Noon Sky.
+        manageEnvironment: false,
         baseUrl: createFoxholeAssetsBaseUrl(config.app.baseURL) + 'world/',
         loadRegion: async (options: Parameters<typeof import('@nixie/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixie/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });

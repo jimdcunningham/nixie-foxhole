@@ -3,8 +3,8 @@ import {compileNativeTerrainShader,nativeTerrainGlobalGroup} from './native-terr
 import {terrainExcavationBit} from './terrain-excavation-mask.mjs';
 import {shoulderChunk} from './road-shoulder-geometry.mjs';
 import {framedMaterialBits,framedTerrainTemplate} from '../runtime/spatial-frame.mjs';
-import {BufferImageSource,UniformGroup,BindGroup,State} from 'pixi.js';
-import {Geometry3D,Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,shadowBitsGpu,shadowBitsGl,acesToneMappingBit} from '@pixi/3d';
+import {BufferImageSource,UniformGroup,BindGroup,State,CubeTexture} from 'pixi.js';
+import {Geometry3D,Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,envSourceDefaultBit,shadowBitsGpu,shadowBitsGl,acesToneMappingBit} from '@pixi/3d';
 import {liveTerrainBit,liveTerrainTemplate} from './live-terrain-shader.mjs';
 
 const maskGL=`
@@ -25,8 +25,8 @@ class RoadShoulderDraw extends RenderPass{
  constructor(renderer,owner){super({renderer,name:'native-road-shoulders'});this.owner=owner;this.shader=null;this.key='';this.state=new State();this.state.depthTest=true;this.state.depthMask=true;this.state.culling=false;this.state.blendMode='normal';this.state.blend=true;}
  setup(b){b.writeColor(b.targetColor);b.writeDepth(b.targetDepth);}
  condition(){const o=this.owner;return o.visible&&o.geometry&&o.group&&o.terrainPass.current?.geometry;}
- render(session){const o=this.owner,current=o.terrainPass.current;if(!o.visible||!o.geometry||!o.geometry.attributes||!o.group||!current?.geometry)return;const gl='gl' in session.renderer,env=o.terrainPass.environment==='previous'?'hemisphere':'cube',filter=session.view3d.shadowFilter||'pcf',key=current.meta.region+env+filter+(current.surface||'native')+o.terrainPass.generation;
-  if(!this.shader||this.key!==key){this.shader?.destroy();const shadows=(gl?shadowBitsGl:shadowBitsGpu)[filter]||(gl?shadowBitsGl:shadowBitsGpu).pcf;const {template:base,bits}=roadShoulderShader(current.meta,o.terrainPass.excavationMask,current.surface);this.shader=compileNativeTerrainShader(this.pipe.renderer,[...(o.terrainPass.frame?framedMaterialBits(bits,'terrain'):bits),shadows,env==='cube'?envSourceCubeBit:envSourceHemisphereBit,iblBit,pbrLightingBit,acesToneMappingBit],o.terrainPass.frame?framedTerrainTemplate(base):base);this.key=key;}
+ render(session){const o=this.owner,current=o.terrainPass.current;if(!o.visible||!o.geometry||!o.geometry.attributes||!o.group||!current?.geometry)return;const gl='gl' in session.renderer,env=session.view3d.environment instanceof CubeTexture?'cube':session.view3d.environment?'hemisphere':'none',filter=session.view3d.shadowFilter||'pcf',key=current.meta.region+env+filter+(current.surface||'native')+o.terrainPass.generation;
+  if(!this.shader||this.key!==key){this.shader?.destroy();const shadows=(gl?shadowBitsGl:shadowBitsGpu)[filter]||(gl?shadowBitsGl:shadowBitsGpu).pcf;const {template:base,bits}=roadShoulderShader(current.meta,o.terrainPass.excavationMask,current.surface);this.shader=compileNativeTerrainShader(this.pipe.renderer,[...(o.terrainPass.frame?framedMaterialBits(bits,'terrain'):bits),shadows,env==='cube'?envSourceCubeBit:env==='hemisphere'?envSourceHemisphereBit:envSourceDefaultBit,iblBit,pbrLightingBit,acesToneMappingBit],o.terrainPass.frame?framedTerrainTemplate(base):base);this.key=key;}
   this.shader.groups[0]=gl?session.globalBindGroup:(this.globalGroup=nativeTerrainGlobalGroup(session,this.globalGroup));this.shader.groups[1]=getCameraData(session.view3d.camera).bindGroup;this.shader.groups[2]=current.group;this.shader.groups[3]=o.group;this.pipe.renderGeometry(o.geometry,this.shader,this.state);
  }
  destroy(){this.shader?.destroy();this.shader=null;this.globalGroup?.destroy();this.globalGroup=null;}

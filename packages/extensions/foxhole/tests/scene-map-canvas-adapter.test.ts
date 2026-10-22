@@ -27,7 +27,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
             assert.equal(content, summaries);
             return summaryGroups;
         },
-        FoxholeRegionSceneController: class { constructor() { return world; } },
+        FoxholeRegionSceneController: class { constructor(options: { manageEnvironment?: boolean; }) { assert.equal(options.manageEnvironment, false); return world; } },
         selectedSpatialRegions, regionIdForKey,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
         FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"}],

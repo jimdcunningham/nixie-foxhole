@@ -4,7 +4,7 @@ type Status = { phase: string; region?: string; error?: string; downloadBytes?: 
 export function regionIdForKey(key: string): string;
 export function selectedSpatialRegions(options: { enabled: boolean; regionKeys: string[]; mode: 'flat' | '2d' | '3d'; }): string[];
 export class FoxholeRegionSceneController {
-    constructor(options: { baseUrl: string; loadRegion: typeof loadCompactRegion; fetcher?: typeof fetch; concurrency?: number; onStatus?: (status: Status) => void; });
+    constructor(options: { baseUrl: string; loadRegion: typeof loadCompactRegion; fetcher?: typeof fetch; concurrency?: number; manageEnvironment?: boolean; onStatus?: (status: Status) => void; });
     sync(options: { view: View3D; settings: { enabled: boolean; regionKeys: string[]; terrainSurface?: 'native' | 'map' | 'plain'; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; shadowQuality?: 'off' | 'low' | 'medium' | 'high'; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; worldLayers?: Parameters<typeof loadCompactRegion>[0]['layers']; }; mode: 'flat' | '2d' | '3d'; position?: { x: number; y: number; }; regions?: { id: string; position: { x: number; y: number; }; warState?: { items?: readonly unknown[]; } | null; }[]; deltaMS?: number; warState?: { items?: readonly unknown[]; } | null; }): void;
     streamingStats(): { resident: number; loading: number; total: number; };
     tourRegions(): { id: string; position: { x: number; y: number; }; scene: import('@nixie/foxhole-world').BakedRegion; }[];
