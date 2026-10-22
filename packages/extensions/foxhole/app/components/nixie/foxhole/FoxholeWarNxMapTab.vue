@@ -2,6 +2,8 @@
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
+import NixieSceneViewpoints from '#nixie/components/nixie/NixieSceneViewpoints.vue';
+import { preserveViewpointRegionCamera } from '#foxhole/plugins/foxhole/nixie/map/viewpoint-region-camera.mjs';
 import NxButton from '#nixie/components/NxButton.vue';
 import NxIconButton from '#nixie/components/NxIconButton.vue';
 import NxProgress from '#nixie/components/NxProgress.vue';
@@ -14,6 +16,7 @@ import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNix
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import {
+    foxholeMapSettings,
     FOXHOLE_MAP_ICON_CATEGORY_KEYS,
     FOXHOLE_MAP_LAYER_DEFINITIONS,
     FOXHOLE_MAP_LAYER_GROUPS,
@@ -116,6 +119,17 @@ const roadTourViews = [{ value: 'variety', label: 'Variety' }, { value: 'close',
 const roadTourSpeeds = [{ value: '6', label: '6 m/s' }, { value: '12', label: '12 m/s' }, { value: '24', label: '24 m/s' }, { value: '48', label: '48 m/s' }];
 function setRoadTourOption(key: 'region' | 'speed' | 'view', value: unknown): void {
     plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' ? Number(value) : String(value) };
+}
+const viewpointSettings = computed(() => Object.fromEntries(foxholeMapSettings.map(setting => [setting.id,
+    isFoxholeMapUserSettingKey(setting.id) ? settingsStore.getValue(setting.id) : runtime.projectStore.settings[setting.id] ?? setting.defaultValue,
+]).filter(([, value]) => typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))) as Record<string, string | number | boolean>);
+function restoreViewpointSettings(settings: Record<string, string | number | boolean>): void {
+    plannerRoadTourActions.value?.stop();
+    if (plannerRoadTourStatus.value.shaking) plannerRoadTourActions.value?.toggleCameraShake();
+    const allowed = new Set(foxholeMapSettings.map(setting => setting.id));
+    const patch = Object.fromEntries(Object.entries(settings).filter(([key]) => allowed.has(key)));
+    preserveViewpointRegionCamera(runtime, String(patch[FOXHOLE_MAP_SETTING_KEYS.regionKeys] ?? ''));
+    patchSettings(patch, 'foxhole-war-nx-map:restore-viewpoint');
 }
 const worldLayerOptions: NxToggleGridOption[] = FOXHOLE_WORLD_LAYER_GROUPS.map(group => ({ id: group.id, label: group.label }));
 const terrainOverlayOptions: NxToggleGridOption[] = [{ id: 'rdz', label: 'RDZ' }, { id: 'topo', label: 'Topo' }];
@@ -741,6 +755,8 @@ const mapModVisibilityDisabled = computed(() => (
                         @update:model-value="onTerrainOverlaysChange"
                     />
                 </div>
+
+                <NixieSceneViewpoints :viewSettings="viewpointSettings" @restore-settings="restoreViewpointSettings" />
 
                 <div v-if="showRoadTour && plannerRoadTourStatus.attached" class="foxhole-war-nx-map-tab__road-tour" role="group" aria-label="Road Tour">
                     <NxSelect label="Tour Region" :modelValue="plannerRoadTourOptions.region" :options="roadTourRegions" :disabled="plannerRoadTourStatus.state !== 'idle'" @update:modelValue="setRoadTourOption('region', $event)" />

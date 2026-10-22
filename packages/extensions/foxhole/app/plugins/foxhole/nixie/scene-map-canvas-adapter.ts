@@ -1,3 +1,4 @@
+import { consumeViewpointRegionCamera } from './map/viewpoint-region-camera.mjs';
 import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
@@ -76,10 +77,13 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const settings = mapSettings.value;
             const regions = FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key));
             const selection = regions.map(region => region.key).sort().join('|');
+            const viewpointCamera = consumeViewpointRegionCamera(context.runtime, selection);
             if (settings.enabled && regions.length && mode !== 'flat' && selection !== lastSpatialRegion) {
                 lastSpatialRegion = selection;
-                const camera = resolveFoxholeMapFitCamera(getFoxholeMapActiveBounds({ ...settings, background: false }), context.app.screen);
-                context.cameraTo(camera.position, camera.scale);
+                if (!viewpointCamera) {
+                    const camera = resolveFoxholeMapFitCamera(getFoxholeMapActiveBounds({ ...settings, background: false }), context.app.screen);
+                    context.cameraTo(camera.position, camera.scale);
+                }
             }
             if (!settings.enabled || !regions.length || mode === 'flat') lastSpatialRegion = null;
             world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings, regions: regions.map(region => ({
