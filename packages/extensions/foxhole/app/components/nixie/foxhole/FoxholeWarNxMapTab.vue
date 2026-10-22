@@ -10,6 +10,7 @@ import NxToggleGrid from '#nixie/components/NxToggleGrid.vue';
 import type { NxToggleGridOption, NxToggleGridOptionClick } from '#nixie/components/NxToggleGrid.vue';
 import { requestNxConfirmDialog } from '#nixie/composables/useNxConfirmDialog.ts';
 import { showNxToast } from '#nixie/composables/useNxToast.ts';
+import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNixieEditorDocumentSession.ts';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import {
@@ -50,6 +51,13 @@ interface FoxholeMapIconEntry {
 const IMM_BASE_LAYER_KEYS = ['colors', 'base_map', 'base_map_full'] as const satisfies readonly FoxholeMapLayerKey[];
 
 const runtime = useNixieRuntime();
+const documentSession = useNixieEditorDocumentSessionOptional();
+const isSpatialView = computed(() => {
+    const controls = documentSession?.isSceneV2Active.value
+        ? documentSession.sceneV2Editor.value?.controller.canvas.getViewControls()
+        : null;
+    return Boolean(controls && controls.mode !== 'flat');
+});
 const settingsStore = useNixieSettingsStore();
 const runtimeConfig = useRuntimeConfig();
 const assetsBaseUrl = createFoxholeAssetsBaseUrl(runtimeConfig.app.baseURL);
@@ -723,23 +731,25 @@ const mapModVisibilityDisabled = computed(() => (
                     @update:modelValue="patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainSurface]: $event }, 'foxhole-war-nx-map:terrain-surface')"
                 />
 
-                <NxToggleGrid
-                    class="foxhole-war-nx-map-tab__world-layers"
-                    :modelValue="activeWorldLayers"
-                    :options="worldLayerOptions"
-                    :disabled="mapControlsDisabled"
-                    aria-label="2.5D / 3D Layers"
-                    @option-click="onWorldLayerClick"
-                />
+                <div class="foxhole-war-nx-map-tab__layer-controls">
+                    <NxToggleGrid
+                        class="foxhole-war-nx-map-tab__world-layers"
+                        :modelValue="activeWorldLayers"
+                        :options="worldLayerOptions"
+                        :disabled="mapControlsDisabled"
+                        aria-label="2.5D / 3D Layers"
+                        @option-click="onWorldLayerClick"
+                    />
 
-                <NxToggleGrid
-                    :modelValue="activeTerrainOverlays"
-                    :options="terrainOverlayOptions"
-                    :disabled="mapControlsDisabled"
-                    aria-label="Terrain Overlays"
-                    title="RDZ shows the 150 m border zone and known 50 m resource/world-base exemptions. Conditional border-base protection is not included. Topo shows 10 m elevation contours, with stronger 50 m lines."
-                    @update:model-value="onTerrainOverlaysChange"
-                />
+                    <NxToggleGrid
+                        :modelValue="activeTerrainOverlays"
+                        :options="terrainOverlayOptions"
+                        :disabled="mapControlsDisabled"
+                        aria-label="Terrain Overlays"
+                        title="RDZ shows the 150 m border zone and known 50 m resource/world-base exemptions. Conditional border-base protection is not included. Topo shows 10 m elevation contours, with stronger 50 m lines."
+                        @update:model-value="onTerrainOverlaysChange"
+                    />
+                </div>
 
                 <div v-if="showRoadTour && plannerRoadTourStatus.attached" class="foxhole-war-nx-map-tab__road-tour" role="group" aria-label="Road Tour">
                     <NxSelect label="Tour Region" :modelValue="plannerRoadTourOptions.region" :options="roadTourRegions" :disabled="plannerRoadTourStatus.state !== 'idle'" @update:modelValue="setRoadTourOption('region', $event)" />
@@ -758,6 +768,7 @@ const mapModVisibilityDisabled = computed(() => (
                 </div>
             </NixieSidebarFormSection>
             <NixieSidebarFormSection
+                v-if="group.heading !== 'Improved Map Mod' || !isSpatialView"
                 :title="getLayerGroupTitle(group)"
                 :sectionKey="getLayerGroupSectionKey(group)"
                 collapsible
@@ -896,6 +907,12 @@ const mapModVisibilityDisabled = computed(() => (
 </template>
 
 <style scoped>
+.foxhole-war-nx-map-tab__layer-controls {
+    display: grid;
+    gap: var(--nx-space-1);
+    min-width: 0;
+}
+
 
 .foxhole-war-nx-map-tab__road-tour {
     display: grid;
