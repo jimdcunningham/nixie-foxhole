@@ -4,6 +4,9 @@ FoxWatch is the local asset pipeline for Foxhole Planner. It reads Foxhole game 
 
 Use this README as the main operator guide for setup, configuration, and common workflows. Blender-specific rendering details live in `tools/foxwatch/blender/README.md`.
 
+For the nonmutating asset-delivery preflight and cross-region sharing report, see
+[Asset Publication Inventory](../../docs/asset-publication.md).
+
 ## What FoxWatch writes
 
 FoxWatch primarily works with two output areas:

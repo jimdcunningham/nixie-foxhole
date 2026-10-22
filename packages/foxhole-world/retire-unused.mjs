@@ -1,15 +1,18 @@
+import {worldRuntimePublicationRoots} from './publication-roots.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {brotliDecompressSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 /** Explicit local bundle cleanup: quarantine old immutable content outside the served assets. */
-export async function retireUnusedWorldContent({target,retired}){
+export async function retireUnusedWorldContent({target,retired,runtimeRoots=worldRuntimePublicationRoots()}){
  const root=await fs.realpath(target),destination=path.resolve(retired);
  if(destination===root||destination.startsWith(root+path.sep))throw Error('Retired content must be outside the served world directory');
  const index=JSON.parse(await fs.readFile(path.join(root,'index.json'),'utf8'));
  if(index.version!==1||index.format!=='compact-recipes-v1')throw Error('Unsupported world index');
  const live=new Set();
+ // Runtime repairs can be live without appearing inside a region manifest.
+ for(const ref of runtimeRoots){if(!ref.path?.startsWith('world/content/'))continue;const relative=ref.path.slice('world/'.length);if(!/^content\/(br|raw)\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/.test(relative))throw Error('Invalid runtime content root');live.add(relative);}
  for(const region of Object.values(index.regions)){
   if(!/^content\/br\/[a-f0-9]{64}\/asset\.json$/.test(region.manifest.path))throw Error('Invalid manifest path');
   const packed=await fs.readFile(path.join(root,region.manifest.path));if(sha(packed)!==region.manifest.hash)throw Error('Invalid region manifest');

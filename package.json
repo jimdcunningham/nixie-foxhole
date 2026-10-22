@@ -13,7 +13,9 @@
     "build:monitor": "dotnet build ./tools/foxwatch/monitor/FoxWatchMonitor.csproj",
     "foxwatch": "node ./tools/foxwatch/run-foxwatch.mjs",
     "test:source-media": "node ./tools/check-source-media.mjs && node --test ./tools/check-source-media.test.mjs",
-    "test": "npm run test:source-media && npm run test --workspaces --if-present"
+    "test": "npm run test:source-media && npm run test --workspaces --if-present",
+    "assets:inventory": "node ./tools/foxwatch/scripts/asset-publication-inventory.mjs",
+    "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs"
   },
   "engines": {
     "node": ">=24 <25"
