@@ -100,12 +100,11 @@ test('manual keyboard camera navigation pauses automation and removes its listen
 
 
 test('shake keeps running during canvas input and road tours without owning the camera pose',async()=>{
- const f=fixture();f.control.toggleCameraShake();assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),.35);
+ const f=fixture();f.control.toggleCameraShake();assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),1);
  assert.equal(f.writes.length,0,'shake never writes or restores a navigation pose');
- for(const event of ['pointerdown','wheel','nixie-camera-navigation']){f.canvas.dispatchEvent(new Event(event));assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),.35);}
+ for(const event of ['pointerdown','wheel','nixie-camera-navigation']){f.canvas.dispatchEvent(new Event(event));assert.equal(f.status.shaking,true);assert.equal(f.shakeWrites.at(-1),1);}
  await f.control.start();assert.equal(f.status.state,'running');assert.equal(f.status.shaking,true);
  const publications=f.publications.length;for(let i=0;i<100;i++)f.step(16);assert.equal(f.publications.length,publications);
- f.options.shakeStrength=2;f.step(16);assert.equal(f.shakeWrites.at(-1),2);assert.equal(f.status.state,'running');
  f.control.stop();assert.equal(f.status.shaking,true,'stopping the tour leaves shake enabled');
  const writes=f.writes.length;f.control.toggleCameraShake();assert.equal(f.status.shaking,false);assert.equal(f.shakeWrites.at(-1),0);assert.equal(f.writes.length,writes);
  f.control.destroy();

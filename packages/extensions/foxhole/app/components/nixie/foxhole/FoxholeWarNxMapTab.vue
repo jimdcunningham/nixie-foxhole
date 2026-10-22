@@ -114,9 +114,8 @@ const showRoadTour = import.meta.dev;
 const roadTourRegions = computed(() => [{ value: '', label: 'Nearest Loaded Region' }, ...plannerRoadTourStatus.value.regions.map(region => ({ value: region.id, label: region.label }))]);
 const roadTourViews = [{ value: 'variety', label: 'Variety' }, { value: 'close', label: 'Close' }, { value: 'scenic', label: 'Scenic' }, { value: 'high', label: 'High' }];
 const roadTourSpeeds = [{ value: '6', label: '6 m/s' }, { value: '12', label: '12 m/s' }, { value: '24', label: '24 m/s' }, { value: '48', label: '48 m/s' }];
-const roadTourShakeStrengths = [{ value: '0.35', label: 'Gentle' }, { value: '1', label: 'Medium' }, { value: '2', label: 'Strong' }];
-function setRoadTourOption(key: 'region' | 'speed' | 'view' | 'shakeStrength', value: unknown): void {
-    plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' || key === 'shakeStrength' ? Number(value) : String(value) };
+function setRoadTourOption(key: 'region' | 'speed' | 'view', value: unknown): void {
+    plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' ? Number(value) : String(value) };
 }
 const worldLayerOptions: NxToggleGridOption[] = FOXHOLE_WORLD_LAYER_GROUPS.map(group => ({ id: group.id, label: group.label }));
 const terrainOverlayOptions: NxToggleGridOption[] = [{ id: 'rdz', label: 'RDZ' }, { id: 'topo', label: 'Topo' }];
@@ -754,8 +753,7 @@ const mapModVisibilityDisabled = computed(() => (
                         <NxButton size="sm" variant="secondary" label="Next Road" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.next()" />
                         <NxButton size="sm" variant="secondary" label="Stop Tour" :disabled="plannerRoadTourStatus.state === 'idle'" @click="plannerRoadTourActions?.stop()" />
                     </div>
-                    <NxSelect label="Shake Strength" :modelValue="String(plannerRoadTourOptions.shakeStrength)" :options="roadTourShakeStrengths" @update:modelValue="setRoadTourOption('shakeStrength', $event)" />
-                    <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.shaking ? 'Stop Shake' : 'Shake Camera'" :aria-pressed="plannerRoadTourStatus.shaking" :disabled="!plannerRoadTourStatus.canShake" @click="plannerRoadTourActions?.toggleCameraShake()" />
+                    <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.shaking ? 'Stop Handheld Camera' : 'Handheld Camera'" :aria-pressed="plannerRoadTourStatus.shaking" :disabled="!plannerRoadTourStatus.canShake" @click="plannerRoadTourActions?.toggleCameraShake()" />
                     <p v-if="plannerRoadTourStatus.error" role="alert" class="text-xs opacity-70">{{ plannerRoadTourStatus.error }}</p>
                 </div>
             </NixieSidebarFormSection>

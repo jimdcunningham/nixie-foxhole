@@ -13,7 +13,7 @@ export function createPlannerRoadTour({canvas,getRegions,getOptions,readPose,wri
   if(same)return;
   published={attached:true,canRun,canShake,shaking,regions:regions.map(r=>({id:r.id,label:r.label||r.id})),state,region,error,canRestore};onStatus(published);
  }
- function syncShake(){const requested=getOptions().shakeStrength??.35,strength=shaking&&Number.isFinite(requested)?Math.max(0,Math.min(2,requested)):0;if(strength!==lastShakeStrength){lastShakeStrength=strength;setCameraShake?.(strength);}}
+ function syncShake(){const strength=shaking?1:0;if(strength!==lastShakeStrength){lastShakeStrength=strength;setCameraShake?.(strength);}}
  function stopShake(){if(!shaking)return;shaking=false;syncShake();publish(true);}
  function toggleCameraShake(){if(disposed||viewMode()!=='3d'||!setCameraShake)return;shaking=!shaking;syncShake();publish(true);}
  function pause(){if(loading){stop();return;}if(tour?.state==='running'){tour.pause();writePose(null);publish(true);}}
@@ -37,7 +37,7 @@ export function createPlannerRoadTour({canvas,getRegions,getOptions,readPose,wri
  canvas.addEventListener('nixie-camera-navigation',pause);canvas.addEventListener('pointerdown',pause,{capture:true});canvas.addEventListener('wheel',pause,{capture:true,passive:true});const keyboard=canvas.ownerDocument||canvas;keyboard.addEventListener('keydown',escape);
  publish(true);
  return {start,pause,next,toggleCameraShake,stop:()=>stop(),restore:()=>stop(true),
-  diagnostics(){const s=tour?.snapshot?.(),shake=shaking?['camera: looping shake']:[];return [...shake,...(loading?['tour: preparing native roads']:s?[`tour:${tour.state}  route:${s.routeNumber}  ${Math.round(s.routeProgressMetres||0)}/${Math.round(s.routeMetres||0)} m  ${s.phase}`]:[])];},
+  diagnostics(){const s=tour?.snapshot?.(),shake=shaking?['camera: handheld motion']:[];return [...shake,...(loading?['tour: preparing native roads']:s?[`tour:${tour.state}  route:${s.routeNumber}  ${Math.round(s.routeProgressMetres||0)}/${Math.round(s.routeMetres||0)} m  ${s.phase}`]:[])];},
   update(deltaMS){if(disposed)return;if(shaking&&viewMode()!=='3d')stopShake();syncShake();if((loading||tour)&&(!liveRecord()||viewMode()!=='3d'||readPose()?.projection!=='perspective')){stop();return;}if(hidden()){publish();return;}if(tour?.state==='running'){
     const options=getOptions();tour.speed=options.speed;tour.view=options.view;if(options.view!=='variety')tour.viewStyle=options.view;
     const pose=tour.update(deltaMS/1000);if(pose)writePose(plannerTourPose(pose,record.position));

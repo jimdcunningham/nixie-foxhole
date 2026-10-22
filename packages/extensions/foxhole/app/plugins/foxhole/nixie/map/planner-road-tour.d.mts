@@ -10,7 +10,7 @@ export function plannerTourPose(pose: NativePose, position: RegionPosition): Pos
 export function createPlannerRoadTour(options: {
     canvas: HTMLCanvasElement;
     getRegions(): { id: string; label?: string; position: RegionPosition; scene: BakedRegion; }[];
-    getOptions(): { region: string; speed: number; view: string; shakeStrength?: number; };
+    getOptions(): { region: string; speed: number; view: string; };
     readPose(): (Pose & { projection: string; }) | null;
     writePose(pose: Pose | null): boolean;
     setCameraShake?(strength: number): void;

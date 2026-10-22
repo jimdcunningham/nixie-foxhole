@@ -5,6 +5,6 @@ export interface PlannerRoadTourStatus {
     error: string | null; canRestore: boolean;
 }
 export const plannerRoadTourStatus = shallowRef<PlannerRoadTourStatus>({ attached: false, canRun: false, canShake: false, shaking: false, state: 'idle', region: '', regions: [], error: null, canRestore: false });
-export const plannerRoadTourOptions = shallowRef({ region: '', speed: 12, view: 'variety', shakeStrength: .35 });
+export const plannerRoadTourOptions = shallowRef({ region: '', speed: 12, view: 'variety' });
 interface Actions { toggleCameraShake(): void; start(): void | Promise<void>; pause(): void; next(): void; stop(): void; restore(): void; }
 export const plannerRoadTourActions = shallowRef<Actions | null>(null);
