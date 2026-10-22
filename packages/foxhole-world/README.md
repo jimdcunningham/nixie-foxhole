@@ -26,7 +26,7 @@ The importer omits instanced mesh components with no native instances. Older pre
 
 After adopting an older prepared cache, pass `--world-native-textures <extracted-texture-root>` (or `FOXWATCH_WORLD_NATIVE_TEXTURES`) to `export-world.mjs`. This runs the idempotent `prepare-foliage-alpha.mjs` normalizer before publication. The texture root is the native extraction folder containing `Textures/Foliage`; no texture files are added to this source package.
 
-The qualified `BirchBushSnow` instance uses Materiality blue for its cutout, while its DXT1 colour texture has no alpha. The normalizer copies the authored linear mask into a lossless RGBA colour image, preserves decoded RGB, UVs, samplers and geometry, and declares the native 0.333 cutoff. Solid materials sharing the original image remain unchanged. New immutable blobs and dependency references are shared by every affected region; old blobs remain available for rollback. Subsequent exports of the normalized cache need no extraction folder.
+The qualified `BirchBushSnow` and `BirchBushSmall` instances use Materiality blue for its cutout, while its DXT1 colour texture has no alpha. The normalizer copies the authored linear mask into a lossless RGBA colour image, preserves decoded RGB, UVs, samplers and geometry, and declares the native 0.333 cutoff. Solid materials sharing the original image remain unchanged. New immutable blobs and dependency references are shared by every affected region; old blobs remain available for rollback. Subsequent exports of the normalized cache need no extraction folder.
 
 ## Viewer
 
@@ -198,3 +198,5 @@ spread these inaccurate sprites into conspicuous bright swarms; module extractio
 coverage alone did not establish visual fidelity. Source recipes remain intact.
 Chimney smoke and steam remain available. WaterMist's existing exclusion remains.
 The details summary reports unsupportedMaterialParticleComponents separately.
+
+Legacy published `BirchBushSmall` models also restore the exact qualified native cutout before decoding. Regenerate its immutable compatibility texture with `node tools/foxwatch/scripts/publish-world-foliage-mask.mjs --input <focused-material-textures-export>`; export `BirchBushThinA` and `BirchBranchThinM` first. The texture stays in the asset repository. Normalized models retain their own opacity metadata and need no override.

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "materials": [
+    {
+      "material": "War/Content/Materials/Environment/Props/BirchBushSmall.uasset",
+      "albedo": "War/Content/Textures/Foliage/BirchBushThinA.BirchBushThinA",
+      "source": "War/Content/Textures/Foliage/BirchBranchThinM.BirchBranchThinM",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/a94bd14911ccef6d6cc74e8601dcb85c02e5a02b8e8b4a4da138211712372316/asset.webp",
+        "hash": "a94bd14911ccef6d6cc74e8601dcb85c02e5a02b8e8b4a4da138211712372316",
+        "decodedHash": "a94bd14911ccef6d6cc74e8601dcb85c02e5a02b8e8b4a4da138211712372316",
+        "bytes": 40968
+      }
+    }
+  ]
+}

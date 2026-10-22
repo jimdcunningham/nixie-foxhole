@@ -4,12 +4,16 @@ import {createHash} from 'node:crypto';
 import {brotliCompressSync,brotliDecompressSync,constants} from 'node:zlib';
 import sharp from 'sharp';
 
-// Qualified native GrassBlades instance: Use Alpha selects Materiality blue.
+// Qualified native GrassBlades instances: Use Alpha selects Materiality blue.
 // Its albedo is DXT1/RGB, so merely declaring glTF MASK leaves the cards solid.
 const rules=[{
  material:'War/Content/Materials/Environment/Props/BirchBushSnow.uasset',
  albedo:'War/Content/Textures/Foliage/BirchBushSnowA.BirchBushSnowA',
  mask:'Textures/Foliage/BirchBushSnowM.png',source:'War/Content/Textures/Foliage/BirchBushSnowM.BirchBushSnowM',channel:2,cutoff:.333,
+},{
+ material:'War/Content/Materials/Environment/Props/BirchBushSmall.uasset',
+ albedo:'War/Content/Textures/Foliage/BirchBushThinA.BirchBushThinA',
+ mask:'Textures/Foliage/BirchBranchThinM.png',source:'War/Content/Textures/Foliage/BirchBranchThinM.BirchBranchThinM',channel:2,cutoff:.333,
 }];
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const compressed=bytes=>brotliCompressSync(bytes,{params:{[constants.BROTLI_PARAM_QUALITY]:6}});
