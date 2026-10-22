@@ -215,3 +215,9 @@ Water uses parallel camera rays in orthographic views, including the reflected Z
 
 The browser fixture `tests/browser/water-depth.mjs` checks close and wide orthographic views, at the centre and off-centre, on WebGL and WebGPU with native and host frames. It checks physical versus optical depth, parallel view direction, and actual water colour over white/black seabeds: an 8 m bed must be obscured while a 25 cm shallow remains visible.
 The same fixture isolates AO over solid-colour water: raising a submerged cliff must affect the old non-writing depth path, and change zero pixels with water surface depth enabled, in both projections. Graph rebuild and unload/reload are also exercised. The view-scoped adapter only changes the pinned beta refraction pass depth attachment declaration; the opaque colour/depth copies used for refraction remain separate and unchanged.
+
+### Faction Flags and Surface Decals
+
+World views draw masked faction cloth once after projected surface decals and before water and airborne transparency. This keeps wall moss and leaks off hanging flags while retaining cloth cutouts, foreground occlusion and shadow membership. Compact regions and the authoring viewer enable this automatically; standalone catalog/native model callers can opt in with `flagSurfacePass: true` when their view includes `SurfaceDecalPass`. Callers without the pass retain ordinary opaque flags.
+
+The browser fixture `tests/browser/faction-flag-decals.mjs` compares a decal-covered flag with the corrected phase on WebGL and WebGPU, in native and reflected host frames. It checks solid cloth, an alpha cutout, the adjacent wall and foreground occlusion, then repeats after graph rebuild and resource unload/reload.

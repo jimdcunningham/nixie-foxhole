@@ -1,3 +1,4 @@
+import {factionFlagPassMask} from './surface-decal-pass.mjs';
 import {catalogStructureOwner,catalogFactionFlag} from './catalog-faction-flags.mjs';
 import {nativeMaterialPeer,nativeMaterialOverrides} from './native-material-peer.mjs';
 import {normalizeWorldModelLayers,worldModelLayers,isVegetationLayer} from './world-model-layers.mjs';
@@ -24,7 +25,7 @@ import{isWaterStencil}from'./water-stencil.mjs';
 function geometry(v,indices,keepColors=true){const positions=new Float32Array(v.length*3),normals=new Float32Array(v.length*3),uvs=new Float32Array(v.length*2),colors=keepColors?new Float32Array(v.length*4):undefined;for(let i=0;i<v.length;i++){const p=v[i];for(let j=0;j<3;j++){positions[i*3+j]=p[j];normals[i*3+j]=p[j+3];}uvs[i*2]=p[6];uvs[i*2+1]=p[7];if(colors)for(let j=0;j<4;j++)colors[i*4+j]=p[j+12];}return new Geometry3D({positions,normals,uvs,...(colors?{colors}:{}),indices,quantizeNormals:false});}
 export {attributeReader} from './geometry-attributes.mjs';
 
-export async function loadWorldModels({region,json,status,root,flagTexture,teamAt,batchLayout='category',assetUrl=url=>url,loadModel=url=>Assets.load(url),signal,concurrency=24,catalogResourceFields=false,catalog,progressive=false,optimize=true,vegetationDensity='full',vegetationShadows=true,windMaterials,priorityPosition,onLayout=()=>{},publishBatch=build=>build(),categories,bridgesOnly=false,worldData,visibilityData,actorVisibility:sharedActorVisibility}){
+export async function loadWorldModels({region,json,status,root,flagTexture,teamAt,batchLayout='category',assetUrl=url=>url,loadModel=url=>Assets.load(url),signal,concurrency=24,catalogResourceFields=false,catalog,progressive=false,optimize=true,vegetationDensity='full',vegetationShadows=true,windMaterials,priorityPosition,onLayout=()=>{},publishBatch=build=>build(),categories,bridgesOnly=false,worldData,visibilityData,actorVisibility:sharedActorVisibility,flagSurfacePass=false}){
  const [data,lodManifest,nightManifest]=await Promise.all([Promise.resolve(worldData||json(`${region}/world.json`)).then(normalizeWorldModelLayers),!optimize||new URLSearchParams(location.search).has("atlasBake")?Promise.resolve({assets:{}}):json(`${region}/lod-manifest.json`),json(`${region}/night-materials.json`)]),layers={};for(const k of worldModelLayers){layers[k]=new Container3D({label:k});root.addChild(layers[k]);}
  // Legacy component and rock exports mark embedded foliage opaque and use an
  // RGB-only copy of its albedo. Reuse alpha from an explicitly masked native
@@ -78,7 +79,7 @@ export async function loadWorldModels({region,json,status,root,flagTexture,teamA
    if(!['COLONIALS','WARDENS'].includes(team)||!actorVisibility.visible(s.actor)){s.batch.setItemActive(s.index,0);continue;}
    const key=s.key+'-'+team;let mat=variants.get(key);
    if(!mat){const texture=await flagTexture(team,s.source,s.name);if(disposed||generation!==flagGeneration)return;mat=new Material3D({baseColorTexture:texture||s.source.textures.baseColor,roughness:.9,doubleSided:true,alphaMode:'mask',alphaCutoff:.3333});variants.set(key,mat);}
-   if(disposed||generation!==flagGeneration)return;s.batch.setMaterialAt(s.index,mat);s.batch.setItemActive(s.index,RenderPassBit.OPAQUE|RenderPassBit.SHADOW);
+   if(disposed||generation!==flagGeneration)return;s.batch.setMaterialAt(s.index,mat);s.batch.setItemActive(s.index,flagSurfacePass?factionFlagPassMask(mat):RenderPassBit.OPAQUE|RenderPassBit.SHADOW);
   }
  }
  const selected=p=>(!categories||categories.includes(p.kind==='building'?'building':p.category))&&(!bridgesOnly||/bridge/i.test(p.name)&&!/proxy|collision|switch/i.test(p.name));

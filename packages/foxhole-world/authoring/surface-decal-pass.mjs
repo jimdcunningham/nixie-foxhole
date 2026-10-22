@@ -4,6 +4,10 @@ import {Pass3D,ForwardRenderPass,RenderPassBit} from '@pixi/3d';
 // terrain and shoulders, before airborne transparency. Separate mesh batches
 // cannot be globally distance-sorted by the renderer's transparent pass.
 export const SURFACE_DECAL_PASS='native-surface-decals';
+export const FACTION_FLAG_SURFACE_PASS='native-faction-flag-surface';
+// Draw faction cloth after projected wall overlays and before transparency.
+// Keep its primary opaque shader and masked shadows, without an earlier colour draw.
+export function factionFlagPassMask(material){material.enablePass(FACTION_FLAG_SURFACE_PASS);return (material._passBit&~RenderPassBit.MATERIAL_PASS_MASK)|RenderPassBit.SHADOW;}
 export function surfaceDecalMaterial(material){
  material.disablePass('transparent');
  material.enablePass(SURFACE_DECAL_PASS);
@@ -20,5 +24,5 @@ class SurfaceDecalDraw extends ForwardRenderPass {
 }
 export class SurfaceDecalPass extends Pass3D {
  constructor(){super();this.stage='afterOpaque';}
- build(graph,{renderer}){graph.addPass(new SurfaceDecalDraw({renderer,name:SURFACE_DECAL_PASS,sort:'key'}));}
+ build(graph,{renderer}){graph.addPass(new SurfaceDecalDraw({renderer,name:SURFACE_DECAL_PASS,sort:'key'}));graph.addPass(new SurfaceDecalDraw({renderer,name:FACTION_FLAG_SURFACE_PASS,sort:'key'}));}
 }
