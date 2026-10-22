@@ -810,8 +810,8 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
     ),
     createBooleanUserSetting(
         FOXHOLE_MAP_SETTING_KEYS.coloredIcons,
-        'Foxhole Map Colored Icons',
-        'Use colored strategic icons when available.',
+        'Foxhole Colored Resource Icons',
+        'Color resource fields, mines, and wells by resource type.',
         'ph:drop',
         225,
         false,
