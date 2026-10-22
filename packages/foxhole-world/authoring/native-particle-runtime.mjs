@@ -15,9 +15,20 @@ export function persistentParticleEmitters(placement,effects){
  if(!placement.visible||placement.hidden||!placement.autoActivate||hideViewerParticleEffect(placement.system))return [];
  return (effects.emitters[placement.system]||[]).filter(e=>!unsupportedParticleMaterialReason(e.material,effects.materials[e.material])&&e.count&&isPersistentParticleEmitter(nativeEmitterModules(placement.system,e))&&nativeEmissionSchedule(e).count);
 }
+/** Advection is in the shared native metre frame, independent of emitter rotation. */
+const nativeParticleWind={name:'nativeParticleWind',bindings:{material:{uSceneWind:'vec3<f32>'}},
+ gpu:{vertex:{beforeTransform:'position=vec4<f32>(position.xyz+material.uSceneWind*(particleAge-(1.0-exp(-particleAge))),1.0);'}},
+ gl:{vertex:{beforeTransform:'position=vec4(position.xyz+uSceneWind*(particleAge-(1.0-exp(-particleAge))),1.0);'}}};
+export function updateNativeParticleWind(container,wind){
+ if(!container.nativeWindResponsive)return;
+ const strength=Number.isFinite(wind?.strength)?Math.max(0,Math.min(1,wind.strength)):0;
+ const angle=(Number.isFinite(wind?.directionDeg)?wind.directionDeg:0)*Math.PI/180,speed=strength*6;
+ container.uniforms.uSceneWind=speed?[Math.cos(angle)*speed,0,-Math.sin(angle)*speed]:[0,0,0];
+}
 export function buildNativeParticleEmitter({placement,emitter:e,material:m,texture,particleHex,frame,region}){
  const lantern=isLanternFlame(placement,m),native=nativeEmitterModules(placement.system,e),schedule=nativeEmissionSchedule(e),random=nativeParticleSeed([region,placement.actor,placement.name,placement.matrix.join(','),e.name].join('|'));
- const bits=[nativeEmissionLifetime,particleMotionBit,nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),...(lantern?[lanternFlameBit]:[]),particleHex];
+ const windResponsive=!lantern&&!m.fire&&/smoke|steam|mist|dust/i.test(placement.system+' '+e.name+' '+e.material);
+ const bits=[nativeEmissionLifetime,particleMotionBit,...(windResponsive?[nativeParticleWind]:[]),nativeParticleSpin,...(native?.orbit?[nativeParticleOrbit]:[]),nativeParticleCurveBit(e.curves,placement.system+e.name),...(lantern?[lanternFlameBit]:[]),particleHex];
  const container=new ParticleContainer3D({texture,capacity:schedule.count,billboard:'spherical',space:frame?'local':'world',blendMode:m.fire&&!lantern?'add':'normal',extraBits:bits,label:placement.actor+'/'+placement.name});
  // The origin remains the sorting anchor; board-frame local centers retain
  // their metre-space launch/motion, while quad diameter is in board world units.
@@ -36,6 +47,7 @@ export function buildNativeParticleEmitter({placement,emitter:e,material:m,textu
   container.setParticle(i,{aBirth:-((i/schedule.count*schedule.period+phase)%schedule.period),aLife:life,aVel:xyz(v),aNativeSpin:sample(native?.rotationRate||[0,0],random)*Math.PI*2,
    ...(native?.orbit?{aNativeOrbitOffset:xyz(sampleVector(native.orbit.offset,random).map(v=>v/100)),aNativeOrbitRotation:xyz(sampleVector(native.orbit.rotation,random)),aNativeOrbitRate:xyz(sampleVector(native.orbit.rate,random))}:{})});
  }
+ container.nativeWindResponsive=windResponsive;if(windResponsive)container.uniforms.uSceneWind=[0,0,0];
  container.nativeActor=placement.actor;container.nativeSchedule=schedule;
  return container;
 }

@@ -82,7 +82,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 context.cameraTo(camera.position, camera.scale);
             }
             if (!settings.enabled || !regions.length || mode === 'flat') lastSpatialRegion = null;
-            world.sync({ view, mode, deltaMS, settings, regions: regions.map(region => ({
+            world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings, regions: regions.map(region => ({
                 id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), warState: plugin.getSpatialWarState(region.key),
             })) });
             roadTour?.update(deltaMS);

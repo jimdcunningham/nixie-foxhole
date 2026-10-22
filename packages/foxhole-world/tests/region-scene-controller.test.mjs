@@ -220,3 +220,12 @@ test('retired progressive preference cannot disable early reveal and detail sett
   }
  }finally{c.destroy();}
 });
+
+test('live scene wind reaches resident smoke without reloading the region',async()=>{
+ const frames=[],view={passes:[],root:{addChild(){}},camera:{position:{x:0,y:0,z:100}},height:600,width:800};let loads=0;
+ const controller=new FoxholeRegionSceneController({baseUrl:'https://world.test/',fetcher:async()=>new Response(JSON.stringify({version:1,regions:{deadlands:{id:'deadlands'}}})),loadRegion:async()=>{loads++;return{root:{removeFromParent(){}},passes:[],metrics:{},update:frame=>frames.push(frame),destroy(){}};}});
+ const sync=wind=>controller.sync({view,settings:{enabled:true,regionKeys:['DeadlandsHex'],worldLayers:{}},mode:'3d',deltaMS:16,wind});
+ sync({directionDeg:0,strength:0});await flush();sync({directionDeg:135,strength:1});
+ assert.deepEqual(frames.at(-1).wind,{directionDeg:135,strength:1});assert.equal(loads,1);
+ sync({directionDeg:135,strength:0});assert.equal(frames.at(-1).wind.strength,0);assert.equal(loads,1);controller.destroy();
+});

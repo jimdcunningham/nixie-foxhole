@@ -8,7 +8,7 @@ export interface BakedRegion {
     sharedPasses?: Record<string, Pass3D>;
     combinedPasses?: Record<string, Pass3D>;
     metrics: { resident?: boolean; waterReflections?: boolean; vegetationShadows?: boolean; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; progressive?: boolean; terrainGeometry?: { step: number; triangles: number; bytes: number; pending: boolean; error: string | null; chunks?: number; visibleChunks?: number; detailChunks?: number; draws?: number; residentTriangles?: number; budget?: { limitBytes: number; baseBytes: number; detailBytes: number; pendingBytes: number; totalBytes: number; evictions: number; denied: number; coarseOverBudget: boolean; }; }; downloadBytes: number; cacheHits: number; cacheMisses: number; cacheWriteFailures: number; readyMs: number; firstVisibleMs?: number; revealedBatches?: number; layers?: { key: string; loaded: boolean; requested: boolean; loading: boolean; error?: string; }[]; };
-    update(options: { time?: number; deltaMS?: number; camera?: { position: number[]; height: number; fov: number; orthographicHeight?: number | null; planes?: ArrayLike<number>; }; }): void;
+    update(options: { wind?: { directionDeg: number; strength: number; }; time?: number; deltaMS?: number; camera?: { position: number[]; height: number; fov: number; orthographicHeight?: number | null; planes?: ArrayLike<number>; }; }): void;
     whenLayersReady?(): Promise<void>;
     setShellEdges?(visible: boolean[]): void;
     setWarState?(state?: { items?: readonly unknown[]; } | null): void;
