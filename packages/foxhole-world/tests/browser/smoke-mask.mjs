@@ -21,6 +21,12 @@ try{
  if(pixel(b,300,250)>1||pixel(b,300,150)<20)throw Error('Smoke must emerge above the outlet plane: '+JSON.stringify({below:pixel(b,300,250),above:pixel(b,300,150)}));
  p.material.textures.smokeClouds=Texture.WHITE;p.uniforms.uParticleTime=1;const flat=await read();p.uniforms.uParticleTime=4;const flatLater=await read();if(changed(flat,flatLater))throw Error('Animation test moved geometry instead of the mask');p.material.textures.smokeClouds=cloud;
  view.passes=[...view.passes];const rebuilt=await read();view.unload();const reloaded=await read();if(changed(b,rebuilt)||changed(b,reloaded))throw Error('Graph rebuild changed the native mask');
+ // Dark smoke must reveal the receiver rather than form a black core. White
+ // smoke stays identical, and neither comparison changes geometry or RGB.
+ app.renderer.background.color=0xffffff;
+ const light=await read();p.uniforms.uSmokeDarkOpacity=1;const lightControl=await read();if(changed(light,lightControl))throw Error('Dark coverage altered white smoke');
+ p.setParticleAt(0,0,0,0,framed?96:3,0,0x242424,1);p.upload();p.uniforms.uSmokeDarkOpacity=.12;const dark=await read();p.uniforms.uSmokeDarkOpacity=1;const darkControl=await read();
+ const darkSoft=pixel(dark,300,150),darkDense=pixel(darkControl,300,150);if(darkSoft-darkDense<8)throw Error('Dark smoke still obscures its receiver: '+JSON.stringify({darkSoft,darkDense}));
  if(webgpu)await webgpu.gpu.device.queue.onSubmittedWorkDone();if(errors.length)throw Error(errors.join('\n'));
- output.textContent=JSON.stringify({verified:true,backend,frame:framed?'host':'native',animatedPixels:motion,belowOutlet:pixel(b,300,250),aboveOutlet:pixel(b,300,150),errors},null,2);document.title='Native Smoke Masks Verified '+backend;
+ output.textContent=JSON.stringify({verified:true,backend,frame:framed?'host':'native',animatedPixels:motion,belowOutlet:pixel(b,300,250),aboveOutlet:pixel(b,300,150),darkSoft,darkDense,errors},null,2);document.title='Native Smoke Masks Verified '+backend;
 }catch(error){output.textContent=error.stack+'\n'+errors.join('\n');document.title='Native Smoke Masks Failed';}

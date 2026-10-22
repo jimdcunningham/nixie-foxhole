@@ -43,7 +43,7 @@ export function buildNativeParticleEmitter({placement,emitter:e,material:m,textu
  container.uniforms.uGravity=vector(placement.matrix,ue(e.acceleration[0]));container.uniforms.uDrag=Math.max(0,sample(native?.drag||[0,0],random));
  container.uniforms.uParticleTime=0;container.uniforms.uEmissionPeriod=schedule.period;
  if(native?.orbit)for(const [i,axis]of ['X','Y','Z'].entries()){const basis=[0,0,0];basis[i]=100;container.uniforms['uNativeOrbit'+axis]=vector(placement.matrix,ue(basis));}
- if(cloudMask){container.material.textures.smokeClouds=smokeCloudTexture;container.uniforms.uSmokeOpacity=m.opacity;container.uniforms.uSmokeOutlet=[...(outlet?.position||[0,0,0]),outlet?1:0];container.uniforms.uSmokeUp=[...(outlet?.up||[0,1,0]),0];container.uniforms.uSmokeFrame=frame?[frame.x,-frame.y,frame.scale,0]:[0,0,1,0];}
+ if(cloudMask){container.material.textures.smokeClouds=smokeCloudTexture;container.uniforms.uSmokeOpacity=m.opacity;container.uniforms.uSmokeDarkOpacity=.12;container.uniforms.uSmokeOutlet=[...(outlet?.position||[0,0,0]),outlet?1:0];container.uniforms.uSmokeUp=[...(outlet?.up||[0,1,0]),0];container.uniforms.uSmokeFrame=frame?[frame.x,-frame.y,frame.scale,0]:[0,0,1,0];}
  const maskRandom=nativeParticleSeed(region+'|'+placement.actor+'|'+e.name+'|cloudOffsets');
  const phase=random()*schedule.period;
  for(let i=0;i<schedule.count;i++){
