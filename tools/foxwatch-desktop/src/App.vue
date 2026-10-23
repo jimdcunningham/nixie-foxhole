@@ -26,6 +26,7 @@ let clock: ReturnType<typeof setInterval>;
 import AssetPreview from './AssetPreview.vue';
 import PublishedLibraryDialog from './PublishedLibraryDialog.vue';
 const showPublished = ref(false);
+const compareAsset = ref(false);
 const fileManagerName = window.foxwatch.fileManagerName;
 
 interface TreeRow extends AssetEntry {
@@ -170,6 +171,7 @@ async function setRoot(value: AssetRoot) {
   listingVersion++;
   root.value = value;
   reviewSummary.value = null;
+  compareAsset.value = false;
   changesOnly.value = false;
   children.value = new Map();
   expanded.value = new Set();
@@ -600,6 +602,10 @@ onBeforeUnmount(() => {
             <h1>{{ selectedLabel }}</h1>
           </div>
           <span v-else class="muted">Asset Inspector</span>
+          <div v-if="selected" class="inspector-mode" role="group" aria-label="Inspector Mode">
+            <button :aria-pressed="!compareAsset" @click="compareAsset = false">Preview</button>
+            <button :aria-pressed="compareAsset" :disabled="!reviewSummary?.approvedAt" :title="reviewSummary?.approvedAt ? 'Compare with the approved local baseline' : 'Approve a baseline from the Review menu first'" @click="compareAsset = true">Compare</button>
+          </div>
           <span v-if="details" class="format-tag">{{ details.extension }}</span>
         </header>
         <div v-if="error" class="error-banner" role="alert">
@@ -623,6 +629,8 @@ onBeforeUnmount(() => {
             :asset="details"
             :requested-path="selected"
             :inspecting="inspecting"
+            :compare="compareAsset"
+            :approved-at="reviewSummary?.approvedAt ?? null"
           />
           <div class="file-properties">
             <dl>

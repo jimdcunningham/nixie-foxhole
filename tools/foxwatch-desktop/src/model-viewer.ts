@@ -1,4 +1,5 @@
 import 'pixi.js/unsafe-eval';
+import type { ModelBounds, PreviewCamera } from '../shared/asset-diff';
 import { Application, Assets, type WebGLRenderer } from 'pixi.js';
 import { installCsp3dUniforms } from './csp-3d-uniforms';
 import {
@@ -16,6 +17,7 @@ export async function createModelPreview(
   host: HTMLElement,
   bytes: Uint8Array,
   cancelled: () => boolean,
+  onCameraChange?: (camera: PreviewCamera) => void,
 ) {
   const app = new Application();
   activePreviews++;
@@ -93,12 +95,12 @@ export async function createModelPreview(
     model = new Model3D({ source, autoUpdate: false });
     view.root.addChild(model);
     const bounds = model.getLocalBounds();
-    const center = {
+    let center = {
       x: (bounds.min.x + bounds.max.x) / 2,
       y: (bounds.min.y + bounds.max.y) / 2,
       z: (bounds.min.z + bounds.max.z) / 2,
     };
-    const radius = Math.max(
+    let radius = Math.max(
       0.01,
       Math.hypot(
         bounds.max.x - bounds.min.x,
@@ -112,7 +114,7 @@ export async function createModelPreview(
       pitch = 0.35,
       distance = radius * 3;
     const target = { ...center };
-    const draw = () => {
+    const draw = (notify = true) => {
       const horizontal = distance * Math.cos(pitch);
       view.camera.position.set(
         target.x + Math.sin(yaw) * horizontal,
@@ -123,12 +125,13 @@ export async function createModelPreview(
       view.camera.far = Math.max(distance * 20, radius * 30);
       view.camera.lookAt(target);
       app.render();
+      if (notify) onCameraChange?.({yaw,pitch,distance,target:{...target}});
     };
-    const reset = () => {
+    const reset = (aspectOverride?: number) => {
       yaw = -0.65;
       pitch = 0.35;
       Object.assign(target, center);
-      const aspect = Math.max(
+      const aspect = typeof aspectOverride === 'number' ? aspectOverride : Math.max(
         0.1,
         host.clientWidth / Math.max(1, host.clientHeight),
       );
@@ -196,7 +199,7 @@ export async function createModelPreview(
     observer = new ResizeObserver(() => {
       if (host.clientWidth && host.clientHeight) {
         app.renderer.resize(host.clientWidth, host.clientHeight);
-        draw();
+        draw(false);
       }
     });
     observer.observe(host);
@@ -204,6 +207,15 @@ export async function createModelPreview(
     return {
       destroy,
       reset,
+      bounds: { min: {x:bounds.min.x,y:bounds.min.y,z:bounds.min.z}, max: {x:bounds.max.x,y:bounds.max.y,z:bounds.max.z} } as ModelBounds,
+      setCamera(camera: PreviewCamera) {
+        yaw = camera.yaw; pitch = camera.pitch; distance = camera.distance; Object.assign(target,camera.target); draw(false);
+      },
+      setFrame(frame: ModelBounds, aspect?: number) {
+        center = {x:(frame.min.x+frame.max.x)/2,y:(frame.min.y+frame.max.y)/2,z:(frame.min.z+frame.max.z)/2};
+        radius = Math.max(.01,Math.hypot(frame.max.x-frame.min.x,frame.max.y-frame.min.y,frame.max.z-frame.min.z)/2);
+        reset(aspect);
+      },
       statistics: `${model.children.length.toLocaleString()} mesh groups`,
     };
   } catch (cause) {

@@ -1,7 +1,7 @@
 # FoxWatch Desktop
 
 The standalone Electron/Vue FoxWatch suite combines Steam build monitoring,
-generation, asset inspection, and explicit R2 publishing. The inspector stays
+generation, asset inspection, A/B comparison, and explicit R2 publishing. The inspector stays
 available while the existing FoxWatch CLI performs background work.
 
 **View → Dashboard** shows the latest/successful builds, polling state, overall
@@ -94,6 +94,34 @@ first published, it uses the release pin copied into the app at build time. Futu
 explicit full-library publishes update the channel only after all immutable objects
 and release metadata verify. Planner-only metadata overlays do not change it.
 
+Select a file and click **Compare** in the inspector header to inspect its
+approved local version (A) against the current working file (B). Create the first
+baseline using **Review → Approve Current Assets as Baseline**. A whole-directory
+comparison is not required just to open one file's A/B view. Added and deleted
+files show an explicit missing side; the approved file is never presented as
+the current working version.
+
+- Images: linked pan/zoom, side-by-side, swipe, overlay opacity, and pixel
+  differences. Dimensions are shown for each side; backgrounds stay within image
+  bounds. Pink highlights changed visible RGBA pixels, including alpha changes;
+  hidden RGB in fully transparent pixels is ignored. Differences above four
+  million pixels are sampled and labeled with the sampled resolution.
+- Models: linked orbit/pan/zoom, side-by-side or A/B switching, and geometry,
+  material, texture, and file-size summaries. Both use one camera and combined
+  bounds in original coordinates; they are not independently rescaled to fit.
+- JSON/manifests: searchable, filterable additions/removals/changed values with
+  approved and working values alongside their field paths. Object key ordering
+  and whitespace are ignored. Arrays with unique id/key/path/name fields match
+  by identity, while meaningful reordering is reported separately. Raw sources
+  remain available, including invalid JSON and text files.
+
+JSON comparisons read up to 8 MB per version and run off the renderer thread.
+Field results stop at 3,000 changes, 200,000 visited nodes, or 64 nested levels,
+with an explicit limit notice. Source display is capped at 1 MB per side.
+Pixel work also runs in a worker. Viewer loading retains the prior rendered
+asset until its replacement is ready, including switching comparison types.
+Comparing never changes approval, generated files, publishing state, or pins.
+
 Preview support:
 
 - Images: PNG, WebP, JPEG, GIF, and SVG, with fit/actual-size zoom, drag panning,
@@ -106,7 +134,7 @@ Preview support:
 
 Images and models have a 32 MB source limit; decoded model geometry has a 128 MB
 limit. External GLTF dependencies, Draco models, audio playback, material editing,
-animations, and A/B comparison are not included yet. Unsupported formats still show
+and animations are not included yet. Unsupported formats still show
 file properties. Preview decoding and adaptation happen in memory; assets are never
 rewritten. The 3D renderer is loaded only when a model is selected and renders on
 interaction or resize rather than running an idle animation loop.
@@ -134,5 +162,6 @@ Run `npm run test:desktop --workspace @nixie/foxwatch-desktop` for the Electron 
 smoke test. It uses isolated temporary assets and a temporary profile, opens its
 own inspector, and intercepts Explorer launches. It checks native menus, browsing,
 immediate keyboard selection, image/JSON/model previews, model orbit controls,
-virtualized large folders, directory switching, and the IPC
+virtualized large folders, directory switching, image comparison modes, manifest
+field searches, linked model cameras, missing A/B sides, and the IPC
 boundary. It does not touch the running legacy monitor, run Steam/generation, or upload anything. Controller integration checks use a synthetic CLI and temporary DPAPI credentials.

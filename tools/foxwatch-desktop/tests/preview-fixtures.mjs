@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib';
 
-export function whitePng() {
+export function whitePng(rgba = [255,255,255,255], width = 16, height = 16) {
   const crc = (bytes) => {
     let value = 0xffffffff;
     for (const byte of bytes) {
@@ -19,12 +19,12 @@ export function whitePng() {
     return Buffer.concat([size, name, data, checksum]);
   };
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(16, 0);
-  header.writeUInt32BE(16, 4);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
   header[8] = 8;
   header[9] = 6;
-  const pixels = Buffer.alloc(16 * (16 * 4 + 1), 255);
-  for (let row = 0; row < 16; row++) pixels[row * 65] = 0;
+  const pixels = Buffer.alloc(height * (width * 4 + 1));
+  for (let row = 0; row < height; row++) for (let column = 0; column < width; column++) pixels.set(rgba,row * (width * 4 + 1) + 1 + column * 4);
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     chunk('IHDR', header),

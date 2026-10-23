@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { checkBackground } from './background-check.mjs';
 import { checkMonitor } from './monitor-check.mjs';
 import { checkPublishedLibrary } from './published-check.mjs';
+import { checkComparisons } from './comparison-check.mjs';
 import { checkAssetReview } from './review-check.mjs';
 import { checkPreviewTransitions } from './transition-check.mjs';
 import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
@@ -253,6 +254,7 @@ try {
   );
   assert.equal(settings.assetsDirectory, alternate);
   await checkAssetReview(app, page, alternate);
+  await checkComparisons(app, page, base);
   await checkPublishedLibrary(app, page, project);
   assert.deepEqual(errors, []);
   console.log(
@@ -280,6 +282,9 @@ try {
         'stale root rejection',
         'persisted directory',
         'approved baseline and deleted-file preview',
+        'image swipe overlay and alpha-aware pixel differences',
+        'searchable manifest field changes',
+        'linked model cameras and missing comparison sides',
         'published-library download and cache reuse',
         'approval preserved across downloaded snapshots',
       ],

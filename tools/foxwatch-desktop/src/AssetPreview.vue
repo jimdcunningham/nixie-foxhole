@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
-import type { AssetDetails, AssetPreview } from '../shared/contracts';
+import type {
+  AssetComparison,
+  AssetDetails,
+  AssetPreview,
+} from '../shared/contracts';
 import PreviewContent from './PreviewContent.vue';
+import ComparisonContent from './ComparisonContent.vue';
 
 const props = defineProps<{
   rootId: string;
   asset: AssetDetails;
   requestedPath: string;
   inspecting: boolean;
+  compare: boolean;
+  approvedAt: string | null;
 }>();
 interface PreviewEntry {
   id: number;
   asset: AssetDetails;
   preview: AssetPreview;
+  comparison?: AssetComparison;
   error?: string;
 }
 const displayed = shallowRef<PreviewEntry | null>(null);
@@ -45,6 +53,8 @@ watch(
     props.asset.modifiedAt,
     props.requestedPath,
     props.inspecting,
+    props.compare,
+    props.approvedAt,
   ],
   async () => {
     const token = ++version;
@@ -62,6 +72,20 @@ watch(
     if (props.inspecting || props.asset.path !== props.requestedPath) return;
     const asset = props.asset;
     try {
+      if (props.compare) {
+        const comparison = await window.foxwatch.comparison(
+          props.rootId,
+          asset.path,
+        );
+        if (token === version)
+          candidate.value = {
+            id: token,
+            asset,
+            comparison,
+            preview: { type: 'unsupported', message: '' },
+          };
+        return;
+      }
       const preview = await window.foxwatch.preview(props.rootId, asset.path);
       if (token === version) candidate.value = { id: token, asset, preview };
     } catch (cause) {
@@ -100,7 +124,13 @@ onBeforeUnmount(() => {
         :inert="layer.id !== displayed?.id"
         :aria-hidden="layer.id !== displayed?.id"
       >
+        <ComparisonContent
+          v-if="layer.comparison"
+          :pair="layer.comparison"
+          @ready="finish(layer.id)"
+        />
         <PreviewContent
+          v-else
           :asset="layer.asset"
           :preview="layer.preview"
           :error="layer.error"
