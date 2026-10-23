@@ -61,6 +61,11 @@ try {
     await page.getByText('3D Model preview', { exact: true }).count(),
     1,
   );
+  await page.getByRole('tree').focus();
+  await page.keyboard.press('ArrowDown');
+  await page.getByRole('heading', { name: 'hospital.preview.webp', exact: true }).waitFor();
+  await page.keyboard.press('ArrowUp');
+  await page.getByRole('heading', { name: 'hospital.glb', exact: true }).waitFor();
   const isolation = await page.evaluate(() => ({
     node: typeof window.require,
     bridge: typeof window.foxwatch.list,

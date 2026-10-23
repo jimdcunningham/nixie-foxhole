@@ -215,6 +215,8 @@ function focusRow(path: string) {
   focused.value = path;
   const index = rows.value.findIndex((row) => row.path === path);
   if (index < 0 || !tree.value) return;
+  const row = rows.value[index]!;
+  if (!row.directory && selected.value !== path) void activate(row);
   const top = index * rowHeight;
   if (top < tree.value.scrollTop) tree.value.scrollTop = top;
   else if (top + rowHeight > tree.value.scrollTop + tree.value.clientHeight)
