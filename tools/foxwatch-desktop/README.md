@@ -134,6 +134,11 @@ the current working version.
   by identity, while meaningful reordering is reported separately. Raw sources
   remain available, including invalid JSON and text files.
 
+Inspector view preferences are remembered across files and app restarts: image
+comparison mode, separate swipe position and overlay opacity, image background,
+model A/B mode, manifest view and change filter, and formatted/raw JSON. Camera
+framing and image pan/zoom reset for each asset.
+
 JSON comparisons read up to 8 MB per version and run off the renderer thread.
 Field results stop at 3,000 changes, 200,000 visited nodes, or 64 nested levels,
 with an explicit limit notice. Source display is capped at 1 MB per side.

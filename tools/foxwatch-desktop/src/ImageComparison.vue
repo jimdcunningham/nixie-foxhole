@@ -2,12 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { AssetComparison } from '../shared/contracts';
 import { comparisonTask } from './comparison-task';
+import { useViewPreferences } from './view-preferences';
 const props = defineProps<{ pair: AssetComparison }>();
 const emit = defineEmits<{ ready: [] }>();
 type Side = { url: string; image: HTMLImageElement; width: number; height: number };
 const sides = shallowRef<Array<Side|null>>([null,null]);
-const mode = ref('side'), background = ref(localStorage.getItem('foxwatch.imageBackground') ?? 'checker');
-const zoom = ref(1), x = ref(0), y = ref(0), mix = ref(50), fitMode = ref(true), error = ref('');
+const { imageMode: mode, imageBackground: background, swipePosition, overlayOpacity } = useViewPreferences();
+const mix = computed({ get: () => mode.value === 'swipe' ? swipePosition.value : overlayOpacity.value, set: value => { if (mode.value === 'swipe') swipePosition.value = value; else overlayOpacity.value = value; } });
+let decoded = false;
+const zoom = ref(1), x = ref(0), y = ref(0), fitMode = ref(true), error = ref('');
 const host = ref<HTMLElement>(), difference = ref<HTMLCanvasElement>();
 const diffImage = shallowRef<ImageData | null>(null), diffInfo = ref(''), diffBusy = ref(false);
 const controller = new AbortController();
@@ -26,7 +29,7 @@ function fit() {
 }
 function down(event: PointerEvent) { if (event.button === 0) { (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); drag = {x:event.clientX,y:event.clientY}; } }
 function move(event: PointerEvent) { if (drag) { x.value += event.clientX - drag.x; y.value += event.clientY - drag.y; drag = {x:event.clientX,y:event.clientY}; } }
-function chooseBackground(value: string) { background.value = value; localStorage.setItem('foxwatch.imageBackground',value); }
+function chooseBackground(value: string) { background.value = value; }
 function setDifference(element: unknown) { difference.value = element as HTMLCanvasElement | undefined; if (diffImage.value) drawDifference(); }
 function drawDifference() {
   const canvas = difference.value, image = diffImage.value;
@@ -58,7 +61,7 @@ async function calculateDifference() {
   } catch (cause) { if (!controller.signal.aborted) error.value = cause instanceof Error ? cause.message : String(cause); }
   finally { diffBusy.value = false; }
 }
-watch(mode, async value => { await nextTick(); if (fitMode.value) fit(); if (value === 'difference') await calculateDifference(); });
+watch(mode, async value => { await nextTick(); if (fitMode.value) fit(); if (decoded && value === 'difference') await calculateDifference(); });
 onMounted(async () => {
   try {
     sides.value = await Promise.all([props.pair.before,props.pair.after].map(async version => {
@@ -69,7 +72,10 @@ onMounted(async () => {
       return {url,image,width:image.naturalWidth,height:image.naturalHeight};
     }));
     if (controller.signal.aborted) return;
+    decoded = true;
     await nextTick(); fit();
+    if (mode.value === 'difference') await calculateDifference();
+    if (controller.signal.aborted) return;
     observer = new ResizeObserver(() => { if (fitMode.value) fit(); }); if (host.value) observer.observe(host.value);
   } catch (cause) { if (!controller.signal.aborted) error.value = cause instanceof Error ? cause.message : String(cause); }
   finally { if (!controller.signal.aborted) emit('ready'); }

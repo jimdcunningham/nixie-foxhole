@@ -3,11 +3,13 @@ import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import type { AssetComparison } from '../shared/contracts';
 import { unionBounds, type PreviewCamera } from '../shared/asset-diff';
 import type { createModelPreview } from './model-viewer';
+import { useViewPreferences } from './view-preferences';
 const props = defineProps<{ pair: AssetComparison }>();
 const emit = defineEmits<{ ready: [] }>();
 type Viewer = NonNullable<Awaited<ReturnType<typeof createModelPreview>>>;
 const hosts: Array<HTMLElement|null> = [null,null], viewers: Array<Viewer|null> = [null,null];
-const mode = ref('both'), ready = ref(false), messages = ref(['','']), stats = ref(['','']);
+const { modelMode: mode } = useViewPreferences();
+const ready = ref(false), messages = ref(['','']), stats = ref(['','']);
 const bounds = shallowRef<ReturnType<typeof unionBounds> | null>(null);
 let disposed = false;
 function host(element: unknown, index: number) { hosts[index] = element as HTMLElement | null; }

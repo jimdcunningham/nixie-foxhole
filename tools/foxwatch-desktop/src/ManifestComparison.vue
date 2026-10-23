@@ -3,9 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import type { AssetComparison } from '../shared/contracts';
 import type { ManifestDiff } from '../shared/asset-diff';
 import { comparisonTask } from './comparison-task';
+import { useViewPreferences } from './view-preferences';
 const props = defineProps<{ pair: AssetComparison }>();
 const emit = defineEmits<{ ready: [] }>();
-const mode = ref<'fields'|'source'>('fields'), query = ref(''), filter = ref('all'), visible = ref(200);
+const { manifestMode: preferredMode, manifestFilter: filter } = useViewPreferences();
+const mode = computed(() => error.value ? 'source' : preferredMode.value);
+const query = ref(''), visible = ref(200);
 const diff = shallowRef<ManifestDiff | null>(null), error = ref('');
 const controller = new AbortController();
 const before = props.pair.before?.preview, after = props.pair.after?.preview;
@@ -20,7 +23,7 @@ onMounted(async () => {
   try {
     if ([before,after].some(side => side && (side.type !== 'text' || !side.json || side.truncated))) throw new Error('Field comparison needs complete JSON files up to 8 MB. Source views are available below.');
     diff.value = await comparisonTask<ManifestDiff>({ kind: 'manifest', before: text(before), after: text(after) }, controller.signal);
-  } catch (cause) { if (!controller.signal.aborted) { error.value = cause instanceof Error ? cause.message : String(cause); mode.value = 'source'; } }
+  } catch (cause) { if (!controller.signal.aborted) { error.value = cause instanceof Error ? cause.message : String(cause); } }
   finally { if (!controller.signal.aborted) emit('ready'); }
 });
 onBeforeUnmount(() => controller.abort());
@@ -28,8 +31,8 @@ onBeforeUnmount(() => controller.abort());
 <template>
   <div class="comparison-content manifest-comparison">
     <div class="preview-toolbar comparison-toolbar">
-      <button :disabled="!diff" :aria-pressed="mode === 'fields'" @click="mode = 'fields'">Fields</button>
-      <button :aria-pressed="mode === 'source'" @click="mode = 'source'">Source</button>
+      <button :disabled="!diff" :aria-pressed="mode === 'fields'" @click="preferredMode = 'fields'">Fields</button>
+      <button :aria-pressed="mode === 'source'" @click="preferredMode = 'source'">Source</button>
       <span v-if="diff" class="muted">{{ counts.added }} Added · {{ counts.removed }} Removed · {{ counts.changed }} Changed</span>
       <div class="toolbar-spacer" />
       <input v-if="mode === 'fields'" v-model="query" type="search" placeholder="Search paths or values…" aria-label="Search Manifest Changes" @input="visible = 200">

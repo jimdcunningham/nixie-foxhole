@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useViewPreferences } from './view-preferences';
 const props = defineProps<{ bytes: Uint8Array; mime: string; label: string }>();
 const emit = defineEmits<{ ready: [] }>();
 const url = URL.createObjectURL(
@@ -7,9 +8,7 @@ const url = URL.createObjectURL(
 );
 const viewport = ref<HTMLElement>();
 const image = ref<HTMLImageElement>();
-const background = ref(
-  localStorage.getItem('foxwatch.imageBackground') ?? 'checker',
-);
+const { imageBackground: background } = useViewPreferences();
 const width = ref(0),
   height = ref(0),
   zoom = ref(1),
@@ -46,7 +45,6 @@ function setZoom(value: number) {
 }
 function chooseBackground(value: string) {
   background.value = value;
-  localStorage.setItem('foxwatch.imageBackground', value);
 }
 function down(event: PointerEvent) {
   if (event.button !== 0) return;

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import type { AssetDetails, AssetPreview } from '../shared/contracts';
 import ImagePreview from './ImagePreview.vue';
 import ModelPreview from './ModelPreview.vue';
 import Icon from './Icon.vue';
+import { useViewPreferences } from './view-preferences';
 
 const props = defineProps<{
   asset: AssetDetails;
@@ -11,7 +12,7 @@ const props = defineProps<{
   error?: string;
 }>();
 const emit = defineEmits<{ ready: [] }>();
-const pretty = ref(true);
+const { formattedJson: pretty } = useViewPreferences();
 const text = computed(() => {
   if (props.preview.type !== 'text') return '';
   if (pretty.value && props.preview.json && !props.preview.truncated) {
