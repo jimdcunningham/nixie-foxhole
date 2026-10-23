@@ -581,3 +581,11 @@ node tools/foxwatch/run-foxwatch.mjs export-world --world-input <prepared-cache>
 Compact recipes are the default. This keeps existing texture encodings and reconstructs lossless road/terrain/decal geometry in browser workers. The expanded baked candidate is research only. Configure `FOXWATCH_WORLD_INPUT` to include compact world publication in complete, unlimited `refresh` runs. Targeted catalog refreshes do not touch world data. The configured cache must already contain the verified region preparation and recipe outputs; fresh-game Node preparation orchestration is still separate from this publisher.
 
 Serve `world/content/br/**` with only `Content-Encoding: br`, and immutable caching for both `content/br/**` and `content/raw/**`. The Nuxt layer applies these headers. Files use payload-appropriate extensions rather than legacy `.gz` names so static hosting cannot infer a second encoding. The small root index is revalidated; content-addressed dependencies are reused across regions and cached locally.
+
+
+### Remote Asset Publishing
+
+Use `assets-prepare`, then `assets-publish` for a local dry run; add `--upload`
+only when the prepared target and release are ready to publish. The Monitor's
+**Asset Publishing** panel exposes the same workflow with encrypted local
+credentials. See [the publication guide](../../docs/asset-publication.md).

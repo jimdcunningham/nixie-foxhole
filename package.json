@@ -14,6 +14,8 @@
     "foxwatch": "node ./tools/foxwatch/run-foxwatch.mjs",
     "test:source-media": "node ./tools/check-source-media.mjs && node --test ./tools/check-source-media.test.mjs",
     "test": "npm run test:source-media && npm run test --workspaces --if-present",
+    "assets:prepare": "node ./tools/foxwatch/run-foxwatch.mjs assets-prepare",
+    "assets:publish": "node ./tools/foxwatch/run-foxwatch.mjs assets-publish",
     "assets:inventory": "node ./tools/foxwatch/scripts/asset-publication-inventory.mjs",
     "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs"
   },

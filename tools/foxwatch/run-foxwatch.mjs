@@ -1,3 +1,4 @@
+import { runAssetPublicationCommand } from './scripts/asset-pack-publisher.mjs';
 import { worldRefreshArguments } from './scripts/world-refresh.mjs';
 import { runAssetGenerationStages } from './scripts/asset-generation-stages.mjs';
 import { spawn } from 'node:child_process';
@@ -70,6 +71,8 @@ const workflowCommands = [
     'refresh',
     'refresh-modifications',
     'publish-manifest',
+    'assets-prepare',
+    'assets-publish',
     'export-3d',
     'export-world',
     'clear-cache',
@@ -157,9 +160,14 @@ if (steamMonitorCommands.includes(command)) {
     process.exit(0);
 }
 
-if (['publish-manifest', 'export-3d', 'export-world', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
+if (['assets-prepare', 'assets-publish', 'publish-manifest', 'export-3d', 'export-world', 'refresh', 'refresh-modifications', 'clear-cache'].includes(command)) {
     const releaseRefreshLock = acquireProcessLock(refreshLockPath, 'FoxWatch refresh/publish pipeline');
     process.on('exit', releaseRefreshLock);
+}
+
+if (['assets-prepare', 'assets-publish'].includes(command)) {
+    await runAssetPublicationCommand(command, rawArgs, repoRoot);
+    process.exit(0);
 }
 
 const args = [...rawArgs];

@@ -630,3 +630,14 @@ Remaining convergence work is mostly operational validation across a full FoxWat
 Compact recipes are the default. Encoded textures stay unchanged, geometry reconstruction is hash-verified in browser workers, and the cache is shared across region selections. The runtime is loaded only for a visible map with one selected region in a spatial view. Expanded GPU buffers remain an explicit research format.
 
 Release packaging includes `models/` and the current world dependency closure, excluding superseded immutable objects. Large archives use a checksummed multipart index and 1 GiB parts; the Nixie CI resolver joins and verifies them. This does not make browsers download a full archive.
+
+
+## Optional Remote Publication
+
+`assets-prepare` snapshots these generated outputs into a separate local staging
+directory after receipt validation. `assets-publish` checks the prepared snapshot
+and uploads only with `--upload`. It publishes shared immutable objects first,
+SDK catalog/region indexes and logical mappings next, and the pinned release
+last. Existing generated assets, production consumer pins, and previous remote
+releases are preserved. See `docs/asset-publication.md` for configuration,
+credentials, resume behavior, and Monitor controls.

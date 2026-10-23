@@ -1,7 +1,8 @@
 # Asset Publication Inventory
 
-This is the local preflight for future remote asset delivery. It does not upload,
-provision storage, modify SDK contracts, repair assets, or delete old files.
+The inventory is the read-only preflight for remote asset delivery. FoxWatch now
+provides separate preparation and explicit publication commands below. Neither
+command switches production consumers or removes previous releases.
 
 From the nixie-foxhole checkout, write the report outside the served asset tree:
 
@@ -90,3 +91,82 @@ not only catalog assets. Identical existing paths are reused; this slice does no
 re-encode textures or invent region archives. Cross-model embedded-image sharing,
 GPU compression, selective physical bundles and local HTTP serving are separate
 experiments after this preflight.
+
+## Prepare and Publish a Pinned Release
+
+Copy `config/asset-publication.example.json` to
+`tools/foxwatch/local/asset-publication.json`. Configure the assets directory,
+output directory, S3 endpoint, bucket, public HTTPS base URL, and an isolated
+object prefix. The local config and credentials are ignored by Git. Public URLs
+must already have working HTTPS, CORS, and caching; the publisher does not change
+Cloudflare account settings.
+
+```powershell
+node tools/foxwatch/run-foxwatch.mjs assets-prepare --config tools/foxwatch/local/asset-publication.json
+node tools/foxwatch/run-foxwatch.mjs assets-publish --config tools/foxwatch/local/asset-publication.json
+# Explicit upload of the checked snapshot:
+node tools/foxwatch/run-foxwatch.mjs assets-publish --config tools/foxwatch/local/asset-publication.json --upload
+```
+
+`assets:prepare` and `assets:publish` are npm aliases. `--plan <plan.json>` selects
+an earlier prepared release instead of the latest local plan. Prepare can use
+`--output <new-directory>`; it refuses to overwrite an existing snapshot and must
+write outside the served assets tree. Commands share FoxWatch's refresh lock,
+preventing a local export and publication from changing the same inputs.
+
+Preparation builds a fresh validated inventory, snapshots each payload, checks
+its encoded hash again, and produces content-addressed objects, SDK-compatible
+catalog/region indexes, logical path mappings, and one pinned release descriptor.
+Self-contained catalog GLBs receive Brotli transport compression; existing world
+content paths and bytes stay intact so relative glTF references still resolve.
+Actual MIME types, HTTP-decoded hashes, application codecs, delta parameters, and
+application-decoded receipts are retained. Shared objects upload once across
+regions and releases. The top-level world index is bootstrap metadata rather
+than an eagerly loaded whole-world SDK pack.
+
+Indexes are partitioned by catalog, support, runtime roots, and region. Each is
+bounded by the SDK's 8 MiB decoded index limit. Data receipts allow up to 512 MiB
+and 4,096 direct dependencies, including legitimate empty binary buffers. Those
+limits describe indexable streamed data; the Nixie renderer still limits files
+to 32 MiB and requested closures to 128 objects / 128 MiB. A release may describe
+more region packs than one installed extension mounts at once. The current
+planner's region streamer and production asset pins are not migrated by this
+publisher.
+
+The first `assets-publish` command above is a dry run: it verifies the snapshot
+without sending requests or needing credentials. `--upload` performs bounded
+concurrent S3 requests, checks existing object metadata before reusing bytes,
+uses conditional creates, and verifies receipts after each upload. Payloads must
+finish before indexes; the pinned release descriptor is published last. The
+supported conditional-create and Content-MD5 behavior is documented in
+[Cloudflare's S3 compatibility table](https://developers.cloudflare.com/r2/api/s3/api/).
+Transient failures retry with backoff; each retry opens a fresh stream. Stop or
+failure leaves the completed immutable objects available for the next attempt.
+Rerun the same plan to resume; remote receipts are checked again rather than
+trusting a local success journal. The uploader never deletes or replaces objects,
+updates a `latest` channel, or silently accepts header/hash mismatches.
+
+A successful upload writes `publication-receipt.json` next to the prepared plan,
+including the pinned release URL, decoded hash and length, target, uploaded and
+reused counts, and timestamp. Retain the previous release pin for rollback. A
+consumer may select an older pin without any upload. Garbage collection and
+retirement of old generated assets remain separate, explicit work.
+
+## Credentials and Monitor Controls
+
+Use bucket-scoped R2 S3 credentials with object read/write access. They are
+separate from Wrangler's OAuth login. The Node publisher accepts only
+`FOXWATCH_ASSETS_ACCESS_KEY_ID` and `FOXWATCH_ASSETS_SECRET_ACCESS_KEY`; it does not
+fall back to another AWS profile. Set these locally in the shell that launches
+the command, or use the Monitor's **Asset Publishing** panel. Never put keys in
+chat, command arguments, source control, public manifests, or publication logs.
+
+The Monitor panel provides **Save Settings**, **Save Credentials**, **Prepare
+Assets**, **Check Upload**, **Publish Assets**, and **Open Output**. Saved Monitor
+credentials use the existing current-user Windows DPAPI helper and an ignored
+local `.dpapi` file referenced by `credentialFile` in the config. Fields are not
+backfilled with stored secrets. On other systems, use the explicit environment
+variables; an optional local `credentialEnvFile` is also supported. Automatic
+Steam polling does not publish assets, and the normal Stop Run action stops the
+uploader's process tree. Opening the configuration panel defers new automatic
+polls until it closes.

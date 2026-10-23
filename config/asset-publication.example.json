@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "assetsRoot": "packages/extensions/foxhole/public/foxhole/assets",
+  "outputRoot": ".tmp/asset-publication",
+  "concurrency": 4,
+  "target": {
+    "endpoint": "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com",
+    "bucket": "nixie-extension-assets-test",
+    "publicBaseUrl": "https://assets-test.nixiejs.com/",
+    "prefix": "foxwatch-test"
+  }
+}
