@@ -54,6 +54,7 @@ export interface InspectorApi {
   list(rootId: string, path: string): Promise<AssetEntry[]>;
   inspect(rootId: string, path: string): Promise<AssetDetails>;
   preview(rootId: string, path: string): Promise<AssetPreview>;
+  comparison(rootId: string, path: string): Promise<AssetComparison>;
   contextMenu(rootId: string, path: string): Promise<void>;
   reveal(rootId: string, path: string): Promise<void>;
   onRootChanged(callback: (root: AssetRoot) => void): () => void;
@@ -89,4 +90,11 @@ export interface PublishedStatus {
   completed: number;
   reused: number;
   message: string;
+}
+
+export interface AssetVersion { asset: AssetDetails; preview: AssetPreview }
+export interface AssetComparison {
+  approvedAt: string | null;
+  before: AssetVersion | null;
+  after: AssetVersion | null;
 }

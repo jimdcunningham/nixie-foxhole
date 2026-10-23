@@ -115,7 +115,9 @@ function imageMime(bytes: Uint8Array, extension: string): string | null {
 export async function readAssetPreview(
   file: string,
   logicalPath: string,
+  textLimit = TEXT_BYTES,
 ): Promise<AssetPreview> {
+  if (!Number.isSafeInteger(textLimit) || textLimit < 1 || textLimit > 8 * TEXT_BYTES) throw new Error('Invalid text preview budget.');
   const extension = path.extname(logicalPath).toLowerCase();
   const text = ['.json', '.md', '.txt', '.csv', '.yaml', '.yml'].includes(
     extension,
@@ -140,7 +142,7 @@ export async function readAssetPreview(
     if ((!text || compressed) && info.size > MAX_BYTES)
       throw new Error('This file exceeds the 32 MB preview limit.');
     const length =
-      text && !compressed ? Math.min(info.size, TEXT_BYTES) : info.size;
+      text && !compressed ? Math.min(info.size, textLimit) : info.size;
     bytes = Buffer.alloc(length);
     let offset = 0;
     while (offset < length) {
@@ -161,8 +163,8 @@ export async function readAssetPreview(
   if (compressed)
     bytes = brotliDecompressSync(bytes, { maxOutputLength: MAX_BYTES });
   if (text) {
-    truncated ||= bytes.byteLength > TEXT_BYTES;
-    const content = new TextDecoder().decode(bytes.subarray(0, TEXT_BYTES));
+    truncated ||= bytes.byteLength > textLimit;
+    const content = new TextDecoder().decode(bytes.subarray(0, textLimit));
     if (content.includes('\0'))
       return {
         type: 'unsupported',

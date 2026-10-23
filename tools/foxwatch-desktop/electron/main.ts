@@ -502,6 +502,18 @@ async function launch() {
       return handlePublishedAction(action, scope);
     },
   );
+  ipcMain.handle('assets:comparison', async (event, id: unknown, relative: unknown) => {
+    authorize(event);
+    const logical = relativePath(relative);
+    const pair = await currentReview(id).comparison(logical);
+    const preview = async (asset: import('../shared/contracts.js').AssetDetails | null) => {
+      if (!asset) return null;
+      try { return { asset, preview: await readAssetPreview(asset.absolutePath, logical, 8 * 1024 * 1024) }; }
+      catch (cause) { return { asset, preview: { type: 'unsupported', message: cause instanceof Error ? cause.message : String(cause) } }; }
+    };
+    const [before, after] = await Promise.all([preview(pair.before), preview(pair.after)]);
+    return { approvedAt: pair.approvedAt, before, after };
+  });
   ipcMain.handle('assets:root', (event) => {
     authorize(event);
     return directory?.root ?? null;

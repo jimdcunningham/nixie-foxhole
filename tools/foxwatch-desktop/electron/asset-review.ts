@@ -341,6 +341,23 @@ export class AssetReview {
       throw new Error('Invalid baseline file.');
     return canonical;
   }
+  async comparison(relative: string) {
+    if (!validPath(relative)) throw new Error('Invalid asset path.');
+    const baseline = this.baseline;
+    const row = baseline?.files[relative];
+    let before: AssetDetails | null = null;
+    if (row) {
+      const file = this.objectFile(row), canonical = await realpath(file), root = await realpath(this.storage);
+      if (!canonical.startsWith(root + path.sep) || (await lstat(file)).isSymbolicLink()) throw new Error('Invalid baseline file.');
+      before = { ...row, directory: false, absolutePath: canonical, bytes: (await stat(canonical)).size,
+        extension: path.extname(relative).slice(1).toUpperCase() || 'FILE', fromBaseline: true };
+    }
+    let after: AssetDetails | null = null;
+    try { after = await this.source.inspect(relative); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    if (!before && !after) throw new Error('This asset is unavailable in both versions.');
+    return { approvedAt: baseline?.approvedAt ?? null, before, after };
+  }
   async inspect(relative: string): Promise<AssetDetails> {
     if (this.changes.get(relative) !== 'deleted')
       return {

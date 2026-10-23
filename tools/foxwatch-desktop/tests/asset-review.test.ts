@@ -100,3 +100,23 @@ test('world transport recompression does not appear as an asset modification', a
   const removed = await review.inspect('world/content/br/sample/asset.json');
   assert.equal(removed.bytes, (await readFile(removed.absolutePath)).length);
 });
+
+test('per-file comparison reads independent approved and working sides without a directory scan', async t => {
+  const {root,review} = await setup(t);
+  await writeFile(path.join(root,'asset.json'), '{"version":1}');
+  assert.equal((await review.comparison('asset.json')).approvedAt, null);
+  await review.approve();
+  await writeFile(path.join(root,'asset.json'), '{"version":2}');
+  const pair = await review.comparison('asset.json');
+  assert.ok(pair.approvedAt);
+  assert.equal(await readFile(pair.before!.absolutePath,'utf8'), '{"version":1}');
+  assert.equal(await readFile(pair.after!.absolutePath,'utf8'), '{"version":2}');
+  await rm(path.join(root,'asset.json'));
+  const removed = await review.comparison('asset.json');
+  assert.ok(removed.before); assert.equal(removed.after,null);
+  await writeFile(path.join(root,'new.json'), '{}');
+  const added = await review.comparison('new.json');
+  assert.equal(added.before,null); assert.ok(added.after);
+  await assert.rejects(review.comparison('../outside.json'), /Invalid/);
+  await assert.rejects(review.comparison('missing.json'), /unavailable/);
+});
