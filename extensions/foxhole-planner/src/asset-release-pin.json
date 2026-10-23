@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "publication": {
+    "url": "https://assets-test.nixiejs.com/foxwatch-test/release-8aa583e2ff3dcf61312a919a69333db7d91adf8d799928b3b5bbc4083aa007a0.json",
+    "sha256": "d65eefa008855e166372476ddb1c3d2b9374de6948723552c1b569ce5835d12d",
+    "byteLength": 32016
+  },
+  "resourcePack": {
+    "contractVersion": 1,
+    "id": "foxhole.runtime",
+    "manifest": {
+      "url": "https://assets-test.nixiejs.com/foxwatch-test/planner-resources-6a098516e74368c96301eefb801e7e07105bfc0d5b192be9a732480544558d67.json",
+      "sha256": "ee8f9e933dd06780a247918ba197b7c1599aab883fc040fcc480d0687fbc283f",
+      "byteLength": 3490076
+    }
+  }
+}

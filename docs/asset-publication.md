@@ -130,8 +130,8 @@ and 4,096 direct dependencies, including legitimate empty binary buffers. Those
 limits describe indexable streamed data; the Nixie renderer still limits files
 to 32 MiB and requested closures to 128 objects / 128 MiB. A release may describe
 more region packs than one installed extension mounts at once. The current
-planner's region streamer and production asset pins are not migrated by this
-publisher.
+planner consumes the pinned release through its remote asset integration. This
+publisher does not update the extension's pin or deploy Nixie.
 
 The first `assets-publish` command above is a dry run: it verifies the snapshot
 without sending requests or needing credentials. `--upload` performs bounded
@@ -170,3 +170,38 @@ variables; an optional local `credentialEnvFile` is also supported. Automatic
 Steam polling does not publish assets, and the normal Stop Run action stops the
 uploader's process tree. Opening the configuration panel defers new automatic
 polls until it closes.
+
+## Connect the Planner to a Published Release
+
+After publishing the full library, generate the Planner resource aliases and
+browser atlases, upload their small overlay, and update its authored pin:
+
+```powershell
+node tools/foxwatch/scripts/asset-pack-planner-resources.mjs --upload --update-pin
+```
+
+This uses the same local config, saved credentials and FoxWatch process lock.
+Models, textures and region objects remain shared with the library; only new UI
+atlases and the immutable SDK resource index upload. Without `--upload`, it only
+prepares a local plan. The pin changes only after uploads verify successfully.
+The Monitor's **Publish Assets** action publishes the full library; this overlay
+command is currently a separate explicit step.
+
+Build the extension from Nixie with
+`npm run build --workspace @nixie/foxhole-planner-sdk`. The build checks local
+catalog, model, map and localization metadata against the published receipts,
+then requires every logical resource binding in the pinned SDK index. Updated
+local exports therefore need a new library publication and overlay before a
+remote build. Commit `extensions/foxhole-planner/src/asset-release-pin.json`
+with the resulting extension manifest. Previous pins remain valid for rollback.
+
+Remote builds contain code and small map metadata only. The compiled world
+integration also uses this publication pin and excludes the layer's bulk public
+assets from Nitro output. `NIXIE_FOXHOLE_ASSET_MODE=bundled` is an explicit
+standalone extension authoring override; it does not change the host world's pin.
+Runtime downloads use verified, bounded caches. Cached placed objects and loaded
+regions can be reused offline; uncached assets still require a connection. This
+is demand caching, not an installation of the entire library.
+
+The checked-in development pin currently targets the isolated test hostname.
+Production hostname, origin CORS and deployment remain separate rollout steps.

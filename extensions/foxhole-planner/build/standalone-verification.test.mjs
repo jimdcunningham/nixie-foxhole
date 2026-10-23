@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { prepareStandalone, verifyStandalone, verifyStandaloneManifest } from './standalone-verification.mjs';
 
 test('standalone hooks detach catalog input and verify exact map payload bytes', async () => {
@@ -25,7 +26,7 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
         await fs.writeFile(join(fixtureRoot, 'src/scene-v2-map-data-node.ts'), 'export default ' + JSON.stringify(metadata) + '; export const foxholeMapResources = [{ id: "map", sourcePath: "maps/source.bin", path: "dist/assets/maps/tile.bin" }];');
         await fs.writeFile(join(fixtureRoot, 'tests/catalog.test.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json';");
         await fs.writeFile(join(fixtureRoot, 'tests/generated-models.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json';");
-        await prepareStandalone({ extensionSource: join(taskRoot, 'extensions/foxhole-planner'), fixtureRoot, foxholeAssetsRoot: assets });
+        await prepareStandalone({ extensionSource: fileURLToPath(new URL('..', import.meta.url)), fixtureRoot, foxholeAssetsRoot: assets });
         assert.match(await fs.readFile(join(fixtureRoot, 'src/scene-v2-assets-node.ts'), 'utf8'), /.nixie-build-input/);
         assert.match(await fs.readFile(join(fixtureRoot, 'tests/catalog.test.ts'), 'utf8'), /.nixie-build-input/);
         assert.match(await fs.readFile(join(fixtureRoot, 'tests/generated-models.ts'), 'utf8'), /.nixie-build-input\/models.v1.json/);
@@ -38,6 +39,21 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
         assert.deepEqual(result.mapResourceVerification, { regions: 1, resources: 1, bytes: bytes.length, labels: 0, staticIcons: 0 });
         await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), 'changed');
         await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification }), /differs from its source/);
+        const receipt = { url: 'https://assets.example.test/index.json', sha256: 'a'.repeat(64), byteLength: 100 };
+        await fs.writeFile(join(fixtureRoot, 'nixie.extension.json'), JSON.stringify({ contributes: {
+            experimentalAssetPacks: [{ contractVersion: 1, id: 'foxhole.runtime', manifest: receipt }],
+        } }));
+        const readAssetIndex = async requested => {
+            assert.deepEqual(requested, receipt);
+            return { contractVersion: 1, assets: [{ path: 'dist/assets/maps/tile.bin', sourcePath: 'objects/map.bin',
+                sha256: createHash('sha256').update(bytes).digest('hex'), byteLength: bytes.length, mediaType: 'application/octet-stream' }] };
+        };
+        const remotePackage = { metadata: { files: [] } };
+        assert.deepEqual((await verifyStandalone({ fixtureRoot, packageVerification: remotePackage, readAssetIndex })).mapResourceVerification,
+            result.mapResourceVerification);
+        await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification, readAssetIndex }), /remote map/);
+        await fs.writeFile(join(assets, 'maps/source.bin'), 'new map bytes');
+        await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification: remotePackage, readAssetIndex }), /remote map/);
     } finally {
         if (oldAssetsRoot === undefined) delete process.env.NIXIE_FOXHOLE_ASSETS_ROOT; else process.env.NIXIE_FOXHOLE_ASSETS_ROOT = oldAssetsRoot;
         assert.ok(resolve(taskRoot).startsWith(resolve(tmpdir())));

@@ -69,7 +69,7 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.ok(treads.length > 0);
             const trackHeight = Math.min(...treads.map((primitive: { attributes: { POSITION: number; }; }) =>
                 document.accessors[primitive.attributes.POSITION].min[1] * 32 + metadata.offsetZ));
-            const contactTolerance = metadata.precisionOptimization.positionStepMetres * 32 + 0.0001;
+            const contactTolerance = (metadata.precisionOptimization.positionStepMetres ?? 0) * 32 + 0.0001;
             assert.ok(Math.abs(trackHeight) <= contactTolerance, 'crane tracks must retain ground contact within their declared precision grid');
             assert.ok(metadata.blueprintOrigin.z > 70, 'the vehicle actor origin is retained above the track reference');
         }
@@ -91,7 +91,7 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             return readModelArtifact(bytes);
         }).dimensions;
         for (const [axis, size] of [metadata.width, metadata.height, metadata.depth].entries()) {
-            const step = 'precisionOptimization' in metadata ? metadata.precisionOptimization.positionStepMetres : 0;
+            const step = 'precisionOptimization' in metadata ? (metadata.precisionOptimization.positionStepMetres ?? 0) : 0;
             // Rounding each bound to the shared grid can change the extent by one step.
             // Still reject scale/baking corruption; allow only that measured rounding budget.
             const roundingBudget = step + Math.max(1, size / 32) * 1e-6;
@@ -107,7 +107,8 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.equal(binary.subarray(view.byteOffset + 8, view.byteOffset + 12).toString(), 'WEBP');
         }
         if (declaredBuild.has(metadata.resourceId)) assert.deepEqual(manifest.contributes.experimentalResources.find((resource: { id: string; }) => resource.id === metadata.resourceId),
-            { contractVersion: 1, id: metadata.resourceId, kind: 'model', path: `dist/assets/scene-v2/assets/${metadata.assetId ?? assetId}/${assetId}.glb` });
+            { contractVersion: 1, id: metadata.resourceId, kind: 'model', path: `dist/assets/scene-v2/assets/${metadata.assetId ?? assetId}/${assetId}.glb`,
+                ...(manifest.contributes.experimentalAssetPacks?.some((pack: { id: string }) => pack.id === 'foxhole.runtime') ? { assetPack: 'foxhole.runtime' } : {}) });
     }
 });
 

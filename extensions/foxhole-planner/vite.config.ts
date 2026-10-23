@@ -1,16 +1,20 @@
 import { copyFile, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import sharp from 'sharp';
-import { readBrowserAtlasImage } from './build/browser-atlas-images.ts';
+import { createBrowserAtlas } from './build/browser-atlas-images.ts';
 import type { createFoxholeSceneV2AssetMetadata } from './src/scene-v2-asset-metadata.ts';
 import type { createFoxholeSceneV2MapMetadata } from './src/scene-v2-map-metadata.ts';
 import type { FoxholeSceneV2ModelSource } from './src/scene-v2-models.ts';
 import { publishCompletedBuild } from './build/completed-build-publisher.ts';
 import { createResourceBuildSnapshot } from './build/resource-build-snapshot.ts';
 import { bindFoxholeModelLayerNodes } from './src/model-layer-nodes.ts';
+
+import assetReleasePin from './src/asset-release-pin.json' with { type: 'json' };
+import { loadFoxholeAssetRelease, readPinnedAssetJson } from './src/asset-release.ts';
+const remoteResourcePack = 'resourcePack' in assetReleasePin && process.env.NIXIE_FOXHOLE_ASSET_MODE !== 'bundled'
+  ? assetReleasePin.resourcePack as import('@nixie/extension-sdk').NixieExperimentalAssetPackV1 : null;
 
 const virtualFoxholeSceneV2AssetsId = '#foxhole-scene-v2-assets';
 const resolvedVirtualFoxholeSceneV2AssetsId = `\0${virtualFoxholeSceneV2AssetsId}`;
@@ -94,7 +98,7 @@ export async function readSceneV2ModelSources(
     .map(model => ({ ...model, packagedPath: getFoxholeSceneV2PackagedModelPath(model) }));
 }
 
-async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
+export async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
   const manifest = JSON.parse(await readFile(foxholeManifestPath, 'utf8')) as PublishedFoxholeManifest;
   // Rollup watch invalidates the virtual module, but does not reload imports
   // captured by its config. Reload the pure generators when their source changes.
@@ -170,6 +174,22 @@ async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
   };
 }
 
+export function sceneV2RemoteResourceBindings(sources: SceneV2ResourceSources) {
+  const source = (path: string) => relative(foxholeAssetsRoot, path).split(sep).join('/');
+  const prefix = 'dist/assets/scene-v2/';
+  return [
+    ...sources.models.map(model => ({ path: prefix + model.packagedPath, source: model.path })),
+    ...sources.browserImageSources.flatMap((_, index) => index % 64 ? [] : [{ path: prefix + 'browser/' + index / 64 + '.webp', source: '__planner/browser/' + index / 64 + '.webp' }]),
+    ...sources.assets.flatMap(asset => [
+      { path: prefix + 'assets/' + asset.id + '/texture.webp', source: source(asset.texturePath) },
+      ...(asset.iconPath ? [{ path: prefix + 'assets/' + asset.id + '/icon.webp', source: source(asset.iconPath) }] : []),
+    ]),
+    ...sources.modifications.map(row => ({ path: prefix + 'shared/modifications/' + row.id + '.webp', source: source(row.sourcePath) })),
+    ...sources.visuals.map(row => ({ path: prefix + 'shared/visuals/' + row.id + '.webp', source: source(row.sourcePath) })),
+    ...sources.maps.resources.map(row => ({ path: row.path, source: row.sourcePath })),
+  ];
+}
+
 function foxholeSceneV2ResourcesPlugin(): Plugin {
   const sources = createResourceBuildSnapshot(readSceneV2AssetSources);
   let updatedManifest = '';
@@ -191,8 +211,33 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
         ...declaration.contributes.experimentalResources.filter((resource: { id: string; kind: string; }) =>
           resource.kind !== 'model' || !resource.id.startsWith('foxhole.model.')),
         ...models.map(model => ({ contractVersion: 1, id: `foxhole.model.${model.id}`, kind: 'model',
-          path: `dist/assets/scene-v2/${model.packagedPath}` })),
+          path: `dist/assets/scene-v2/${model.packagedPath}`, ...(remoteResourcePack ? { assetPack: remoteResourcePack.id } : {}) })),
       ];
+      if (remoteResourcePack) {
+        const library = await loadFoxholeAssetRelease(assetReleasePin.publication);
+        // Generated metadata compiled into the extension must describe the pinned bytes.
+        for (const path of ['manifest.v1.json', 'models/manifest.v1.json', 'maps/map-data.v1.json',
+          ...['de', 'fr', 'pt', 'ru', 'zh'].map(locale => `localizations/${locale}.json`)]) {
+          const bytes = await readFile(resolve(foxholeAssetsRoot, path));
+          const entry = library.files.get(path)?.entry;
+          if (!entry || bytes.length !== entry.byteLength || createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
+            throw new Error('Local build metadata differs from the pinned publication: ' + path + '. Publish the updated library before building.');
+          }
+        }
+        const index = await readPinnedAssetJson<{ assets: Array<{ path: string; }>; }>(remoteResourcePack.manifest);
+        const indexed = new Set(index.assets.map(row => row.path));
+        for (const binding of sceneV2RemoteResourceBindings(await getSources())) {
+          if (!indexed.has(binding.path)) throw new Error('Rebuild the remote resource index for ' + binding.path);
+        }
+        declaration.capabilities = [...new Set([...declaration.capabilities, 'resources.remote'])];
+        declaration.contributes.experimentalAssetPacks = [remoteResourcePack];
+        declaration.contributes.experimentalResourceTemplates = declaration.contributes.experimentalResourceTemplates.map((row: { idPrefix: string; }) =>
+          ({ ...row, assetPack: remoteResourcePack.id }));
+      }
+      if (!remoteResourcePack) {
+        delete declaration.contributes.experimentalAssetPacks;
+        declaration.contributes.experimentalResourceTemplates = declaration.contributes.experimentalResourceTemplates.map(({ assetPack, ...row }: { assetPack?: string; }) => row);
+      }
       updatedManifest = `${JSON.stringify(declaration)}\n`;
       this.addWatchFile(foxholeManifestPath);
         for (const locale of ['de', 'fr', 'pt', 'ru', 'zh']) this.addWatchFile(resolve(foxholeAssetsRoot, `localizations/${locale}.json`));
@@ -238,26 +283,18 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
       const assetsRoot = resolve(outputRoot, 'assets');
       await rm(assetsRoot, { recursive: true, force: true });
       await mkdir(assetsRoot, { recursive: true });
-      for (const model of sources.models) {
+      for (const model of remoteResourcePack ? [] : sources.models) {
         const destination = resolve(outputRoot, model.packagedPath);
         await mkdir(dirname(destination), { recursive: true });
         await copyFile(resolve(foxholeAssetsRoot, model.path), destination);
       }
       const browserRoot = resolve(outputRoot, 'browser');
       await mkdir(browserRoot, { recursive: true });
-      for (let start = 0; start < sources.browserImageSources.length; start += 64) {
-        const images = await Promise.all(sources.browserImageSources.slice(start, start + 64).map(source =>
-          readBrowserAtlasImage(resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length)))));
-        const pixels = Buffer.alloc(2048 * 2048 * 4);
-        for (const [index, image] of images.entries()) {
-          for (let row = 0; row < 256; row++) {
-            image.copy(pixels, ((Math.floor(index / 8) * 256 + row) * 2048 + (index % 8) * 256) * 4, row * 256 * 4, (row + 1) * 256 * 4);
-          }
-        }
-        await sharp(pixels, { raw: { width: 2048, height: 2048, channels: 4 } }).webp({ lossless: true, effort: 6 })
-          .toFile(resolve(browserRoot, `${Math.floor(start / 64)}.webp`));
+      for (let start = 0; !remoteResourcePack && start < sources.browserImageSources.length; start += 64) {
+        const atlas = await createBrowserAtlas(sources.browserImageSources.slice(start, start + 64).map(source => resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length))));
+        await writeFile(resolve(browserRoot, `${Math.floor(start / 64)}.webp`), atlas);
       }
-      for (let start = 0; start < sources.assets.length; start += 64) {
+      for (let start = 0; !remoteResourcePack && start < sources.assets.length; start += 64) {
         await Promise.all(sources.assets.slice(start, start + 64).map(async asset => {
           const assetRoot = resolve(assetsRoot, asset.id);
           await mkdir(assetRoot, { recursive: true });
@@ -271,14 +308,14 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
       }
       const modificationsRoot = resolve(outputRoot, 'shared/modifications');
       await mkdir(modificationsRoot, { recursive: true });
-      for (let start = 0; start < sources.modifications.length; start += 64) {
+      for (let start = 0; !remoteResourcePack && start < sources.modifications.length; start += 64) {
         await Promise.all(sources.modifications.slice(start, start + 64).map(resource => (
           copyFile(resource.sourcePath, resolve(modificationsRoot, `${resource.id}.webp`))
         )));
       }
       const visualsRoot = resolve(outputRoot, 'shared/visuals');
       await mkdir(visualsRoot, { recursive: true });
-      for (let start = 0; start < sources.visuals.length; start += 64) {
+      for (let start = 0; !remoteResourcePack && start < sources.visuals.length; start += 64) {
         await Promise.all(sources.visuals.slice(start, start + 64).map(resource => (
           copyFile(resource.sourcePath, resolve(visualsRoot, `${resource.id}.webp`))
         )));
@@ -286,7 +323,7 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
       const mapsRoot = resolve(String(options.dir ?? 'dist'), 'assets/maps');
       await mkdir(mapsRoot, { recursive: true });
       await writeFile(resolve(mapsRoot, 'metadata.json'), JSON.stringify(sources.maps.metadata));
-      for (let start = 0; start < sources.maps.resources.length; start += 64) {
+      for (let start = 0; !remoteResourcePack && start < sources.maps.resources.length; start += 64) {
         await Promise.all(sources.maps.resources.slice(start, start + 64).map(resource =>
           copyFile(resolve(foxholeAssetsRoot, resource.sourcePath), resolve(mapsRoot, resource.path.split('/').at(-1)!))));
       }

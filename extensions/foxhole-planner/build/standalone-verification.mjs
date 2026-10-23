@@ -3,6 +3,8 @@ import { isFoxholeGeneratedModelPath } from '../src/scene-v2-models.ts';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { readPinnedAssetJson } from '../src/asset-release.ts';
+import { parseNixieExperimentalAssetPackIndexV1 } from './remote-resource-bindings.ts';
 
 export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeAssetsRoot = join(extensionSource, '../../packages/extensions/foxhole/public/foxhole/assets') }) {
     const fixtureInputRoot = join(fixtureRoot, 'src', '.nixie-build-input');
@@ -42,7 +44,8 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     manifest.contributes.experimentalResources = [
         ...manifest.contributes.experimentalResources.filter(resource => resource.kind !== 'model'),
         ...packagedModels.map(model => ({ contractVersion: 1, id: model.resourceId, kind: 'model',
-            path: 'dist/assets/scene-v2/' + getFoxholeSceneV2PackagedModelPath(model) })),
+            path: 'dist/assets/scene-v2/' + getFoxholeSceneV2PackagedModelPath(model),
+            ...(manifest.contributes.experimentalAssetPacks?.some(pack => pack.id === 'foxhole.runtime') ? { assetPack: 'foxhole.runtime' } : {}) })),
     ];
     await fs.writeFile(manifestPath, JSON.stringify(manifest) + '\n', 'utf8');
     const nodeAssetsPath = join(fixtureRoot, 'src', 'scene-v2-assets-node.ts');
@@ -83,7 +86,12 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
     ), 'utf8');
 }
 
-export async function verifyStandalone({ fixtureRoot, packageVerification }) {
+export async function verifyStandalone({ fixtureRoot, packageVerification, readAssetIndex = readPinnedAssetJson }) {
+    const manifest = JSON.parse(await fs.readFile(join(fixtureRoot, 'nixie.extension.json'), 'utf8'));
+    const pack = manifest.contributes?.experimentalAssetPacks?.find(pack => pack.id === 'foxhole.runtime');
+    const remoteEntries = pack
+        ? new Map(parseNixieExperimentalAssetPackIndexV1(await readAssetIndex(pack.manifest)).assets.map(entry => [entry.path, entry]))
+        : null;
     const { default: mapMetadata, foxholeMapResources } = await import(pathToFileURL(join(fixtureRoot, 'src', 'scene-v2-map-data-node.ts')).href);
     const builtMetadata = JSON.parse(await fs.readFile(join(fixtureRoot, 'dist', 'assets', 'maps', 'metadata.json'), 'utf8'));
     if (JSON.stringify(builtMetadata) !== JSON.stringify(mapMetadata)) {
@@ -91,6 +99,16 @@ export async function verifyStandalone({ fixtureRoot, packageVerification }) {
     }
     let bytes = 0;
     for (const resource of foxholeMapResources) {
+        if (remoteEntries) {
+            const source = await fs.readFile(join(process.env.NIXIE_FOXHOLE_ASSETS_ROOT, resource.sourcePath));
+            const entry = remoteEntries.get(resource.path);
+            if (!entry || entry.sha256 !== createHash('sha256').update(source).digest('hex') || entry.byteLength !== source.length
+                || packageVerification.metadata.files.some(file => file.path === resource.path)) {
+                throw new Error('The standalone remote map differs from its pinned source or was bundled: ' + resource.id);
+            }
+            bytes += source.length;
+            continue;
+        }
         const [source, built] = await Promise.all([
             fs.readFile(join(process.env.NIXIE_FOXHOLE_ASSETS_ROOT, resource.sourcePath)),
             fs.readFile(join(fixtureRoot, resource.path)),
