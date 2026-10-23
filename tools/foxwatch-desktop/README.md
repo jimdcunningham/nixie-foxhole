@@ -23,11 +23,28 @@ generated assets. Hidden entries and symlinks/junctions are excluded. No generat
 assets or game files are bundled into the app.
 
 The left tree opens folders lazily and virtualizes visible rows. Arrow keys navigate;
-Right/Left expand/collapse; Enter opens a file. Single-click opens file metadata and
-a format-specific preview placeholder on the right. Drag the divider to resize the
+Right/Left expand/collapse. Moving onto a file immediately opens it in the inspector,
+as does a single click. Drag the divider to resize the
 sidebar. **View → Refresh Assets** (Ctrl+R) refreshes expanded folders; Ctrl+B toggles
 the sidebar. Right-click a file to reveal it in Explorer; a folder also offers opening
 that folder directly. There are no create, rename, delete, or upload actions.
+
+Preview support:
+
+- Images: PNG, WebP, JPEG, GIF, and SVG, with fit/actual-size zoom, drag panning,
+  dimensions, and checkerboard, dark, or light backgrounds.
+- Models: self-contained GLB 2.0, including meshopt geometry and embedded WebP
+  textures, with orbit, pan, zoom, and reset controls. Rendering uses PixiJS and
+  the vendored MIT-licensed `@pixi/3d` library, independently of Studio.
+- Metadata: selectable text and JSON, including formatted/raw JSON and transparent
+  decoding of Brotli world metadata. Text previews stop at 1 MB.
+
+Images and models have a 32 MB source limit; decoded model geometry has a 128 MB
+limit. External GLTF dependencies, Draco models, audio playback, material editing,
+animations, and A/B comparison are not included yet. Unsupported formats still show
+file properties. Preview decoding and adaptation happen in memory; assets are never
+rewritten. The 3D renderer is loaded only when a model is selected and renders on
+interaction or resize rather than running an idle animation loop.
 
 Original local filenames remain intact. Shared models receive readable owner/part
 labels from the local model manifest, and region-manifest storage folders receive
@@ -51,5 +68,6 @@ npm run build --workspace @nixie/foxwatch-desktop
 Run `npm run test:desktop --workspace @nixie/foxwatch-desktop` for the Electron UI
 smoke test. It uses isolated temporary assets and a temporary profile, opens its
 own inspector, and intercepts Explorer launches. It checks native menus, browsing,
-keyboard navigation, virtualized large folders, directory switching, and the IPC
+immediate keyboard selection, image/JSON/model previews, model orbit controls,
+virtualized large folders, directory switching, and the IPC
 boundary. It does not touch the running Monitor or upload anything.

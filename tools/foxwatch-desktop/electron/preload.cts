@@ -15,6 +15,7 @@ const api: InspectorApi = {
   chooseRoot: () => ipcRenderer.invoke('assets:choose'),
   list: (id, path) => ipcRenderer.invoke('assets:list', id, path),
   inspect: (id, path) => ipcRenderer.invoke('assets:inspect', id, path),
+  preview: (id, path) => ipcRenderer.invoke('assets:preview', id, path),
   contextMenu: (id, path) => ipcRenderer.invoke('assets:context', id, path),
   reveal: (id, path) => ipcRenderer.invoke('assets:reveal', id, path),
   onRootChanged: (callback) => subscribe<AssetRoot>('assets:changed', callback),

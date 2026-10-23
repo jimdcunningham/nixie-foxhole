@@ -5,15 +5,19 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
 const require = createRequire(import.meta.url);
 const project = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 const base = await mkdtemp(path.join(os.tmpdir(), 'foxwatch-desktop-smoke-'));
 const root = path.join(base, 'assets');
 await mkdir(path.join(root, 'structures/hospital'), { recursive: true });
-await writeFile(path.join(root, 'structures/hospital/hospital.glb'), 'model');
+await writeFile(
+  path.join(root, 'structures/hospital/hospital.glb'),
+  triangleGlb(),
+);
 await writeFile(
   path.join(root, 'structures/hospital/hospital.preview.webp'),
-  'image',
+  whitePng(),
 );
 await mkdir(path.join(root, 'many'));
 for (let start = 0; start < 1200; start += 100)
@@ -43,8 +47,9 @@ const app = await electron.launch({
   timeout: 30000,
 });
 const errors = [];
+let page;
 try {
-  const page = await app.firstWindow();
+  page = await app.firstWindow();
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
@@ -57,15 +62,37 @@ try {
   await page
     .getByRole('heading', { name: 'hospital.glb', exact: true })
     .waitFor();
+  await page.locator('.model-viewport canvas').waitFor();
+  await page.locator('.model-message').waitFor({ state: 'hidden' });
   assert.equal(
-    await page.getByText('3D Model preview', { exact: true }).count(),
-    1,
+    await page.locator('.file-heading h1').innerText(),
+    'hospital.glb',
   );
+  const modelCanvas = page.locator('.model-viewport canvas');
+  const originalView = await modelCanvas.screenshot();
+  const bounds = await modelCanvas.boundingBox();
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    bounds.x + bounds.width / 2 + 80,
+    bounds.y + bounds.height / 2 + 20,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  assert.notDeepEqual(await modelCanvas.screenshot(), originalView);
+  await page.getByRole('button', { name: 'Reset View', exact: true }).click();
   await page.getByRole('tree').focus();
   await page.keyboard.press('ArrowDown');
-  await page.getByRole('heading', { name: 'hospital.preview.webp', exact: true }).waitFor();
+  await page
+    .getByRole('heading', { name: 'hospital.preview.webp', exact: true })
+    .waitFor();
   await page.keyboard.press('ArrowUp');
-  await page.getByRole('heading', { name: 'hospital.glb', exact: true }).waitFor();
+  await page
+    .getByRole('heading', { name: 'hospital.glb', exact: true })
+    .waitFor();
   const isolation = await page.evaluate(() => ({
     node: typeof window.require,
     bridge: typeof window.foxwatch.list,
@@ -123,7 +150,10 @@ try {
   await page
     .getByRole('treeitem', { name: 'hospital.preview.webp', exact: true })
     .click();
-  await page.getByText('Image preview', { exact: true }).waitFor();
+  await page
+    .getByRole('img', { name: 'hospital.preview.webp', exact: true })
+    .waitFor();
+  await page.getByText('16 × 16', { exact: true }).waitFor();
   await page
     .getByRole('button', { name: 'Show in Explorer', exact: true })
     .click();
@@ -146,6 +176,11 @@ try {
     BrowserWindow.getAllWindows()[0].setSize(800, 560),
   );
 
+  await page.getByLabel('File Contents').waitFor();
+  assert.equal(
+    (await page.getByLabel('File Contents').innerText()).trim(),
+    '{}',
+  );
   const escaped = await page.evaluate(async () => {
     const root = await window.foxwatch.getRoot();
     try {
@@ -171,7 +206,7 @@ try {
   );
   const alternate = path.join(base, 'alternate');
   await mkdir(alternate);
-  await writeFile(path.join(alternate, 'second.glb'), 'model');
+  await writeFile(path.join(alternate, 'second.glb'), triangleGlb());
   await app.evaluate(({ dialog }, folder) => {
     dialog.showOpenDialog = async () => ({
       canceled: false,
@@ -214,7 +249,7 @@ try {
         'single-click selection',
         'native Explorer context menus and targets',
         'refresh',
-        'format placeholders',
+        'image and GLB previews',
         'virtualized 1200-file folder',
         'keyboard navigation',
         'narrow window',
@@ -228,6 +263,17 @@ try {
       errors,
     }),
   );
+} catch (cause) {
+  console.error(
+    JSON.stringify({
+      errors,
+      screen: await page
+        ?.locator('body')
+        .innerText()
+        .catch(() => ''),
+    }),
+  );
+  throw cause;
 } finally {
   await app.close();
   await rm(base, { recursive: true, force: true });

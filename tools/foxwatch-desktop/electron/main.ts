@@ -12,6 +12,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AssetDirectory } from './asset-directory.js';
+import { readAssetPreview } from './preview-file.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../..');
@@ -180,6 +181,14 @@ async function launch() {
     authorize(event);
     return source(id).list(relativePath(relative));
   });
+  ipcMain.handle(
+    'assets:preview',
+    async (event, id: unknown, relative: unknown) => {
+      authorize(event);
+      const logical = relativePath(relative);
+      return readAssetPreview(await source(id).resolve(logical), logical);
+    },
+  );
   ipcMain.handle('assets:inspect', (event, id: unknown, relative: unknown) => {
     authorize(event);
     return source(id).inspect(relativePath(relative));

@@ -9,6 +9,7 @@ import {
 } from 'vue';
 import type { AssetDetails, AssetEntry, AssetRoot } from '../shared/contracts';
 import Icon from './Icon.vue';
+import AssetPreview from './AssetPreview.vue';
 
 interface TreeRow extends AssetEntry {
   depth: number;
@@ -455,9 +456,8 @@ onBeforeUnmount(() => {
       <section class="inspector" aria-label="Asset Inspector">
         <header class="inspector-header">
           <div v-if="selected" class="file-heading">
-            <Icon :name="details?.kind ?? 'file'" /><span>{{
-              selectedLabel
-            }}</span>
+            <Icon :name="details?.kind ?? 'file'" />
+            <h1>{{ selectedLabel }}</h1>
           </div>
           <span v-else class="muted">Asset Inspector</span>
           <span v-if="details" class="format-tag">{{ details.extension }}</span>
@@ -475,16 +475,7 @@ onBeforeUnmount(() => {
             }}<span v-if="details.path.includes('/')">/</span
             ><strong>{{ details.label }}</strong>
           </div>
-          <div class="preview-placeholder">
-            <div class="placeholder-icon">
-              <Icon :name="details.kind" :size="48" />
-            </div>
-            <h1>{{ details.label }}</h1>
-            <p>{{ kindLabels[details.kind] }} preview</p>
-            <span class="preview-note"
-              >Preview support is coming in a future update.</span
-            >
-          </div>
+          <AssetPreview :root-id="root?.id ?? ''" :asset="details" />
           <div class="file-properties">
             <dl>
               <div>

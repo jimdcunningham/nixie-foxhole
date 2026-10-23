@@ -64,6 +64,10 @@
     "tools/foxwatch/scripts/RegionMask.png": {
       "sha256": "c814511f3153a432c57aa0fc7b480a4469e05c037ca07ce7e140474dd18c39ff",
       "provenance": "Plain geometric hexagon alpha mask; no map or game artwork."
+    },
+    "tools/foxwatch-desktop/vendor/pixi-3d-0.1.0-beta.2.tgz": {
+      "provenance": "MIT-licensed @pixi/3d 0.1.0-beta.2 library distribution, copied byte-for-byte from Nixie vendor/pixi-3d; contains third-party renderer code and source maps, no game assets. License included inside the package.",
+      "sha256": "f515c1b603da64e2d546ffc74a71d14a0218f9819b09d250310b55b9ff04013a"
     }
   }
 }
