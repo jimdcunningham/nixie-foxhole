@@ -1,3 +1,5 @@
+import { getNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
+import { FOXHOLE_COMPLETE_CATALOG_SETTINGS as allSettings } from './sdk-catalog-settings.ts';
 import { createNixieIconAssetSnapshot } from '#nixie/plugins/nixie/contributions/assets/shared/icon-asset.ts';
 import type { NixieExperimentalComponentProductV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import { createFoxholeAssetIdentityResolver } from '../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
@@ -8,15 +10,15 @@ import { createFoxholeSplineConnectorSnapshot } from '../plugins/foxhole/nixie/s
 
 const OWNER = 'nixie.foxhole-planner';
 const SDK_SOURCE = `sdk.${OWNER}__assets`;
-const allSettings = { 'foxhole.assets.filter.tier': '3', 'foxhole.assets.filter.showPreviousTiers': true,
-    'foxhole.assets.filter.upgrades': true, 'foxhole.assets.filter.destroyed': true, 'foxhole.assets.filter.breached': true,
-    'foxhole.assets.filter.3dReady': false, 'foxhole.assets.filter.faction': 'all',
-    ...Object.fromEntries(['bunkers', 'facilities', 'vehicles', 'world', 'items'].map(kind => [`foxhole.assets.filter.category.${kind}`, true])) };
+
 
 export async function lookupFoxholeSdkCatalogReference(sourceId: string, assetId: string) {
     if (sourceId !== SDK_SOURCE && sourceId !== 'foxhole.structures') return null;
     const manifest = getFoxholeManifest('/foxhole/assets/');
-    const resolve = createFoxholeAssetIdentityResolver(manifest.assets);
+    const catalog = getNixieExtensionProductCatalog();
+    const resolve = catalog?.extensions.value.some(entry => entry.ownerId === OWNER)
+        ? catalog.domainData(OWNER, 'asset-identities', () => createFoxholeAssetIdentityResolver(manifest.assets))
+        : createFoxholeAssetIdentityResolver(manifest.assets);
     let reference = assetId.replace(/^#?registry-asset:/u, '').replace(/^#/u, '');
     for (const prefix of [`${SDK_SOURCE}:`, 'foxhole.structures:']) {
         if (reference.startsWith(prefix)) {

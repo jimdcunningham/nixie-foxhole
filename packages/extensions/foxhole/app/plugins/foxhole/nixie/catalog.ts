@@ -1,3 +1,4 @@
+import { getNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
 import {
     getFoxholeManifest,
     getFoxholeManifestLocalizationMap,
@@ -1295,6 +1296,16 @@ export function buildFoxholeItemCatalog(manifest: FoxholeManifest): FoxholeItemC
 
 export function getFoxholeStructureCatalog(baseAssetsUrl: string): FoxholeStructureCatalog {
     const cacheKey = String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/';
+    const shared = getNixieExtensionProductCatalog();
+    if (shared?.extensions.value.some(entry => entry.ownerId === 'nixie.foxhole-planner')) {
+        return shared.domainData('nixie.foxhole-planner', `structures:${cacheKey}`, () => {
+            // Adopt any catalog prepared during contribution registration. Later
+            // generations rebuild from the current manifest, once for all panels.
+            const catalog = structureCatalogCache.get(cacheKey) ?? buildFoxholeStructureCatalog(getFoxholeManifest(cacheKey));
+            structureCatalogCache.delete(cacheKey);
+            return catalog;
+        });
+    }
     const existing = structureCatalogCache.get(cacheKey);
     if (existing) {
         return existing;
@@ -1307,6 +1318,16 @@ export function getFoxholeStructureCatalog(baseAssetsUrl: string): FoxholeStruct
 
 export function getFoxholeItemCatalog(baseAssetsUrl: string): FoxholeItemCatalog {
     const cacheKey = String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/';
+    const shared = getNixieExtensionProductCatalog();
+    if (shared?.extensions.value.some(entry => entry.ownerId === 'nixie.foxhole-planner')) {
+        return shared.domainData('nixie.foxhole-planner', `items:${cacheKey}`, () => {
+            // Adopt any catalog prepared during contribution registration. Later
+            // generations rebuild from the current manifest, once for all panels.
+            const catalog = itemCatalogCache.get(cacheKey) ?? buildFoxholeItemCatalog(getFoxholeManifest(cacheKey));
+            itemCatalogCache.delete(cacheKey);
+            return catalog;
+        });
+    }
     const existing = itemCatalogCache.get(cacheKey);
     if (existing) {
         return existing;

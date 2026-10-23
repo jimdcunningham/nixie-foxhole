@@ -542,6 +542,7 @@ function getUpgradePreviewIconUrl(variant: FoxholeStructureModificationSlotVaria
 
 function createResolvedFoxholeHoverEntry(options: {
     id: string;
+    catalogProductId?: string;
     assetIdentifier: string;
     displayName: string;
     description: string;
@@ -574,6 +575,7 @@ function createResolvedFoxholeHoverEntry(options: {
                 itemIconUrl: iconUrl || undefined,
                 previewIconUrl: iconUrl || undefined,
                 assetIdentifier: options.assetIdentifier,
+                extensionCatalogReference: { sourceId: FOXHOLE_ASSET_SOURCE_ID, assetId: options.catalogProductId ?? options.id },
                 assetClipboardValue: options.assetIdentifier.replace(/^#/, ''),
                 ...(options.metadata ?? {}),
             },
@@ -651,6 +653,7 @@ function createUpgradeHoverEntry(
 
     return createResolvedFoxholeHoverEntry({
         id: `${currentAsset.foxholeKey}:${slot.id}:${variant.id}`,
+        catalogProductId: `upgrade:${currentAsset.foxholeKey}:${slot.id}:${variant.id}`,
         assetIdentifier: `#${currentAsset.foxholeKey}`,
         displayName: buildLocalizedUpgradeDisplayName(currentAsset, variant),
         description: localizeVariantDescription(variant),
@@ -708,6 +711,7 @@ function createExperimentalHoverEntry(
 
     return createResolvedFoxholeHoverEntry({
         id: `${currentAsset.foxholeKey}:${slot.id}:${variant.id}`,
+        catalogProductId: `upgrade:${currentAsset.foxholeKey}:${slot.id}:${variant.id}`,
         assetIdentifier: `#${currentAsset.foxholeKey}`,
         displayName: localizeVariantName(variant),
         description: localizeVariantDescription(variant),
