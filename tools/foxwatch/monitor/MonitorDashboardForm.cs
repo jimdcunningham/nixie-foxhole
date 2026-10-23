@@ -311,7 +311,7 @@ internal sealed class MonitorForm : Form
         var actionBar = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            AutoSize = true,
+            AutoSize = false,
             ColumnCount = 2,
             RowCount = 1,
             BackColor = Surface,
@@ -319,12 +319,12 @@ internal sealed class MonitorForm : Form
             Margin = Padding.Empty,
         };
         actionBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        actionBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        actionBar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        actionBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute));
+        actionBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var actions = new FlowLayoutPanel
         {
-            AutoSize = true,
+            AutoSize = false,
             Dock = DockStyle.Fill,
             WrapContents = true,
             Margin = Padding.Empty,
@@ -375,7 +375,7 @@ internal sealed class MonitorForm : Form
         var preferences = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
+            AutoSize = false,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Margin = Padding.Empty,
@@ -396,6 +396,18 @@ internal sealed class MonitorForm : Form
         preferences.Controls.Add(_startWithWindows);
         actionBar.Controls.Add(preferences, 1, 0);
 
+        // Measure wrapping with the resolved column width; autosizing at the
+        // initial narrow width otherwise reserves one row per button.
+        void SizeActionBar()
+        {
+            var preferenceSize = preferences.GetPreferredSize(Size.Empty);
+            actionBar.ColumnStyles[1].Width = preferenceSize.Width;
+            var availableWidth = Math.Max(1, actionBar.ClientSize.Width - actionBar.Padding.Horizontal - preferenceSize.Width);
+            var actionSize = actions.GetPreferredSize(new Size(availableWidth, 0));
+            actionBar.Height = actionBar.Padding.Vertical + Math.Max(actionSize.Height, preferenceSize.Height);
+        }
+        actionBar.SizeChanged += (_, _) => SizeActionBar();
+        SizeActionBar();
         var footer = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
