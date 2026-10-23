@@ -203,9 +203,8 @@ Runtime downloads use verified, bounded caches. Cached placed objects and loaded
 regions can be reused offline; uncached assets still require a connection. This
 is demand caching, not an installation of the entire library.
 
-The checked-in pin remains on the test hostname until explicit promotion.
-The production hostname and CORS are configured; cache readiness and application
-deployment remain separate rollout checks.
+The checked-in pin targets `assets.nixiejs.com`. Production HTTPS, CORS and
+CDN cache hits are verified. Application deployment remains a separate step.
 
 ## Metadata-Only Application Builds
 
