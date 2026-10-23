@@ -17,7 +17,9 @@
     "assets:prepare": "node ./tools/foxwatch/run-foxwatch.mjs assets-prepare",
     "assets:publish": "node ./tools/foxwatch/run-foxwatch.mjs assets-publish",
     "assets:inventory": "node ./tools/foxwatch/scripts/asset-publication-inventory.mjs",
-    "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs"
+    "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs",
+    "dev:desktop": "npm run dev --workspace @nixie/foxwatch-desktop",
+    "build:desktop": "npm run build --workspace @nixie/foxwatch-desktop"
   },
   "engines": {
     "node": ">=24 <25"

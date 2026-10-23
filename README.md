@@ -43,3 +43,10 @@ Original code in this repository is available under the [MIT License](LICENSE).
 CUE4Parse is included as a Git submodule and remains under its own Apache-2.0 license and third-party notices. Generated files and assets extracted from Foxhole are deliberately excluded from this repository and are not relicensed under MIT. Users must provide their own legitimate Foxhole installation and are responsible for complying with the game's terms.
 
 Foxhole is a trademark of Siege Camp. This community project is not affiliated with or endorsed by Siege Camp.
+
+## FoxWatch desktop inspector
+
+The standalone Electron/Vue inspector is in [tools/foxwatch-desktop](tools/foxwatch-desktop/README.md).
+Run `npm run dev:desktop` to browse the local generated assets directory, or use its
+File menu to open another directory. This first slice is read-only and leaves the
+existing tray Monitor and Steam polling unchanged. No generated assets are bundled.
