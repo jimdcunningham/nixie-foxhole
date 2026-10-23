@@ -223,15 +223,22 @@ Pin identity ignores checkout line endings and JSON whitespace.
 Application builds do not need the generated-assets Git repository or any images/models.
 Source-level model geometry tests still use the local FoxWatch outputs.
 
-## Production Hostname Promotion
+## Production Asset Delivery
 
-`assets.nixiejs.com` is connected to the same public R2 bucket as the test hostname.
-Changing hostnames does not duplicate the library. The Nixie repository tracks
-its read-only web, desktop and local CORS policy in `config/foxhole-assets-cors.json`.
-A Cloudflare cache rule must mark both asset hostnames eligible for cache and
-retain the objects' Cache-Control TTLs.
+`assets.nixiejs.com` is the sole public asset hostname and connects to the
+`nixie-extension-assets` bucket. The development `r2.dev` URL is disabled. The
+Nixie repository tracks the read-only web, desktop and local CORS policy in
+`config/foxhole-assets-cors.json`. The **Nixie Asset Delivery** cache rule matches
+only this hostname, marks responses eligible for cache and retains the objects'
+Cache-Control TTLs.
 
-Prepare a hostname promotion without network writes or pin changes:
+The historical `foxwatch-test/` object prefix remains intentional: published URLs
+and immutable receipts stay valid across the bucket migration. Keep the local
+publication config pointed at `nixie-extension-assets` with the existing prefix;
+old prepared plans targeting another bucket must be prepared again. The bucket
+name is infrastructure configuration and never appears in the public asset URLs.
+
+For a future hostname change, prepare a promotion without network writes or pin changes (substitute the new hostname):
 
 ```powershell
 node tools/foxwatch/scripts/asset-pack-promote-host.mjs --public-base-url https://assets.nixiejs.com/

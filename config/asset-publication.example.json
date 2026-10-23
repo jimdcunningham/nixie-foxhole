@@ -5,8 +5,8 @@
   "concurrency": 4,
   "target": {
     "endpoint": "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com",
-    "bucket": "nixie-extension-assets-test",
-    "publicBaseUrl": "https://assets-test.nixiejs.com/",
+    "bucket": "nixie-extension-assets",
+    "publicBaseUrl": "https://assets.nixiejs.com/",
     "prefix": "foxwatch-test"
   }
 }
