@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "publication": {
-    "url": "https://assets.nixiejs.com/foxwatch-test/release-9292045dde349b240c98d65bd13aa6e3ef7bf75e0eb011b3a749d3d27658fbda.json",
-    "sha256": "b1634bb109947701e9eddf210f93cf471de751362b88848dfa34b0485c30e5f0",
-    "byteLength": 31451
+    "url": "https://assets.nixiejs.com/foxhole-planner/release-03d296ca166229dfef4923ed4a977986d68e98688fca263bd529b71b5f2b316f.json",
+    "sha256": "d76d7e950343e2858587cbfa0adcf76fff96615ed08da1b23586c9126f9cd25a",
+    "byteLength": 31677
   },
   "resourcePack": {
     "contractVersion": 1,
     "id": "foxhole.runtime",
     "manifest": {
-      "url": "https://assets.nixiejs.com/foxwatch-test/planner-resources-032fb285c1ff7c7cb6a5f18f667658464cfa353bf73e3d6094249e1f18215ee5.json",
+      "url": "https://assets.nixiejs.com/foxhole-planner/planner-resources-032fb285c1ff7c7cb6a5f18f667658464cfa353bf73e3d6094249e1f18215ee5.json",
       "sha256": "1a74b364db2d6625ffa6273aa79d8a127419ea8b891e361434a72fc86924630a",
       "byteLength": 3490313
     }
   },
   "buildMetadata": {
-    "url": "https://assets.nixiejs.com/foxwatch-test/objects/raw/36ae3fb2db600aa912e589a56ad2576fa62fc9b84bbfb30272dcff2c9d9a0b92/bacb769b46f6/asset.json",
-    "sha256": "36ae3fb2db600aa912e589a56ad2576fa62fc9b84bbfb30272dcff2c9d9a0b92",
+    "url": "https://assets.nixiejs.com/foxhole-planner/objects/raw/4faa46c130c44d540d50d6c32012dddd08debf0630e41f4442105b9c5ce1a2a2/bacb769b46f6/asset.json",
+    "sha256": "4faa46c130c44d540d50d6c32012dddd08debf0630e41f4442105b9c5ce1a2a2",
     "byteLength": 5048
   }
 }

@@ -232,11 +232,16 @@ Nixie repository tracks the read-only web, desktop and local CORS policy in
 only this hostname, marks responses eligible for cache and retains the objects'
 Cache-Control TTLs.
 
-The historical `foxwatch-test/` object prefix remains intentional: published URLs
-and immutable receipts stay valid across the bucket migration. Keep the local
-publication config pointed at `nixie-extension-assets` with the existing prefix;
-old prepared plans targeting another bucket must be prepared again. The bucket
-name is infrastructure configuration and never appears in the public asset URLs.
+The library uses the `foxhole-planner/` object prefix. Keep the local publication
+config pointed at `nixie-extension-assets` with `prefix: "foxhole-planner"`; old
+prepared plans targeting another prefix must be prepared again. The previous
+test prefix has been retired, so builds must use the current checked-in asset pin.
+The bucket name is infrastructure configuration and never appears in public URLs.
+
+A prefix migration can copy existing objects within R2 without regenerating models
+or uploading the library from the local machine. Release metadata and the extension
+pin must then be regenerated for the new paths. The promotion command below only
+publishes the small rewritten metadata; it does not copy the referenced payloads.
 
 For a future hostname change, prepare a promotion without network writes or pin changes (substitute the new hostname):
 

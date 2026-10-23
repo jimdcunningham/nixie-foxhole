@@ -7,6 +7,6 @@
     "endpoint": "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com",
     "bucket": "nixie-extension-assets",
     "publicBaseUrl": "https://assets.nixiejs.com/",
-    "prefix": "foxwatch-test"
+    "prefix": "foxhole-planner"
   }
 }
