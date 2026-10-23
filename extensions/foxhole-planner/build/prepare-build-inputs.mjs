@@ -3,7 +3,6 @@ import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
-import {loadFoxholeAssetRelease} from '../src/asset-release.ts';
 export const BUILD_INPUT_PATHS=['manifest.v1.json','models/manifest.v1.json','maps/map-data.v1.json',
     ...['de','fr','pt','ru','zh'].map(locale=>'localizations/'+locale+'.json')];
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -18,7 +17,7 @@ export async function readVerifiedBuildInput(receipt,fetcher=fetch){
 }
 export async function prepareBuildInputs({pin,output,library,fetcher=fetch}){
     if(!pin.buildMetadata)throw Error('Publish derived Planner build metadata first');
-    library??=await loadFoxholeAssetRelease(pin.publication);
+    library??=await (await import('../src/asset-release.ts')).loadFoxholeAssetRelease(pin.publication);
     let downloadedBytes=0,reusedBytes=0;
     for(const name of BUILD_INPUT_PATHS){
         const location=library.files.get(name);if(!location)throw Error('Missing published build input: '+name);

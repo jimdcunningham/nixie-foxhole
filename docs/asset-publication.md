@@ -221,3 +221,23 @@ matching files are reused; mismatching local exports fail rather than being over
 <sha256>` checks the exact source-controlled pin used by a coordinating build.
 Application builds do not need the generated-assets Git repository or any images/models.
 Source-level model geometry tests still use the local FoxWatch outputs.
+
+## Production Hostname Promotion
+
+`assets.nixiejs.com` is connected to the same public R2 bucket as the test hostname.
+Changing hostnames does not duplicate the library. The Nixie repository tracks
+its read-only web, desktop and local CORS policy in `config/foxhole-assets-cors.json`.
+A Cloudflare cache rule must mark both asset hostnames eligible for cache and
+retain the objects' Cache-Control TTLs.
+
+Prepare a hostname promotion without network writes or pin changes:
+
+```powershell
+node tools/foxwatch/scripts/asset-pack-promote-host.mjs --public-base-url https://assets.nixiejs.com/
+```
+
+After explicit approval, add `--upload` to publish only the rewritten release
+and derived metadata. The command verifies public receipts before changing the
+source pin, local publisher base URL and latest-plan pointer. Existing object
+keys, bulk bytes and older release descriptors remain available. This command
+does not push source changes, deploy Nixie, or change a running application's pin.
