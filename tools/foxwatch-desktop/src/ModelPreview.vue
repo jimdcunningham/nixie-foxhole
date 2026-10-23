@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 const props = defineProps<{ bytes: Uint8Array }>();
+const emit = defineEmits<{ ready: [] }>();
 const host = ref<HTMLElement>();
 const loading = ref(true),
   error = ref(''),
@@ -26,7 +27,10 @@ onMounted(async () => {
     if (!disposed)
       error.value = cause instanceof Error ? cause.message : String(cause);
   } finally {
-    if (!disposed) loading.value = false;
+    if (!disposed) {
+      loading.value = false;
+      emit('ready');
+    }
   }
 });
 onBeforeUnmount(() => {

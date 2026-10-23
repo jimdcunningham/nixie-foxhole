@@ -440,6 +440,7 @@ dd {
 }
 
 .asset-preview {
+  position: relative;
   flex: 1;
   min-height: 240px;
   display: flex;
@@ -589,4 +590,43 @@ dd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.preview-stage {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.preview-layer {
+  grid-area: 1 / 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.preview-layer.is-pending {
+  visibility: hidden;
+  pointer-events: none;
+}
+.preview-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.preview-content > .preview-placeholder {
+  color: var(--muted);
+  gap: 16px;
+}
+.preview-loading {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
 }

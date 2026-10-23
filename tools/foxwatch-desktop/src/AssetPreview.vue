@@ -1,104 +1,115 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
-import type {
-  AssetDetails,
-  AssetPreview as Preview,
-} from '../shared/contracts';
-import ImagePreview from './ImagePreview.vue';
-import ModelPreview from './ModelPreview.vue';
-import Icon from './Icon.vue';
-const props = defineProps<{ rootId: string; asset: AssetDetails }>();
-const preview = shallowRef<Preview | null>(null);
+import type { AssetDetails, AssetPreview } from '../shared/contracts';
+import PreviewContent from './PreviewContent.vue';
+
+const props = defineProps<{
+  rootId: string;
+  asset: AssetDetails;
+  requestedPath: string;
+  inspecting: boolean;
+}>();
+interface PreviewEntry {
+  id: number;
+  asset: AssetDetails;
+  preview: AssetPreview;
+  error?: string;
+}
+const displayed = shallowRef<PreviewEntry | null>(null);
+const candidate = shallowRef<PreviewEntry | null>(null);
+const layers = computed(() =>
+  [displayed.value, candidate.value].filter(
+    (entry): entry is PreviewEntry => !!entry,
+  ),
+);
 const loading = ref(false);
-const error = ref('');
-const pretty = ref(true);
+const showLoading = ref(false);
 let version = 0;
-const text = computed(() => {
-  const value = preview.value;
-  if (value?.type !== 'text') return '';
-  if (pretty.value && value.json && !value.truncated) {
-    try {
-      return JSON.stringify(JSON.parse(value.text), null, 2);
-    } catch {
-      /* Preserve invalid JSON for inspection. */
-    }
-  }
-  return value.text;
-});
+let hintTimer: ReturnType<typeof setTimeout> | undefined;
+
+function finish(id: number) {
+  if (id !== version || candidate.value?.id !== id) return;
+  // The candidate is already decoded and rendered. Keep its keyed DOM instance
+  // while removing the outgoing preview, so there is no empty/loading frame.
+  displayed.value = candidate.value;
+  candidate.value = null;
+  loading.value = false;
+  showLoading.value = false;
+  clearTimeout(hintTimer);
+}
+
 watch(
-  () => [props.rootId, props.asset.path, props.asset.modifiedAt],
+  () => [
+    props.rootId,
+    props.asset.path,
+    props.asset.modifiedAt,
+    props.requestedPath,
+    props.inspecting,
+  ],
   async () => {
     const token = ++version;
-    preview.value = null;
-    error.value = '';
-    loading.value = true;
+    candidate.value = null;
+    clearTimeout(hintTimer);
+    showLoading.value = false;
+    loading.value =
+      props.inspecting || props.asset.path === props.requestedPath;
+    if (loading.value)
+      hintTimer = setTimeout(() => {
+        showLoading.value = true;
+      }, 250);
+    // A new keyboard selection invalidates staged work immediately, even while
+    // its metadata is still being read by the main process.
+    if (props.inspecting || props.asset.path !== props.requestedPath) return;
+    const asset = props.asset;
     try {
-      const value = await window.foxwatch.preview(
-        props.rootId,
-        props.asset.path,
-      );
-      if (token === version) preview.value = value;
+      const preview = await window.foxwatch.preview(props.rootId, asset.path);
+      if (token === version) candidate.value = { id: token, asset, preview };
     } catch (cause) {
-      if (token === version)
-        error.value = String(
-          cause instanceof Error ? cause.message : cause,
-        ).replace(/^Error invoking remote method '[^']+': Error: /, '');
-    } finally {
-      if (token === version) loading.value = false;
+      if (token !== version) return;
+      const error = String(
+        cause instanceof Error ? cause.message : cause,
+      ).replace(/^Error invoking remote method '[^']+': Error: /, '');
+      candidate.value = {
+        id: token,
+        asset,
+        preview: { type: 'unsupported', message: error },
+        error,
+      };
     }
   },
   { immediate: true },
 );
-onBeforeUnmount(() => version++);
+onBeforeUnmount(() => {
+  version++;
+  clearTimeout(hintTimer);
+});
 </script>
+
 <template>
-  <div class="asset-preview">
-    <div
-      v-if="loading || error || preview?.type === 'unsupported'"
-      class="preview-placeholder"
-      :role="error ? 'alert' : undefined"
-    >
-      <Icon :name="asset.kind" :size="40" />
-      <p>
-        {{
-          loading
-            ? 'Loading preview…'
-            : error || (preview?.type === 'unsupported' ? preview.message : '')
-        }}
-      </p>
-    </div>
-    <ImagePreview
-      v-else-if="preview?.type === 'image'"
-      :key="asset.path"
-      :bytes="preview.bytes"
-      :mime="preview.mime"
-      :label="asset.label"
-    />
-    <ModelPreview
-      v-else-if="preview?.type === 'model'"
-      :key="asset.path"
-      :bytes="preview.bytes"
-    />
-    <template v-else-if="preview?.type === 'text'">
-      <div class="preview-toolbar">
-        <span>{{ preview.json ? 'JSON' : 'Text' }}</span
-        ><span v-if="preview.truncated" class="muted"
-          >Showing the first 1 MB</span
-        >
-        <div class="toolbar-spacer" />
-        <button
-          v-if="preview.json && !preview.truncated"
-          :aria-pressed="pretty"
-          @click="pretty = !pretty"
-        >
-          {{ pretty ? 'Formatted' : 'Raw' }}
-        </button>
+  <div
+    class="asset-preview"
+    :aria-busy="loading"
+    :data-preview-path="displayed?.asset.path"
+  >
+    <div class="preview-stage">
+      <div
+        v-for="layer in layers"
+        :key="layer.id"
+        class="preview-layer"
+        :class="{ 'is-pending': layer.id !== displayed?.id }"
+        :inert="layer.id !== displayed?.id"
+        :aria-hidden="layer.id !== displayed?.id"
+      >
+        <PreviewContent
+          :asset="layer.asset"
+          :preview="layer.preview"
+          :error="layer.error"
+          @ready="finish(layer.id)"
+        />
       </div>
-      <pre
-        class="text-preview"
-        tabindex="0"
-        aria-label="File Contents"
-      ><code>{{ text }}</code></pre>
-    </template>
+    </div>
+    <span v-if="showLoading" class="preview-loading" role="status"
+      >Loading preview…</span
+    >
   </div>
 </template>

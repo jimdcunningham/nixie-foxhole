@@ -70,7 +70,9 @@ const kindLabels: Record<string, string> = {
 };
 const selectedLabel = computed(
   () =>
-    details.value?.label ??
+    (details.value?.path === selected.value
+      ? details.value.label
+      : undefined) ??
     rows.value.find((row) => row.path === selected.value)?.label ??
     '',
 );
@@ -156,7 +158,6 @@ async function activate(row: TreeRow) {
   if (!current) return;
   const version = ++selectionVersion;
   selected.value = row.path;
-  details.value = null;
   inspecting.value = true;
   try {
     const value = await window.foxwatch.inspect(current.id, row.path);
@@ -475,7 +476,12 @@ onBeforeUnmount(() => {
             }}<span v-if="details.path.includes('/')">/</span
             ><strong>{{ details.label }}</strong>
           </div>
-          <AssetPreview :root-id="root?.id ?? ''" :asset="details" />
+          <AssetPreview
+            :root-id="root?.id ?? ''"
+            :asset="details"
+            :requested-path="selected"
+            :inspecting="inspecting"
+          />
           <div class="file-properties">
             <dl>
               <div>
@@ -506,14 +512,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
+        <div v-else-if="selected" class="file-inspector" aria-busy="true" />
         <div v-else class="empty-inspector">
-          <Icon :name="inspecting ? 'file' : 'folder-open'" :size="44" />
-          <h1>{{ inspecting ? 'Opening Asset…' : 'Select an Asset' }}</h1>
-          <p>
-            {{
-              inspecting ? selected : 'Browse the directory to inspect a file.'
-            }}
-          </p>
+          <Icon name="folder-open" :size="44" />
+          <h1>Select an Asset</h1>
+          <p>Browse the directory to inspect a file.</p>
           <button v-if="!root" class="primary-button" @click="chooseRoot">
             Open Assets Directory
           </button>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 const props = defineProps<{ bytes: Uint8Array; mime: string; label: string }>();
+const emit = defineEmits<{ ready: [] }>();
 const url = URL.createObjectURL(
   new Blob([new Uint8Array(props.bytes)], { type: props.mime }),
 );
@@ -37,6 +38,7 @@ function loaded() {
   width.value = image.value.naturalWidth;
   height.value = image.value.naturalHeight;
   fit();
+  emit('ready');
 }
 function setZoom(value: number) {
   fitMode.value = false;
@@ -124,7 +126,10 @@ onBeforeUnmount(() => {
           transform: `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${zoom})`,
         }"
         @load="loaded"
-        @error="error = true"
+        @error="
+          error = true;
+          emit('ready');
+        "
       />
     </div>
   </div>

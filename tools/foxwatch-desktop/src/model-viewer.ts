@@ -10,24 +10,43 @@ import {
   type Scene3DSource,
 } from '@pixi/3d';
 
+let activePreviews = 0;
+
 export async function createModelPreview(
   host: HTMLElement,
   bytes: Uint8Array,
   cancelled: () => boolean,
 ) {
   const app = new Application();
-  await app.init({
-    width: Math.max(1, host.clientWidth),
-    height: Math.max(1, host.clientHeight),
-    preference: 'webgl',
-    antialias: true,
-    resolution: Math.min(window.devicePixelRatio, 2),
-    autoDensity: true,
-    autoStart: false,
-    background: 0x1c2026,
-  });
+  activePreviews++;
+  let released = false;
+  const destroyApplication = () => {
+    if (released) return;
+    released = true;
+    // Outgoing and staged previews briefly share Pixi's global shader cache.
+    // Only the last renderer may release it.
+    app.destroy(
+      { removeView: true, releaseGlobalResources: --activePreviews === 0 },
+      { children: true },
+    );
+  };
+  try {
+    await app.init({
+      width: Math.max(1, host.clientWidth),
+      height: Math.max(1, host.clientHeight),
+      preference: 'webgl',
+      antialias: true,
+      resolution: Math.min(window.devicePixelRatio, 2),
+      autoDensity: true,
+      autoStart: false,
+      background: 0x1c2026,
+    });
+  } catch (cause) {
+    activePreviews--;
+    throw cause;
+  }
   if (cancelled()) {
-    app.destroy(true, { children: true });
+    destroyApplication();
     return;
   }
   installCsp3dUniforms(app.renderer as WebGLRenderer);
@@ -59,7 +78,7 @@ export async function createModelPreview(
     }
     if (loaded) void Assets.unload(url).catch(() => {});
     URL.revokeObjectURL(url);
-    app.destroy(true, { children: true });
+    destroyApplication();
   }
   try {
     const source = await Assets.load<Scene3DSource>({

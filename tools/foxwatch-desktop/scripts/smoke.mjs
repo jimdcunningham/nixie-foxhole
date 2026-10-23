@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import { checkPreviewTransitions } from './transition-check.mjs';
 import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
 const require = createRequire(import.meta.url);
 const project = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
@@ -50,7 +51,7 @@ const errors = [];
 let page;
 try {
   page = await app.firstWindow();
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.stack ?? error.message));
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
@@ -84,6 +85,7 @@ try {
   await page.mouse.up();
   assert.notDeepEqual(await modelCanvas.screenshot(), originalView);
   await page.getByRole('button', { name: 'Reset View', exact: true }).click();
+  await checkPreviewTransitions(app, page);
   await page.getByRole('tree').focus();
   await page.keyboard.press('ArrowDown');
   await page
