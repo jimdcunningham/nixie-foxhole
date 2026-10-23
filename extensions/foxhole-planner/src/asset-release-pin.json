@@ -9,9 +9,14 @@
     "contractVersion": 1,
     "id": "foxhole.runtime",
     "manifest": {
-      "url": "https://assets-test.nixiejs.com/foxwatch-test/planner-resources-6a098516e74368c96301eefb801e7e07105bfc0d5b192be9a732480544558d67.json",
-      "sha256": "ee8f9e933dd06780a247918ba197b7c1599aab883fc040fcc480d0687fbc283f",
-      "byteLength": 3490076
+      "url": "https://assets-test.nixiejs.com/foxwatch-test/planner-resources-bdb2e3dc82050a33586df6ddae51960537cb0222c1d6c3f3a9dbae6bd6fb4fb5.json",
+      "sha256": "d6405a9a859329de40431ee91fe945a604055b5e29d534c9f820921925ccc90c",
+      "byteLength": 3490313
     }
+  },
+  "buildMetadata": {
+    "url": "https://assets-test.nixiejs.com/foxwatch-test/objects/raw/f72b596ebece8e06676101ba9d5d9b0f2d849d63895c4be60093c47a80e37023/bacb769b46f6/asset.json",
+    "sha256": "f72b596ebece8e06676101ba9d5d9b0f2d849d63895c4be60093c47a80e37023",
+    "byteLength": 5048
   }
 }

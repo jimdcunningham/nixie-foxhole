@@ -10,6 +10,7 @@ import type { FoxholeSceneV2ModelSource } from './src/scene-v2-models.ts';
 import { publishCompletedBuild } from './build/completed-build-publisher.ts';
 import { createResourceBuildSnapshot } from './build/resource-build-snapshot.ts';
 import { bindFoxholeModelLayerNodes } from './src/model-layer-nodes.ts';
+import { applyPublishedModelLayers, type PublishedModelLayers } from './build/model-layer-metadata.ts';
 
 import assetReleasePin from './src/asset-release-pin.json' with { type: 'json' };
 import { loadFoxholeAssetRelease, readPinnedAssetJson } from './src/asset-release.ts';
@@ -98,7 +99,7 @@ export async function readSceneV2ModelSources(
     .map(model => ({ ...model, packagedPath: getFoxholeSceneV2PackagedModelPath(model) }));
 }
 
-export async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources> {
+export async function readSceneV2AssetSources(options: { deriveModelLayers?: boolean; } = {}): Promise<SceneV2ResourceSources> {
   const manifest = JSON.parse(await readFile(foxholeManifestPath, 'utf8')) as PublishedFoxholeManifest;
   // Rollup watch invalidates the virtual module, but does not reload imports
   // captured by its config. Reload the pure generators when their source changes.
@@ -126,10 +127,15 @@ export async function readSceneV2AssetSources(): Promise<SceneV2ResourceSources>
   }
   selection = selection?.trim() || undefined;
   const models = await readSceneV2ModelSources(generated.assets, modelManifest, selection);
+  const publishedLayers = remoteResourcePack && !options.deriveModelLayers
+    ? await readPinnedAssetJson<PublishedModelLayers>(assetReleasePin.buildMetadata) : null;
+  const extractorSource = await readFile(new URL('./src/model-layer-nodes.ts', import.meta.url), 'utf8');
   for (const model of models) {
     const asset = generated.assets[model.assetId];
     if (asset?.model && /^Foundation/i.test(asset.codeName) && model.id === model.assetId) {
-      bindFoxholeModelLayerNodes(asset, await readFile(resolve(foxholeAssetsRoot, model.path)));
+      if (publishedLayers) applyPublishedModelLayers(asset, model.assetId, model.path, publishedLayers,
+        { publicationSha256: assetReleasePin.publication.sha256, extractorSource });
+      else bindFoxholeModelLayerNodes(asset, await readFile(resolve(foxholeAssetsRoot, model.path)));
     }
   }
   const assets = (manifest.assets ?? []).map(asset => {

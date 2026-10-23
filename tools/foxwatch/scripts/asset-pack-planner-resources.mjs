@@ -13,7 +13,7 @@ import {loadAssetPublicationCredentials} from './asset-pack-credentials.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 /** Publish one metadata-only overlay. Bulk bytes stay in the original immutable release. */
-export async function preparePlannerResourcePublication({index,target,publication,outputRoot,payloads=[]}) {
+export async function preparePlannerResourcePublication({index,target,publication,outputRoot,payloads=[],buildMetadata}) {
     const decoded=Buffer.from(JSON.stringify(parseNixieExperimentalAssetPackIndexV1(index)));
     if(decoded.length>8*1024**2)throw Error('Planner runtime index exceeds its SDK budget');
     const encoded=brotliCompressSync(decoded,{params:{[constants.BROTLI_PARAM_QUALITY]:5}});
@@ -37,7 +37,7 @@ export async function preparePlannerResourcePublication({index,target,publicatio
     const plan={schemaVersion:1,target,inventorySha256:publication.sha256,release:resourcePack.manifest,objects,
         summary:{sourceFiles:payloads.length,objects:objects.length,bytes:objects.reduce((sum,row)=>sum+row.bytes,0),packs:1}};
     await fs.writeFile(path.join(directory,'plan.json'),JSON.stringify({...plan,planSha256:hash(Buffer.from(JSON.stringify(plan)))},null,2)+'\n');
-    await fs.writeFile(path.join(directory,'extension-pin.json'),JSON.stringify({schemaVersion:1,publication,resourcePack},null,2)+'\n');
+    await fs.writeFile(path.join(directory,'extension-pin.json'),JSON.stringify({schemaVersion:1,publication,resourcePack,...(buildMetadata?{buildMetadata}:{})},null,2)+'\n');
     return {directory,planPath:path.join(directory,'plan.json'),resourcePack};
 }
 async function run() {
@@ -53,7 +53,7 @@ async function run() {
     const {readSceneV2AssetSources,sceneV2RemoteResourceBindings}=await import('../../../extensions/foxhole-planner/vite.config.ts');
     const {createPlannerRemoteResourceIndex}=await import('../../../extensions/foxhole-planner/build/remote-resource-bindings.ts');
     const library=await loadFoxholeAssetRelease(publication);
-    const sources=await readSceneV2AssetSources();
+    const sources=await readSceneV2AssetSources({deriveModelLayers:true});
     const {createBrowserAtlas}=await import('../../../extensions/foxhole-planner/build/browser-atlas-images.ts');
     const payloads=[];
     for(let start=0;start<sources.browserImageSources.length;start+=64) {
@@ -63,8 +63,23 @@ async function run() {
         library.entries.set(key,entry);library.files.set('__planner/browser/'+start/64+'.webp',{url:new URL(config.target.prefix+'/'+key,config.target.publicBaseUrl).href,entry});
         if(!payloads.some(row=>row.path===key))payloads.push({path:key,bytes});
     }
+    const extractorSource=await fs.readFile(path.join(root,'extensions/foxhole-planner/src/model-layer-nodes.ts'),'utf8');
+    const modelLayers={schemaVersion:1,publicationSha256:publication.sha256,extractorSha256:hash(Buffer.from(extractorSource)),models:{}};
+    for(const model of sources.models){
+        const asset=sources.metadata[model.assetId];
+        if(!asset?.model||!/^Foundation/i.test(asset.codeName)||model.id!==model.assetId)continue;
+        const bytes=await fs.readFile(path.join(config.assetsRoot,model.path));
+        if(hash(bytes)!==library.files.get(model.path)?.entry.sha256)throw Error('Local foundation differs from publication: '+model.assetId);
+        modelLayers.models[model.assetId]={path:model.path,...(asset.modelLayerNodes?{modelLayerNodes:asset.modelLayerNodes}:{}),
+            ...(asset.foundationSurfaceZ!==undefined?{foundationSurfaceZ:asset.foundationSurfaceZ}:{})};
+    }
+    const metadataBytes=Buffer.from(JSON.stringify(modelLayers)),metadataHash=hash(metadataBytes);
+    const metadataPath='objects/raw/'+metadataHash+'/'+hash(Buffer.from('application/json')).slice(0,12)+'/asset.json';
+    library.entries.set(metadataPath,{path:metadataPath,sha256:metadataHash,byteLength:metadataBytes.length,mediaType:'application/json'});
+    payloads.push({path:metadataPath,bytes:metadataBytes});
+    const buildMetadata={url:new URL(config.target.prefix+'/'+metadataPath,config.target.publicBaseUrl).href,sha256:metadataHash,byteLength:metadataBytes.length};
     const index=createPlannerRemoteResourceIndex(sceneV2RemoteResourceBindings(sources),library);
-    const prepared=await preparePlannerResourcePublication({index,target:config.target,publication,outputRoot:config.outputRoot,payloads});
+    const prepared=await preparePlannerResourcePublication({index,target:config.target,publication,outputRoot:config.outputRoot,payloads,buildMetadata});
     if(values.upload) {
         if(config.credentialEnvFile)process.loadEnvFile(path.resolve(root,config.credentialEnvFile));
         const transport=createAssetPublicationS3(config.target,await loadAssetPublicationCredentials(config,root));

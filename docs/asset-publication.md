@@ -205,3 +205,19 @@ is demand caching, not an installation of the entire library.
 
 The checked-in development pin currently targets the isolated test hostname.
 Production hostname, origin CORS and deployment remain separate rollout steps.
+
+## Metadata-Only Application Builds
+
+The Planner overlay now includes a pinned foundation-layer extraction document.
+The local publisher verifies each source GLB against the library receipt; builds
+consume the extracted layer names and surface heights without opening a GLB.
+An extraction-source hash rejects stale derived metadata after extraction code changes.
+
+`node extensions/foxhole-planner/build/prepare-build-inputs.mjs` retrieves eight
+verified catalog, model, map and localization JSON files to the normal build-input
+location. Use `--output <empty-directory>` for an isolated verification. Existing
+matching files are reused; mismatching local exports fail rather than being overwritten.
+`--identity-only` prints the pin identity without any asset requests. `--expected
+<sha256>` checks the exact source-controlled pin used by a coordinating build.
+Application builds do not need the generated-assets Git repository or any images/models.
+Source-level model geometry tests still use the local FoxWatch outputs.

@@ -42,3 +42,16 @@ test('runtime resource aliases retain shared dependencies and never copy a model
     assert.equal(index.assets.length, 3);
     assert.throws(() => createPlannerRemoteResourceIndex([{ path: 'dist/no.glb', source: 'missing' }], library), /does not contain/);
 });
+
+
+test('published foundation bindings retain layer names and reject stale extraction', async () => {
+    const { applyPublishedModelLayers } = await import('../build/model-layer-metadata.ts');
+    const asset = {} as import('../src/model-layer-nodes.ts').FoxholeModelLayerMetadata;
+    const input = { schemaVersion: 1 as const, publicationSha256: 'a'.repeat(64), extractorSha256: sha('extractor'),
+        models: { foundation: { path: 'model.glb', modelLayerNodes: { floor: ['floor'] }, foundationSurfaceZ: 32 } } };
+    const expected = { publicationSha256: input.publicationSha256, extractorSource: 'extractor' };
+    applyPublishedModelLayers(asset, 'foundation', 'model.glb', input, expected);
+    assert.deepEqual(asset.modelLayerNodes, { floor: ['floor'] });assert.equal(asset.foundationSurfaceZ, 32);
+    assert.throws(() => applyPublishedModelLayers(asset, 'foundation', 'other.glb', input, expected), /Missing/);
+    assert.throws(() => applyPublishedModelLayers(asset, 'foundation', 'model.glb', input, { ...expected, extractorSource: 'changed' }), /stale/);
+});
