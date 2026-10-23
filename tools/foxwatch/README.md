@@ -71,7 +71,32 @@ That workflow:
 
 If Blender is not installed yet, start with non-render workflows such as `generate-manifest`, `generate-map-data`, or `extract-ui-assets`.
 
-## Automatic Steam monitoring
+## Automatic Steam Monitoring
+
+Use [FoxWatch Desktop](../foxwatch-desktop/README.md) for Steam polling,
+generation, inspection, credentials, and publishing. The WinForms tray monitor is
+**deprecated**; its source and old host commands remain only for rollback.
+The shared polling/generation CLI (`monitor-once`, `monitor-now`, `monitor`,
+`monitor-status`, and `monitor-logs`) remains supported and is used by Desktop.
+
+For an existing installation, close the deprecated WinForms host and let active
+work finish. In Desktop Settings enable **Start With Windows** and **Start Minimized
+at Login**, save settings, and choose **Start Polling** on the Dashboard when ready.
+Saving Settings registers Desktop even when Start With Windows was already checked.
+Credentials, Steam installations, generated assets, logs, and pipeline state are
+reused. Desktop starts paused on first adoption.
+
+Nixie notifications use the same saved webhook and **Nixie Checkpoint
+Notifications** setting. Automatic polls send new-build, refresh-started,
+refresh-finished, and failure checkpoints. Manual refreshes, unchanged polls,
+asset preparation, upload checks, and publishing do not send these checkpoints.
+Delivery failures are recorded in the run/monitor logs and do not fail generation.
+
+### Legacy WinForms Setup (Deprecated)
+
+The following host setup and lifecycle commands describe the retained rollback
+path. They install/open the old WinForms app, not FoxWatch Desktop. New setups
+should use Desktop Settings instead.
 
 FoxWatch can maintain its own verified Foxhole installation without reading the
 normal Steam client installation. Setup is guided and idempotent:

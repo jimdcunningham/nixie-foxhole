@@ -8,6 +8,36 @@ export async function checkMonitor(app, page) {
   await page.getByLabel('Steam Username', { exact: true }).waitFor();
   assert.equal(await page.getByLabel(/Steam Password/).inputValue(), '');
   assert.equal(await page.getByLabel(/R2 Secret Access Key/).inputValue(), '');
+  assert.equal(await page.getByRole('button', { name: 'Retire Legacy Monitor', exact: true }).count(), 0);
+  // Exercise the real settings IPC without changing OS startup or shared config.
+  const initialSettings = await page.evaluate(async () => (await window.foxwatch.monitor.info()).settings);
+  await app.evaluate(({app}) => {
+    const require = process.getBuiltinModule('module').createRequire(app.getAppPath() + '/package.json');
+    const {MonitorService} = require('./dist-electron/electron/monitor-service.js');
+    const originalSave = MonitorService.prototype.save, originalLogin = app.setLoginItemSettings;
+    app.__startupCalls = [];
+    app.setLoginItemSettings = options => { app.__startupCalls.push(options); };
+    MonitorService.prototype.save = async function(value) { this.settings = {...value}; };
+    app.__restoreStartupCheck = () => { MonitorService.prototype.save = originalSave; app.setLoginItemSettings = originalLogin; delete app.__startupCalls; delete app.__restoreStartupCheck; };
+  });
+  try {
+    await page.getByLabel('Start With Windows', {exact:true}).check();
+    await page.getByLabel('Start Minimized at Login', {exact:true}).check();
+    for (let count = 1; count <= 2; count++) {
+      await page.getByRole('button', {name:'Save Settings',exact:true}).click();
+      await page.waitForFunction(() => document.querySelector('.tool-notice[role=status]')?.textContent === 'Settings saved.');
+      const calls = await app.evaluate(({app}) => app.__startupCalls);
+      assert.equal(calls.length,count);
+      assert.equal(calls.at(-1).openAtLogin,true);
+      assert.equal(calls.at(-1).name,'Nixie FoxWatch Monitor');
+      assert.equal(calls.at(-1).args.at(-1),'--background');
+    }
+  } finally {
+    // The mocked save restores only the isolated controller's in-memory settings.
+    await page.evaluate(settings => window.foxwatch.monitor.save(settings), initialSettings);
+    await app.evaluate(({app}) => app.__restoreStartupCheck());
+  }
+
   await app.evaluate(({ Menu }) => {
     Menu.getApplicationMenu().items.find(item => item.label === '&Run').submenu.items.find(item => item.label === 'Settings…').click();
   });

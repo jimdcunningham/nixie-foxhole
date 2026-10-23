@@ -152,7 +152,7 @@ export class MonitorService {
       await atomic(path.join(this.local, 'asset-publication.json'), this.publication);
     }
   }
-  async action(action: RunOperation | 'start' | 'pause' | 'cancel' | 'retire') {
+  async action(action: RunOperation | 'start' | 'pause' | 'cancel') {
     if (this.actionPending) throw new Error('A FoxWatch action is already pending.');
     if (action === 'pause') {
       this.actionPending = true;
@@ -172,11 +172,7 @@ export class MonitorService {
     if (process.platform !== 'win32') throw new Error('Steam polling, generation, and publishing require Windows.');
     this.actionPending = true;
     try {
-      if (action === 'retire') {
-        await exec('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File', path.join(this.repo, 'tools/foxwatch-desktop/scripts/retire-monitor.ps1')], { windowsHide: true, timeout: 20000 });
-        return;
-      }
-      if (await this.legacyRunning()) throw new Error('Retire the legacy monitor in Settings first so only one app polls for builds.');
+      if (await this.legacyRunning()) throw new Error('Close the deprecated WinForms monitor first so only one app polls for builds.');
       if (action === 'start') {
         const { validateMonitorConfig } = await this.module('steam-monitor-core'); validateMonitorConfig(this.config);
         this.controller.polling(true); await this.persist();
@@ -185,7 +181,7 @@ export class MonitorService {
   }
   private async run(operation: RunOperation, line: (value: string) => void): Promise<number> {
     this.cancelled = false;
-    if (await this.legacyRunning()) throw new Error('The legacy monitor is running. Retire it in Settings before starting work.');
+    if (await this.legacyRunning()) throw new Error('The deprecated WinForms monitor is running. Close it before starting work.');
     const commands: Record<RunOperation, string[]> = {
       poll: ['monitor-once'], refresh: ['monitor-now','--force-refresh'], 'clear-cache': ['clear-cache'],
       prepare: ['assets-prepare'], check: ['assets-publish'], publish: ['assets-publish','--upload'],

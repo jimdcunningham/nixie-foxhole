@@ -49,6 +49,9 @@ export const steamMonitorCommands = Object.freeze([
 
 export async function runSteamMonitorCommand({ command, args, repoRoot, runnerScriptPath }) {
     const paths = createMonitorPaths(repoRoot);
+    if (['setup-monitor', 'install-monitor-app', 'open-monitor', 'uninstall-monitor'].includes(command)) {
+        console.warn('Deprecated WinForms monitor command: ' + command + '. Use FoxWatch Desktop (npm run dev:desktop) and its Settings page. These legacy host commands remain for rollback; shared polling/generation commands remain supported.');
+    }
     if (command === 'open-monitor') {
         await manageMonitorApp(paths, 'open');
         return;

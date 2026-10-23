@@ -24,7 +24,7 @@ export interface MonitorApi {
   info(): Promise<ToolInfo>;
   save(settings: ToolSettings): Promise<ToolInfo>;
   credentials(input: CredentialInput): Promise<ToolInfo>;
-  action(action: RunOperation | 'start' | 'pause' | 'cancel' | 'logs' | 'output' | 'retire'): Promise<void>;
+  action(action: RunOperation | 'start' | 'pause' | 'cancel' | 'logs' | 'output'): Promise<void>;
   onStatus(callback: (status: RunStatus) => void): () => void;
   onView(callback: (view: AppView) => void): () => void;
 }

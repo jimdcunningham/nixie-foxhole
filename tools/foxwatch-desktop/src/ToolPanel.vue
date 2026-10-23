@@ -16,7 +16,7 @@ async function perform(task: () => Promise<unknown>, message = '') {
 }
 function refreshInfo() { return perform(async () => {}); }
 async function load() { info.value = await api.info(); settings.value = { ...info.value.settings }; }
-function action(value: RunOperation | 'start' | 'pause' | 'cancel' | 'logs' | 'output' | 'retire') {
+function action(value: RunOperation | 'start' | 'pause' | 'cancel' | 'logs' | 'output') {
   void perform(() => api.action(value));
 }
 async function saveCredentials() {
@@ -38,7 +38,7 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
     <p v-if="error" class="tool-error" role="alert">{{ error }}</p>
     <p v-if="notice" class="tool-notice" role="status">{{ notice }}</p>
     <p v-if="info && !info.windows" class="tool-notice">Steam monitoring and generation require Windows. Asset inspection and published-library downloads are available on this platform.</p>
-    <p v-if="info?.legacyRunning" class="tool-notice">The legacy monitor is running. Retire it in Settings before starting work here.</p>
+    <p v-if="info?.legacyRunning" class="tool-notice">The deprecated WinForms monitor is running. Close it before starting work here.</p>
 
     <template v-if="view === 'dashboard'">
       <div class="tool-cards">
@@ -81,7 +81,6 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
         <label class="tool-check"><input v-model="settings.startWithWindows" type="checkbox">Start With Windows</label>
         <label class="tool-check"><input v-model="settings.startMinimized" type="checkbox">Start Minimized at Login</label>
         <p class="muted">Polling is paused on first adoption. Start it on the Dashboard; later launches remember that choice.</p>
-        <button class="tool-button" @click="action('retire')">Retire Legacy Monitor</button>
       </fieldset>
       <fieldset :disabled="busy || !!status?.running || !info.windows"><legend>Steam & Generation</legend>
         <div class="settings-grid">

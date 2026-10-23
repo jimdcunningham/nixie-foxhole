@@ -446,9 +446,11 @@ async function launch() {
   ipcMain.handle('monitor:info', event => { authorize(event); return monitor.info(); });
   ipcMain.handle('monitor:save', async (event, value) => {
     authorize(event);
-    if (value?.startWithWindows !== monitor.settings.startWithWindows && await monitor.legacyRunning()) throw new Error('Retire the legacy monitor before enabling Windows startup.');
-    const startupChanged = value?.startWithWindows !== monitor.settings.startWithWindows;
-    await monitor.save(value); if (startupChanged) loginSettings(value.startWithWindows); return monitor.info();
+    if ((value?.startWithWindows || value?.startWithWindows !== monitor.settings.startWithWindows) && await monitor.legacyRunning()) throw new Error('Close the deprecated WinForms monitor before changing Windows startup.');
+    await monitor.save(value);
+    // Reconcile the OS registration even when the saved checkbox was already enabled.
+    loginSettings(value.startWithWindows);
+    return monitor.info();
   });
   ipcMain.handle('monitor:credentials', async (event, value) => { authorize(event); await monitor.credentials(value); return monitor.info(); });
   ipcMain.handle('monitor:action', async (event, action) => {
@@ -457,13 +459,12 @@ async function launch() {
       const target = action === 'logs' ? path.join(repo, 'tools/foxwatch/local/logs') : path.resolve(repo, monitor.settings.outputRoot);
       await mkdir(target, { recursive: true }); const error = await shell.openPath(target); if (error) throw new Error(error); return;
     }
-    if (!['start','pause','cancel','poll','refresh','clear-cache','prepare','check','publish','retire'].includes(action)) throw new Error('Invalid FoxWatch action.');
-    if (['cancel','clear-cache','publish','retire'].includes(action)) {
+    if (!['start','pause','cancel','poll','refresh','clear-cache','prepare','check','publish'].includes(action)) throw new Error('Invalid FoxWatch action.');
+    if (['cancel','clear-cache','publish'].includes(action)) {
       const messages: Record<string, [string,string]> = {
         cancel: ['Cancel the active run?', 'This stops the process tree and pauses polling. Generated outputs already written are retained.'],
         'clear-cache': ['Clear generation caches?', 'Steam installations, settings, logs, rendered outputs, and published assets are preserved.'],
         publish: ['Publish the prepared asset release?', 'This uploads the prepared snapshot and updates the public stable channel after verification. It does not approve a local baseline or update the extension build pin.'],
-        retire: ['Retire the legacy monitor?', 'Ask it to finish active work and exit, then remove its old Windows startup entry. Enable Windows startup here to replace it.'],
       };
       const [message, detail] = messages[action]!;
       const result = await dialog.showMessageBox(window, { type: 'question', message, detail, buttons: ['Cancel', 'Continue'], defaultId: 0, cancelId: 0 });

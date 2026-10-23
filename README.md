@@ -44,9 +44,14 @@ CUE4Parse is included as a Git submodule and remains under its own Apache-2.0 li
 
 Foxhole is a trademark of Siege Camp. This community project is not affiliated with or endorsed by Siege Camp.
 
-## FoxWatch desktop inspector
+## FoxWatch Desktop
 
-The standalone Electron/Vue inspector is in [tools/foxwatch-desktop](tools/foxwatch-desktop/README.md).
-Run `npm run dev:desktop` to browse the local generated assets directory, or use its
-File menu to open another directory. This first slice is read-only and leaves the
-existing tray Monitor and Steam polling unchanged. No generated assets are bundled.
+The [Electron/Vue app](tools/foxwatch-desktop/README.md) is the supported FoxWatch
+interface for Steam build polling, generation, asset inspection/comparison,
+credentials, and explicit R2 publishing. It stays available in the Windows tray
+and can start with Windows. Run `npm run dev:desktop` for development.
+
+The old [WinForms monitor](tools/foxwatch/monitor/README.md) is deprecated and
+retained for rollback. Existing installations switch Windows startup through
+Desktop Settings; pulling this repository does not change startup or polling.
+The shared FoxWatch CLI pipeline remains supported. No generated assets are bundled.
