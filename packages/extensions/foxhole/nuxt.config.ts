@@ -7,6 +7,8 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 
 // Build-time only (not runtimeConfig). Prefer FOXHOLE_BUILD_* so it is not confused with NUXT_* droplet env.
 const enableScheduledTasks = process.env.FOXHOLE_BUILD_SCHEDULED_TASKS === 'true';
+// Local delivery is a development-only opt-in shared with the SDK watcher.
+const localAssets = process.env.NODE_ENV === 'development' && process.env.NIXIE_FOXHOLE_ASSET_MODE === 'bundled';
 
 function readBooleanEnv(value: string | undefined, fallback = false): boolean {
   const normalized = String(value ?? '').trim().toLowerCase();
@@ -41,6 +43,7 @@ export default defineNuxtConfig({
       true,
     ),
     public: {
+      foxholeAssetMode: localAssets ? 'local' : 'remote',
       legacyBlueprintDiscoveryEnabled: true,
       legacyBlueprintCopyEnabled: true,
       legacyBlueprintLibraryEnabled: true,
@@ -64,10 +67,11 @@ export default defineNuxtConfig({
   },
   hooks: {
     'nitro:config'(config) {
-      config.publicAssets = withoutLocalAssetPublicDirectory(config.publicAssets ?? [], join(currentDir, 'public'));
+      if (!localAssets) config.publicAssets = withoutLocalAssetPublicDirectory(config.publicAssets ?? [], join(currentDir, 'public'));
     },
   },
   routeRules: {
+    ...(localAssets ? { '/foxhole/assets/**': { headers: { 'Cache-Control': 'no-store' } } } : {}),
     '/foxhole/assets/world/content/br/**': { headers: { 'Content-Encoding': 'br', 'Cache-Control': 'public, max-age=31536000, immutable' } },
     '/foxhole/assets/world/content/raw/**': { headers: { 'Cache-Control': 'public, max-age=31536000, immutable' } },
   },

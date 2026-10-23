@@ -76,3 +76,19 @@ test('one-shot builds publish through the atomic swap or its lock fallback', asy
         await rm(root, { recursive: true, force: true });
     }
 });
+
+test('incremental watched publication retains complete staging for the next build', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nixie-extension-retained-stage-'));
+    const source = join(root, 'source'), target = join(root, 'target'), previous = join(root, 'previous');
+    try {
+        await mkdir(source); await writeFile(join(source, 'model.glb'), 'model');
+        await publishCompletedBuild(source, target, previous, true, {
+            mirror: mirrorCompletedBuild,
+            rename: async () => { throw new Error('A watched build must not rename the live directory'); },
+            rm,
+            retainSource: true,
+        });
+        assert.equal(await readFile(join(target, 'model.glb'), 'utf8'), 'model');
+        assert.equal(await readFile(join(source, 'model.glb'), 'utf8'), 'model');
+    } finally { await rm(root, { recursive: true, force: true }); }
+});

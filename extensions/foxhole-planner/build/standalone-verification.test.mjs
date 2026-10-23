@@ -34,7 +34,7 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
         await fs.writeFile(join(assets, 'maps/source.bin'), bytes);
         await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), bytes);
         await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/metadata.json'), JSON.stringify(metadata));
-        const packageVerification = { metadata: { files: [{ path: 'dist/assets/maps/tile.bin', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] } };
+        const packageVerification = { manifest: { contributes: {} }, metadata: { files: [{ path: 'dist/assets/maps/tile.bin', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] } };
         const result = await verifyStandalone({ fixtureRoot, packageVerification });
         assert.deepEqual(result.mapResourceVerification, { regions: 1, resources: 1, bytes: bytes.length, labels: 0, staticIcons: 0 });
         await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), 'changed');
@@ -48,7 +48,9 @@ test('standalone hooks detach catalog input and verify exact map payload bytes',
             return { contractVersion: 1, assets: [{ path: 'dist/assets/maps/tile.bin', sourcePath: 'objects/map.bin',
                 sha256: createHash('sha256').update(bytes).digest('hex'), byteLength: bytes.length, mediaType: 'application/octet-stream' }] };
         };
-        const remotePackage = { metadata: { files: [] } };
+        const remoteManifest = JSON.parse(await fs.readFile(join(fixtureRoot, 'nixie.extension.json'), 'utf8'));
+        const remotePackage = { manifest: remoteManifest, metadata: { files: [] } };
+        packageVerification.manifest = remoteManifest;
         assert.deepEqual((await verifyStandalone({ fixtureRoot, packageVerification: remotePackage, readAssetIndex })).mapResourceVerification,
             result.mapResourceVerification);
         await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification, readAssetIndex }), /remote map/);

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,8 @@ import type { createFoxholeSceneV2MapMetadata } from './src/scene-v2-map-metadat
 import type { FoxholeSceneV2ModelSource } from './src/scene-v2-models.ts';
 import { publishCompletedBuild } from './build/completed-build-publisher.ts';
 import { createResourceBuildSnapshot } from './build/resource-build-snapshot.ts';
+import { createFoxholeRuntimeManifest } from './build/runtime-manifest.ts';
+import { createIncrementalBuildMirror, createResourceOutputCache } from './build/resource-output-cache.ts';
 import { bindFoxholeModelLayerNodes } from './src/model-layer-nodes.ts';
 import { applyPublishedModelLayers, type PublishedModelLayers } from './build/model-layer-metadata.ts';
 
@@ -199,6 +201,10 @@ export function sceneV2RemoteResourceBindings(sources: SceneV2ResourceSources) {
 function foxholeSceneV2ResourcesPlugin(): Plugin {
   const sources = createResourceBuildSnapshot(readSceneV2AssetSources);
   let updatedManifest = '';
+  const resourceOutputs = createResourceOutputCache();
+  let initializedStaging = false;
+  let publishedCopies = 0;
+  const mirror = createIncrementalBuildMirror(() => publishedCopies++);
   const extensionRoot = resolve(fileURLToPath(new URL('./', import.meta.url)));
   const buildingMarker = resolve(extensionRoot, '.nixie-building');
   const getSources = sources.read;
@@ -206,19 +212,25 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
     name: 'nixie-foxhole-scene-v2-resources',
     apply: 'build',
     enforce: 'pre',
+    config(config) {
+      if (!remoteResourcePack && config.build?.watch) return { build: { emptyOutDir: false } };
+    },
     async buildStart() {
       await writeFile(buildingMarker, 'Building extension output\n');
+      if (!remoteResourcePack && this.meta.watchMode && !initializedStaging) {
+        const staging = resolve(extensionRoot, '.nixie-build');
+        if (dirname(staging) !== extensionRoot) throw new Error('Unexpected extension staging directory.');
+        await rm(staging, { recursive: true, force: true });
+        initializedStaging = true;
+      }
+      resourceOutputs.begin();
+      publishedCopies = 0;
       // Keep declarations aligned with the filtered generated input, including future allowed exports.
       const manifestPath = fileURLToPath(new URL('./nixie.extension.json', import.meta.url));
       const original = await readFile(manifestPath, 'utf8');
-      const declaration = JSON.parse(original);
       const models = (await sources.begin()).models;
-      declaration.contributes.experimentalResources = [
-        ...declaration.contributes.experimentalResources.filter((resource: { id: string; kind: string; }) =>
-          resource.kind !== 'model' || !resource.id.startsWith('foxhole.model.')),
-        ...models.map(model => ({ contractVersion: 1, id: `foxhole.model.${model.id}`, kind: 'model',
-          path: `dist/assets/scene-v2/${model.packagedPath}`, ...(remoteResourcePack ? { assetPack: remoteResourcePack.id } : {}) })),
-      ];
+      const declaration = createFoxholeRuntimeManifest(JSON.parse(original), models, remoteResourcePack);
+      this.addWatchFile(manifestPath);
       if (remoteResourcePack) {
         const library = await loadFoxholeAssetRelease(assetReleasePin.publication);
         // Generated metadata compiled into the extension must describe the pinned bytes.
@@ -235,16 +247,20 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
         for (const binding of sceneV2RemoteResourceBindings(await getSources())) {
           if (!indexed.has(binding.path)) throw new Error('Rebuild the remote resource index for ' + binding.path);
         }
-        declaration.capabilities = [...new Set([...declaration.capabilities, 'resources.remote'])];
-        declaration.contributes.experimentalAssetPacks = [remoteResourcePack];
-        declaration.contributes.experimentalResourceTemplates = declaration.contributes.experimentalResourceTemplates.map((row: { idPrefix: string; }) =>
-          ({ ...row, assetPack: remoteResourcePack.id }));
-      }
-      if (!remoteResourcePack) {
-        delete declaration.contributes.experimentalAssetPacks;
-        declaration.contributes.experimentalResourceTemplates = declaration.contributes.experimentalResourceTemplates.map(({ assetPack, ...row }: { assetPack?: string; }) => row);
+
       }
       updatedManifest = `${JSON.stringify(declaration)}\n`;
+      if (!remoteResourcePack) {
+        const local = await getSources();
+        const watch = (path: string) => this.addWatchFile(resolve(foxholeAssetsRoot, path));
+        for (const model of local.models) watch(model.path);
+        for (const path of local.browserImageSources) watch(path.slice('/foxhole/assets/'.length));
+        for (const asset of local.assets) {
+          watch(asset.texturePath);
+          if (asset.iconPath) watch(asset.iconPath);
+        }
+        for (const resource of [...local.modifications, ...local.visuals, ...local.maps.resources]) watch(resource.sourcePath);
+      }
       this.addWatchFile(foxholeManifestPath);
         for (const locale of ['de', 'fr', 'pt', 'ru', 'zh']) this.addWatchFile(resolve(foxholeAssetsRoot, `localizations/${locale}.json`));
       this.addWatchFile(resolve(foxholeAssetsRoot, 'models/manifest.v1.json'));
@@ -281,33 +297,38 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
       const sources = await getSources();
       return `export const catalogLocalizations=${JSON.stringify(sources.catalogLocalizations)};export const productionOutputsByRecipeId=${JSON.stringify(sources.productionOutputsByRecipeId)};export const productionRecipesById=${JSON.stringify(sources.productionRecipesById)};export const bunkerDestructionWeapons=${JSON.stringify(sources.bunkerDestructionWeapons)};export default ${JSON.stringify(sources.metadata)};`;
     },
-    async writeBundle(options) {
-      const outputRoot = resolve(String(options.dir ?? 'dist'), 'assets/scene-v2');
+    async writeBundle(options, bundle) {
+      const staging = resolve(String(options.dir));
+      const published = resolve(extensionRoot, 'dist');
+      const previous = resolve(extensionRoot, '.nixie-previous');
+      if (staging !== resolve(extensionRoot, '.nixie-build') || ![staging, published, previous].every(path => dirname(path) === extensionRoot)) {
+        throw new Error('Unexpected extension staging directory.');
+      }
+      const outputRoot = resolve(staging, 'assets/scene-v2');
       await mkdir(outputRoot, { recursive: true });
       const sources = await getSources();
       // Group each catalog asset's render resources together so model growth remains inspectable.
       const assetsRoot = resolve(outputRoot, 'assets');
-      await rm(assetsRoot, { recursive: true, force: true });
       await mkdir(assetsRoot, { recursive: true });
       for (const model of remoteResourcePack ? [] : sources.models) {
         const destination = resolve(outputRoot, model.packagedPath);
         await mkdir(dirname(destination), { recursive: true });
-        await copyFile(resolve(foxholeAssetsRoot, model.path), destination);
+        await resourceOutputs.copy(resolve(foxholeAssetsRoot, model.path), destination);
       }
       const browserRoot = resolve(outputRoot, 'browser');
       await mkdir(browserRoot, { recursive: true });
       for (let start = 0; !remoteResourcePack && start < sources.browserImageSources.length; start += 64) {
-        const atlas = await createBrowserAtlas(sources.browserImageSources.slice(start, start + 64).map(source => resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length))));
-        await writeFile(resolve(browserRoot, `${Math.floor(start / 64)}.webp`), atlas);
+        const files = sources.browserImageSources.slice(start, start + 64).map(source => resolve(foxholeAssetsRoot, source.slice('/foxhole/assets/'.length)));
+        await resourceOutputs.generate(resolve(browserRoot, `${Math.floor(start / 64)}.webp`), files, () => createBrowserAtlas(files));
       }
       for (let start = 0; !remoteResourcePack && start < sources.assets.length; start += 64) {
         await Promise.all(sources.assets.slice(start, start + 64).map(async asset => {
           const assetRoot = resolve(assetsRoot, asset.id);
           await mkdir(assetRoot, { recursive: true });
           await Promise.all([
-            copyFile(asset.texturePath, resolve(assetRoot, 'texture.webp')),
+            resourceOutputs.copy(asset.texturePath, resolve(assetRoot, 'texture.webp')),
             ...(asset.iconPath
-              ? [copyFile(asset.iconPath, resolve(assetRoot, 'icon.webp'))]
+              ? [resourceOutputs.copy(asset.iconPath, resolve(assetRoot, 'icon.webp'))]
               : []),
           ]);
         }));
@@ -316,35 +337,31 @@ function foxholeSceneV2ResourcesPlugin(): Plugin {
       await mkdir(modificationsRoot, { recursive: true });
       for (let start = 0; !remoteResourcePack && start < sources.modifications.length; start += 64) {
         await Promise.all(sources.modifications.slice(start, start + 64).map(resource => (
-          copyFile(resource.sourcePath, resolve(modificationsRoot, `${resource.id}.webp`))
+          resourceOutputs.copy(resource.sourcePath, resolve(modificationsRoot, `${resource.id}.webp`))
         )));
       }
       const visualsRoot = resolve(outputRoot, 'shared/visuals');
       await mkdir(visualsRoot, { recursive: true });
       for (let start = 0; !remoteResourcePack && start < sources.visuals.length; start += 64) {
         await Promise.all(sources.visuals.slice(start, start + 64).map(resource => (
-          copyFile(resource.sourcePath, resolve(visualsRoot, `${resource.id}.webp`))
+          resourceOutputs.copy(resource.sourcePath, resolve(visualsRoot, `${resource.id}.webp`))
         )));
       }
       const mapsRoot = resolve(String(options.dir ?? 'dist'), 'assets/maps');
       await mkdir(mapsRoot, { recursive: true });
-      await writeFile(resolve(mapsRoot, 'metadata.json'), JSON.stringify(sources.maps.metadata));
+      await resourceOutputs.write(resolve(mapsRoot, 'metadata.json'), JSON.stringify(sources.maps.metadata));
       for (let start = 0; !remoteResourcePack && start < sources.maps.resources.length; start += 64) {
         await Promise.all(sources.maps.resources.slice(start, start + 64).map(resource =>
-          copyFile(resolve(foxholeAssetsRoot, resource.sourcePath), resolve(mapsRoot, resource.path.split('/').at(-1)!))));
+          resourceOutputs.copy(resolve(foxholeAssetsRoot, resource.sourcePath), resolve(mapsRoot, resource.path.split('/').at(-1)!))));
       }
       // Publish a completed build once. Discovery must never hash an asset copy in progress.
-      const staging = resolve(String(options.dir));
-      const published = resolve(extensionRoot, 'dist');
-      const previous = resolve(extensionRoot, '.nixie-previous');
-      if (staging !== resolve(extensionRoot, '.nixie-build') || ![staging, published, previous].every(path => dirname(path) === extensionRoot)) {
-        throw new Error('Unexpected extension staging directory.');
-      }
-      await publishCompletedBuild(staging, published, previous, this.meta.watchMode);
-      const manifestPath = resolve(extensionRoot, 'nixie.extension.json');
-      if (await readFile(manifestPath, 'utf8') !== updatedManifest) {
-        await writeFile(manifestPath, updatedManifest);
-      }
+      await resourceOutputs.write(resolve(staging, 'nixie.extension.json'), updatedManifest);
+      const stats = await resourceOutputs.finish(staging, Object.keys(bundle));
+      const incremental = this.meta.watchMode && !remoteResourcePack;
+      await publishCompletedBuild(staging, published, previous, this.meta.watchMode,
+        incremental ? { mirror, rename, rm, retainSource: true } : undefined);
+      if (incremental) console.info('Foxhole assets: ' + stats.copied + ' copied, ' + stats.generated + ' atlases built, '
+        + stats.reused + ' reused, ' + stats.removed + ' stale files removed; ' + publishedCopies + ' output files published.');
       await unlink(buildingMarker);
       await rm(previous, { recursive: true, force: true });
     },

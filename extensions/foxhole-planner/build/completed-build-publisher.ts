@@ -31,6 +31,7 @@ interface CompletedBuildPublisherOperations {
     mirror: typeof mirrorCompletedBuild;
     rename: typeof rename;
     rm: typeof rm;
+    retainSource?: boolean;
 }
 
 /** Publish staging without renaming the live directory during a watched development build. */
@@ -44,7 +45,7 @@ export async function publishCompletedBuild(
     await operations.rm(previous, { recursive: true, force: true });
     if (watchMode) {
         await operations.mirror(source, target);
-        await operations.rm(source, { recursive: true, force: true });
+        if (!operations.retainSource) await operations.rm(source, { recursive: true, force: true });
         return;
     }
     let movedTarget = false;

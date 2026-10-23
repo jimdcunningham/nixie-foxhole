@@ -87,7 +87,7 @@ export async function prepareStandalone({ extensionSource, fixtureRoot, foxholeA
 }
 
 export async function verifyStandalone({ fixtureRoot, packageVerification, readAssetIndex = readPinnedAssetJson }) {
-    const manifest = JSON.parse(await fs.readFile(join(fixtureRoot, 'nixie.extension.json'), 'utf8'));
+    const manifest = packageVerification.manifest;
     const pack = manifest.contributes?.experimentalAssetPacks?.find(pack => pack.id === 'foxhole.runtime');
     const remoteEntries = pack
         ? new Map(parseNixieExperimentalAssetPackIndexV1(await readAssetIndex(pack.manifest)).assets.map(entry => [entry.path, entry]))
