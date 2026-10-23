@@ -29,6 +29,7 @@ export interface AssetDetails extends AssetEntry {
   extension: string;
 }
 export interface InspectorApi {
+  monitor: import('./monitor.js').MonitorApi;
   fileManagerName: string;
   published(
     action: 'info' | 'check' | 'download' | 'cancel' | 'open',

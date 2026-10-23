@@ -15,6 +15,14 @@ import type {
   ReviewSummary,
 } from '../shared/contracts';
 import Icon from './Icon.vue';
+import ToolPanel from './ToolPanel.vue';
+import type { AppView, RunStatus } from '../shared/monitor';
+const view = ref<AppView>('inspector');
+const runStatus = shallowRef<RunStatus | null>(null);
+const now = ref(Date.now());
+const elapsed = computed(() => runStatus.value?.startedAt ? Math.max(0, Math.floor(((runStatus.value.finishedAt ?? now.value) - runStatus.value.startedAt) / 1000)) : 0);
+let clock: ReturnType<typeof setInterval>;
+
 import AssetPreview from './AssetPreview.vue';
 import PublishedLibraryDialog from './PublishedLibraryDialog.vue';
 const showPublished = ref(false);
@@ -346,7 +354,11 @@ function resizeByKey(event: KeyboardEvent) {
   localStorage.setItem('foxwatch.sidebarWidth', String(sidebarWidth.value));
 }
 onMounted(async () => {
+  clock = setInterval(() => now.value = Date.now(), 1000);
+  runStatus.value = await window.foxwatch.monitor.status();
   unsubscribe.push(
+    window.foxwatch.monitor.onStatus(status => runStatus.value = status),
+    window.foxwatch.monitor.onView(value => view.value = value),
     window.foxwatch.onPublished(() => {
       showPublished.value = true;
     }),
@@ -373,6 +385,7 @@ onMounted(async () => {
   if (tree.value) observer.observe(tree.value);
 });
 onBeforeUnmount(() => {
+  clearInterval(clock);
   observer?.disconnect();
   unsubscribe.forEach((stop) => stop());
 });
@@ -380,7 +393,11 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="workspace" :style="{ '--sidebar-width': `${sidebarWidth}px` }">
-    <div class="panes">
+    <nav class="workspace-nav" aria-label="Workspace Views">
+      <button v-for="item in ([['inspector','Assets'],['dashboard','Dashboard'],['workers','Workers & Logs']] as const)" :key="item[0]" :aria-pressed="view === item[0]" @click="view = item[0]">{{ item[1] }}</button>
+      <span class="nav-spacer"/><button :aria-pressed="view === 'settings'" @click="view = 'settings'">Settings</button>
+    </nav>
+    <div v-show="view === 'inspector'" class="panes">
       <aside v-show="sidebar" class="sidebar" aria-label="Assets">
         <header class="sidebar-header">
           <span>Assets</span>
@@ -659,11 +676,19 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
+    <ToolPanel v-show="view !== 'inspector'" :view="view" :status="runStatus" />
+    <button v-if="runStatus" class="run-strip" :class="{ 'run-failed': runStatus.stage === 'Failed' }" @click="view = 'dashboard'" aria-label="Show Run Dashboard">
+      <span class="run-stage">{{ runStatus.running ? runStatus.stage : runStatus.stage === 'Failed' ? 'Run Failed' : runStatus.polling ? 'Polling Enabled' : 'Polling Paused' }}</span>
+      <progress v-if="runStatus.running" max="100" :value="runStatus.percent" aria-label="Run Progress" />
+      <span class="run-detail">{{ runStatus.detail }}</span>
+      <span v-if="runStatus.startedAt">{{ Math.round(runStatus.percent) }}% · {{ Math.floor(elapsed / 60) }}m {{ elapsed % 60 }}s</span>
+      <span v-if="runStatus.polling">{{ runStatus.running ? 'Next poll after run' : runStatus.nextPollAt ? 'Next poll ' + new Date(runStatus.nextPollAt).toLocaleTimeString() : '' }}</span>
+    </button>
     <PublishedLibraryDialog
       v-if="showPublished"
       @close="showPublished = false"
     />
-    <footer class="status-bar">
+    <footer v-show="view === 'inspector'" class="status-bar">
       <span :title="root?.path">{{
         root ? root.path : 'No directory open'
       }}</span

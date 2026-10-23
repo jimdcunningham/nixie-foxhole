@@ -11,4 +11,8 @@ while ((Get-Process -Name FoxWatchMonitor -ErrorAction SilentlyContinue) -and [D
 if (Get-Process -Name FoxWatchMonitor -ErrorAction SilentlyContinue) {
     throw 'The legacy monitor is finishing its run. Wait for it to exit, then retry.'
 }
-Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Nixie FoxWatch Monitor' -ErrorAction SilentlyContinue
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$startup = (Get-ItemProperty -LiteralPath $runKey -Name 'Nixie FoxWatch Monitor' -ErrorAction SilentlyContinue).'Nixie FoxWatch Monitor'
+if ($startup -and $startup -match 'FoxWatchMonitor\.exe') {
+    Remove-ItemProperty -LiteralPath $runKey -Name 'Nixie FoxWatch Monitor' -ErrorAction SilentlyContinue
+}

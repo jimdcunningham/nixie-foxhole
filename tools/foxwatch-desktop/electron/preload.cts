@@ -11,6 +11,15 @@ function subscribe<T>(
   return () => ipcRenderer.removeListener(channel, listener);
 }
 const api: InspectorApi = {
+  monitor: {
+    status: () => ipcRenderer.invoke('monitor:status'),
+    info: () => ipcRenderer.invoke('monitor:info'),
+    save: value => ipcRenderer.invoke('monitor:save', value),
+    credentials: value => ipcRenderer.invoke('monitor:credentials', value),
+    action: action => ipcRenderer.invoke('monitor:action', action),
+    onStatus: callback => subscribe('monitor:status', callback),
+    onView: callback => subscribe('app:view', callback),
+  },
   fileManagerName:
     process.platform === 'darwin'
       ? 'Finder'

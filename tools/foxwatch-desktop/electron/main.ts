@@ -5,12 +5,16 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  nativeImage,
+  Tray,
   shell,
 } from 'electron';
 import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from 'electron';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MonitorService } from './monitor-service.js';
+import type { AppView } from '../shared/monitor.js';
 import { PublishedLibrary, type PublishedPlan } from './published-library.js';
 import type { PublishedStatus } from '../shared/contracts.js';
 import { AssetReview } from './asset-review.js';
@@ -20,6 +24,43 @@ import { readAssetPreview } from './preview-file.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../..');
 let window: BrowserWindow;
+let monitor: MonitorService;
+let tray: Tray;
+let quitting = false;
+let quitWhenIdle = false;
+let notifyTimer: ReturnType<typeof setTimeout> | undefined;
+const showWindow = () => { window.show(); if (window.isMinimized()) window.restore(); window.focus(); };
+const navigate = (view: AppView) => { showWindow(); window.webContents.send('app:view', view); };
+function loginSettings(enabled: boolean) {
+  if (process.platform !== 'win32') return;
+  app.setLoginItemSettings({ openAtLogin: enabled, name: 'Nixie FoxWatch Monitor', path: process.execPath,
+    args: app.isPackaged ? ['--background'] : [path.resolve(here, '../..'), '--background'] });
+}
+function monitorChanged() {
+  if (!monitor || !window || window.isDestroyed()) return;
+  if (quitWhenIdle && !monitor.controller.status.running) { quitting = true; app.quit(); return; }
+  if (notifyTimer) return;
+  notifyTimer = setTimeout(() => {
+    notifyTimer = undefined;
+    if (window.isDestroyed()) return;
+    const status = monitor.controller.status;
+    window.webContents.send('monitor:status', status);
+    window.setProgressBar(status.running ? (status.percent ? status.percent / 100 : 2) : -1);
+    tray?.setToolTip(`FoxWatch — ${status.stage}${status.running ? ' · ' + Math.round(status.percent) + '%' : ''}`);
+    updateTray();
+  }, 200);
+}
+function updateTray() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open FoxWatch', click: showWindow },
+    { label: 'Dashboard', click: () => navigate('dashboard') },
+    { label: monitor.controller.status.polling ? 'Pause Polling' : 'Start Polling',
+      click: () => void report(() => monitor.action(monitor.controller.status.polling ? 'pause' : 'start')) },
+    { label: 'Settings…', click: () => navigate('settings') },
+    { type: 'separator' }, { label: 'Quit FoxWatch', click: () => app.quit() },
+  ]));
+}
 let directory: AssetDirectory | null = null;
 let review: AssetReview | null = null;
 let reviewRunning = false;
@@ -226,6 +267,8 @@ async function handlePublishedAction(action: unknown, scope: unknown) {
 
 async function launch() {
   await app.whenReady();
+  monitor = new MonitorService(repo, app.getPath('userData'), monitorChanged);
+  await monitor.initialize();
   const bundled = JSON.parse(
     await readFile(path.join(here, '../shared/release-pin.json'), 'utf8'),
   );
@@ -238,9 +281,7 @@ async function launch() {
     ).href,
   });
   publishedStatus.current = await library.current();
-  app.on('before-quit', () =>
-    publishedAbort?.abort(new Error('FoxWatch is closing.')),
-  );
+
   nativeTheme.themeSource = 'dark';
   window = new BrowserWindow({
     width: 1240,
@@ -260,7 +301,37 @@ async function launch() {
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
-  window.on('ready-to-show', () => window.show());
+  window.on('ready-to-show', () => {
+    if (!process.argv.includes('--background') || !monitor.settings.startMinimized) window.show();
+  });
+  window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
+  // A real native tray icon keeps the controller reachable with every window hidden.
+  const pixels = Buffer.alloc(32 * 32 * 4);
+  for (let y = 3; y < 29; y++) for (let x = 3; x < 29; x++) {
+    const offset = (y * 32 + x) * 4;
+    const glyph = (x >= 9 && x <= 12 && y >= 8 && y <= 24) || (x >= 9 && x <= 23 && y >= 8 && y <= 11) || (x >= 9 && x <= 20 && y >= 15 && y <= 18);
+    pixels[offset] = glyph ? 232 : 77; pixels[offset + 1] = glyph ? 244 : 112;
+    pixels[offset + 2] = glyph ? 241 : 92; pixels[offset + 3] = 255;
+  }
+  const icon = nativeImage.createFromBitmap(pixels, { width: 32, height: 32, scaleFactor: 1 });
+  tray = new Tray(icon);
+  tray.setToolTip('FoxWatch');
+  tray.on('double-click', showWindow);
+  tray.on('click', showWindow);
+  updateTray();
+  app.on('second-instance', showWindow);
+  app.on('activate', showWindow);
+  app.on('before-quit', event => {
+    if (quitting) return;
+    if (monitor.controller.status.running) {
+      event.preventDefault();
+      if (!quitWhenIdle) void dialog.showMessageBox(window, { type: 'question', buttons: ['Keep Running', 'Quit After Run'], defaultId: 0,
+        message: 'FoxWatch is still working.', detail: 'Quit after the active run finishes? Closing the window keeps FoxWatch running in the tray.' }).then(result => {
+          if (result.response === 1) { quitWhenIdle = true; monitor.stopScheduling(); monitorChanged(); }
+        });
+    } else quitting = true;
+  });
+  app.on('will-quit', () => { publishedAbort?.abort(new Error('FoxWatch is closing.')); monitor.dispose(); clearTimeout(notifyTimer); tray.destroy(); });
   const menu: MenuItemConstructorOptions[] = [
     {
       label: '&File',
@@ -314,10 +385,21 @@ async function launch() {
         },
       ],
     },
-    { label: '&Edit', submenu: [{ role: 'copy' }, { role: 'selectAll' }] },
+    { label: '&Run', submenu: [
+      { label: 'Start Polling', click: () => void report(() => monitor.action('start')) },
+      { label: 'Pause Polling', click: () => void report(() => monitor.action('pause')) },
+      { label: 'Refresh Latest Build', click: () => void report(() => monitor.action('refresh')) },
+      { type: 'separator' },
+      { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => navigate('settings') },
+    ] },
+    { label: '&Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     {
       label: '&View',
       submenu: [
+        { label: 'Asset Inspector', accelerator: 'CmdOrCtrl+1', click: () => navigate('inspector') },
+        { label: 'Dashboard', accelerator: 'CmdOrCtrl+2', click: () => navigate('dashboard') },
+        { label: 'Workers & Logs', accelerator: 'CmdOrCtrl+3', click: () => navigate('workers') },
+        { type: 'separator' },
         {
           label: 'Refresh Assets',
           accelerator: 'CmdOrCtrl+R',
@@ -348,7 +430,7 @@ async function launch() {
               title: 'About FoxWatch',
               message: 'FoxWatch',
               detail:
-                'Asset Inspector · 0.1.0\nRead-only inspection of local generated assets.',
+                'FoxWatch · 0.1.0\nSteam build monitoring, asset generation, inspection, and publishing.',
             }),
         },
       ],
@@ -356,6 +438,36 @@ async function launch() {
   ];
   if (process.platform === 'darwin') menu.unshift({ role: 'appMenu' });
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
+  ipcMain.handle('monitor:status', event => { authorize(event); return monitor.controller.status; });
+  ipcMain.handle('monitor:info', event => { authorize(event); return monitor.info(); });
+  ipcMain.handle('monitor:save', async (event, value) => {
+    authorize(event);
+    if (value?.startWithWindows !== monitor.settings.startWithWindows && await monitor.legacyRunning()) throw new Error('Retire the legacy monitor before enabling Windows startup.');
+    const startupChanged = value?.startWithWindows !== monitor.settings.startWithWindows;
+    await monitor.save(value); if (startupChanged) loginSettings(value.startWithWindows); return monitor.info();
+  });
+  ipcMain.handle('monitor:credentials', async (event, value) => { authorize(event); await monitor.credentials(value); return monitor.info(); });
+  ipcMain.handle('monitor:action', async (event, action) => {
+    authorize(event);
+    if (action === 'logs' || action === 'output') {
+      const target = action === 'logs' ? path.join(repo, 'tools/foxwatch/local/logs') : path.resolve(repo, monitor.settings.outputRoot);
+      await mkdir(target, { recursive: true }); const error = await shell.openPath(target); if (error) throw new Error(error); return;
+    }
+    if (!['start','pause','cancel','poll','refresh','clear-cache','prepare','check','publish','retire'].includes(action)) throw new Error('Invalid FoxWatch action.');
+    if (['cancel','clear-cache','publish','retire'].includes(action)) {
+      const messages: Record<string, [string,string]> = {
+        cancel: ['Cancel the active run?', 'This stops the process tree and pauses polling. Generated outputs already written are retained.'],
+        'clear-cache': ['Clear generation caches?', 'Steam installations, settings, logs, rendered outputs, and published assets are preserved.'],
+        publish: ['Publish the prepared asset release?', 'This uploads the prepared snapshot and updates the public stable channel after verification. It does not approve a local baseline or update the extension build pin.'],
+        retire: ['Retire the legacy monitor?', 'Ask it to finish active work and exit, then remove its old Windows startup entry. Enable Windows startup here to replace it.'],
+      };
+      const [message, detail] = messages[action]!;
+      const result = await dialog.showMessageBox(window, { type: 'question', message, detail, buttons: ['Cancel', 'Continue'], defaultId: 0, cancelId: 0 });
+      if (result.response !== 1) return;
+    }
+    await monitor.action(action);
+  });
+  monitor.startTimer();
   ipcMain.handle(
     'assets:review',
     async (event, id: unknown, action: unknown) => {
@@ -492,9 +604,10 @@ async function launch() {
   }
   if (devUrl) await window.loadURL(devUrl);
   else await window.loadFile(path.resolve(here, '../../dist/index.html'));
-  app.on('window-all-closed', () => app.quit());
+  // Window close hides to tray; only an explicit Quit ends background polling.
 }
-void launch().catch((error) => {
+if (!app.requestSingleInstanceLock()) app.quit();
+else void launch().catch((error) => {
   console.error(error);
   dialog.showErrorBox(
     'FoxWatch Could Not Start',

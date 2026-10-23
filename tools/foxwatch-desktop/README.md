@@ -1,9 +1,44 @@
 # FoxWatch Desktop
 
-The first Electron/Vue slice of the standalone FoxWatch tooling suite. This is a
-read-only local asset inspector. It does not replace, launch, stop, or modify the
-existing Windows tray Monitor. Steam polling, generation, A/B rendering, publishing,
-and the new background controller remain outside this inspector slice.
+The standalone Electron/Vue FoxWatch suite combines Steam build monitoring,
+generation, asset inspection, and explicit R2 publishing. The inspector stays
+available while the existing FoxWatch CLI performs background work.
+
+**View → Dashboard** shows the latest/successful builds, polling state, overall
+stage progress, and run actions. **View → Workers & Logs** shows Blender workers,
+3D export activity, counters, and recent output. The run strip remains visible
+while browsing assets. Full per-run logs are saved in `tools/foxwatch/local/logs`.
+
+**Run → Settings** (Ctrl+,) contains startup behavior, Steam/Blender/Node settings,
+encrypted credentials, asset publication configuration, and cache maintenance.
+Existing repository configuration and Windows DPAPI credentials are reused.
+Secret values are never returned to the renderer. Empty credential fields keep
+the saved values. Saving a password or key does not run a poll or upload.
+
+Closing the window hides it in the native tray. Its menu opens the app, navigates
+to the Dashboard/Settings, starts/pauses polling, or quits. Reopening FoxWatch
+focuses the existing instance. **Start With Windows** registers the built app;
+**Start Minimized at Login** keeps its initial window hidden. The built renderer
+must exist before enabling startup; Windows login does not start a Vite server.
+
+First adoption starts paused. **Retire Legacy Monitor** asks the WinForms monitor
+to finish active work and exit, then removes only its old startup command. It
+never kills the legacy process. Once it has exited, enable Windows startup here
+and use **Start Polling**. The legacy executable is retained for rollback.
+
+Only one pipeline operation runs at a time. Each automatic poll includes any
+required acquisition/generation; the next interval starts only after completion.
+**Pause Polling** leaves an active run alone; **Cancel Run** explicitly stops its
+process tree and pauses future polling. Quit can wait for the active run without
+disabling the saved polling preference for the next launch. CLI monitor/refresh
+locks continue to protect work started outside Electron.
+
+Publishing is manual: **Prepare Assets**, inspect/review, **Check Upload**, then
+**Publish Assets**. Prepare/check never upload; publish requires confirmation and
+updates the public stable channel only after verification. Generation never
+automatically uploads, and publishing changes neither the local approved baseline
+nor Nixie's checked-in release pin. Inspection/downloads work without Windows;
+Steam, generation, DPAPI credentials, and this publishing controller are Windows-only.
 
 From the `nixie-foxhole` checkout:
 
@@ -27,7 +62,7 @@ Right/Left expand/collapse. Moving onto a file immediately opens it in the inspe
 as does a single click. Drag the divider to resize the
 sidebar. **View → Refresh Assets** (Ctrl+R) refreshes expanded folders; Ctrl+B toggles
 the sidebar. Right-click a file to reveal it in Explorer; a folder also offers opening
-that folder directly. There are no create, rename, delete, or upload actions.
+that folder directly. The directory navigator has no create, rename, delete, or upload actions.
 
 **Review → Approve Current Assets as Baseline** explicitly saves an approved local
 snapshot in Electron user data. **Compare With Approved Baseline** (or Refresh after
@@ -100,4 +135,4 @@ smoke test. It uses isolated temporary assets and a temporary profile, opens its
 own inspector, and intercepts Explorer launches. It checks native menus, browsing,
 immediate keyboard selection, image/JSON/model previews, model orbit controls,
 virtualized large folders, directory switching, and the IPC
-boundary. It does not touch the running Monitor or upload anything.
+boundary. It does not touch the running legacy monitor, run Steam/generation, or upload anything. Controller integration checks use a synthetic CLI and temporary DPAPI credentials.

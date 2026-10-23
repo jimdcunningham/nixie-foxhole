@@ -5,6 +5,8 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import { checkBackground } from './background-check.mjs';
+import { checkMonitor } from './monitor-check.mjs';
 import { checkPublishedLibrary } from './published-check.mjs';
 import { checkAssetReview } from './review-check.mjs';
 import { checkPreviewTransitions } from './transition-check.mjs';
@@ -87,6 +89,7 @@ try {
   await page.mouse.up();
   assert.notDeepEqual(await modelCanvas.screenshot(), originalView);
   await page.getByRole('button', { name: 'Reset View', exact: true }).click();
+  await checkMonitor(app, page);
   await checkPreviewTransitions(app, page);
   await page.getByRole('tree').focus();
   await page.keyboard.press('ArrowDown');
@@ -108,6 +111,7 @@ try {
   assert.deepEqual(nativeMenus, [
     '&File',
     '&Review',
+    '&Run',
     '&Edit',
     '&View',
     '&Help',
@@ -256,6 +260,10 @@ try {
       ok: true,
       checks: [
         'native menus',
+        'dashboard and worker progress while inspecting',
+        'settings without credential disclosure',
+        'hide to tray and background startup',
+        'single-instance window restoration',
         'sandboxed bridge',
         'lazy folder expansion',
         'single-click selection',
@@ -291,5 +299,6 @@ try {
   throw cause;
 } finally {
   await app.close();
+  if (!errors.length) await checkBackground(electron, require('electron'), project, base, env);
   await rm(base, { recursive: true, force: true });
 }

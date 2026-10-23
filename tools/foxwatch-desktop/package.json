@@ -12,7 +12,7 @@
     "build": "npm run typecheck && npm run build:main && vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "test:desktop": "npm run build && node scripts/smoke.mjs"
+    "test:desktop": "npm run build && node --test scripts/monitor-service.test.mjs && node scripts/smoke.mjs"
   },
   "dependencies": {
     "vue": "3.5.44",
