@@ -4,6 +4,10 @@ import {
   copyFile,
   lstat,
   mkdir,
+  mkdtemp,
+  rm,
+  rmdir,
+  utimes,
   readFile,
   realpath,
   rename,
@@ -190,8 +194,11 @@ export class AssetReview {
   async compare(onProgress: ReviewProgress = () => {}) {
     if (!this.baseline)
       throw new Error('Approve a baseline before comparing assets.');
-    const files = await this.scan(onProgress),
-      changes = new Map<string, AssetChange>();
+    return this.updateComparison(await this.scan(onProgress));
+  }
+  private updateComparison(files: Record<string, SnapshotFile>) {
+    if (!this.baseline) throw new Error('No approved baseline.');
+    const changes = new Map<string, AssetChange>();
     let unchanged = 0;
     for (const [logical, row] of Object.entries(files)) {
       const previous = this.baseline.files[logical];
@@ -206,6 +213,154 @@ export class AssetReview {
     this.comparedAt = new Date().toISOString();
     return this.summary();
   }
+  /** A fresh, immutable plan is prepared before the confirmation is shown. */
+  async prepareDiscard(onProgress: ReviewProgress = () => {}) {
+    if (!this.baseline) throw new Error('Approve a baseline before discarding changes.');
+    await this.assertWritableRoot();
+    const files = await this.scan(onProgress);
+    const summary = this.updateComparison(files);
+    return {
+      baseline: this.baseline,
+      files,
+      changes: new Map(this.changes),
+      summary,
+    };
+  }
+
+  private async assertWritableRoot() {
+    const root = this.source.root.path;
+    if (root === path.parse(root).root)
+      throw new Error('Choose an assets directory, not a filesystem root.');
+    const info = await lstat(root);
+    if (!info.isDirectory() || info.isSymbolicLink() || await realpath(root) !== root)
+      throw new Error('The assets directory moved or became a link. Reopen it before restoring.');
+  }
+
+  /** Missing parents are allowed, but no path component may redirect a write. */
+  private async restoreTarget(logical: string, createParents = false) {
+    if (!validPath(logical) || logical.split('/').some(part => part.startsWith('.')))
+      throw new Error('Invalid baseline asset path: ' + logical);
+    const root = this.source.root.path;
+    await this.assertWritableRoot();
+    const parts = logical.split('/');
+    let target = root;
+    for (const [index, part] of parts.entries()) {
+      target = path.join(target, part);
+      const relative = path.relative(root, target);
+      if (!relative || relative.startsWith('..' + path.sep) || path.isAbsolute(relative))
+        throw new Error('Restore target is outside the assets directory.');
+      let info;
+      try { info = await lstat(target); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      const parent = index < parts.length - 1;
+      if (parent && !info && createParents) {
+        await mkdir(target).catch(error => { if (error.code !== 'EEXIST') throw error; });
+        info = await lstat(target);
+      }
+      if (info && (info.isSymbolicLink() || (parent ? !info.isDirectory() : !info.isFile())))
+        throw new Error('Restore blocked by a link or changed file type: ' + logical);
+    }
+    return target;
+  }
+
+  private async approvedSource(row: SnapshotFile) {
+    const file = this.objectFile(row), canonical = await realpath(file), root = await realpath(this.storage);
+    if (!canonical.startsWith(root + path.sep) || (await lstat(file)).isSymbolicLink())
+      throw new Error('Invalid approved file: ' + row.path);
+    return canonical;
+  }
+
+  async discard(plan: Awaited<ReturnType<AssetReview['prepareDiscard']>>, onProgress: ReviewProgress = () => {}) {
+    if (plan.baseline !== this.baseline)
+      throw new Error('The approved baseline changed. Confirm the discard again.');
+    await this.assertWritableRoot();
+    const latest = await this.scan(onProgress);
+    if (Object.keys(latest).length !== Object.keys(plan.files).length || Object.entries(latest).some(([key,row]) => {
+      const expected = plan.files[key];
+      return !expected || row.sha256 !== expected.sha256 || row.bytes !== expected.bytes || row.modifiedAt !== expected.modifiedAt;
+    })) throw new Error('Working files changed after confirmation. Review and confirm again.');
+    if (!plan.changes.size) return this.updateComparison(latest);
+    const rows = [...plan.changes].map(([logical,change], index) => ({logical,change,index}));
+    // Resolve every destination before moving any working file. A replaced parent
+    // directory or a broken baseline therefore cannot cause a partial discard.
+    for (const row of rows) await this.restoreTarget(row.logical);
+    const root = this.source.root.path;
+    const staging = await mkdtemp(path.join(root, '.foxwatch-restore-'));
+    let mutated = false;
+    const clean = async () => {
+      if (path.dirname(staging) !== root || !path.basename(staging).startsWith('.foxwatch-restore-') || (await lstat(staging)).isSymbolicLink())
+        throw new Error('Invalid restore staging directory.');
+      await rm(staging, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    };
+    try {
+      await mkdir(path.join(staging, 'approved'));
+      await mkdir(path.join(staging, 'discarded'));
+      let prepared = 0;
+      for (const row of rows) {
+        if (row.change !== 'added') {
+          const approved = plan.baseline.files[row.logical]!;
+          const payload = path.join(staging, 'approved', String(row.index));
+          await copyFile(await this.approvedSource(approved), payload, constants.COPYFILE_FICLONE);
+          if (await fingerprint(payload, row.logical) !== approved.sha256)
+            throw new Error('The approved file is missing or corrupt: ' + row.logical);
+          const date = new Date(approved.modifiedAt);
+          if (!Number.isFinite(date.getTime())) throw new Error('Invalid approved modification time.');
+          await utimes(payload, date, date);
+        }
+        onProgress('Verifying Approved Files', ++prepared, rows.length);
+      }
+      await writeFile(path.join(staging, 'restore.json'), JSON.stringify({
+        schemaVersion: 1, root, approvedAt: plan.baseline.approvedAt,
+        files: rows.map(row => ({...row, workingFile: plan.files[row.logical] ?? null})),
+      }, null, 2));
+      let completed = 0;
+      for (const row of rows) {
+        const target = await this.restoreTarget(row.logical, row.change !== 'added');
+        const working = plan.files[row.logical];
+        if (working) {
+          if (await fingerprint(target, row.logical) !== working.sha256)
+            throw new Error('A working file changed while restoring: ' + row.logical);
+          await rename(target, path.join(staging, 'discarded', String(row.index)));
+          mutated = true;
+        } else {
+          try { await lstat(target); throw new Error('A file appeared while restoring: ' + row.logical); }
+          catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        }
+        if (row.change !== 'added') {
+          mutated = true;
+          await rename(path.join(staging, 'approved', String(row.index)), target);
+        }
+        onProgress('Returning to Baseline', ++completed, rows.length);
+      }
+      // Remove only empty parents of added files, preserving approved directories
+      // and any hidden files or other content that was never part of the review.
+      const approvedDirs = new Set<string>();
+      for (const logical of Object.keys(plan.baseline.files)) {
+        let parent = path.posix.dirname(logical);
+        while (parent !== '.') { approvedDirs.add(parent); parent = path.posix.dirname(parent); }
+      }
+      const removable = new Set<string>();
+      for (const row of rows) if (row.change === 'added') {
+        let parent = path.posix.dirname(row.logical);
+        while (parent !== '.' && !approvedDirs.has(parent)) { removable.add(parent); parent = path.posix.dirname(parent); }
+      }
+      for (const logical of [...removable].sort((a,b) => b.split('/').length-a.split('/').length)) {
+        // Validating a synthetic child checks the complete directory ancestry.
+        const target = path.dirname(await this.restoreTarget(logical + '/restore-check'));
+        await rmdir(target).catch(error => { if (!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code)) throw error; });
+      }
+      const result = await this.compare(onProgress);
+      if (result.added || result.modified || result.deleted)
+        throw new Error('Working files changed during the restore. Review the remaining changes.');
+      await clean();
+      return result;
+    } catch (cause) {
+      if (!mutated) { await clean(); throw cause; }
+      throw new Error((cause instanceof Error ? cause.message : String(cause)) +
+        '\nRestore stopped. The approved baseline is unchanged. Recoverable working files and a restore journal are retained at: ' + staging);
+    }
+  }
+
   async approve(onProgress: ReviewProgress = () => {}) {
     const files = await this.scan(onProgress);
     let completed = 0;

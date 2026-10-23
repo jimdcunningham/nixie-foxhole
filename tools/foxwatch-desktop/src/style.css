@@ -854,3 +854,6 @@ dd {
 .manifest-table .changed td:nth-child(2) { background:#663b3e22; }.manifest-table .changed td:last-child { background:#24513c22; }
 .manifest-table .added .field-kind { color:#86cda7; }.manifest-table .removed .field-kind { color:#e49c9e; }.manifest-table .changed .field-kind { color:#dcc18b; }
 .source-sides .text-preview { padding:14px; font-size:11px; }
+
+.discard-controls { padding: 4px 10px 8px; border-bottom: 1px solid var(--line); }
+.discard-controls button { width: 100%; padding: 5px 8px; border: 1px solid #634341; color: #dfa7a3; font-size: 11px; text-align: left; }

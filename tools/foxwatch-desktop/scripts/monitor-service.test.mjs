@@ -85,3 +85,19 @@ test('cancel during runner startup does not start a process later', { skip: proc
   assert.equal(service.controller.status.stage, 'Failed'); assert.match(service.controller.status.detail, /cancelled/);
   await assert.rejects(readFile(path.join(repo, 'calls.jsonl')), { code: 'ENOENT' });
 });
+
+test('exclusive asset work blocks polling and other operations until completion', {skip:process.platform !== 'win32'}, async t => {
+  const {service,repo} = await fixture(t);
+  await service.action('start');
+  let finish;
+  const exclusive = service.withIdle(() => new Promise(resolve => finish=resolve));
+  assert.equal(service.busy,true);
+  await assert.rejects(service.action('refresh'), /pending/);
+  await assert.rejects(service.withIdle(async()=>{}), /active/);
+  service.startTimer();
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  await assert.rejects(readFile(path.join(repo,'calls.jsonl')),{code:'ENOENT'});
+  finish(); await exclusive;
+  assert.equal(service.busy,false);
+  await service.action('pause');
+});

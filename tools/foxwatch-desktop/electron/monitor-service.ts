@@ -64,6 +64,13 @@ export class MonitorService {
   dispose() { clearInterval(this.timer); }
   stopScheduling() { this.dispose(); this.controller.polling(false); }
   private idle() { if (this.actionPending || this.controller.status.running) throw new Error('Wait for the active FoxWatch operation to finish.'); }
+  get busy() { return this.actionPending || this.controller.status.running; }
+  async withIdle<T>(task: () => Promise<T>): Promise<T> {
+    this.idle();
+    this.actionPending = true;
+    try { return await task(); }
+    finally { this.actionPending = false; this.changed(); }
+  }
   private async persist() { await atomic(path.join(this.profile, 'monitor.json'), {
     nodePath: this.settings.nodePath, startMinimized: this.settings.startMinimized,
     startWithWindows: this.settings.startWithWindows, polling: this.controller.status.polling,

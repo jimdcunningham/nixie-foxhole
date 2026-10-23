@@ -73,6 +73,25 @@ Snapshot objects are deduplicated by content and original basename. Reopening a
 folder remembers its approval; comparison is explicit, avoiding a full-library hash
 scan at startup. World Brotli recompression alone does not count as an asset change.
 
+**Return to Baseline…** below the directory controls (also in **Review**) discards
+all reviewed file changes in the open directory. Its confirmation shows the exact
+folder, approval date, number of modified/deleted files to restore, and additions
+to remove; Cancel is the default. The baseline and its approval date are kept.
+Successful restoration clears change markers and turns off Changes Only.
+
+The app holds its operation guard while preparing, confirming, and restoring, so
+automatic polling and manual generation cannot start in that interval. Generated
+output also uses the CLI's refresh lock; other review folders use a local lock.
+If working files change after confirmation, the restore stops and requires a new
+confirmation. Every needed approved object is staged and content-verified before
+working files move. Links, filesystem roots, and file/directory type conflicts are
+rejected. Hidden metadata is kept, and only empty parents of removed additions
+are pruned. If a later step fails, the error identifies a hidden
+`.foxwatch-restore-*` directory containing recoverable working files and a journal.
+Resolving the problem and returning to baseline again can finish the restore.
+Existing prepared upload snapshots are independent; prepare again before
+publishing restored working files.
+
 **File → Download Published Assets** opens the download/update dialog. Choose the
 entire library or catalog and models, check for updates, then **Download & Open**.
 The public HTTPS release restores original logical filenames and verifies decoded
@@ -163,5 +182,6 @@ smoke test. It uses isolated temporary assets and a temporary profile, opens its
 own inspector, and intercepts Explorer launches. It checks native menus, browsing,
 immediate keyboard selection, image/JSON/model previews, model orbit controls,
 virtualized large folders, directory switching, image comparison modes, manifest
-field searches, linked model cameras, missing A/B sides, and the IPC
+field searches, linked model cameras, missing A/B sides, cancelled/confirmed
+baseline restoration, and the IPC
 boundary. It does not touch the running legacy monitor, run Steam/generation, or upload anything. Controller integration checks use a synthetic CLI and temporary DPAPI credentials.

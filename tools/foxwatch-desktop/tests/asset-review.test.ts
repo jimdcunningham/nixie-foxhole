@@ -7,6 +7,8 @@ import {
   rm,
   writeFile,
   utimes,
+  readdir,
+  symlink,
 } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -119,4 +121,102 @@ test('per-file comparison reads independent approved and working sides without a
   assert.equal(added.before,null); assert.ok(added.after);
   await assert.rejects(review.comparison('../outside.json'), /Invalid/);
   await assert.rejects(review.comparison('missing.json'), /unavailable/);
+});
+
+test('discard restores modified and deleted files, removes additions, and preserves the approved baseline', async t => {
+  const {root,review} = await setup(t);
+  await writeFile(path.join(root,'modified.txt'),'original');
+  await mkdir(path.join(root,'old'));
+  await writeFile(path.join(root,'old/deleted.txt'),'restore me');
+  await review.approve();
+  const approved = await readFile(path.join(review.storage,'approved.json'),'utf8');
+  const approvedAt = review.summary().approvedAt;
+  await writeFile(path.join(root,'modified.txt'),'working');
+  await rm(path.join(root,'old/deleted.txt'));
+  await mkdir(path.join(root,'new'));
+  await writeFile(path.join(root,'new/added.txt'),'discard me');
+  await writeFile(path.join(root,'.local-settings'),'keep hidden metadata');
+  const plan = await review.prepareDiscard();
+  assert.deepEqual([plan.summary.added,plan.summary.modified,plan.summary.deleted],[1,1,1]);
+  const result = await review.discard(plan);
+  assert.deepEqual([result.added,result.modified,result.deleted],[0,0,0]);
+  assert.equal(await readFile(path.join(root,'modified.txt'),'utf8'),'original');
+  assert.equal(await readFile(path.join(root,'old/deleted.txt'),'utf8'),'restore me');
+  await assert.rejects(readFile(path.join(root,'new/added.txt')), {code:'ENOENT'});
+  await assert.rejects(readFile(path.join(root,'new')), {code:'ENOENT'});
+  assert.equal(await readFile(path.join(root,'.local-settings'),'utf8'),'keep hidden metadata');
+  assert.equal(review.summary().approvedAt,approvedAt);
+  assert.equal(await readFile(path.join(review.storage,'approved.json'),'utf8'),approved);
+  assert.ok(!(await readdir(root)).some(name=>name.startsWith('.foxwatch-restore-')));
+});
+
+test('discard verifies every needed baseline object before moving working files', async t => {
+  const {root,review} = await setup(t);
+  for(const name of ['a.txt','z.txt']) await writeFile(path.join(root,name),'original '+name);
+  await review.approve();
+  for(const name of ['a.txt','z.txt']) await writeFile(path.join(root,name),'modified '+name);
+  const plan = await review.prepareDiscard();
+  const snapshot = (await review.comparison('z.txt')).before!;
+  await writeFile(snapshot.absolutePath,'corrupt baseline copy');
+  await assert.rejects(review.discard(plan), /missing or corrupt/);
+  for(const name of ['a.txt','z.txt']) assert.equal(await readFile(path.join(root,name),'utf8'),'modified '+name);
+  assert.ok(!(await readdir(root)).some(name=>name.startsWith('.foxwatch-restore-')));
+});
+
+test('discard refuses a changed working set or changed approval after confirmation', async t => {
+  const {root,review} = await setup(t);
+  await assert.rejects(review.prepareDiscard(), /Approve a baseline/);
+  await writeFile(path.join(root,'file.txt'),'original'); await review.approve();
+  await writeFile(path.join(root,'file.txt'),'change one');
+  const plan = await review.prepareDiscard();
+  await writeFile(path.join(root,'new-after-confirmation.txt'),'unconfirmed');
+  await assert.rejects(review.discard(plan), /changed after confirmation/);
+  assert.equal(await readFile(path.join(root,'file.txt'),'utf8'),'change one');
+  const next = await review.prepareDiscard(); await review.approve();
+  await assert.rejects(review.discard(next), /baseline changed/);
+});
+
+test('discard rejects a replaced directory link before touching any file', async t => {
+  const {root,review} = await setup(t);
+  await writeFile(path.join(root,'first.txt'),'original');
+  const folder = path.join(root,'nested'); await mkdir(folder);
+  await writeFile(path.join(folder,'file.txt'),'approved'); await review.approve();
+  const outside = path.join(path.dirname(root),'outside'); await mkdir(outside);
+  await writeFile(path.join(outside,'file.txt'),'outside must survive');
+  assert.equal(path.dirname(folder),root);
+  await rm(folder,{recursive:true});
+  try { await symlink(outside,folder,process.platform === 'win32' ? 'junction' : 'dir'); }
+  catch(error) { if(['EPERM','EACCES'].includes((error as NodeJS.ErrnoException).code!)) {t.skip('Directory links unavailable');return;} throw error; }
+  await writeFile(path.join(root,'first.txt'),'modified');
+  const plan = await review.prepareDiscard();
+  await assert.rejects(review.discard(plan), /link or changed file type/);
+  assert.equal(await readFile(path.join(root,'first.txt'),'utf8'),'modified');
+  assert.equal(await readFile(path.join(outside,'file.txt'),'utf8'),'outside must survive');
+});
+
+test('an interrupted discard retains working bytes and a journal and can be retried', async t => {
+  const {root,review} = await setup(t);
+  for(const name of ['a.txt','b.txt']) await writeFile(path.join(root,name),'approved '+name);
+  await review.approve();
+  for(const name of ['a.txt','b.txt']) await writeFile(path.join(root,name),'working '+name);
+  const plan = await review.prepareDiscard();
+  await assert.rejects(review.discard(plan,(phase,count)=>{ if(phase==='Returning to Baseline'&&count===1)throw new Error('Injected failure'); }), /Recoverable working files/);
+  const retained = (await readdir(root)).find(name=>name.startsWith('.foxwatch-restore-'))!;
+  const journal = JSON.parse(await readFile(path.join(root,retained,'restore.json'),'utf8'));
+  assert.equal(journal.root,root);
+  assert.equal(await readFile(path.join(root,retained,'discarded','0'),'utf8'),'working '+journal.files[0].logical);
+  const result = await review.discard(await review.prepareDiscard());
+  assert.deepEqual([result.added,result.modified,result.deleted],[0,0,0]);
+  assert.equal(await readFile(path.join(root,'b.txt'),'utf8'),'approved b.txt');
+});
+
+test('discard restores Brotli asset content from its approved object', async t => {
+  const {root,review} = await setup(t);
+  const folder = path.join(root,'world/content/br/sample'); await mkdir(folder,{recursive:true});
+  const file = path.join(folder,'terrain.json');
+  const original = brotliCompressSync(Buffer.from('{"height":10}'));
+  await writeFile(file,original); await review.approve();
+  await writeFile(file,brotliCompressSync(Buffer.from('{"height":20}')));
+  await review.discard(await review.prepareDiscard());
+  assert.deepEqual(await readFile(file),original);
 });

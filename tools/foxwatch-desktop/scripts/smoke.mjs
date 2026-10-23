@@ -282,6 +282,7 @@ try {
         'stale root rejection',
         'persisted directory',
         'approved baseline and deleted-file preview',
+        'cancelled and confirmed baseline discard with unchanged approval',
         'image swipe overlay and alpha-aware pixel differences',
         'searchable manifest field changes',
         'linked model cameras and missing comparison sides',

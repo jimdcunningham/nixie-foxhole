@@ -10,9 +10,9 @@ import {
   shell,
 } from 'electron';
 import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from 'electron';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MonitorService } from './monitor-service.js';
 import type { AppView } from '../shared/monitor.js';
 import { PublishedLibrary, type PublishedPlan } from './published-library.js';
@@ -38,7 +38,7 @@ function loginSettings(enabled: boolean) {
 }
 function monitorChanged() {
   if (!monitor || !window || window.isDestroyed()) return;
-  if (quitWhenIdle && !monitor.controller.status.running) { quitting = true; app.quit(); return; }
+  if (quitWhenIdle && !monitor.busy) { quitting = true; app.quit(); return; }
   if (notifyTimer) return;
   notifyTimer = setTimeout(() => {
     notifyTimer = undefined;
@@ -64,6 +64,7 @@ function updateTray() {
 let directory: AssetDirectory | null = null;
 let review: AssetReview | null = null;
 let reviewRunning = false;
+let restoringBaseline = false;
 let library: PublishedLibrary;
 let publishedPlan: PublishedPlan | null = null;
 let publishedAbort: AbortController | null = null;
@@ -110,6 +111,7 @@ function currentReview(id: unknown) {
   return review;
 }
 async function openDirectory(target: string, persist = false) {
+  if (restoringBaseline) throw new Error('Wait for the baseline restore to finish before changing directories.');
   const opened = await AssetDirectory.open(target);
   if (persist) {
     const settings = path.join(app.getPath('userData'), 'inspector.json');
@@ -323,10 +325,10 @@ async function launch() {
   app.on('activate', showWindow);
   app.on('before-quit', event => {
     if (quitting) return;
-    if (monitor.controller.status.running) {
+    if (monitor.busy) {
       event.preventDefault();
       if (!quitWhenIdle) void dialog.showMessageBox(window, { type: 'question', buttons: ['Keep Running', 'Quit After Run'], defaultId: 0,
-        message: 'FoxWatch is still working.', detail: 'Quit after the active run finishes? Closing the window keeps FoxWatch running in the tray.' }).then(result => {
+        message: 'FoxWatch is still working.', detail: 'Quit after the active operation finishes? Closing the window keeps FoxWatch running in the tray.' }).then(result => {
           if (result.response === 1) { quitWhenIdle = true; monitor.stopScheduling(); monitorChanged(); }
         });
     } else quitting = true;
@@ -383,6 +385,8 @@ async function launch() {
           label: 'Approve Current Assets as Baseline',
           click: () => window.webContents.send('review:run', 'approve'),
         },
+        { type: 'separator' },
+        { label: 'Return to Baseline…', click: () => window.webContents.send('review:run', 'discard') },
       ],
     },
     { label: '&Run', submenu: [
@@ -474,11 +478,53 @@ async function launch() {
       authorize(event);
       const current = currentReview(id);
       if (action === 'summary') return current.summary();
-      if (action !== 'approve' && action !== 'compare')
+      if (action !== 'approve' && action !== 'compare' && action !== 'discard')
         throw new Error('Invalid review action.');
       if (reviewRunning) throw new Error('An asset review is already running.');
       reviewRunning = true;
       try {
+        if (action === 'discard') return await monitor.withIdle(async () => {
+          restoringBaseline = true;
+          const releases: Array<() => void> = [];
+          try {
+            const locks = await import(pathToFileURL(path.join(repo, 'tools/foxwatch/scripts/process-lock.mjs')).href);
+            const root = source(id).root.path;
+            if (root === path.parse(root).root || await realpath(root) !== root)
+              throw new Error('Reopen a valid assets directory before restoring.');
+            const configuredRoots = [
+              path.join(repo, 'packages/extensions/foxhole/public/foxhole/assets'),
+              monitor.settings.assetsRoot && path.resolve(repo, monitor.settings.assetsRoot),
+              process.env.NIXIE_FOXHOLE_ASSETS_ROOT && path.resolve(repo, process.env.NIXIE_FOXHOLE_ASSETS_ROOT),
+            ].filter((value): value is string => !!value);
+            const generatedRoots = await Promise.all(configuredRoots.map(file => realpath(file).catch(error => {
+              if (error.code === 'ENOENT') return null;
+              throw error;
+            })));
+            // Use the CLI's existing lock for generated output. Arbitrary review
+            // folders have their own lock and cannot interrupt the real watcher.
+            if (generatedRoots.includes(root)) releases.push(locks.acquireProcessLock(
+              path.join(repo, 'tools/foxwatch/tmp/foxwatch-refresh.lock.json'), 'FoxWatch baseline restore'));
+            releases.push(locks.acquireProcessLock(path.join(root, '.foxwatch-review.lock.json'), 'FoxWatch asset review'));
+            const progress = (phase: string, completed: number, total: number) => {
+              if ((completed % 25 === 0 || completed === total) && !window.isDestroyed())
+                window.webContents.send('review:progress', {phase,completed,total});
+            };
+            const plan = await current.prepareDiscard(progress);
+            const { added, modified, deleted, approvedAt } = plan.summary;
+            const result = await dialog.showMessageBox(window, {
+              type: 'warning', title: 'Return to Baseline',
+              message: 'Discard All Changes and Return to Baseline?',
+              detail: `${source(id).root.path}\n\nApproved: ${new Date(approvedAt!).toLocaleString()}\nRestore ${modified + deleted} files (${modified} modified, ${deleted} deleted).\nRemove ${added} added files.\n\nUnapproved contents will be discarded. The approved baseline is kept.`,
+              buttons: ['Cancel', 'Return to Baseline'], defaultId: 0, cancelId: 0, noLink: true,
+            });
+            source(id); // The confirmation belongs only to the originally open root.
+            if (result.response !== 1) return current.summary();
+            return await current.discard(plan, progress);
+          } finally {
+            try { for (const release of releases.reverse()) release(); }
+            finally { restoringBaseline = false; }
+          }
+        });
         return await current[action]((phase, completed, total) => {
           if (
             (completed % 25 === 0 || completed === total) &&

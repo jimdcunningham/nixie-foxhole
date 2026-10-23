@@ -39,9 +39,9 @@ export interface InspectorApi {
   onPublishedProgress(callback: (value: PublishedStatus) => void): () => void;
   review(
     rootId: string,
-    action: 'summary' | 'approve' | 'compare',
+    action: 'summary' | 'approve' | 'compare' | 'discard',
   ): Promise<ReviewSummary>;
-  onReview(callback: (action: 'approve' | 'compare') => void): () => void;
+  onReview(callback: (action: 'approve' | 'compare' | 'discard') => void): () => void;
   onReviewProgress(
     callback: (progress: {
       phase: string;

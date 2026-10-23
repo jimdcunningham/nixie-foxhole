@@ -52,16 +52,20 @@ const changeCount = computed(
     (reviewSummary.value?.modified ?? 0) +
     (reviewSummary.value?.deleted ?? 0),
 );
-async function runReview(action: 'approve' | 'compare') {
+async function runReview(action: 'approve' | 'compare' | 'discard') {
   const current = root.value;
   if (!current || reviewBusy.value) return;
   reviewBusy.value = true;
   reviewProgress.value =
-    action === 'approve' ? 'Saving baseline…' : 'Comparing assets…';
+    action === 'approve' ? 'Saving baseline…' : action === 'discard' ? 'Preparing to return to baseline…' : 'Comparing assets…';
   try {
     const result = await window.foxwatch.review(current.id, action);
     if (root.value?.id !== current.id) return;
     reviewSummary.value = result;
+    if (action === 'discard' && !result.added && !result.modified && !result.deleted) {
+      changesOnly.value = false;
+      compareAsset.value = false;
+    }
     await refresh(false);
   } catch (cause) {
     if (root.value?.id === current.id) error.value = message(cause);
@@ -477,6 +481,9 @@ onBeforeUnmount(() => {
               reviewSummary?.approvedAt ? 'Not Compared' : 'No Baseline'
             }}</span
           >
+        </div>
+        <div v-if="root" class="discard-controls">
+          <button :disabled="!reviewSummary?.approvedAt || reviewBusy || !!runStatus?.running" @click="runReview('discard')">Return to Baseline…</button>
         </div>
         <div
           ref="tree"
