@@ -27,6 +27,7 @@ internal sealed class MonitorForm : Form
     private readonly NxActionButton _startStopButton;
     private readonly NxActionButton _runRefreshButton;
     private readonly NxActionButton _clearCacheButton;
+    private readonly NxActionButton _assetPublishingButton;
     private readonly CheckBox _startWithWindows;
     private readonly CheckBox _startMinimized;
     private readonly Label _stageValue;
@@ -54,6 +55,7 @@ internal sealed class MonitorForm : Form
     public event EventHandler? StopRequested;
     public event EventHandler? RunRefreshRequested;
     public event EventHandler? ClearCacheRequested;
+    public event EventHandler? AssetPublishingRequested;
     public event EventHandler? OpenLogsRequested;
     public event EventHandler<bool>? StartWithWindowsChanged;
     public event EventHandler<bool>? StartMinimizedChanged;
@@ -323,7 +325,8 @@ internal sealed class MonitorForm : Form
         var actions = new FlowLayoutPanel
         {
             AutoSize = true,
-            WrapContents = false,
+            Dock = DockStyle.Fill,
+            WrapContents = true,
             Margin = Padding.Empty,
         };
         _startStopButton = CreateButton("Stop Run");
@@ -360,6 +363,9 @@ internal sealed class MonitorForm : Form
             Color.FromArgb(38, 31, 17));
         _clearCacheButton.Click += (_, _) => ClearCacheRequested?.Invoke(this, EventArgs.Empty);
         actions.Controls.Add(_clearCacheButton);
+        _assetPublishingButton = CreateButton("Asset Publishing");
+        _assetPublishingButton.Click += (_, _) => AssetPublishingRequested?.Invoke(this, EventArgs.Empty);
+        actions.Controls.Add(_assetPublishingButton);
         var logsButton = CreateButton("Open Logs");
         logsButton.FlatAppearance.BorderColor = Color.FromArgb(119, 132, 148);
         logsButton.Click += (_, _) => OpenLogsRequested?.Invoke(this, EventArgs.Empty);
@@ -455,6 +461,7 @@ internal sealed class MonitorForm : Form
     {
         _runRefreshButton.Enabled = enabled;
         _clearCacheButton.Enabled = enabled;
+        _assetPublishingButton.Enabled = enabled;
     }
 
     public void SetStartWithWindows(bool enabled)

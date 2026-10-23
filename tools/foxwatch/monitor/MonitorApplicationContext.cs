@@ -38,6 +38,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
     private bool _stopRequested;
     private bool _exitWhenIdle;
     private bool _shuttingDown;
+    private bool _assetPublicationDialogOpen;
 
     public MonitorApplicationContext(
         MonitorHostOptions options,
@@ -62,6 +63,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         _form.StopRequested += (_, _) => StopRunAndPolling();
         _form.RunRefreshRequested += (_, _) => StartFullRefresh();
         _form.ClearCacheRequested += (_, _) => ConfirmAndClearCache();
+        _form.AssetPublishingRequested += (_, _) => ShowAssetPublishing();
         _form.OpenLogsRequested += (_, _) => OpenLogsFolder();
         _form.StartWithWindowsChanged += (_, enabled) => SetStartWithWindows(enabled);
         _form.StartMinimizedChanged += (_, enabled) => SetStartMinimized(enabled);
@@ -160,7 +162,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         }
         UpdateCountdown();
         UpdateElapsedTime();
-        if (!_paused && _activeProcess is null && DateTimeOffset.Now >= _nextPollAt)
+        if (!_assetPublicationDialogOpen && !_paused && _activeProcess is null && DateTimeOffset.Now >= _nextPollAt)
             StartPoll();
     }
 
@@ -202,6 +204,26 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             ["--force-refresh"],
             "Starting Refresh",
             "Starting a full refresh for the latest verified Foxhole build.");
+    }
+
+    private void ShowAssetPublishing()
+    {
+        if (_activeProcess is not null || _shuttingDown) return;
+        _assetPublicationDialogOpen = true;
+        try
+        {
+            using var dialog = new AssetPublicationForm(_options.RepoRoot);
+            if (dialog.ShowDialog(_form) != DialogResult.OK) return;
+            var config = new[] { "--config", Path.Combine(_options.RepoRoot, "tools", "foxwatch", "local", "asset-publication.json") };
+            switch (dialog.RequestedOperation)
+            {
+                case "prepare": StartRunnerOperation(RunnerOperation.PrepareAssets, "assets-prepare", config, "Preparing Assets", "Verifying and snapshotting the local asset publication."); break;
+                case "check": StartRunnerOperation(RunnerOperation.CheckAssets, "assets-publish", config, "Checking Upload", "Verifying the prepared plan without uploading."); break;
+                case "publish": StartRunnerOperation(RunnerOperation.PublishAssets, "assets-publish", [..config, "--upload"], "Publishing Assets", "Uploading the prepared immutable release."); break;
+            }
+        }
+        catch (Exception error) { MessageBox.Show(_form, error.Message, "Asset Publishing", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { _assetPublicationDialogOpen = false; }
     }
 
     private void ConfirmAndClearCache()
@@ -322,6 +344,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             var completion = operation switch
             {
                 RunnerOperation.Refresh => ("Refresh Complete", "The full FoxWatch refresh completed successfully."),
+                RunnerOperation.PrepareAssets => ("Assets Prepared", "The asset snapshot is ready. Check Upload verifies it before publishing."),
+                RunnerOperation.CheckAssets => ("Upload Check Complete", "The prepared snapshot passed its local checks. No files were uploaded."),
+                RunnerOperation.PublishAssets => ("Assets Published", "The pinned asset release was published. Production pins were not changed."),
                 RunnerOperation.ClearCache => ("Cache Cleared", "FoxWatch caches were cleared. The next refresh will rebuild them."),
                 _ => ("Complete", "The latest poll and any required FoxWatch work completed successfully."),
             };
@@ -335,6 +360,9 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             var operationName = operation switch
             {
                 RunnerOperation.Refresh => "refresh",
+                RunnerOperation.PrepareAssets => "asset preparation",
+                RunnerOperation.CheckAssets => "upload check",
+                RunnerOperation.PublishAssets => "asset publication",
                 RunnerOperation.ClearCache => "cache clear",
                 _ => "monitor poll",
             };
@@ -485,7 +513,7 @@ internal sealed class MonitorApplicationContext : ApplicationContext
 
     private void UpdatePipelineDetail(string line)
     {
-        if (TryUpdateStructuredProgress(line)) return;
+        if (TryUpdateAssetPublicationProgress(line) || TryUpdateStructuredProgress(line)) return;
         if (line.Contains("Checking Steam branch metadata", StringComparison.OrdinalIgnoreCase))
             SetPipelineStage("Checking Steam", "Checking public and devbranch Steam metadata.", 2);
         else if (line.Contains("Acquiring Steam", StringComparison.OrdinalIgnoreCase))
@@ -502,6 +530,27 @@ internal sealed class MonitorApplicationContext : ApplicationContext
             SetPipelineStage("Publishing", "Publishing the generated FoxWatch assets and manifest.", 92);
         else if (line.Contains("completed successfully", StringComparison.OrdinalIgnoreCase))
             SetPipelineStage("Finalizing", "FoxWatch completed successfully; finalizing monitor state.", 99);
+    }
+
+    private bool TryUpdateAssetPublicationProgress(string line)
+    {
+        const string prefix = "asset-publication: ";
+        if (!line.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(line[prefix.Length..]);
+            var root = document.RootElement;
+            var phase = GetString(root, "phase") ?? "assets";
+            var total = GetInt32(root, "total", GetInt32(root, "selected", 0));
+            var completed = GetInt32(root, "completed", 0);
+            var stage = phase switch { "inventory" => "Verifying Assets", "prepare" => "Snapshotting Assets", "prepared" => "Assets Prepared", "dry-run" => "Upload Check Complete", "published" => "Assets Published", _ => "Publishing Assets" };
+            var detail = total > 0 ? $"{phase}: {completed:N0}/{total:N0} objects" : stage;
+            _pipelinePercent = total > 0 ? Math.Clamp((int)(100d * completed / total), 0, 99) : 100;
+            UpdateStatus("Running", detail);
+            _form.SetPipelineProgress(stage, detail, _pipelinePercent);
+        }
+        catch (JsonException) { return false; }
+        return true;
     }
 
     private bool TryUpdateStructuredProgress(string line)
@@ -738,5 +787,8 @@ internal sealed class MonitorApplicationContext : ApplicationContext
         Poll,
         Refresh,
         ClearCache,
+        PrepareAssets,
+        CheckAssets,
+        PublishAssets,
     }
 }
