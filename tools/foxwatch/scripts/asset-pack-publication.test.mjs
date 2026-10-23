@@ -35,8 +35,8 @@ async function fixture(t) {
     return {parent, root, inventory, write, prepare, decode, shared, modelPath};
 }
 function fakeTransport(failKey) {
-    const remote = new Map(), puts = [];
-    return {remote, puts, async head(key) {return remote.get(key) ?? null;}, async put(row) {
+    const remote = new Map(), puts = [], channels = [];
+    return {remote, puts, channels, async putChannel(row) { channels.push({key: row.key, document: JSON.parse(await fs.readFile(row.sourceFile))}); remote.set(row.key, {...row}); }, async head(key) {return remote.get(key) ?? null;}, async put(row) {
         puts.push(row.key); if (failKey?.(row)) throw new Error('Disconnected');
         remote.set(row.key, {...row});
     }};
@@ -80,7 +80,9 @@ test('uploads objects before indexes and release, reuses matching remote bytes, 
     const phases = transport.puts.map(key => prepared.plan.objects.find(row => row.key === key).phase);
     assert.ok(phases.lastIndexOf('assets') < phases.indexOf('indexes'));
     const second = await publishAssetPublication({planPath, transport}); assert.equal(second.stats.uploaded, 0); assert.equal(second.stats.reused, first.stats.total);
-    assert.equal(transport.remote.size, first.stats.total);
+    assert.equal(transport.remote.size, first.stats.total + 1);
+    assert.deepEqual(transport.channels.at(-1).document.release, prepared.plan.release);
+    assert.equal(transport.remote.get(target.prefix + '/channels/stable.json').cacheControl, 'no-cache, max-age=0, must-revalidate');
     assert.equal(JSON.parse(await fs.readFile(path.join(prepared.directory, 'publication-receipt.json'))).status, 'complete');
     const updated = Buffer.from('glTF' + 'updated model data '.repeat(200));
     await f.write(f.modelPath, updated);
@@ -114,11 +116,11 @@ test('actual S3 wire requests are signed, conditional and preserve encoding and 
             assert.match(request.headers.authorization, /^AWS4-HMAC-SHA256 /); signed++;
             const key = new URL(request.url, 'http://localhost').pathname, current = objects.get(key);
             if (request.method === 'HEAD') {response.writeHead(current ? 200 : 404, current?.headers); response.end(); return;}
-            assert.equal(request.method, 'PUT'); assert.equal(request.headers['if-none-match'], '*');
+            assert.equal(request.method, 'PUT'); const channel = key.endsWith('/channels/stable.json'); assert.equal(request.headers['if-none-match'], channel ? undefined : '*');
             const chunks = []; for await (const chunk of request) chunks.push(chunk); const bytes = Buffer.concat(chunks);
             assert.equal(hash(bytes), request.headers['x-amz-meta-foxwatch-sha256']);
             assert.equal(createHash('md5').update(bytes).digest('base64'), request.headers['content-md5']);
-            if (current) {response.writeHead(412); response.end(); return;}
+            if (current && !channel) {response.writeHead(412); response.end(); return;}
             const headers = Object.fromEntries(Object.entries(request.headers).filter(([key]) => key.startsWith('x-amz-meta-') || ['content-type', 'content-encoding', 'cache-control', 'content-length'].includes(key)));
             objects.set(key, {bytes, headers}); response.writeHead(200, {etag: '"fixture"'}); response.end();
         } catch (error) {response.writeHead(500); response.end(String(error));}
@@ -127,5 +129,19 @@ test('actual S3 wire requests are signed, conditional and preserve encoding and 
     const transport = createAssetPublicationS3(target, {FOXWATCH_ASSETS_ACCESS_KEY_ID: 'test', FOXWATCH_ASSETS_SECRET_ACCESS_KEY: 'test-secret'}, {endpoint: `http://127.0.0.1:${server.address().port}`});
     t.after(() => transport.close());
     const receipt = await publishAssetPublication({planPath: path.join(prepared.directory, 'plan.json'), transport, concurrency: 2});
-    assert.equal(receipt.status, 'complete'); assert.equal(objects.size, prepared.plan.objects.length); assert.ok(signed >= objects.size * 3);
+    assert.equal(receipt.status, 'complete'); assert.equal(objects.size, prepared.plan.objects.length + 1); assert.ok(signed >= prepared.plan.objects.length * 3 + 2);
+});
+
+test('channel failure preserves the previous pointer and can resume after immutable uploads', async t => {
+    const f = await fixture(t), prepared = await f.prepare('channel-failure'), planPath = path.join(prepared.directory, 'plan.json'), transport = fakeTransport();
+    const original = transport.putChannel;
+    transport.putChannel = async () => {throw new Error('Channel unavailable');};
+    await assert.rejects(publishAssetPublication({planPath, transport}), /Channel unavailable/);
+    assert.equal(transport.remote.has(target.prefix + '/channels/stable.json'), false);
+    await assert.rejects(fs.stat(path.join(prepared.directory, 'publication-receipt.json')), {code: 'ENOENT'});
+    transport.putChannel = original;
+    const resumed = await publishAssetPublication({planPath, transport});
+    assert.equal(resumed.stats.uploaded, 0);
+    assert.equal(resumed.stats.reused, prepared.plan.objects.length);
+    assert.deepEqual(transport.channels.at(-1).document.release, prepared.plan.release);
 });

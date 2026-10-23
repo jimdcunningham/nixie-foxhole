@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
+import {brotliDecompressSync} from 'node:zlib';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {prepareAssetPublication, readPublicationPlan, validateTarget} from './asset-pack-publication.mjs';
@@ -55,8 +56,29 @@ export async function publishAssetPublication({planPath, transport, concurrency 
         if (failure) throw failure;
         const rejected = results.find(result => result.status === 'rejected'); if (rejected) throw rejected.reason;
     }
+    const releaseObject = plan.objects.find(row => row.phase === 'release');
+    const releaseBytes = await fs.readFile(path.join(directory, releaseObject.file));
+    const releaseDocument = JSON.parse((releaseObject.contentEncoding === 'br' ? brotliDecompressSync(releaseBytes, {maxOutputLength: 8 * 1024 ** 2}) : releaseBytes).toString('utf8'));
+    let channelUrl;
+    if (releaseDocument.schemaVersion === 1 && releaseDocument.format === 'foxwatch-asset-release-v1') {
+        // Inspection clients discover the latest explicitly published release here.
+        // Immutable payloads and release metadata have all verified before cutover.
+        if (typeof transport.putChannel !== 'function') throw new Error('The publication transport must support the stable channel');
+        const channelBody = Buffer.from(JSON.stringify({schemaVersion: 1, release: plan.release}));
+        const channelSha256 = createHash('sha256').update(channelBody).digest('hex');
+        const channel = {key: plan.target.prefix + '/channels/stable.json', sha256: channelSha256, bytes: channelBody.length,
+            mediaType: 'application/json', cacheControl: 'no-cache, max-age=0, must-revalidate', decodedSha256: channelSha256,
+            decodedBytes: channelBody.length, md5: createHash('md5').update(channelBody).digest('base64')};
+        const channelFile = path.join(directory, '.channel-' + randomUUID() + '.json');
+        try {
+            await fs.writeFile(channelFile, channelBody, {flag: 'wx'});
+            await retry(() => transport.putChannel({...channel, sourceFile: channelFile}, activeSignal), activeSignal);
+            if (!matches(await retry(() => transport.head(channel.key, activeSignal), activeSignal), channel)) throw new Error('Published channel receipt does not match');
+        } finally {await fs.unlink(channelFile).catch(error => {if (error.code !== 'ENOENT') throw error;});}
+        channelUrl = new URL(channel.key, plan.target.publicBaseUrl).href;
+    }
     const receipt = {schemaVersion: 1, status: 'complete', planSha256: plan.planSha256, target: plan.target,
-        release: plan.release, stats, completedAt: new Date().toISOString()};
+        release: plan.release, channelUrl, stats, completedAt: new Date().toISOString()};
     await writeAtomic(path.join(directory, 'publication-receipt.json'), receipt);
     return receipt;
 }

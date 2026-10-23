@@ -8,6 +8,15 @@ export function createAssetPublicationS3(target, env = process.env, options = {}
     const client = new S3Client({endpoint: target.endpoint, region: 'auto', forcePathStyle: true, maxAttempts: 1,
         requestHandler: {connectionTimeout: 10_000, requestTimeout: 120_000},
         requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED', credentials: {accessKeyId, secretAccessKey}, ...options});
+    const put = async (row, signal, mutable = false) => {
+        const body = createReadStream(row.sourceFile);
+        try {
+            await client.send(new PutObjectCommand({Bucket: target.bucket, Key: row.key, Body: body, ContentLength: row.bytes,
+                ContentType: row.mediaType, ContentEncoding: row.contentEncoding, CacheControl: row.cacheControl, IfNoneMatch: mutable ? undefined : '*', ContentMD5: row.md5,
+                Metadata: {'foxwatch-sha256': row.sha256, 'foxwatch-decoded-sha256': row.decodedSha256, 'foxwatch-decoded-bytes': String(row.decodedBytes)},
+            }), {abortSignal: signal});
+        } finally {body.destroy();}
+    };
     return {
         async head(key, signal) {
             try {
@@ -17,14 +26,10 @@ export function createAssetPublicationS3(target, env = process.env, options = {}
                     decodedSha256: row.Metadata?.['foxwatch-decoded-sha256'], decodedBytes: Number(row.Metadata?.['foxwatch-decoded-bytes'])};
             } catch (error) {if (error.$metadata?.httpStatusCode === 404) return null; throw error;}
         },
-        async put(row, signal) {
-            const body = createReadStream(row.sourceFile);
-            try {
-                await client.send(new PutObjectCommand({Bucket: target.bucket, Key: row.key, Body: body, ContentLength: row.bytes,
-                    ContentType: row.mediaType, ContentEncoding: row.contentEncoding, CacheControl: row.cacheControl, IfNoneMatch: '*', ContentMD5: row.md5,
-                    Metadata: {'foxwatch-sha256': row.sha256, 'foxwatch-decoded-sha256': row.decodedSha256, 'foxwatch-decoded-bytes': String(row.decodedBytes)},
-                }), {abortSignal: signal});
-            } finally {body.destroy();}
+        put: (row, signal) => put(row, signal),
+        putChannel(row, signal) {
+            if (row.key !== target.prefix + '/channels/stable.json') throw new Error('Only the stable channel may be overwritten');
+            return put(row, signal, true);
         },
         close: () => client.destroy(),
     };
