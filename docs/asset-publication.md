@@ -203,8 +203,9 @@ Runtime downloads use verified, bounded caches. Cached placed objects and loaded
 regions can be reused offline; uncached assets still require a connection. This
 is demand caching, not an installation of the entire library.
 
-The checked-in development pin currently targets the isolated test hostname.
-Production hostname, origin CORS and deployment remain separate rollout steps.
+The checked-in pin remains on the test hostname until explicit promotion.
+The production hostname and CORS are configured; cache readiness and application
+deployment remain separate rollout checks.
 
 ## Metadata-Only Application Builds
 
@@ -217,8 +218,9 @@ An extraction-source hash rejects stale derived metadata after extraction code c
 verified catalog, model, map and localization JSON files to the normal build-input
 location. Use `--output <empty-directory>` for an isolated verification. Existing
 matching files are reused; mismatching local exports fail rather than being overwritten.
-`--identity-only` prints the pin identity without any asset requests. `--expected
-<sha256>` checks the exact source-controlled pin used by a coordinating build.
+`--identity-only` prints the pin identity without any asset requests.
+`--expected <sha256>` checks the normalized JSON pin used by a coordinating build.
+Pin identity ignores checkout line endings and JSON whitespace.
 Application builds do not need the generated-assets Git repository or any images/models.
 Source-level model geometry tests still use the local FoxWatch outputs.
 

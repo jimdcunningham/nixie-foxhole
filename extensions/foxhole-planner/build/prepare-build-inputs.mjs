@@ -6,6 +6,7 @@ import {parseArgs} from 'node:util';
 export const BUILD_INPUT_PATHS=['manifest.v1.json','models/manifest.v1.json','maps/map-data.v1.json',
     ...['de','fr','pt','ru','zh'].map(locale=>'localizations/'+locale+'.json')];
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+export const assetPinIdentity=bytes=>hash(Buffer.from(JSON.stringify(JSON.parse(bytes))));
 export async function readVerifiedBuildInput(receipt,fetcher=fetch){
     const response=await fetcher(receipt.url,{credentials:'omit',redirect:'error',signal:AbortSignal.timeout(30000)});
     if(!response.ok||!response.body||receipt.byteLength>8*1024**2)throw Error('Build input unavailable or oversized');
@@ -37,7 +38,7 @@ export async function prepareBuildInputs({pin,output,library,fetcher=fetch}){
 async function run(){
     const {values}=parseArgs({options:{output:{type:'string'},expected:{type:'string'},'identity-only':{type:'boolean'}}});
     const extension=path.resolve(import.meta.dirname,'..');
-    const bytes=await fs.readFile(path.join(extension,'src/asset-release-pin.json')),assetPin=hash(bytes);
+    const bytes=await fs.readFile(path.join(extension,'src/asset-release-pin.json')),assetPin=assetPinIdentity(bytes);
     if(values.expected&&values.expected!==assetPin)throw Error('Requested asset pin differs from the pinned source revision');
     const started=performance.now();
     const result=values['identity-only']?{}:await prepareBuildInputs({pin:JSON.parse(bytes),output:path.resolve(values.output??path.join(extension,'../../packages/extensions/foxhole/public/foxhole/assets'))});

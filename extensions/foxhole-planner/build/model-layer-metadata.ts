@@ -9,7 +9,7 @@ export interface PublishedModelLayers {
 export function applyPublishedModelLayers(asset: FoxholeModelLayerMetadata, assetId: string, path: string, input: PublishedModelLayers,
     expected: { publicationSha256: string; extractorSource: string; }): void {
     if (input.schemaVersion !== 1 || input.publicationSha256 !== expected.publicationSha256
-        || input.extractorSha256 !== createHash('sha256').update(expected.extractorSource).digest('hex')) {
+        || input.extractorSha256 !== createHash('sha256').update(expected.extractorSource.replaceAll('\r\n', '\n')).digest('hex')) {
         throw new Error('Published model-layer metadata is stale; publish the Planner overlay again.');
     }
     const row = input.models[assetId];

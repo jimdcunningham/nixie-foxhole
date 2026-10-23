@@ -64,7 +64,7 @@ async function run() {
         if(!payloads.some(row=>row.path===key))payloads.push({path:key,bytes});
     }
     const extractorSource=await fs.readFile(path.join(root,'extensions/foxhole-planner/src/model-layer-nodes.ts'),'utf8');
-    const modelLayers={schemaVersion:1,publicationSha256:publication.sha256,extractorSha256:hash(Buffer.from(extractorSource)),models:{}};
+    const modelLayers={schemaVersion:1,publicationSha256:publication.sha256,extractorSha256:hash(Buffer.from(extractorSource.replaceAll('\r\n','\n'))),models:{}};
     for(const model of sources.models){
         const asset=sources.metadata[model.assetId];
         if(!asset?.model||!/^Foundation/i.test(asset.codeName)||model.id!==model.assetId)continue;

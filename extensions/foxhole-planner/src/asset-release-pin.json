@@ -9,14 +9,14 @@
     "contractVersion": 1,
     "id": "foxhole.runtime",
     "manifest": {
-      "url": "https://assets-test.nixiejs.com/foxwatch-test/planner-resources-bdb2e3dc82050a33586df6ddae51960537cb0222c1d6c3f3a9dbae6bd6fb4fb5.json",
-      "sha256": "d6405a9a859329de40431ee91fe945a604055b5e29d534c9f820921925ccc90c",
+      "url": "https://assets-test.nixiejs.com/foxwatch-test/planner-resources-032fb285c1ff7c7cb6a5f18f667658464cfa353bf73e3d6094249e1f18215ee5.json",
+      "sha256": "1a74b364db2d6625ffa6273aa79d8a127419ea8b891e361434a72fc86924630a",
       "byteLength": 3490313
     }
   },
   "buildMetadata": {
-    "url": "https://assets-test.nixiejs.com/foxwatch-test/objects/raw/f72b596ebece8e06676101ba9d5d9b0f2d849d63895c4be60093c47a80e37023/bacb769b46f6/asset.json",
-    "sha256": "f72b596ebece8e06676101ba9d5d9b0f2d849d63895c4be60093c47a80e37023",
+    "url": "https://assets-test.nixiejs.com/foxwatch-test/objects/raw/4c51fe983080ce97bea56d5ddc733a169b336e6e8731e7e666670acb936c3c9c/bacb769b46f6/asset.json",
+    "sha256": "4c51fe983080ce97bea56d5ddc733a169b336e6e8731e7e666670acb936c3c9c",
     "byteLength": 5048
   }
 }

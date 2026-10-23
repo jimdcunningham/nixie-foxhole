@@ -6,7 +6,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {prepareBuildInputs,readVerifiedBuildInput,BUILD_INPUT_PATHS} from './prepare-build-inputs.mjs';
+import {prepareBuildInputs,readVerifiedBuildInput,BUILD_INPUT_PATHS,assetPinIdentity} from './prepare-build-inputs.mjs';
 const receipt=(url,bytes)=>({url,sha256:createHash('sha256').update(bytes).digest('hex'),byteLength:bytes.length});
 test('empty clean build input directory receives only verified JSON and rejects stale local files',async t=>{
  const output=await fs.mkdtemp(path.join(os.tmpdir(),'foxhole-build-inputs-'));t.after(()=>fs.rm(output,{recursive:true,force:true}));
@@ -33,4 +33,12 @@ test('identity checks work before SDK installation in prepared desktop jobs',asy
  const result=execFileSync(process.execPath,[script,'--identity-only','--expected',sha],{encoding:'utf8',env:{...process.env,GITHUB_OUTPUT:''}});
  assert.equal(JSON.parse(result).assetPin,sha);
  assert.throws(()=>execFileSync(process.execPath,[script,'--identity-only','--expected','0'.repeat(64)],{stdio:'pipe'}),/Command failed/);
+});
+
+
+test('asset pin identity ignores checkout line endings and JSON whitespace',()=>{
+ const linux=Buffer.from('{"schemaVersion":1,"url":"https://assets.test/index.json"}\n');
+ const windows=Buffer.from('{\r\n  "schemaVersion": 1,\r\n  "url": "https://assets.test/index.json"\r\n}\r\n');
+ assert.equal(assetPinIdentity(linux),assetPinIdentity(windows));
+ assert.notEqual(assetPinIdentity(linux),assetPinIdentity(Buffer.from('{"schemaVersion":2,"url":"https://assets.test/index.json"}')));
 });
