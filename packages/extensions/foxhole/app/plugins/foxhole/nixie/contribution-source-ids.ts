@@ -2,6 +2,7 @@ export const FOXHOLE_NIXIE_CONTRIBUTION_SOURCE_IDS = {
     debug: 'layer:foxhole:nixie:debug',
     chatMap: 'layer:foxhole:nixie:chat-map',
     map: 'layer:foxhole:nixie:map',
+    sceneFaction: 'layer:foxhole:nixie:scene-faction',
     structures: 'layer:foxhole:nixie:structures',
     tacticalLines: 'layer:foxhole:nixie:tactical-lines',
     binocularLines: 'layer:foxhole:nixie:binocular-lines',

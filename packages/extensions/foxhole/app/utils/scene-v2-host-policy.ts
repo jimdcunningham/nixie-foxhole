@@ -1,9 +1,20 @@
 import { registerNixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 
+import { FOXHOLE_SCENE_FACTION_SETTING_ID, normalizeFoxholeSceneFaction } from './scene-faction.ts';
+
 const OWNER_ID = 'nixie.foxhole-planner';
 export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     ownerId: OWNER_ID,
+    spatialPresentation(readSetting) {
+        const faction = normalizeFoxholeSceneFaction(readSetting(FOXHOLE_SCENE_FACTION_SETTING_ID));
+        return {
+            poweredSpotlights: readSetting('foxhole.ranges.nighttime') === true
+                && readSetting('foxhole.ranges.poweredSpotlights') === true
+                && readSetting('foxhole.structure.hideRoofs') !== true,
+            flagAtlasRow: faction === 'asset-default' ? undefined : faction === 'warden' ? 1 : 0,
+        };
+    },
     catalog: {
         providerId: 'assets', legacySourceIds: ['foxhole.structures'],
         lookup: async (sourceId, assetId) => (await import('./sdk-catalog-compatibility.ts')).lookupFoxholeSdkCatalogReference(sourceId, assetId),

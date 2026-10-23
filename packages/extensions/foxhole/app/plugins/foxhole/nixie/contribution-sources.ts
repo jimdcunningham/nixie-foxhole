@@ -14,7 +14,13 @@ import foxholeSettingsPageSectionsContribution from '#foxhole/plugins/nixie/cont
 import foxholeComponentExamplesContribution from '#foxhole/plugins/nixie/contributions/foxhole/component-examples.contrib.ts';
 import foxholeToolbarContribution from '#foxhole/plugins/nixie/contributions/foxhole/toolbar.contrib.ts';
 
+import foxholeSceneFactionContribution from '#foxhole/plugins/nixie/contributions/foxhole/scene-faction.contrib.ts';
+
 export const foxholeNixieContributionEntries = [
+    {
+        sourceId: FOXHOLE_NIXIE_CONTRIBUTION_SOURCE_IDS.sceneFaction,
+        contribution: foxholeSceneFactionContribution,
+    },
     {
         sourceId: FOXHOLE_NIXIE_CONTRIBUTION_SOURCE_IDS.settingsPageSections,
         contribution: foxholeSettingsPageSectionsContribution,
