@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineProps<{ name: string; size?: number }>();
 const paths: Record<string, string> = {
+  download: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
   chevron: 'm9 6 6 6-6 6',
   folder: 'M3 7V5h6l2 2h10v13H3Z',
   'folder-open': 'M3 7V5h6l2 2h10v3M3 7v13h16l3-10H7L3 20',

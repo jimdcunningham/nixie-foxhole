@@ -11,6 +11,16 @@ function subscribe<T>(
   return () => ipcRenderer.removeListener(channel, listener);
 }
 const api: InspectorApi = {
+  fileManagerName:
+    process.platform === 'darwin'
+      ? 'Finder'
+      : process.platform === 'win32'
+        ? 'Explorer'
+        : 'File Manager',
+  published: (action, scope) =>
+    ipcRenderer.invoke('published:action', action, scope),
+  onPublished: (callback) => subscribe('published:open', callback),
+  onPublishedProgress: (callback) => subscribe('published:progress', callback),
   review: (id, action) => ipcRenderer.invoke('assets:review', id, action),
   onReview: (callback) => subscribe('review:run', callback),
   onReviewProgress: (callback) => subscribe('review:progress', callback),

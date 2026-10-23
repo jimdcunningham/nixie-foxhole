@@ -29,6 +29,13 @@ export interface AssetDetails extends AssetEntry {
   extension: string;
 }
 export interface InspectorApi {
+  fileManagerName: string;
+  published(
+    action: 'info' | 'check' | 'download' | 'cancel' | 'open',
+    scope: PublishedScope,
+  ): Promise<PublishedStatus>;
+  onPublished(callback: () => void): () => void;
+  onPublishedProgress(callback: (value: PublishedStatus) => void): () => void;
   review(
     rootId: string,
     action: 'summary' | 'approve' | 'compare',
@@ -57,3 +64,28 @@ export type AssetPreview =
   | { type: 'image' | 'model'; bytes: Uint8Array; mime: string }
   | { type: 'text'; text: string; truncated: boolean; json: boolean }
   | { type: 'unsupported'; message: string };
+
+export interface ReleaseReceipt {
+  url: string;
+  sha256: string;
+  byteLength: number;
+}
+export type PublishedScope = 'all' | 'catalog';
+export interface PublishedInfo {
+  release: ReleaseReceipt;
+  source: 'channel' | 'bundled';
+  scope: PublishedScope;
+  files: number;
+  bytes: number;
+  downloadedAt: string;
+  assetsPath: string;
+  baseUrl: string;
+}
+export interface PublishedStatus {
+  phase: 'idle' | 'checking' | 'ready' | 'downloading' | 'complete' | 'error';
+  current: PublishedInfo | null;
+  candidate: Omit<PublishedInfo, 'downloadedAt' | 'assetsPath'> | null;
+  completed: number;
+  reused: number;
+  message: string;
+}

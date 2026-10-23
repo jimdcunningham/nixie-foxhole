@@ -348,10 +348,12 @@ export class AssetReview {
         change: this.changes.get(relative),
       };
     const row = this.baseline!.files[relative]!;
+    const absolutePath = await this.resolve(relative);
     return {
       ...row,
+      bytes: (await stat(absolutePath)).size,
       directory: false,
-      absolutePath: await this.resolve(relative),
+      absolutePath,
       extension: path.extname(relative).slice(1).toUpperCase() || 'FILE',
       change: 'deleted',
       fromBaseline: true,

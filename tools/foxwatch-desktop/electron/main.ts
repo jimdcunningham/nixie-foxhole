@@ -11,6 +11,8 @@ import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from 'electron';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PublishedLibrary, type PublishedPlan } from './published-library.js';
+import type { PublishedStatus } from '../shared/contracts.js';
 import { AssetReview } from './asset-review.js';
 import { AssetDirectory } from './asset-directory.js';
 import { readAssetPreview } from './preview-file.js';
@@ -21,6 +23,21 @@ let window: BrowserWindow;
 let directory: AssetDirectory | null = null;
 let review: AssetReview | null = null;
 let reviewRunning = false;
+let library: PublishedLibrary;
+let publishedPlan: PublishedPlan | null = null;
+let publishedAbort: AbortController | null = null;
+let publishedStatus: PublishedStatus = {
+  phase: 'idle',
+  current: null,
+  candidate: null,
+  completed: 0,
+  reused: 0,
+  message: '',
+};
+const publishStatus = () => {
+  if (window && !window.isDestroyed())
+    window.webContents.send('published:progress', publishedStatus);
+};
 const devUrl = process.env.FOXWATCH_DESKTOP_DEV_URL;
 const pageUrl = new URL(
   devUrl ?? new URL('../../dist/index.html', import.meta.url).href,
@@ -62,9 +79,26 @@ async function openDirectory(target: string, persist = false) {
     );
     await rename(settings + '.tmp', settings);
   }
+  let reviewIdentity: string | undefined;
+  const libraryRoot = path.join(app.getPath('userData'), 'published-library');
+  const fromLibrary = path.relative(libraryRoot, opened.root.path);
+  if (
+    fromLibrary &&
+    !fromLibrary.startsWith('..') &&
+    !path.isAbsolute(fromLibrary)
+  ) {
+    const metadata = JSON.parse(
+      await readFile(
+        path.join(opened.root.path, '.foxwatch-published.json'),
+        'utf8',
+      ),
+    );
+    reviewIdentity = 'published:' + library.baseUrl + ':' + metadata.scope;
+  }
   const openedReview = await AssetReview.open(
     opened,
     path.join(app.getPath('userData'), 'baselines'),
+    reviewIdentity,
   );
   directory = opened;
   review = openedReview;
@@ -93,8 +127,120 @@ async function report(task: () => Promise<unknown>) {
   }
 }
 
+async function handlePublishedAction(action: unknown, scope: unknown) {
+  if (scope !== 'all' && scope !== 'catalog')
+    throw new Error('Invalid library scope.');
+  if (action === 'info') return publishedStatus;
+  if (action === 'cancel') {
+    publishedAbort?.abort(new Error('Download cancelled.'));
+    return publishedStatus;
+  }
+  if (action === 'open') {
+    const current = await library.current();
+    if (!current) throw new Error('Download a published library first.');
+    await openDirectory(current.assetsPath, true);
+    return publishedStatus;
+  }
+  if (action !== 'check' && action !== 'download')
+    throw new Error('Invalid published-library action.');
+  if (publishedAbort)
+    throw new Error('A library operation is already running.');
+  const controller = new AbortController();
+  publishedAbort = controller;
+  try {
+    if (action === 'check') {
+      publishedPlan = null;
+      publishedStatus = {
+        ...publishedStatus,
+        phase: 'checking',
+        candidate: null,
+        message: 'Checking published assets…',
+      };
+      publishStatus();
+      const plan = await library.check(scope, controller.signal, (message) => {
+        publishedStatus.message = message;
+        publishStatus();
+      });
+      publishedPlan = plan;
+      publishedStatus = {
+        ...publishedStatus,
+        phase: 'ready',
+        candidate: {
+          release: plan.release,
+          source: plan.source,
+          scope: plan.scope,
+          files: plan.files.length,
+          bytes: plan.bytes,
+          baseUrl: plan.baseUrl,
+        },
+        message:
+          'Ready to download. Existing local and generated files will be kept.',
+      };
+    } else {
+      if (!publishedPlan || publishedPlan.scope !== scope)
+        throw new Error('Check for updates before downloading.');
+      publishedStatus = {
+        ...publishedStatus,
+        phase: 'downloading',
+        completed: 0,
+        reused: 0,
+        message: 'Downloading and verifying assets…',
+      };
+      publishStatus();
+      const info = await library.download(
+        publishedPlan,
+        controller.signal,
+        (progress) => {
+          publishedStatus.completed = progress.completed;
+          publishedStatus.reused = progress.reused;
+          publishedStatus.message = `${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} files · ${progress.reused.toLocaleString()} reused`;
+          if (
+            progress.completed % 10 === 0 ||
+            progress.completed === progress.total
+          )
+            publishStatus();
+        },
+      );
+      await openDirectory(info.assetsPath, true);
+      publishedStatus = {
+        ...publishedStatus,
+        phase: 'complete',
+        current: info,
+        message: 'Download complete. The published library is open.',
+      };
+    }
+    publishStatus();
+    return publishedStatus;
+  } catch (cause) {
+    publishedStatus = {
+      ...publishedStatus,
+      phase: 'error',
+      message: cause instanceof Error ? cause.message : String(cause),
+    };
+    publishStatus();
+    throw cause;
+  } finally {
+    publishedAbort = null;
+  }
+}
+
 async function launch() {
   await app.whenReady();
+  const bundled = JSON.parse(
+    await readFile(path.join(here, '../shared/release-pin.json'), 'utf8'),
+  );
+  library = new PublishedLibrary({
+    root: path.join(app.getPath('userData'), 'published-library'),
+    pin: bundled.publication,
+    channelUrl: new URL(
+      'channels/stable.json',
+      new URL('.', bundled.publication.url),
+    ).href,
+  });
+  publishedStatus.current = await library.current();
+  app.on('before-quit', () =>
+    publishedAbort?.abort(new Error('FoxWatch is closing.')),
+  );
   nativeTheme.themeSource = 'dark';
   window = new BrowserWindow({
     width: 1240,
@@ -123,6 +269,20 @@ async function launch() {
           label: 'Open Assets Directory…',
           accelerator: 'CmdOrCtrl+O',
           click: () => void report(chooseDirectory),
+        },
+        {
+          label: 'Download Published Assets…',
+          click: () => window.webContents.send('published:open'),
+        },
+        {
+          label: 'Open Downloaded Assets',
+          click: () =>
+            void report(async () => {
+              const current = await library.current();
+              if (!current)
+                throw new Error('Download a published library first.');
+              await openDirectory(current.assetsPath, true);
+            }),
         },
         {
           label: 'Open Generated Assets',
@@ -194,6 +354,7 @@ async function launch() {
       ],
     },
   ];
+  if (process.platform === 'darwin') menu.unshift({ role: 'appMenu' });
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
   ipcMain.handle(
     'assets:review',
@@ -220,6 +381,13 @@ async function launch() {
       } finally {
         reviewRunning = false;
       }
+    },
+  );
+  ipcMain.handle(
+    'published:action',
+    (event, action: unknown, scope: unknown) => {
+      authorize(event);
+      return handlePublishedAction(action, scope);
     },
   );
   ipcMain.handle('assets:root', (event) => {
@@ -271,7 +439,12 @@ async function launch() {
         ...(info.isDirectory()
           ? [
               {
-                label: 'Open in Windows Explorer',
+                label:
+                  process.platform === 'darwin'
+                    ? 'Open in Finder'
+                    : process.platform === 'win32'
+                      ? 'Open in Windows Explorer'
+                      : 'Open in File Manager',
                 click: () =>
                   void report(async () => {
                     const error = await shell.openPath(target);
@@ -281,7 +454,12 @@ async function launch() {
             ]
           : []),
         {
-          label: 'Reveal in Windows Explorer',
+          label:
+            process.platform === 'darwin'
+              ? 'Reveal in Finder'
+              : process.platform === 'win32'
+                ? 'Reveal in Windows Explorer'
+                : 'Reveal in File Manager',
           click: () => shell.showItemInFolder(target),
         },
       ];

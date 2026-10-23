@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import { checkPublishedLibrary } from './published-check.mjs';
 import { checkAssetReview } from './review-check.mjs';
 import { checkPreviewTransitions } from './transition-check.mjs';
 import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
@@ -248,6 +249,7 @@ try {
   );
   assert.equal(settings.assetsDirectory, alternate);
   await checkAssetReview(app, page, alternate);
+  await checkPublishedLibrary(app, page, project);
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -269,6 +271,9 @@ try {
         'switch directory',
         'stale root rejection',
         'persisted directory',
+        'approved baseline and deleted-file preview',
+        'published-library download and cache reuse',
+        'approval preserved across downloaded snapshots',
       ],
       errors,
     }),

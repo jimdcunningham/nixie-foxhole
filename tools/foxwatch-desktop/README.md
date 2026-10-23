@@ -2,8 +2,8 @@
 
 The first Electron/Vue slice of the standalone FoxWatch tooling suite. This is a
 read-only local asset inspector. It does not replace, launch, stop, or modify the
-existing Windows tray Monitor. Steam polling, generation, A/B rendering, approval,
-publishing, and the new background controller are later slices.
+existing Windows tray Monitor. Steam polling, generation, A/B rendering, publishing,
+and the new background controller remain outside this inspector slice.
 
 From the `nixie-foxhole` checkout:
 
@@ -37,6 +37,27 @@ from the approved copy; approval is independent of uploading or publishing.
 Snapshot objects are deduplicated by content and original basename. Reopening a
 folder remembers its approval; comparison is explicit, avoiding a full-library hash
 scan at startup. World Brotli recompression alone does not count as an asset change.
+
+**File → Download Published Assets** opens the download/update dialog. Choose the
+entire library or catalog and models, check for updates, then **Download & Open**.
+The public HTTPS release restores original logical filenames and verifies decoded
+SHA-256/size receipts. No R2 credentials, Steam, .NET, or generation tools are needed
+for inspection. The client uses Node/Electron filesystem APIs on Windows and macOS;
+Explorer/Finder actions and native keyboard accelerators follow the platform. macOS
+packaging and a native Mac runtime check remain future work.
+
+Downloads live under Electron user data in `published-library`, separate from local
+generation output. Compressed world files stay Brotli-compressed in both the cache
+and readable library. Interrupted downloads leave the current library untouched;
+retrying reuses verified cached content. A complete verified download opens as a new
+local snapshot. Approval is never automatic, and an approved published-library
+baseline follows later downloaded snapshots of the same scope. Older snapshots and
+baseline content are retained; automatic pruning is not included yet.
+
+The inspector checks `foxhole-planner/channels/stable.json`. Until that channel is
+first published, it uses the release pin copied into the app at build time. Future
+explicit full-library publishes update the channel only after all immutable objects
+and release metadata verify. Planner-only metadata overlays do not change it.
 
 Preview support:
 

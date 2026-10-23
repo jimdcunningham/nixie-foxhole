@@ -16,6 +16,9 @@ import type {
 } from '../shared/contracts';
 import Icon from './Icon.vue';
 import AssetPreview from './AssetPreview.vue';
+import PublishedLibraryDialog from './PublishedLibraryDialog.vue';
+const showPublished = ref(false);
+const fileManagerName = window.foxwatch.fileManagerName;
 
 interface TreeRow extends AssetEntry {
   depth: number;
@@ -344,6 +347,9 @@ function resizeByKey(event: KeyboardEvent) {
 }
 onMounted(async () => {
   unsubscribe.push(
+    window.foxwatch.onPublished(() => {
+      showPublished.value = true;
+    }),
     window.foxwatch.onReview((action) => void runReview(action)),
     window.foxwatch.onReviewProgress((progress) => {
       reviewProgress.value = `${progress.phase} · ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()}`;
@@ -385,6 +391,13 @@ onBeforeUnmount(() => {
               @click="chooseRoot"
             >
               <Icon name="folder-open" />
+            </button>
+            <button
+              title="Download Published Assets"
+              aria-label="Download Published Assets"
+              @click="showPublished = true"
+            >
+              <Icon name="download" />
             </button>
             <button
               title="Refresh Assets (Ctrl+R)"
@@ -621,8 +634,8 @@ onBeforeUnmount(() => {
               ><button class="text-button" @click="reveal(details.path)">
                 {{
                   details.fromBaseline
-                    ? 'Show Baseline in Explorer'
-                    : 'Show in Explorer'
+                    ? `Show Baseline in ${fileManagerName}`
+                    : `Show in ${fileManagerName}`
                 }}
               </button>
             </div>
@@ -636,9 +649,20 @@ onBeforeUnmount(() => {
           <button v-if="!root" class="primary-button" @click="chooseRoot">
             Open Assets Directory
           </button>
+          <button
+            v-if="!root"
+            class="text-button"
+            @click="showPublished = true"
+          >
+            Download Published Assets
+          </button>
         </div>
       </section>
     </div>
+    <PublishedLibraryDialog
+      v-if="showPublished"
+      @close="showPublished = false"
+    />
     <footer class="status-bar">
       <span :title="root?.path">{{
         root ? root.path : 'No directory open'

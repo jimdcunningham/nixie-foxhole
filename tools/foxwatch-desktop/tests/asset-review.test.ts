@@ -61,7 +61,7 @@ test('compares added and same-size modified files by content, ignoring timestamp
   await review.approve();
   assert.equal((await review.compare()).modified, 0);
 });
-test('deleted directories remain navigable and can be replaced by files', async (t) => {
+test('deleted directories remain navigable', async (t) => {
   const { root, review } = await setup(t);
   await mkdir(path.join(root, 'old/nested'), { recursive: true });
   await writeFile(path.join(root, 'old/nested/asset.json'), '{}');
@@ -94,4 +94,9 @@ test('world transport recompression does not appear as an asset modification', a
     }),
   );
   assert.equal((await review.compare()).modified, 0);
+  await review.approve();
+  await rm(file);
+  await review.compare();
+  const removed = await review.inspect('world/content/br/sample/asset.json');
+  assert.equal(removed.bytes, (await readFile(removed.absolutePath)).length);
 });
