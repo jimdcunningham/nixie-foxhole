@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, unlink, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { whitePng, triangleGlb } from '../tests/preview-fixtures.mjs';
 
@@ -21,6 +21,7 @@ export async function checkComparisons(app, page, base) {
   await page.getByRole('treeitem',{name:'manifest.json',exact:true}).waitFor();
   await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.find(item => item.label === '&Review').submenu.items.find(item => item.label === 'Approve Current Assets as Baseline').click());
   await page.getByText('0 Changes',{exact:true}).waitFor();
+  const approvedSizes = Object.fromEntries(await Promise.all(['icon.png','model.glb','manifest.json','deleted.glb'].map(async name => [name,(await stat(path.join(root,name))).size])));
   await put('large-manifest.json',JSON.stringify({payload:largeBody,setting:2}));
   await put('icon.png',whitePng([255,255,255,128],32,16));
   await put('model.glb',triangleGlb({nodes:[{mesh:0,scale:[1.4,1.4,1.4]}],materials:[{doubleSided:true,pbrMetallicRoughness:{baseColorFactor:[.2,.5,.95,1],metallicFactor:0,roughnessFactor:1}}]}));
@@ -37,6 +38,13 @@ export async function checkComparisons(app, page, base) {
   await page.getByRole('button',{name:'Compare',exact:true}).click();
   await page.locator('.preview-layer:not(.is-pending) .image-comparison').waitFor();
   assert.equal(await page.locator('.preview-layer:not(.is-pending) .image-comparison img').count(),2);
+  const sizes = page.getByRole('group',{name:'File Size Comparison'});
+  assert.equal(await sizes.locator(':scope > span').nth(0).getAttribute('title'), `${approvedSizes['icon.png'].toLocaleString()} B on disk`);
+  const workingSize = (await stat(path.join(root,'icon.png'))).size;
+  assert.equal(await sizes.locator(':scope > span').nth(1).getAttribute('title'), `${workingSize.toLocaleString()} B on disk`);
+  const delta = workingSize - approvedSizes['icon.png'];
+  assert.equal(await sizes.getByLabel('Size Change').getAttribute('title'), `${delta < 0 ? '−' : delta > 0 ? '+' : ''}${Math.abs(delta).toLocaleString()} B on disk`);
+  assert.match(await sizes.getByLabel('Size Change').innerText(),/%/);
   await page.getByRole('button',{name:'Swipe',exact:true}).click();
   await page.getByRole('slider',{name:'Swipe Position'}).evaluate(element => { element.value = '30'; element.dispatchEvent(new Event('input',{bubbles:true})); });
   assert.match(await page.locator('.swipe-divider').getAttribute('style'),/30%/);
@@ -60,6 +68,7 @@ export async function checkComparisons(app, page, base) {
   await page.getByRole('button',{name:'Dark Background',exact:true}).click();
   await select('manifest.json');
   await page.locator('.manifest-table').waitFor();
+  assert.equal(await sizes.locator(':scope > span').nth(0).getAttribute('title'), `${approvedSizes['manifest.json'].toLocaleString()} B on disk`);
   assert.match(await page.locator('.manifest-table').innerText(),/\/assets\/hospital\/health/);
   assert.equal(await page.locator('.manifest-table tbody tr').count(),3);
   await page.getByRole('searchbox',{name:'Search Manifest Changes'}).fill('health');
@@ -84,6 +93,7 @@ export async function checkComparisons(app, page, base) {
   await page.locator('[data-side=approved] .model-viewport canvas').waitFor();
   await page.locator('[data-side=working] .model-viewport canvas').waitFor();
   assert.equal(await page.locator('.model-comparison .model-message').count(),0);
+  assert.equal(await sizes.locator(':scope > span').nth(0).getAttribute('title'), `${approvedSizes['model.glb'].toLocaleString()} B on disk`);
   const a = page.locator('[data-side=approved] .model-viewport canvas');
   const b = page.locator('[data-side=working] .model-viewport canvas');
   const before = await b.screenshot(); const box = await a.boundingBox();
@@ -97,9 +107,13 @@ export async function checkComparisons(app, page, base) {
   assert.equal(await page.getByRole('button',{name:'B · Working',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'Side by Side',exact:true}).click();
   await page.locator('.model-comparison').getByText('Deleted from working files',{exact:true}).waitFor();
+  assert.match(await sizes.getByLabel('Size Change').innerText(),/Deleted · −/);
+  assert.match(await sizes.innerText(),/Not Present/);
   await select('added.png');
   await page.getByRole('button',{name:'Side by Side',exact:true}).click();
   await page.locator('.image-comparison').getByText('Not in the approved baseline',{exact:true}).waitFor();
+  assert.match(await sizes.getByLabel('Size Change').innerText(),/Added · \+/);
+  assert.match(await sizes.innerText(),/Not Present/);
   await page.getByRole('button',{name:'Preview',exact:true}).click();
   await page.locator('.preview-layer:not(.is-pending) .image-preview').waitFor();
   await select('manifest.json');

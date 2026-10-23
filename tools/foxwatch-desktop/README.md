@@ -115,7 +115,9 @@ and release metadata verify. Planner-only metadata overlays do not change it.
 
 Select a file and click **Compare** in the inspector header to inspect its
 approved local version (A) against the current working file (B). Create the first
-baseline using **Review → Approve Current Assets as Baseline**. A whole-directory
+baseline using **Review → Approve Current Assets as Baseline**. Every comparison shows approved and working file sizes plus the signed byte and
+percentage change. Hover a size for exact bytes on disk; added/deleted files and
+empty baselines are labeled explicitly. A whole-directory
 comparison is not required just to open one file's A/B view. Added and deleted
 files show an explicit missing side; the approved file is never presented as
 the current working version.

@@ -857,3 +857,7 @@ dd {
 
 .discard-controls { padding: 4px 10px 8px; border-bottom: 1px solid var(--line); }
 .discard-controls button { width: 100%; padding: 5px 8px; border: 1px solid #634341; color: #dfa7a3; font-size: 11px; text-align: left; }
+
+.comparison-sizes { display:flex; flex-wrap:wrap; align-items:center; gap:8px 24px; padding:8px 16px; border-bottom:1px solid var(--line); flex-shrink:0; font-size:11px; font-variant-numeric:tabular-nums; }
+.comparison-sizes > span { display:flex; align-items:baseline; gap:8px; }
+.comparison-sizes strong { font-weight:500; }
