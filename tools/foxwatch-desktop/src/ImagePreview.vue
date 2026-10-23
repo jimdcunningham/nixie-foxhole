@@ -106,7 +106,6 @@ onBeforeUnmount(() => {
     <div
       ref="viewport"
       class="image-viewport"
-      :class="background"
       @wheel.prevent="setZoom(zoom * Math.exp(-$event.deltaY * 0.001))"
       @pointerdown="down"
       @pointermove="move"
@@ -116,21 +115,28 @@ onBeforeUnmount(() => {
       @dblclick="fit"
     >
       <p v-if="error" role="alert">This image could not be decoded.</p>
-      <img
+      <div
         v-else
-        ref="image"
-        :src="url"
-        :alt="label"
-        draggable="false"
+        class="image-frame"
+        :class="background"
         :style="{
-          transform: `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${zoom})`,
+          width: `${width * zoom}px`,
+          height: `${height * zoom}px`,
+          transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
         }"
-        @load="loaded"
-        @error="
-          error = true;
-          emit('ready');
-        "
-      />
+      >
+        <img
+          ref="image"
+          :src="url"
+          :alt="label"
+          draggable="false"
+          @load="loaded"
+          @error="
+            error = true;
+            emit('ready');
+          "
+        />
+      </div>
     </div>
   </div>
 </template>
