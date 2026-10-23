@@ -2,7 +2,7 @@ import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperim
     NixieExperimentalSpatialEndpointBindingsV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
-import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
+import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 
 const data = (entity: Entity, id: string, owner = 'nixie.core') => entity.components.find(component => component.ownerId === owner
@@ -21,7 +21,7 @@ export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: F
         if (!subject) continue;
         const assetId = String(data(subject, 'asset', 'nixie.foxhole-planner')?.assetId ?? '');
         const requested = String(spline[`${prefix}AttachmentSocketName`] ?? '');
-        const socket = resolveFoxholeEntityStructureSockets(subject, metadata[assetId]).find(socket => socketName(socket.name) === socketName(requested));
+        const socket = resolveFoxholeEntityAttachmentSockets(subject, metadata[assetId]).find(socket => socketName(socket.name) === socketName(requested));
         if (!socket) continue;
         const point = projection.toLocal(entity, projection.toWorld(subject, [socket.x, socket.y, socket.z ?? 0]));
         const direction = projection.toLocal(entity, projection.toWorld(subject, [socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation), socket.z ?? 0]));

@@ -3,7 +3,7 @@ import type {
     NixieExperimentalEntityRendererContextV1,
 } from '@nixie/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
-import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
+import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 
@@ -146,7 +146,7 @@ function resolveSocket(
     const assetId = typeof asset?.assetId === 'string' ? asset.assetId : '';
     const metadata = assetMetadataById[assetId];
     const expectedName = normalizedSocketName(link.socketName);
-    const socket = entity && resolveFoxholeEntityStructureSockets(entity, metadata).find(candidate => normalizedSocketName(candidate.name) === expectedName);
+    const socket = entity && resolveFoxholeEntityAttachmentSockets(entity, metadata).find(candidate => normalizedSocketName(candidate.name) === expectedName);
     const world = worldMatrices.get(link.nodeId);
     if (!socket || !world) {
         return null;
