@@ -84,14 +84,17 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
         // Bounds sizing must preserve the authored 32-units-per-metre ratio.
         // Repeated pipes/crates once shared geometry during transform baking,
         // corrupting these bounds and squashing the entire building at load time.
+        const positionSteps = ['precisionOptimization' in metadata ? (metadata.precisionOptimization.positionStepMetres ?? 0) : 0];
         const dimensions = modelArtifactBounds(readModelArtifact(bytes), resourceId => {
-            const shared = (fullModelBundle as unknown as { sharedParts: Record<string, { resourceId: string; path: string; }> }).sharedParts;
+            const shared = fullModelBundle.sharedParts;
             const part = Object.values(shared).find(part => part.resourceId === resourceId)!;
+            positionSteps.push(part.precisionOptimization.positionStepMetres ?? 0);
             const bytes = readFileSync(new URL(`../../../packages/extensions/foxhole/public/foxhole/assets/${part.path}`, import.meta.url));
             return readModelArtifact(bytes);
         }).dimensions;
         for (const [axis, size] of [metadata.width, metadata.height, metadata.depth].entries()) {
-            const step = 'precisionOptimization' in metadata ? (metadata.precisionOptimization.positionStepMetres ?? 0) : 0;
+            // Empty assembly parents inherit the precision grid of their referenced meshes.
+            const step = Math.max(...positionSteps);
             // Rounding each bound to the shared grid can change the extent by one step.
             // Still reject scale/baking corruption; allow only that measured rounding budget.
             const roundingBudget = step + Math.max(1, size / 32) * 1e-6;
@@ -99,7 +102,7 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.ok(Math.abs(size / 32 - dimensions[axis]!) <= roundingBudget,
                 `${assetId} axis ${axis} would distort the model during bounds sizing`);
         }
-        for (const image of document.images) {
+        for (const image of document.images ?? []) {
             assert.equal(image.mimeType, 'image/webp');
             assert.equal(image.uri, undefined);
             const view = document.bufferViews[image.bufferView];

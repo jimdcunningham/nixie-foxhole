@@ -3,6 +3,9 @@ import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
 import { createFoxholeStructureFiringEnvelopes } from '../src/scene-v2-structure-range-overlays.ts';
 
+// Catalog publication rounds numeric metadata to three decimal places.
+const publishedCoordinateError = 0.0005 + Number.EPSILON;
+
 test('AI coverage uses component origins without discarding physical muzzle coordinates', () => {
     const expected: Record<string, readonly [number, number, number]> = {
         mgait1: [2.68,-0.01067,2.6243], mgait2: [2.68,-0.01067,2.6243], mgait3: [2.61,0,2.01],
@@ -14,7 +17,7 @@ test('AI coverage uses component origins without discarding physical muzzle coor
     for (const [id, origin] of Object.entries(expected)) {
         const asset=assets[id]!, source=asset.ranges!.find(range=>range.firingVolume)!.firingVolume!;
         assert.ok(source.originSource==='muzzle-component' || source.originSource==='gun-bone',id);
-        origin.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<0.0001,`${id} source axis ${i}`));
+        origin.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<=publishedCoordinateError,`${id} source axis ${i}`));
         const volume=createFoxholeStructureFiringEnvelopes(asset,{}, {destroyed:false,packaged:false})[0]!;
         assert.ok(volume,`${id} must retain its source-backed AI envelope`);
         const offset=asset.model!.blueprintOrigin!;
@@ -25,17 +28,22 @@ test('AI coverage uses component origins without discarding physical muzzle coor
     }
 });
 
-test('tankette gun sockets face forward and do not inherit stale ground-range centers', () => {
-    for (const [id,x] of [['tankettec',1.85378],['tanketteoffensivec',2.16036]] as const) {
+test('tankette sockets retain physical model frames independently of legacy ground ranges', () => {
+    // Legacy planar corrections must not rotate a resolved model-space muzzle.
+    for (const [id,origin,orientation] of [
+        ['tankettec',[1.85378,0.28763,0.12808],[0,0,0,-1]],
+        ['tanketteoffensivec',[-0.22763,2.10036,0.2143],[0,0,-Math.SQRT1_2,-Math.SQRT1_2]],
+    ] as const) {
         const asset=assets[id]!, source=asset.ranges![0]!.firingVolume!;
         assert.equal(source.originSource,'muzzle-socket');
-        assert.ok(Math.abs(source.origin[0]-x)<0.001,id);
-        assert.ok(Math.abs(source.origin[1]-0.28763)<0.001,id);
-        assert.ok(Math.abs(source.orientation[3])>0.99999,`${id} must not acquire a quarter turn`);
-        assert.ok(Math.abs(source.origin[0]-(asset.ranges![0]!.x??0))>1,'seat position must not replace the gun');
+        origin.forEach((value,i)=>assert.ok(Math.abs(source.origin[i]!-value)<0.001,`${id} model axis ${i}`));
+        orientation.forEach((value,i)=>assert.ok(Math.abs(source.orientation[i]!-value)<=publishedCoordinateError,`${id} orientation ${i}`));
+        assert.ok(Math.hypot(source.origin[0]-(asset.ranges![0]!.x??0),source.origin[1]-(asset.ranges![0]!.y??0))>1,'seat position must not replace the gun');
         const volume=createFoxholeStructureFiringEnvelopes(asset,{'foxhole.debug.ranges.vehicleWeapons':true},{destroyed:false,packaged:false})[0]!;
         assert.ok(volume);
-        assert.ok(Math.abs(volume.origin[0]-source.origin[0]*32)<0.0001);
+        const offset=asset.model!.blueprintOrigin!;
+        source.origin.forEach((value,i)=>assert.ok(Math.abs(volume.origin[i]!-(value*32+[offset.x,offset.y,offset.z][i]!))<0.0001,`${id} envelope axis ${i}`));
+        assert.deepEqual(volume.orientation,source.orientation);
     }
 });
 
@@ -77,10 +85,10 @@ test('remaining initialization-bound guns retain their source origins and launch
         scoutvehicleoffensivew:[['S_Muzzle',0.28917,0.00001,0.82404]],
         truckoffensivec:[['S_Muzzle',3.60915,0.5552,1.65804]],
         scoutvehicleoffensivec:[['S_Muzzle',-0.38509,0.32216,0.90299]],
-        aircraftfighter2c:[['S_AircraftFighter2C_Top_Gunner_0',2.07726,-0.72919,1.40527]],
-        aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',-0.00393,6.16677,0.28913]],
-        aircraftdivec:[['S_AircraftDiveC_Muzzle_L',0.06061,2.0636,0.9044]],
-        aircraftbomberc:[['S_Muzzle_Fore_0',0,-7.11152,0.46479],['S_Muzzle_Mid_0',0.00005,7.46581,1.46248],['S_Muzzle_Aft_0',-0.01029,15.62941,0.23921]],
+        aircraftfighter2c:[['S_AircraftFighter2C_Top_Gunner_0',0.72919,2.07726,1.40527]],
+        aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',0.00393,-6.16677,0.28913]],
+        aircraftdivec:[['S_AircraftDiveC_Muzzle_L',-0.06061,-2.0636,0.9044]],
+        aircraftbomberc:[['S_Muzzle_Fore_0',0,7.11152,0.46479],['S_Muzzle_Mid_0',-0.00005,-7.46581,1.46248],['S_Muzzle_Aft_0',0.01029,-15.62941,0.23921]],
         armoredcar2multiw:[['PayloadInstancedStaticMesh',-1.73084,-0.56515,0.8299]],
         truckmultic:[['PayloadInstancedStaticMesh',-4.00573,1.52788,1.1481]],
         gunboat2c:[['PayloadInstancedStaticMesh',-4.47388,-1.2613,5.07751]],

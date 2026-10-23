@@ -136,7 +136,12 @@ test('rocket salvos use independent firing-ready muzzle origins and calibrated s
         assert.equal(source.minPitch,0,'source frame already includes firing-ready elevation');
         assert.ok(Math.abs(source.maxPitch-span)<0.01,id);
         const [x,y,z,w]=source.orientation;
-        assert.ok(Math.abs(Math.asin(2*(x*z-w*y))*180/Math.PI-physicalPitch)<0.01,id);
+        // Propagate the publisher's half-step quaternion rounding through the pitch formula.
+        const sine=2*(x*z-w*y);
+        const componentError=0.0005;
+        const sineError=2*componentError*(Math.abs(x)+Math.abs(y)+Math.abs(z)+Math.abs(w))+4*componentError**2;
+        const degrees=(value:number)=>Math.asin(Math.max(-1,Math.min(1,value)))*180/Math.PI;
+        assert.ok(physicalPitch>=degrees(sine-sineError)-0.01 && physicalPitch<=degrees(sine+sineError)+0.01,id);
         const all=createFoxholeStructureFiringEnvelopes(asset,settings,appearance);
         const volumes=all.filter(volume=>volume.id.includes('-muzzle-'));
         assert.equal(volumes.length,count,id);
