@@ -6,8 +6,14 @@ import {
   onMounted,
   ref,
   shallowRef,
+  watch,
 } from 'vue';
-import type { AssetDetails, AssetEntry, AssetRoot } from '../shared/contracts';
+import type {
+  AssetDetails,
+  AssetEntry,
+  AssetRoot,
+  ReviewSummary,
+} from '../shared/contracts';
 import Icon from './Icon.vue';
 import AssetPreview from './AssetPreview.vue';
 
@@ -24,6 +30,34 @@ const focused = ref('');
 const error = ref('');
 const inspecting = ref(false);
 const sidebar = ref(true);
+const reviewSummary = shallowRef<ReviewSummary | null>(null);
+const reviewBusy = ref(false),
+  changesOnly = ref(false),
+  reviewProgress = ref('');
+const changeCount = computed(
+  () =>
+    (reviewSummary.value?.added ?? 0) +
+    (reviewSummary.value?.modified ?? 0) +
+    (reviewSummary.value?.deleted ?? 0),
+);
+async function runReview(action: 'approve' | 'compare') {
+  const current = root.value;
+  if (!current || reviewBusy.value) return;
+  reviewBusy.value = true;
+  reviewProgress.value =
+    action === 'approve' ? 'Saving baseline…' : 'Comparing assets…';
+  try {
+    const result = await window.foxwatch.review(current.id, action);
+    if (root.value?.id !== current.id) return;
+    reviewSummary.value = result;
+    await refresh(false);
+  } catch (cause) {
+    if (root.value?.id === current.id) error.value = message(cause);
+  } finally {
+    reviewBusy.value = false;
+    reviewProgress.value = '';
+  }
+}
 const sidebarWidth = ref(
   Math.max(
     220,
@@ -43,6 +77,7 @@ const rows = computed(() => {
   const result: TreeRow[] = [];
   const visit = (parent: string, depth: number) => {
     for (const entry of children.value.get(parent) ?? []) {
+      if (changesOnly.value && !entry.change) continue;
       result.push({ ...entry, depth });
       if (entry.directory && expanded.value.has(entry.path))
         visit(entry.path, depth + 1);
@@ -123,6 +158,8 @@ async function setRoot(value: AssetRoot) {
   selectionVersion++;
   listingVersion++;
   root.value = value;
+  reviewSummary.value = null;
+  changesOnly.value = false;
   children.value = new Map();
   expanded.value = new Set();
   pending.value = new Set();
@@ -134,6 +171,8 @@ async function setRoot(value: AssetRoot) {
   scrollTop.value = 0;
   if (tree.value) tree.value.scrollTop = 0;
   await load('');
+  const summary = await window.foxwatch.review(value.id, 'summary');
+  if (root.value?.id === value.id) reviewSummary.value = summary;
 }
 async function chooseRoot() {
   try {
@@ -169,9 +208,13 @@ async function activate(row: TreeRow) {
     if (version === selectionVersion) inspecting.value = false;
   }
 }
-async function refresh() {
+async function refresh(recompare = true) {
   if (!root.value) return;
   const current = root.value.id;
+  if (recompare && reviewSummary.value?.approvedAt) {
+    await runReview('compare');
+    return;
+  }
   const open = [...expanded.value].sort(
     (a, b) => a.split('/').length - b.split('/').length,
   );
@@ -206,7 +249,13 @@ async function reveal(path: string) {
   }
 }
 async function showContext(path: string) {
-  if (!root.value) return;
+  if (
+    !root.value ||
+    rows.value.some(
+      (row) => row.path === path && row.fromBaseline && row.directory,
+    )
+  )
+    return;
   try {
     await window.foxwatch.contextMenu(root.value.id, path);
   } catch (cause) {
@@ -224,6 +273,11 @@ function focusRow(path: string) {
   else if (top + rowHeight > tree.value.scrollTop + tree.value.clientHeight)
     tree.value.scrollTop = top + rowHeight - tree.value.clientHeight;
 }
+watch(changesOnly, () => {
+  scrollTop.value = 0;
+  if (tree.value) tree.value.scrollTop = 0;
+  focused.value = rows.value[0]?.path ?? '';
+});
 async function navigate(event: KeyboardEvent) {
   if (!rows.value.length) return;
   const index = Math.max(
@@ -290,6 +344,10 @@ function resizeByKey(event: KeyboardEvent) {
 }
 onMounted(async () => {
   unsubscribe.push(
+    window.foxwatch.onReview((action) => void runReview(action)),
+    window.foxwatch.onReviewProgress((progress) => {
+      reviewProgress.value = `${progress.phase} · ${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()}`;
+    }),
     window.foxwatch.onRootChanged((value) => void setRoot(value)),
     window.foxwatch.onRefresh(() => void refresh()),
     window.foxwatch.onToggleSidebar(() => {
@@ -332,7 +390,7 @@ onBeforeUnmount(() => {
               title="Refresh Assets (Ctrl+R)"
               aria-label="Refresh Assets"
               :disabled="!root"
-              @click="refresh"
+              @click="refresh()"
             >
               <Icon name="refresh" />
             </button>
@@ -355,6 +413,39 @@ onBeforeUnmount(() => {
         >
           <Icon name="folder" /><strong>{{ root.name }}</strong>
         </button>
+        <div v-if="root" class="review-controls">
+          <button
+            :disabled="!reviewSummary?.approvedAt || reviewBusy"
+            :aria-pressed="changesOnly"
+            @click="changesOnly = !changesOnly"
+          >
+            Changes Only
+          </button>
+          <button
+            :disabled="!reviewSummary?.approvedAt || reviewBusy"
+            title="Compare With Approved Baseline"
+            @click="runReview('compare')"
+          >
+            <Icon name="refresh" :size="13" />
+          </button>
+          <span v-if="reviewBusy" role="status">{{ reviewProgress }}</span>
+          <span
+            v-else-if="reviewSummary?.comparedAt"
+            :title="`${reviewSummary.added} added, ${reviewSummary.modified} modified, ${reviewSummary.deleted} deleted`"
+            >{{ changeCount }} Changes</span
+          >
+          <span
+            v-else
+            :title="
+              reviewSummary?.approvedAt
+                ? 'Use Review → Compare With Approved Baseline.'
+                : 'Use Review → Approve Current Assets as Baseline.'
+            "
+            >{{
+              reviewSummary?.approvedAt ? 'Not Compared' : 'No Baseline'
+            }}</span
+          >
+        </div>
         <div
           ref="tree"
           class="tree"
@@ -421,7 +512,25 @@ onBeforeUnmount(() => {
                 "
                 class="entry-icon"
               />
-              <span class="entry-label">{{ row.label }}</span
+              <span
+                class="entry-label"
+                :class="{
+                  'deleted-name': row.change === 'deleted' && !row.directory,
+                }"
+                >{{ row.label }}</span
+              ><span
+                v-if="row.change"
+                class="change-badge"
+                :class="row.change"
+                :title="
+                  row.change.charAt(0).toUpperCase() + row.change.slice(1)
+                "
+                :aria-label="
+                  row.change.charAt(0).toUpperCase() + row.change.slice(1)
+                "
+                >{{
+                  { added: 'A', modified: 'M', deleted: 'D' }[row.change]
+                }}</span
               ><span
                 v-if="pending.has(row.path)"
                 class="loading-dot"
@@ -431,7 +540,7 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="pending.has('')" class="tree-message">Loading assets…</p>
           <p v-else-if="root && !rows.length" class="tree-message">
-            This folder is empty.
+            {{ changesOnly ? 'No changed assets.' : 'This folder is empty.' }}
           </p>
           <div v-else-if="!root" class="tree-empty">
             <p>No directory open.</p>
@@ -476,6 +585,9 @@ onBeforeUnmount(() => {
             }}<span v-if="details.path.includes('/')">/</span
             ><strong>{{ details.label }}</strong>
           </div>
+          <div v-if="details.fromBaseline" class="baseline-notice">
+            Deleted from working files · Showing the approved version
+          </div>
           <AssetPreview
             :root-id="root?.id ?? ''"
             :asset="details"
@@ -507,7 +619,11 @@ onBeforeUnmount(() => {
                 details.absolutePath
               }}</span
               ><button class="text-button" @click="reveal(details.path)">
-                Show in Explorer
+                {{
+                  details.fromBaseline
+                    ? 'Show Baseline in Explorer'
+                    : 'Show in Explorer'
+                }}
               </button>
             </div>
           </div>

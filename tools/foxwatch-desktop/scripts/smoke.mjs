@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import { checkAssetReview } from './review-check.mjs';
 import { checkPreviewTransitions } from './transition-check.mjs';
 import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
 const require = createRequire(import.meta.url);
@@ -103,7 +104,13 @@ try {
   const nativeMenus = await app.evaluate(({ Menu }) =>
     Menu.getApplicationMenu().items.map((item) => item.label),
   );
-  assert.deepEqual(nativeMenus, ['&File', '&Edit', '&View', '&Help']);
+  assert.deepEqual(nativeMenus, [
+    '&File',
+    '&Review',
+    '&Edit',
+    '&View',
+    '&Help',
+  ]);
   await app.evaluate(({ Menu, shell }) => {
     globalThis.contexts = [];
     globalThis.explorer = [];
@@ -240,6 +247,7 @@ try {
     ).readFile(path.join(profile, 'inspector.json'), 'utf8'),
   );
   assert.equal(settings.assetsDirectory, alternate);
+  await checkAssetReview(app, page, alternate);
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({

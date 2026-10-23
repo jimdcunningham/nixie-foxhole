@@ -4,7 +4,18 @@ export interface AssetRoot {
   path: string;
 }
 export type AssetKind = 'image' | 'model' | 'data' | 'text' | 'audio' | 'file';
+export type AssetChange = 'added' | 'modified' | 'deleted';
+export interface ReviewSummary {
+  approvedAt: string | null;
+  comparedAt: string | null;
+  added: number;
+  modified: number;
+  deleted: number;
+  unchanged: number;
+}
 export interface AssetEntry {
+  change?: AssetChange;
+  fromBaseline?: boolean;
   path: string;
   name: string;
   label: string;
@@ -18,6 +29,18 @@ export interface AssetDetails extends AssetEntry {
   extension: string;
 }
 export interface InspectorApi {
+  review(
+    rootId: string,
+    action: 'summary' | 'approve' | 'compare',
+  ): Promise<ReviewSummary>;
+  onReview(callback: (action: 'approve' | 'compare') => void): () => void;
+  onReviewProgress(
+    callback: (progress: {
+      phase: string;
+      completed: number;
+      total: number;
+    }) => void,
+  ): () => void;
   getRoot(): Promise<AssetRoot | null>;
   chooseRoot(): Promise<AssetRoot | null>;
   list(rootId: string, path: string): Promise<AssetEntry[]>;

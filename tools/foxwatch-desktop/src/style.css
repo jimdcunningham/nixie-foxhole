@@ -636,3 +636,54 @@ dd {
   font-size: 11px;
   pointer-events: none;
 }
+
+.review-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  min-height: 34px;
+}
+.review-controls button {
+  font-size: 11px;
+  padding: 3px 5px;
+}
+.review-controls button[aria-pressed='true'] {
+  background: var(--selected);
+  color: var(--accent);
+}
+.review-controls > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.change-badge {
+  margin-left: auto;
+  font:
+    10px Consolas,
+    monospace;
+  flex-shrink: 0;
+}
+.change-badge.added {
+  color: #91d4a7;
+}
+.change-badge.modified {
+  color: #e0bd78;
+}
+.change-badge.deleted {
+  color: #e49b9b;
+}
+.deleted-name {
+  text-decoration: line-through;
+  color: #b4a2a5;
+}
+.baseline-notice {
+  padding: 4px 20px;
+  color: #d4b4b4;
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+}

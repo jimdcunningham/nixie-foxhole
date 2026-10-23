@@ -11,6 +11,7 @@ import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from 'electron';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AssetReview } from './asset-review.js';
 import { AssetDirectory } from './asset-directory.js';
 import { readAssetPreview } from './preview-file.js';
 
@@ -18,6 +19,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../..');
 let window: BrowserWindow;
 let directory: AssetDirectory | null = null;
+let review: AssetReview | null = null;
+let reviewRunning = false;
 const devUrl = process.env.FOXWATCH_DESKTOP_DEV_URL;
 const pageUrl = new URL(
   devUrl ?? new URL('../../dist/index.html', import.meta.url).href,
@@ -43,6 +46,11 @@ function relativePath(value: unknown): string {
     throw new Error('Invalid asset path.');
   return value;
 }
+function currentReview(id: unknown) {
+  source(id);
+  if (!review) throw new Error('No review directory is open.');
+  return review;
+}
 async function openDirectory(target: string, persist = false) {
   const opened = await AssetDirectory.open(target);
   if (persist) {
@@ -54,7 +62,12 @@ async function openDirectory(target: string, persist = false) {
     );
     await rename(settings + '.tmp', settings);
   }
+  const openedReview = await AssetReview.open(
+    opened,
+    path.join(app.getPath('userData'), 'baselines'),
+  );
   directory = opened;
+  review = openedReview;
   window?.setTitle(`FoxWatch — ${opened.root.path}`);
   window?.webContents.send('assets:changed', opened.root);
   return opened.root;
@@ -128,6 +141,19 @@ async function launch() {
         { role: 'quit' },
       ],
     },
+    {
+      label: '&Review',
+      submenu: [
+        {
+          label: 'Compare With Approved Baseline',
+          click: () => window.webContents.send('review:run', 'compare'),
+        },
+        {
+          label: 'Approve Current Assets as Baseline',
+          click: () => window.webContents.send('review:run', 'approve'),
+        },
+      ],
+    },
     { label: '&Edit', submenu: [{ role: 'copy' }, { role: 'selectAll' }] },
     {
       label: '&View',
@@ -169,6 +195,33 @@ async function launch() {
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
+  ipcMain.handle(
+    'assets:review',
+    async (event, id: unknown, action: unknown) => {
+      authorize(event);
+      const current = currentReview(id);
+      if (action === 'summary') return current.summary();
+      if (action !== 'approve' && action !== 'compare')
+        throw new Error('Invalid review action.');
+      if (reviewRunning) throw new Error('An asset review is already running.');
+      reviewRunning = true;
+      try {
+        return await current[action]((phase, completed, total) => {
+          if (
+            (completed % 25 === 0 || completed === total) &&
+            directory?.root.id === id
+          )
+            window.webContents.send('review:progress', {
+              phase,
+              completed,
+              total,
+            });
+        });
+      } finally {
+        reviewRunning = false;
+      }
+    },
+  );
   ipcMain.handle('assets:root', (event) => {
     authorize(event);
     return directory?.root ?? null;
@@ -179,32 +232,37 @@ async function launch() {
   });
   ipcMain.handle('assets:list', (event, id: unknown, relative: unknown) => {
     authorize(event);
-    return source(id).list(relativePath(relative));
+    return currentReview(id).list(relativePath(relative));
   });
   ipcMain.handle(
     'assets:preview',
     async (event, id: unknown, relative: unknown) => {
       authorize(event);
       const logical = relativePath(relative);
-      return readAssetPreview(await source(id).resolve(logical), logical);
+      return readAssetPreview(
+        await currentReview(id).resolve(logical),
+        logical,
+      );
     },
   );
   ipcMain.handle('assets:inspect', (event, id: unknown, relative: unknown) => {
     authorize(event);
-    return source(id).inspect(relativePath(relative));
+    return currentReview(id).inspect(relativePath(relative));
   });
   ipcMain.handle(
     'assets:reveal',
     async (event, id: unknown, relative: unknown) => {
       authorize(event);
-      shell.showItemInFolder(await source(id).resolve(relativePath(relative)));
+      shell.showItemInFolder(
+        await currentReview(id).resolve(relativePath(relative)),
+      );
     },
   );
   ipcMain.handle(
     'assets:context',
     async (event, id: unknown, relative: unknown) => {
       authorize(event);
-      const current = source(id);
+      const current = currentReview(id);
       const target = await current.resolve(relativePath(relative));
       const info = await import('node:fs/promises').then((fs) =>
         fs.stat(target),

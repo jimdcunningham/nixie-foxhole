@@ -11,6 +11,9 @@ function subscribe<T>(
   return () => ipcRenderer.removeListener(channel, listener);
 }
 const api: InspectorApi = {
+  review: (id, action) => ipcRenderer.invoke('assets:review', id, action),
+  onReview: (callback) => subscribe('review:run', callback),
+  onReviewProgress: (callback) => subscribe('review:progress', callback),
   getRoot: () => ipcRenderer.invoke('assets:root'),
   chooseRoot: () => ipcRenderer.invoke('assets:choose'),
   list: (id, path) => ipcRenderer.invoke('assets:list', id, path),

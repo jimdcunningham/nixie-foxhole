@@ -29,6 +29,15 @@ sidebar. **View → Refresh Assets** (Ctrl+R) refreshes expanded folders; Ctrl+B
 the sidebar. Right-click a file to reveal it in Explorer; a folder also offers opening
 that folder directly. There are no create, rename, delete, or upload actions.
 
+**Review → Approve Current Assets as Baseline** explicitly saves an approved local
+snapshot in Electron user data. **Compare With Approved Baseline** (or Refresh after
+approval) hashes the working files and marks additions, modifications, and deletions.
+**Changes Only** filters the navigator. Deleted files remain navigable and preview
+from the approved copy; approval is independent of uploading or publishing.
+Snapshot objects are deduplicated by content and original basename. Reopening a
+folder remembers its approval; comparison is explicit, avoiding a full-library hash
+scan at startup. World Brotli recompression alone does not count as an asset change.
+
 Preview support:
 
 - Images: PNG, WebP, JPEG, GIF, and SVG, with fit/actual-size zoom, drag panning,
