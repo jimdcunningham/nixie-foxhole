@@ -8,7 +8,11 @@
       "types": "./runtime/load-region.d.mts",
       "import": "./runtime/index.mjs"
     },
-    "./cache": "./runtime/resource-cache.mjs"
+    "./cache": "./runtime/resource-cache.mjs",
+    "./asset-locations": {
+      "types": "./runtime/asset-locations.d.mts",
+      "import": "./runtime/asset-locations.mjs"
+    }
   },
   "scripts": {
     "viewer": "node serve-viewer.mjs",

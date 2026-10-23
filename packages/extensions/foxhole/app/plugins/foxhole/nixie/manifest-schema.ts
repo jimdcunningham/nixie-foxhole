@@ -1,3 +1,4 @@
+import { hasFoxholeAssetLocations, resolveFoxholeAssetUrl } from './asset-locations.ts';
 import { z } from 'zod';
 import { readNativeSplineSurface } from '../../../../../../../extensions/foxhole-planner/src/native-spline-surface.ts';
 import type { NativeSplineSurface } from '../../../../../../../extensions/foxhole-planner/src/native-spline-surface.ts';
@@ -2305,7 +2306,7 @@ export function rebaseFoxholeManifestAssetUrls(
 ): FoxholeManifest {
     const normalizedFromBase = `${trimSlashes(String(fromBaseAssetsUrl ?? ''))}/`.replace(/^\/$/, '/');
     const normalizedToBase = `${trimSlashes(String(toBaseAssetsUrl ?? ''))}/`.replace(/^\/$/, '/');
-    if (normalizedFromBase === normalizedToBase) {
+    if (normalizedFromBase === normalizedToBase && !hasFoxholeAssetLocations()) {
         return manifest;
     }
 
@@ -2314,7 +2315,7 @@ export function rebaseFoxholeManifestAssetUrls(
             return value;
         }
         return value.startsWith(normalizedFromBase)
-            ? `${normalizedToBase}${value.slice(normalizedFromBase.length)}`
+            ? resolveFoxholeAssetUrl(`${normalizedToBase}${value.slice(normalizedFromBase.length)}`, normalizedToBase)
             : value;
     };
 

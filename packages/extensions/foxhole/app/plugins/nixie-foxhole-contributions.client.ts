@@ -1,3 +1,4 @@
+import { initializeFoxholeAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
 import { registerNixieExtension } from '#nixie/plugins/nixie/extensions/index.ts';
 
@@ -14,12 +15,13 @@ export default defineNuxtPlugin({
     name: 'foxhole-nixie-contributions',
     enforce: 'pre',
     dependsOn: ['nixie-registry'],
-    setup() {
+    async setup() {
+        const assetDelivery = await initializeFoxholeAssetDelivery();
         registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport);
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
         registerFoxholeSceneV2HostPolicy();
         // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
-        registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', '/foxhole/assets/types/structures/facilitytransferresource/facilitytransferresource.glb');
+        registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', assetDelivery.resolve('types/structures/facilitytransferresource/facilitytransferresource.glb'));
         registerNixieExtension({
             id: 'nixie.foxhole-planner',
             aliases: ['foxhole'],

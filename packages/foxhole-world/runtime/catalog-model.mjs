@@ -1,3 +1,4 @@
+import {fetchWorldAsset} from './asset-locations.mjs';
 import {Assets,extensions,ExtensionType} from 'pixi.js';
 import {loadGlb} from '@pixi/3d';
 
@@ -20,7 +21,7 @@ export function catalogGlbForLoader(bytes){
 const parser='loadFoxholeCatalogGlb';
 extensions.add({extension:{type:ExtensionType.LoadParser,name:parser},name:parser,
  async load(url,asset,loader){
-  const response=await fetch(url);if(!response.ok)throw Error('Catalog model download failed ('+response.status+')');
+  const response=await fetchWorldAsset(url);if(!response.ok)throw Error('Catalog model download failed ('+response.status+')');
   const bytes=await response.arrayBuffer();if(bytes.byteLength>32*1024*1024)throw Error('Catalog model exceeds 32 MiB');
   const blob=URL.createObjectURL(new Blob([catalogGlbForLoader(bytes)],{type:'model/gltf-binary'}));
   try{return await loadGlb.load(blob,asset,loader);}finally{URL.revokeObjectURL(blob);}

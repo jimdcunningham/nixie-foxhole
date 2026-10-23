@@ -3,8 +3,7 @@ import { preserveViewpointRegionCamera, consumeViewpointRegionCamera } from './m
 import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
-import { useRuntimeConfig } from '#imports';
-import { createFoxholeAssetsBaseUrl } from './catalog.ts';
+import { foxholeWorldAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
 import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
 import { FoxholeRegionSceneController, regionIdForKey, selectedSpatialRegions } from './map/region-scene-controller.mjs';
 import { computed, shallowRef } from 'vue';
@@ -21,11 +20,12 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const settingsStore = useNixieSettingsStore();
     // Frame callbacks share one reactive snapshot; Pinia action reads allocate.
     const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id)));
-    const config = useRuntimeConfig();
+    const delivery = foxholeWorldAssetDelivery();
     const world = new FoxholeRegionSceneController({
         // Scene time of day owns the shared sky; a region must not install Noon Sky.
         manageEnvironment: false,
-        baseUrl: createFoxholeAssetsBaseUrl(config.app.baseURL) + 'world/',
+        baseUrl: delivery.baseUrl,
+        indexLoader: delivery.loadIndex,
         loadRegion: async (options: Parameters<typeof import('@nixie/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixie/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });
     const roadTour = import.meta.dev && context.cameraPose && context.setCameraPose ? createPlannerRoadTour({

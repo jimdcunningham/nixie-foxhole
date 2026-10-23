@@ -22,7 +22,7 @@ export function regionShellEdges(position,others){return neighbors.map(([x,z])=>
 
 /** Region residency follows explicit selection. Only preparation is queued. */
 export class FoxholeRegionSceneController {
- constructor({baseUrl,loadRegion,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.cutouts=[];}
+ constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.cutouts=[];}
  disposeScene(scene){if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);scene.root.removeFromParent();scene.destroy();}
  reconcile(){
   if(!this.view||this.view.destroyed)return;
@@ -90,7 +90,7 @@ export class FoxholeRegionSceneController {
  loadIndex(){
   if(this.index)return Promise.resolve(this.index);
   // The metadata request belongs to the controller, not either region's lifetime.
-  return this.indexLoad??=(async()=>{const response=await this.fetcher(this.baseUrl+'index.json',{signal:this.indexController.signal,cache:'no-cache'});if(!response.ok)throw Error('The region assets are unavailable ('+response.status+').');const index=await response.json();this.indexController.signal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');return this.index=index;})().catch(error=>{this.indexLoad=null;throw error;});
+  return this.indexLoad??=(async()=>{if(this.indexLoader){const index=await this.indexLoader(this.indexController.signal);this.indexController.signal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');return this.index=index;}const response=await this.fetcher(this.baseUrl+'index.json',{signal:this.indexController.signal,cache:'no-cache'});if(!response.ok)throw Error('The region assets are unavailable ('+response.status+').');const index=await response.json();this.indexController.signal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');return this.index=index;})().catch(error=>{this.indexLoad=null;throw error;});
  }
  async start(record){
   const {id,position,controller}=record,signal=controller.signal;record.state={phase:'Downloading Region',downloadBytes:0};this.report();

@@ -1,3 +1,4 @@
+import { resolveFoxholeAssetUrl } from '../asset-locations.ts';
 import * as PIXI from 'pixi.js';
 import { useRuntimeConfig } from '#imports';
 import { Plugin } from '#nixie/utils/nixie-pixi-viewport.ts';
@@ -388,8 +389,8 @@ export class FoxholeMapViewportPlugin extends Plugin {
                     resolveNxTheme(this.settingsStore.getValue(NIXIE_COLOR_THEME_SETTING_ID) as 'light' | 'dark' | 'system'),
                 ),
                 hasActiveSceneView: () => this.pluginContext.session.sceneViewActive.value,
-                loadTexture: url => this.textureOwner.load(url),
-                releaseTexture: url => this.textureOwner.release(url),
+                loadTexture: url => this.textureOwner.load(resolveFoxholeAssetUrl(url, assetsBaseUrl)),
+                releaseTexture: url => this.textureOwner.release(resolveFoxholeAssetUrl(url, assetsBaseUrl)),
                 releaseAllTextures: () => this.textureOwner.releaseAll(),
             };
 

@@ -229,3 +229,17 @@ test('live scene wind reaches resident smoke without reloading the region',async
  assert.deepEqual(frames.at(-1).wind,{directionDeg:135,strength:1});assert.equal(loads,1);
  sync({directionDeg:135,strength:0});assert.equal(frames.at(-1).wind.strength,0);assert.equal(loads,1);controller.destroy();
 });
+
+
+test('verified index injection avoids a mutable request and rejects late results after retirement',async()=>{
+ let finish,reads=0;
+ const index={version:1,regions:{}};
+ const controller=new FoxholeRegionSceneController({baseUrl:'https://pinned.test/world/',loadRegion:async()=>{},
+  fetcher:async()=>{throw Error('Mutable index request');},indexLoader:()=>{reads++;return Promise.resolve(index);}});
+ assert.equal(await controller.loadIndex(),index);assert.equal(await controller.loadIndex(),index);assert.equal(reads,1);controller.destroy();
+ const retired=new FoxholeRegionSceneController({baseUrl:'https://pinned.test/world/',loadRegion:async()=>{},
+  indexLoader:signal=>new Promise(resolve=>{finish=()=>{assert.equal(signal.aborted,true);resolve(index);};})});
+ const pending=retired.loadIndex();retired.destroy();finish();await assert.rejects(pending,/abort/i);assert.equal(retired.index,null);
+ const unsupported=new FoxholeRegionSceneController({baseUrl:'https://pinned.test/world/',loadRegion:async()=>{},indexLoader:async()=>({version:2})});
+ await assert.rejects(unsupported.loadIndex(),/Unsupported/);unsupported.destroy();
+});

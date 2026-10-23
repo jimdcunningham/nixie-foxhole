@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'node:fs';
+import { withoutLocalAssetPublicDirectory } from './asset-public-directory.ts';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
@@ -27,7 +28,7 @@ export default defineNuxtConfig({
   },
   css: [join(currentDir, './app/assets/css/host-compat.css')],
   // Nuxt's builder and Nitro watchers must also ignore generated asset writes.
-  // This does not remove the public directory from static asset serving.
+  // The Nitro hook below separately excludes bulk assets from static output.
   ignore: ['public/foxhole/assets/**'],
   // Do not set global app.head brand tags here — they would pollute Studio hosts.
   runtimeConfig: {
@@ -58,7 +59,13 @@ export default defineNuxtConfig({
   alias: {
     '#nixie-internal': nixieLayerDir,
     '#foxhole': join(currentDir, './app'),
+    '#foxhole-planner-assets': join(currentDir, '../../../extensions/foxhole-planner/src'),
     '#foxhole-server': join(currentDir, './server'),
+  },
+  hooks: {
+    'nitro:config'(config) {
+      config.publicAssets = withoutLocalAssetPublicDirectory(config.publicAssets ?? [], join(currentDir, 'public'));
+    },
   },
   routeRules: {
     '/foxhole/assets/world/content/br/**': { headers: { 'Content-Encoding': 'br', 'Cache-Control': 'public, max-age=31536000, immutable' } },
@@ -69,7 +76,7 @@ export default defineNuxtConfig({
     server: {
       watch: {
         // FoxWatch rewrites generated manifests during exports. Keep serving
-        // them, but do not restart loaded regions for every asset write.
+        // build inputs, but do not restart loaded regions for every asset write.
         ignored: [/[/\\]public[/\\]foxhole[/\\]assets(?:[/\\]|$)/],
       },
       fs: {
