@@ -755,7 +755,7 @@ function renderFoxholeSceneV2EntityPlan(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, volumes: firingVolumes };
     }
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
-        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance));
+        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance, assetId));
     const rotation = entity.components.find(component => (
         component.ownerId === 'nixie.core'
         && component.componentId === 'transform'

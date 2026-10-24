@@ -988,7 +988,7 @@ test('derives a manifest-textured cubic ribbon for Foxhole spline connectors', (
         }],
     }));
 
-    assert.equal(plan.root.children.filter(child => child.id !== 'spline-connector-guides').length, 3);
+    assert.equal(plan.root.children.filter(child => child.id !== 'spline-connector-guides' && child.id !== 'spline-connector-socket-presentation').length, 3);
     assert.ok(plan.root.children.every(child => child.kind !== 'graphics'), 'editing handles and draft outlines remain inside declared selected-only groups');
     assert.deepEqual(plan.root.children.find(child => child.id === 'spline-connector-guides')?.experimentalPresentation,
         { contractVersion: 1, selectionOnly: true, excludeFromBounds: true });

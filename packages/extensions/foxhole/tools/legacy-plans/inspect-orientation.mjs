@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../..');
-const mapSrc = fs.readFileSync(path.join(root, 'app/plugins/foxhole/legacy/plan-socket-id-map.ts'), 'utf8');
+const mapSrc = fs.readFileSync(path.join(root, '../../../extensions/foxhole-planner/src/legacy-plan-socket-id-map.ts'), 'utf8');
 const mappedKeys = [...mapSrc.matchAll(/"([^"]+)": \{/g)].map(m => m[1]);
 console.log('mapped foxhole keys', mappedKeys.length);
 

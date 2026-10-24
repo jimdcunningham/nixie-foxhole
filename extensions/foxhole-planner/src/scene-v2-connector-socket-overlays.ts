@@ -5,7 +5,7 @@ import { resolveConnectorBehavior, requiresStraightConnectorSocketAlignment } fr
 import { resolveFacilityPipeSideSocketsFromPath } from './connector-side-sockets.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { renderFoxholeSocketIndicatorGroups, resolveFoxholeSocketDisplayKind, resolveFoxholeSocketDisplayFlow, FOXHOLE_SOCKET_DISPLAY_SETTING_IDS,
-    FOXHOLE_POWER_SOCKET_COLOR, FOXHOLE_PIPE_SOCKET_COLORS } from './scene-v2-socket-overlays.ts';
+    FOXHOLE_POWER_SOCKET_COLOR, FOXHOLE_PIPE_SOCKET_COLORS, FOXHOLE_ALL_SOCKETS_SETTING_ID, renderFoxholeSocketStatusGroups } from './scene-v2-socket-overlays.ts';
 import { FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, foxholeRenderLane } from './render-lanes.ts';
 
 function normalizedAngle(value: number): number {
@@ -99,10 +99,16 @@ export function renderFoxholeConnectorSpatialMarkers(data: FoxholeSceneV2SplineC
 export function renderFoxholeConnectorSocketOverlays(data: FoxholeSceneV2SplineConnectorData, asset: FoxholeSceneV2AssetMetadata | undefined,
     attachments: unknown, settings: Readonly<Record<string, boolean>>): NixieExtensionRenderNodeV1[] {
     const sockets = visibleConnectorSockets(data, asset, attachments, settings);
-    if (!sockets.length) {
-        return [];
-    }
-    return [{ id: 'spline-connector-socket-overlays', kind: 'group', ...foxholeRenderLane(FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE),
+    const occupied = new Set<string>(Array.isArray(attachments) ? attachments.flatMap(value => value && typeof value === 'object'
+        && !Array.isArray(value) && typeof value.localSocketName === 'string' ? [value.localSocketName] : []) : []);
+    const allSockets = asset ? resolveFoxholeConnectorDisplaySockets(data, asset) : [];
+    for (const entry of allSockets) if (entry.endpoint !== 'side' && typeof data[`${entry.endpoint}AttachmentNodeId`] === 'string'
+        && typeof data[`${entry.endpoint}AttachmentSocketName`] === 'string') occupied.add(entry.socket.name);
+    const children = settings[FOXHOLE_ALL_SOCKETS_SETTING_ID] === true
+        ? renderFoxholeSocketStatusGroups(allSockets, occupied, data.foxholeKey, false,
+            { connector: true, worldUpright: requiresStraightConnectorSocketAlignment(data.foxholeKey) })
+        : renderFoxholeSocketIndicatorGroups(sockets, settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true, 'spline-socket', true);
+    return [{ id: 'spline-connector-socket-presentation', kind: 'group', ...foxholeRenderLane(FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE),
         experimentalPresentation: { contractVersion: 1, excludeFromBounds: true },
-        children: renderFoxholeSocketIndicatorGroups(sockets, settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true, 'spline-socket', true) }];
+        children }];
 }

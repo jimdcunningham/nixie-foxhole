@@ -16,6 +16,12 @@ From the repository root, run `node packages/extensions/foxhole/tools/test-sdk-h
 
 Ctrl/Cmd+wheel curve controls are declared through SDK selection geometry. Studio validates the owner-local numeric field, applies bounded steps, and retains placement drafts without saving until placement completes. Planner supplies pipe curve policy; it does not receive native wheel events. Legacy V1 insertion and bundled panels remain compiled integrations.
 
+## Selection and Socket Presentation
+
+Accepted SDK selection fields take precedence over private compatibility hints. Core authored hitboxes still win, and missing fields retain older-plan fallbacks. Socket indicators, All Sockets status colors and grouped legacy labels, and connector guides are ordinary SDK graphics/text with host-owned bounds exclusion, selection visibility, upright orientation, and tool colors. Modern render plans retain empty socket groups when indicators are hidden so compatibility code cannot restore them. The private adapter leaves those plans intact; older generations keep their native fallback.
+
+The pure legacy socket ID/name map lives in `src/legacy-plan-socket-id-map.ts`. Legacy imports re-export it and the existing generator updates that canonical source. This does not move legacy project import or bundled panel code into the sandbox.
+
 ## Development
 
 Run `npm run dev --workspace @nixie/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.

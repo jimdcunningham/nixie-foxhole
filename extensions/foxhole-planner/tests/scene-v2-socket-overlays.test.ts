@@ -75,3 +75,26 @@ test('generic bunker socket markers follow All Sockets independently of power an
         assert.deepEqual(markers.map(marker => marker.label), all ? [generic.name] : []);
     }
 });
+
+test('all-socket SDK output includes occupied and generic terminals, grouped legacy labels and stable empty declarations', () => {
+    const shared = { name: 'FrontFortSocket', x: 100, y: 50, rotation: 90, socketTags: [] };
+    const fixture = { ...asset, overlaySockets: [shared, { ...shared, name: 'BackFortSocket' },
+        { ...shared, name: 'PowerSocket', x: 200 }] };
+    const overlays = renderFoxholeStructureSocketOverlays(fixture, [], [{ localSocketName: 'FrontFortSocket' }],
+        { 'foxhole.debug.structure.allSockets': true, 'foxhole.debug.structure.socketLabels': true,
+            'foxhole.debug.structure.powerSockets': false, 'foxhole.debug.structure.pipeSockets': false },
+        { destroyed: false, packaged: false }, 'artilleryait1');
+    const group = overlays[0]!;
+    assert.ok(group.kind === 'group'); assert.equal(group.children.length, 3);
+    const first = group.children[0]!; assert.ok(first.kind === 'group');
+    const status = first.children[0]!; assert.ok(status.kind === 'graphics');
+    assert.ok(status.commands.some(c => c.op === 'fill' && c.color === 0x53D769));
+    const labels = first.children.filter(n => n.kind === 'text');
+    assert.deepEqual(labels.map(n => n.text), ['2 — Front', '0 — Back']);
+    assert.deepEqual(labels.map(n => n.y), [18, 34]);
+    assert.ok(labels.every(n => n.experimentalPresentation?.worldUpright === true));
+    assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: overlays } }));
+    const hidden = renderFoxholeStructureSocketOverlays(fixture, [], [], { 'foxhole.debug.structure.powerSockets': false,
+        'foxhole.debug.structure.pipeSockets': false }, { destroyed: false, packaged: false });
+    assert.ok(hidden[0]?.kind === 'group' && hidden[0].children.length === 0);
+});

@@ -20,7 +20,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
 } });
 const { getFoxholeManifest } = await import('../../app/plugins/foxhole/nixie/manifest.ts');
 const { resolveFoxholeEffectiveBuildSockets } = await import('../../app/plugins/foxhole/nixie/structure-socket-resolution.ts');
-const { resolveFoxholeStructureOverlaySockets } = await import('../../app/plugins/foxhole/nixie/structure-socket-overlay.ts');
+const { resolveFoxholeStructureOverlaySockets, createFoxholeSocketAttachmentStatusVisual, createFoxholeAllSocketsLabel } = await import('../../app/plugins/foxhole/nixie/structure-socket-overlay.ts');
 const { createFoxholePowerSocketVisual, createFoxholePipeSocketVisual, createFoxholeSocketLabel, resolveFoxholePipeSocketFlow,
     resolveFoxholePipeSocketColor, FOXHOLE_POWER_SOCKET_COLOR } = await import('../../app/plugins/foxhole/nixie/structure-socket-visuals.ts');
 hook.deregister();
@@ -162,4 +162,29 @@ test('materialized socket visuals retain Native geometry, label outlines, uprigh
         metrics.__context = oldContext;
         metrics.clearMetrics();
     }
+});
+
+test('SDK All Sockets status graphics and grouped labels retain Native layout, identifiers and colors', () => {
+    const source = [{ name: 'FrontFortSocket', x: 100, y: 50, rotation: 90, socketTags: [] },
+        { name: 'BackFortSocket', x: 100, y: 50, rotation: 90, socketTags: [] },
+        { name: 'PowerSocket', x: -100, y: 20, rotation: 180, socketTags: [] }];
+    const asset = createFoxholeSceneV2AssetMetadata({ assets: [{ id: 'artilleryait1', sprite: { width: 100, height: 100 }, buildSockets: source }] }).assets.artilleryait1!;
+    const overlays = renderFoxholeStructureSocketOverlays(asset, [], [{ localSocketName: 'FrontFortSocket' }],
+        { 'foxhole.debug.structure.allSockets': true, 'foxhole.debug.structure.socketLabels': true }, { destroyed: false, packaged: false }, 'artilleryait1');
+    const group = overlays[0]!; assert.ok(group.kind === 'group');
+    const native = resolveFoxholeStructureOverlaySockets(source, { x: 0, y: 0 }, 'fixture');
+    const color = (socket: typeof native[number]) => socket.name === 'FrontFortSocket' ? 0x53D769 : 0xFF4D4D;
+    for (const [index, socket] of native.entries()) {
+        const expected = createFoxholeSocketAttachmentStatusVisual(socket, color(socket));
+        const actual = group.children[index]!; assert.ok(actual.kind === 'group');
+        assert.deepEqual([actual.x, actual.y, actual.rotation ?? 0], [expected.x, expected.y, expected.rotation]);
+        const graphic = actual.children[0]!; assert.ok(graphic.kind === 'graphics');
+        assert.equal(graphic.commands.find(c => c.op === 'fill')?.color, (expected.children[0] as PIXI.Graphics).context.instructions[0]!.data.style.color);
+        expected.destroy({ children: true });
+    }
+    const labels = createFoxholeAllSocketsLabel(native.slice(0, 2), 'artilleryait1', color);
+    const actual = group.children[0]!; assert.ok(actual.kind === 'group');
+    assert.deepEqual(actual.children.filter(n => n.kind === 'text').map(n => [n.text, n.x, n.y, n.anchorX, n.anchorY, n.style?.fill]),
+        (labels.children as PIXI.Text[]).map(n => [n.text, n.x, n.y, n.anchor.x, n.anchor.y, n.style.fill]));
+    labels.destroy({ children: true });
 });

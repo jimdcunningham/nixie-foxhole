@@ -1,3 +1,5 @@
+import assets from '../../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
+import { createFoxholeSceneV2SplineProductData } from '../../../../../extensions/foxhole-planner/src/scene-v2-connector-products.ts';
 import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -326,12 +328,15 @@ test('structure presentation retains native socket placement, occupancy, setting
     ] };
     const settings = { 'foxhole.debug.structure.powerSockets': true, 'foxhole.debug.structure.pipeSockets': true };
     const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings });
-    assert.ok(plan.root.children.some(node => node.id === 'structure-socket-overlays'));
+    assert.ok(plan.root.children.some(node => node.id === 'structure-socket-presentation'));
+    assert.equal(prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings), null, 'SDK socket output remains authoritative');
+    // Old generations did not declare SDK socket presentation.
+    plan.root.children = plan.root.children.filter(node => node.id !== 'structure-socket-presentation');
     const original = structuredClone({ entity, plan });
     const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings)!;
     assert.ok(presentation);
     assert.deepEqual(presentation.boundsExcludedNodeIds, ['native-socket-indicators']);
-    assert.equal(presentation.plan.root.children.some(node => node.id === 'structure-socket-overlays'), false, 'the bundled replacement cannot duplicate SDK socket indicators');
+    assert.equal(presentation.plan.root.children.some(node => node.id === 'structure-socket-presentation'), false, 'the bundled replacement cannot duplicate SDK socket indicators');
     const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });
     const root = await host.replace(composeNixieSceneV2RenderPlans(null, presentation.plan)!);
     await applyNixieSceneV2RenderPresentation(presentation, root);
@@ -376,5 +381,31 @@ test('SDK ground range groups survive the Native compatibility adapter', () => {
         const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings);
         assert.equal(presentation === null, true, 'the host must render the portable ranges without a private replacement');
         assert.equal(JSON.stringify(plan), original);
+    }
+});
+
+test('SDK structure sockets and connector guides survive private compatibility without replacement or duplicate drawing', () => {
+    const ownerId = 'nixie.foxhole-planner';
+    for (const all of [false, true]) for (const key of ['facilitypowerdiesel', 'facilitypipe', 'facilitypipeunderground', 'powerline', 'railtrackspline', 'waterwallsplinet1']) {
+        const data = key === 'facilitypowerdiesel' ? { catalogId: 'foxhole.structures', assetId: key }
+            : createFoxholeSceneV2SplineProductData(key, assets[key]!.connector!);
+        const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: key, revision: 0, components: [
+            { ownerId, componentId: key === 'facilitypowerdiesel' ? 'asset' : 'spline-connector', version: 1, definitionAvailable: true, data },
+        ] };
+        const settings = { 'foxhole.debug.structure.allSockets': all, 'foxhole.debug.structure.powerSockets': all,
+            'foxhole.debug.structure.pipeSockets': all, 'foxhole.debug.structure.socketLabels': all };
+        const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings });
+        const before = structuredClone({ entity, plan });
+        assert.equal(prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings), null, key + '/' + all);
+        assert.deepEqual({ entity, plan }, before);
+        const overlayId = key === 'facilitypowerdiesel' ? 'structure-socket-presentation' : 'spline-connector-socket-presentation';
+        const overlay = plan.root.children.find(node => node.id === overlayId);
+        assert.ok(overlay?.kind === 'group');
+        if (!all) assert.equal(overlay.children.length, 0, 'empty SDK declarations prevent fallback from resurrecting hidden indicators');
+        if (key !== 'facilitypowerdiesel') {
+            const old = { ...plan, root: { ...plan.root, children: plan.root.children.map(node => node.id === overlayId
+                ? { ...node, id: 'spline-connector-socket-overlays' } : node) } };
+            assert.ok(prepareFoxholeSceneV2RenderPresentation(entity, old, 1, settings), 'older partial SDK overlays retain native All Sockets diagnostics');
+        }
     }
 });

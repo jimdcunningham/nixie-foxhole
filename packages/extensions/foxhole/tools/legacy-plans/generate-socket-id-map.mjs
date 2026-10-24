@@ -7,7 +7,7 @@ import { exfilLegacySocketsFromDataJs } from './exfil-legacy-sockets.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GAME_KITCHEN = process.env.GAME_KITCHEN_PATH || 'C:/Code/game-kitchen';
 const ORIENTATION_MAP_PATH = path.resolve(__dirname, '../../app/plugins/foxhole/legacy/plan-orientation-map.ts');
-const OUT_TS = path.resolve(__dirname, '../../app/plugins/foxhole/legacy/plan-socket-id-map.ts');
+const OUT_TS = path.resolve(__dirname, '../../../../../extensions/foxhole-planner/src/legacy-plan-socket-id-map.ts');
 const OUT_JSON = path.resolve(__dirname, 'socket-map.json');
 const SOCKET_OVERRIDES_PATH = path.resolve(__dirname, 'socket-overrides.json');
 const SOCKET_QA_PATH = path.resolve(__dirname, 'socket-qa.json');

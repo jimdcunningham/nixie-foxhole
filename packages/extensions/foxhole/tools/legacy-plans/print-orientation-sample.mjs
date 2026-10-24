@@ -5,7 +5,7 @@ const src = fs.readFileSync(
     'utf8',
 );
 const socketSrc = fs.readFileSync(
-    new URL('../../app/plugins/foxhole/legacy/plan-socket-id-map.ts', import.meta.url),
+    new URL('../../../../../extensions/foxhole-planner/src/legacy-plan-socket-id-map.ts', import.meta.url),
     'utf8',
 );
 

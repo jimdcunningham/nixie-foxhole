@@ -16,7 +16,7 @@ const hook = registerHooks({ resolve(specifier, context, next) {
 } });
 const { normalizeFoxholeSplineConnectorState, resolveEffectiveConnectorPathStyle, allowsConnectorRotationHandles } = await import('../../app/plugins/foxhole/nixie/spline-connector.ts');
 const { resolveFoxholeSplinePathConstraints, resolveFoxholeSplineGuidePath, drawFoxholeSplineEndpointGizmo } = await import('../../app/plugins/foxhole/nixie/spline-connector-guides.ts');
-const { resolveFoxholeSplineConnectorSockets } = await import('../../app/plugins/foxhole/nixie/spline-connector-sockets.ts');
+const { resolveFoxholeSplineConnectorSockets, populateFoxholeSplineConnectorSocketOverlay } = await import('../../app/plugins/foxhole/nixie/spline-connector-sockets.ts');
 const { getFoxholeManifest } = await import('../../app/plugins/foxhole/nixie/manifest.ts');
 hook.deregister();
 
@@ -134,5 +134,43 @@ test('host color hints update real Planner and Diagram guide graphics while reta
         } finally {
             host.destroy();
         }
+    }
+});
+
+test('portable all-socket connector graphics retain Native occupied endpoints, side branches and upright rigid spans', async () => {
+    for (const key of ['powerline', 'facilitypipe', 'facilitypipeunderground', 'fieldbridge', 'railtrackspline']) {
+        const asset = assets[key]!, structure = getFoxholeManifest('/foxhole/assets/').assets.find(a => a.id === key)!;
+        assert.ok(asset && structure, key);
+        const data = { foxholeKey: key, startX: 12, startY: -20, startRotation: 0.3, endX: 220, endY: 50, endRotation: 2.6,
+            startSocketName: 'BackSocket', endSocketName: 'FrontSocket', minLength: 96, maxLength: 640, minRadius: 16, maxRadius: 96,
+            maxBuffer: 96, curveT: 0.5, blueprint: false, startAttachmentNodeId: 'source', startAttachmentSocketName: 'output' };
+        const state = normalizeFoxholeSplineConnectorState({ ...data, start: { x: data.startX, y: data.startY, rotation: data.startRotation },
+            end: { x: data.endX, y: data.endY, rotation: data.endRotation } });
+        const pathStyle = resolveEffectiveConnectorPathStyle(asset.connector?.pathStyle, key);
+        const constraints = resolveFoxholeSplinePathConstraints(state, pathStyle, asset.connector?.maxBufferCm ?? asset.connector?.minLengthCm ?? 0);
+        const span = asset.renderLayers.span ?? asset.renderLayers.underlay;
+        const sockets = resolveFoxholeSplineConnectorSockets({ structure, state, constraints, pathStyle,
+            lateralOffset: Math.max(2, (span?.height ?? 8) * 0.5), visualRotations: true });
+        const native = new PIXI.Container();
+        populateFoxholeSplineConnectorSocketOverlay(native, { sockets, foxholeKey: key, nodeRotation: 0.4,
+            isOccupied: socket => socket.endpoint === 'start' || socket.name === 'RightSocket',
+            settings: { showAllSockets: true, showPowerSockets: false, showPipeSockets: false, showSocketLabels: true } });
+        const children = renderFoxholeConnectorSocketOverlays(data, asset, [{ localSocketName: 'RightSocket' }],
+            { 'foxhole.debug.structure.allSockets': true, 'foxhole.debug.structure.powerSockets': false, 'foxhole.debug.structure.pipeSockets': false });
+        const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });
+        try {
+            await host.replace(composeNixieSceneV2RenderPlans(null, { schemaVersion: 1, root: { id: 'root', kind: 'group', children } })!);
+            host.syncWorldUpright(0.4);
+            const layer = host.getRenderAnnotations().boundsExcluded[0]!;
+            assert.equal(layer.children.length, native.children.length, key);
+            for (const [index, child] of layer.children.entries()) {
+                const expected = native.children[index]!;
+                assert.ok(Math.abs(child.x - expected.x) < 1e-7 && Math.abs(child.y - expected.y) < 1e-7 && Math.abs(child.rotation - expected.rotation) < 1e-7, key);
+                const graphic = child.children[0] as PIXI.Graphics, expectedGraphic = expected.children[0] as PIXI.Graphics;
+                assert.equal(graphic.context.instructions[0]!.data.style.color, expectedGraphic.context.instructions[0]!.data.style.color, key);
+                const bounds = graphic.getLocalBounds(), expectedBounds = expectedGraphic.getLocalBounds();
+                assert.deepEqual([bounds.minX, bounds.minY, bounds.maxX, bounds.maxY], [expectedBounds.minX, expectedBounds.minY, expectedBounds.maxX, expectedBounds.maxY]);
+            }
+        } finally { host.destroy(); native.destroy({ children: true }); }
     }
 });

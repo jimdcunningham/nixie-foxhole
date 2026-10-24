@@ -1,3 +1,4 @@
+import { resolveLegacyPlanSocketId } from './legacy-plan-socket-id-map.ts';
 import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixie/extension-sdk/experimental/scene-v2';
 import { resolveFoxholeEffectiveStructureSocketSources } from './effective-structure-sockets.ts';
 import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.ts';
@@ -146,23 +147,58 @@ export function renderFoxholeSocketIndicatorGroups(sockets: ReturnType<typeof re
     return children;
 }
 
+/** All-Sockets diagnostics are ordinary bounded graphics/text, including occupied and nonutility terminals. */
+export function renderFoxholeSocketStatusGroups(sockets: Array<{ socket: FoxholeBunkerStatisticsSocket; x: number; y: number; rotation: number; }>,
+    occupied: ReadonlySet<string>, assetId: string, showLabels: boolean, options: { connector?: boolean; worldUpright?: boolean; } = {}): NixieExtensionRenderNodeV1[] {
+    const color = (name: string) => occupied.has(name) ? 0x53D769 : 0xFF4D4D;
+    const groups = new Map<string, typeof sockets>();
+    const positionKey = (entry: typeof sockets[number]) => entry.x.toFixed(3) + ':' + entry.y.toFixed(3);
+    if (showLabels && !options.connector) for (const entry of sockets) groups.set(positionKey(entry), [...groups.get(positionKey(entry)) ?? [], entry]);
+    return sockets.map((entry, index) => {
+        const half = options.connector ? 4.5 : 6;
+        const commands: NixieExtensionGraphicsCommandV1[] = [{ op: 'rect', x: -half, y: -half, width: half * 2, height: half * 2 },
+            { op: 'fill', color: color(entry.socket.name), alpha: 0.95 }, { op: 'stroke', color: 0x081018, alpha: 0.95, width: options.connector ? 1 : 2 }];
+        if (!options.connector) commands.push({ op: 'move-to', x: 0, y: 0 },
+            { op: 'line-to', x: Math.cos(entry.rotation) * 4.5, y: Math.sin(entry.rotation) * 4.5 },
+            { op: 'stroke', color: 0xffffff, alpha: 0.95, width: 2, cap: 'round' });
+        const children: NixieExtensionRenderNodeV1[] = [{ id: 'status-' + index, kind: 'graphics', commands }];
+        const group = groups.get(positionKey(entry));
+        if (group?.[0] === entry) group.forEach((row, rowIndex) => {
+            const name = row.socket.name.trim(), legacy = resolveLegacyPlanSocketId(assetId, name);
+            const display = name.replace(/FortSocket$/, '') || socketLabel(name, row.socket.componentType, 'generic');
+            const side = Math.cos(entry.rotation) >= 0 ? 1 : -1;
+            children.push({ id: 'status-label-' + index + '-' + rowIndex, kind: 'text', text: legacy ? legacy + ' — ' + display : display,
+                x: Math.cos(entry.rotation) * 36 + side * 6, y: Math.sin(entry.rotation) * 36 - 10 + (rowIndex - (group.length - 1) / 2) * 16,
+                anchorX: side > 0 ? 0 : 1, anchorY: 0.5,
+                experimentalPresentation: { contractVersion: 1, worldUpright: true },
+                style: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', fill: color(name),
+                    experimentalStroke: { contractVersion: 1, color: 0x081018, width: 3, join: 'round' } } });
+        });
+        return { id: 'socket-status-' + index, kind: 'group', x: entry.x, y: entry.y,
+            ...(options.worldUpright ? { experimentalPresentation: { contractVersion: 1, worldUpright: true } } : {}), children };
+    });
+}
+
 export function renderFoxholeStructureSocketOverlays(asset: FoxholeSceneV2AssetMetadata,
     variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown,
-    settings: Readonly<Record<string, boolean>>, appearance: { destroyed: boolean; packaged: boolean; }): NixieExtensionRenderNodeV1[] {
-    if (appearance.destroyed || appearance.packaged) {
-        return [];
-    }
+    settings: Readonly<Record<string, boolean>>, appearance: { destroyed: boolean; packaged: boolean; }, assetId = ''): NixieExtensionRenderNodeV1[] {
+    if (appearance.destroyed || appearance.packaged) return [];
     const occupied = new Set(Array.isArray(attachments)
         ? attachments.flatMap(value => value && typeof value === 'object'
             && !Array.isArray(value) && typeof value.localSocketName === 'string'
             ? [value.localSocketName]
             : [])
         : []);
-    const sockets = resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings);
-    if (!sockets.length) {
-        return [];
-    }
-    const children = renderFoxholeSocketIndicatorGroups(sockets, settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true);
-    return [{ id: 'structure-socket-overlays', kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
+    const all = settings[FOXHOLE_ALL_SOCKETS_SETTING_ID] === true;
+    const showLabels = settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true;
+    const sockets = resolveFoxholeEffectiveStructureSocketSources(asset, variants).flatMap(socket => {
+        const x = Number(socket.x ?? 0) * 0.32, y = Number(socket.y ?? 0) * 0.32, rotation = Number(socket.rotation ?? 0) * Math.PI / 180;
+        return [x, y, rotation].every(Number.isFinite) ? [{ socket, x, y, rotation }] : [];
+    });
+    if (!sockets.length) return [];
+    const children = all
+        ? renderFoxholeSocketStatusGroups(sockets, occupied, assetId, showLabels)
+        : renderFoxholeSocketIndicatorGroups(resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings), showLabels);
+    return [{ id: 'structure-socket-presentation', kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
         experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }];
 }

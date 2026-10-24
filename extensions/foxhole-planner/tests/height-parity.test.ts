@@ -30,7 +30,7 @@ test('all catwalk components remain overhead and rail forms stay below pipes', (
             data: { catalogId: 'foxhole.structures', assetId: id },
         }] });
         assert.ok(plan.root.children.length);
-        const physical = plan.root.children.filter(node => !node.id.startsWith('placement-invalid-'));
+        const physical = plan.root.children.filter(node => !node.id.startsWith('placement-invalid-') && node.experimentalPresentation?.excludeFromBounds !== true);
         assert.ok(physical.every(node => node.laneOrder === 120));
     }
     for (const id of ['railtracksplinebiarc', 'railtracksplinefoundation', 'smallrailtracksplinefoundation', 'cranerailtrackspline']) {
