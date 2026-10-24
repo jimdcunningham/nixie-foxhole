@@ -5,6 +5,10 @@ import {waterOpticsHeader} from './water-optics.mjs';
 const materialGL=`
 // Orthographic rays are parallel, regardless of zoom or distance from the camera.
 viewDir = waterViewDirection(vPosition);
+// Use the native water-plane up axis before the board frame restores normals.
+// Map-like orthographic views need faint ripples rather than full wave relief.
+float waterTopDown = 0.0;
+if(abs(uProjectionMatrix[3][3])>.5){waterTopDown=smoothstep(.65,.98,abs(viewDir.y));}
 vec2 waterXZ = vPosition.xz;
 float pond = step(.5,material.hasPonds)*step(0.0,vPosition.y);
 float waterTime = material.waterTime*mix(1.0,.2,pond);
@@ -17,6 +21,7 @@ vec2 largeN = (sampleWaveLarge(largeUV + vec2(.013,.007)*waterTime).rg
 vec2 smallN = (sampleWaveSmall(smallUV + vec2(.027,-.016)*waterTime).rg
  + sampleWaveSmall(smallUV*1.03 + vec2(-.023,.019)*waterTime + vec2(.41,.19)).rg - vec2(1.0));
 vec2 waterN = (largeN * material.waveStrength + smallN * .16)*mix(1.0,.3,pond);
+waterN *= mix(1.0,.25,waterTopDown);
 normal = normalize(vec3(waterN.x, sqrt(max(.08,1.0-dot(waterN,waterN))), -waterN.y));
 specularNormal = normal;
 vec2 heightUV = (vec2((vPosition.x+1092.0)/2184.0,(945.0-vPosition.z)/1890.0)*vec2(2184.0,1890.0)+vec2(.5))/vec2(2185.0,1891.0);
@@ -43,9 +48,15 @@ vec3 absorption = exp(-vec3(.50,.28,.36)*opticalDepth/max(.5,abs(refractedRay.y)
 float fresnelWater = .02037+.97963*pow(1.0-max(dot(normal,viewDir),0.0),5.0);
 float transmitWater = exp(-opticalDepth*.27)*(1.0-fresnelWater)*(1.0-foam);
 vec3 bodyColor = mix(material.waterBody.rgb,material.waterShallow.rgb,shallows);
+// The source body palette is almost neutral. Bring its green-blue tint through
+// the neutral reflected light without increasing brightness or colouring foam.
+float bodyLuminance = dot(bodyColor,vec3(.2126,.7152,.0722));
+bodyColor = max(vec3(0.0),vec3(bodyLuminance)+(bodyColor-vec3(bodyLuminance))*3.0);
 // Only transmitted scene light is emissive. Body colour must darken with the sun.
 emissive = behind*absorption*transmitWater;
 albedo = mix(bodyColor*(1.0-transmitWater)*1.2,material.waterFoamColor.rgb,foam);
+// Preserve the source wave/reflection gloss. Direct sun glare is exposed
+// separately in the lighting lobe below, without blurring normals or SSR.
 roughness = mix(mix(.18,.24,pond),.78,foam);
 metallic = 0.0;
 occlusion = 1.0;
@@ -53,8 +64,26 @@ fresnelF0 = vec3(.02037);
 f90 = 1.0;
 alpha = 1.0;
 `;
+// Adjust only the direct directional specular contribution, after attenuation
+// and before shadows. As with Pixi's anisotropy lobe, replace the existing
+// contribution through the supported per-light slot. Diffuse sunlight, IBL,
+// SSR, foam and transmission keep their original energy and wave detail.
+const sunGlintGL=`
+if(light.type == LIGHT_DIRECTIONAL){
+ vec3 waterSun = specular*radiance*nDotL;
+ float waterSunPeak = max(max(waterSun.r,waterSun.g),waterSun.b);
+ // A separate glint exposure preserves variation across resolved waves; the
+ // soft shoulder protects grazing highlights without clipping their colour.
+ float waterSunExposure = .04;
+ float waterSunScale = waterSunExposure/(1.0+waterSunPeak*waterSunExposure/.18);
+ // Calmer normals face the noon sun more uniformly. Keep that from adding a
+ // broad pale sheen as the top-down wave relief fades.
+ waterSunScale *= mix(1.0,.4,waterTopDown);
+ directLight += (waterSun*waterSunScale-waterSun)*shadow;
+}
+`;
 // Keep the same arithmetic and source samplers on both backends.
-function wgsl(gl){return gl.replaceAll('vPosition','input.vPosition').replaceAll('uViewMatrix','camera.uViewMatrix')
+function wgsl(gl){return gl.replaceAll('vPosition','input.vPosition').replaceAll('uViewMatrix','camera.uViewMatrix').replaceAll('uProjectionMatrix','camera.uProjectionMatrix')
  .replace(/vec2 (\w+) =/g,'var $1 =').replace(/vec3 (\w+) =/g,'var $1 =').replace(/float (\w+) =/g,'var $1 =')
  .replaceAll('vec2(', 'vec2<f32>(').replaceAll('vec3(', 'vec3<f32>(').replaceAll('vec4(', 'vec4<f32>(')
  .replace('sampleScreenCopy(uOpaqueColorTexture,refractedPoint','sampleScreenCopy(uOpaqueColorTexture,uBrdfLutSampler,refractedPoint')
@@ -63,5 +92,5 @@ export const nativeWaterBit={
  name:'foxholeNativeWater2',
  textures:['waveLarge','waveSmall','waterFoam','waterBed'],
  bindings:{material:{waterTime:'f32',waveStrength:'f32',hasPonds:'f32',waterBody:'vec4<f32>',waterShallow:'vec4<f32>',waterFoamColor:'vec4<f32>',waterScatter:'vec4<f32>'}},
- gl:{header:waterOpticsHeader(false),fragment:{material:materialGL}},gpu:{header:waterOpticsHeader(true),fragment:{material:wgsl(materialGL)}}
+ gl:{header:waterOpticsHeader(false),fragment:{material:materialGL,lobePerLight:sunGlintGL}},gpu:{header:waterOpticsHeader(true),fragment:{material:wgsl(materialGL),lobePerLight:wgsl(sunGlintGL).replace('light.type','light.kind')}}
 };
