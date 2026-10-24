@@ -12,7 +12,7 @@ const extensionRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 test('declares real Planner migrations through the public SDK', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(resolve(extensionRoot, 'nixie.extension.json'), 'utf8')));
     assert.equal(manifest.id, 'nixie.foxhole-planner');
-    assert.deepEqual(manifest.contributes.panels.filter(panel => panel.id === 'statistics'), [{ id: 'statistics', reportSystemId: 'reports.statistics', reportSectionsSettingId: 'nixie.foxhole-planner.stats.exportSections', title: 'Planning Statistics', icon: 'ph:chart-bar-horizontal', placement: 'right-sidebar',
+    assert.deepEqual(manifest.contributes.panels.filter(panel => panel.id === 'statistics'), [{ id: 'statistics', reportSystemId: 'reports.statistics', reportSectionsSettingId: 'nixie.foxhole-planner.stats.exportSections', title: 'Planning Statistics', icon: 'nx:hexagon-bars', placement: 'right-sidebar',
         settingIds: ['nixie.foxhole-planner.stats.scope', 'nixie.foxhole-planner.stats.interval'] }]);
     assert.equal(manifest.contributes.settingsPageSections.length, 7);
     assert.ok(manifest.development?.contributionOverrides.includes('foxhole-browser'));

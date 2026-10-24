@@ -7,7 +7,7 @@
     "#foxhole-scene-v2-maps": "./src/scene-v2-map-data-node.ts",
     "#foxhole-scene-v2-assets": "./src/scene-v2-assets-node.ts"
   },
-  "description": "Foxhole Planner implemented against the public Nixie extension SDK",
+  "description": "Plan Foxhole bases, facilities, logistics, and defenses in Nixie Studio",
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
