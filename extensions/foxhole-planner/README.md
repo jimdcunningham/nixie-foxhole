@@ -1,4 +1,4 @@
-# Foxhole Planner (SDK)
+# Foxhole Planner
 
 This is the first-class migration target for Foxhole Planner on the public Nixie extension SDK. It is discovered from a configured local extensions folder like any third-party extension and imports only the published `@nixiejs/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
 
