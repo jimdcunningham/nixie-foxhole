@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
 import { listFoxholeSceneV2Products } from '../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
-import { registerFoxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
+
 import { resolveNixieSdkCatalogAsset } from '#nixie/utils/nixie-sdk-catalog-assets.ts';
-import { foxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
+
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createNixieExtensionProductCatalog, registerNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
@@ -37,9 +37,10 @@ test('Inspector, upgrades, scene, and item callers share activation-owned catalo
 });
 
 test('the complete index includes hidden assets and upgrades without overriding presentation preferences', () => {
-    const settings = foxholeSceneV2HostPolicy.catalog!.indexSettings!({ 'foxhole.locale': 'fr',
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
+    const settings = { 'foxhole.locale': 'fr',
         'foxhole.assets.browser.iconSet': 'rendered', 'foxhole.assets.filter.upgrades': false,
-        'foxhole.assets.filter.category.facilities': false, 'foxhole.assets.filter.faction': 'colonial' });
+        'foxhole.assets.filter.category.facilities': false, 'foxhole.assets.filter.faction': 'colonial', ...manifest.contributes.experimentalProductProviders![0]!.indexSettings };
     assert.equal(settings['foxhole.locale'], 'fr');
     assert.equal(settings['foxhole.assets.browser.iconSet'], 'rendered');
     assert.equal(settings['foxhole.assets.filter.upgrades'], true);
@@ -56,11 +57,10 @@ test('the real Planner index retains hidden upgrades and resolves them without a
     let calls = 0;
     const service = createNixieExtensionProductCatalog({ catalog: useNixieSceneV2ExtensionCatalog(), eager: true,
         getPort: () => ({ listSceneV2Products: async (_owner, _generation, _system, query) => { calls++; return listFoxholeSceneV2Products(query); } }),
-        indexSettings: (_owner, _provider, settings) => foxholeSceneV2HostPolicy.catalog!.indexSettings!(settings),
         readSetting: (id, fallback) => id === 'foxhole.assets.filter.upgrades' ? false : fallback,
         canCreateSnapshot: () => true, createSnapshot: async () => null });
     const unregister = registerNixieExtensionProductCatalog(service);
-    const unregisterPolicy = registerFoxholeSceneV2HostPolicy();
+
     try {
         await service.ensure();
         const visible = Object.values(service.pages.value).flatMap(page => page.items);
@@ -73,5 +73,5 @@ test('the real Planner index retains hidden upgrades and resolves them without a
         const resolved = await resolveNixieSdkCatalogAsset('sdk.nixie.foxhole-planner__assets', upgrade.item.product.id);
         assert.equal(resolved!.item.product.id, upgrade.item.product.id);
         assert.equal(calls, before);
-    } finally { unregisterPolicy(); unregister(); service.destroy(); replaceNixieSceneV2ExtensionCatalog([]); }
+    } finally { unregister(); service.destroy(); replaceNixieSceneV2ExtensionCatalog([]); }
 });

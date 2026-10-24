@@ -1,5 +1,4 @@
 import { readFoxholeModelLightHints } from '../../../../../extensions/foxhole-planner/src/model-light-hints.ts';
-import { FOXHOLE_COMPLETE_CATALOG_SETTINGS } from './sdk-catalog-settings.ts';
 import { registerNixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 
@@ -20,7 +19,6 @@ export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     },
     catalog: {
         providerId: 'assets', legacySourceIds: ['foxhole.structures'],
-        indexSettings: values => ({ ...values, ...FOXHOLE_COMPLETE_CATALOG_SETTINGS }),
         lookup: async (sourceId, assetId) => (await import('./sdk-catalog-compatibility.ts')).lookupFoxholeSdkCatalogReference(sourceId, assetId),
         createSnapshot: async (product, label, position) => (await import('./sdk-catalog-compatibility.ts')).createFoxholeSdkCatalogSnapshot(product, label, position),
     },
