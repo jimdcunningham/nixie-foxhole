@@ -1,6 +1,6 @@
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import spatialPolicy from './scene-v2-model-policy.json' with { type: 'json' };
-import { parseNixieExperimentalModelPartsV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalModelPartsV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 export function readFoxholeSpatialPathProfile(value: unknown): FoxholeSpatialPathProfile | undefined {
     if (value === undefined) return undefined;

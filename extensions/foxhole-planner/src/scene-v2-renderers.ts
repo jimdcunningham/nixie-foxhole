@@ -27,7 +27,7 @@ import type {
     NixieExperimentalEntityRendererContextV1,
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderPlanV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { FOXHOLE_STRUCTURE_RENDER_LANES, FOXHOLE_MODIFICATION_TEXTURE_LAYER_LANES, foxholeRenderLane, resolveFoxholeStructureDirtRenderLane, resolveFoxholeStructurePrimaryRenderLane, resolveFoxholeAssetHeightLane, resolveFoxholeAssetComponentLane } from './render-lanes.ts';
 import { compareFoxholeModificationRenderOrder, isFoxholeRoofModification, resolveFoxholeModificationTextureLayer } from './modification-render-order.ts';
 import { filterFoxholeSameWallInfrastructureSelections } from './modification-wall-conflicts.ts';

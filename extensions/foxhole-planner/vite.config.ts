@@ -17,7 +17,7 @@ import { applyPublishedModelLayers, type PublishedModelLayers } from './build/mo
 import assetReleasePin from './src/asset-release-pin.json' with { type: 'json' };
 import { loadFoxholeAssetRelease, readPinnedAssetJson } from './src/asset-release.ts';
 const remoteResourcePack = 'resourcePack' in assetReleasePin && process.env.NIXIE_FOXHOLE_ASSET_MODE !== 'bundled'
-  ? assetReleasePin.resourcePack as import('@nixie/extension-sdk').NixieExperimentalAssetPackV1 : null;
+  ? assetReleasePin.resourcePack as import('@nixiejs/extension-sdk').NixieExperimentalAssetPackV1 : null;
 
 const virtualFoxholeSceneV2AssetsId = '#foxhole-scene-v2-assets';
 const resolvedVirtualFoxholeSceneV2AssetsId = `\0${virtualFoxholeSceneV2AssetsId}`;

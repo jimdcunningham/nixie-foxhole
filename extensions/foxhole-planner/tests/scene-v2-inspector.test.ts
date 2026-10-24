@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
+import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { inspectFoxholeSceneV2Structure, inspectFoxholeSceneV2SplineConnector } from '../src/scene-v2-inspector.ts';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import assets from '#foxhole-scene-v2-assets';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregateFoxholeEcsResources, resolveFoxholeStatisticsCosts } from '../src/resource-statistics.ts';
 import type { FoxholeResourceStatisticsAsset } from '../src/resource-statistics.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 test('resource totals retain authored costs, modification choices and legacy volume/power/maintenance rules', () => {
     const assets: Record<string, FoxholeResourceStatisticsAsset> = {

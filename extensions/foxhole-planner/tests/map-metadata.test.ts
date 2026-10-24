@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { parseNixieExtensionManifestV1, resolveNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
 import maps, { foxholeMapResources } from '../src/scene-v2-map-data-node.ts';
 import { createFoxholeSceneV2MapMetadata, foxholeSceneV2MapBounds } from '../src/scene-v2-map-metadata.ts';
 

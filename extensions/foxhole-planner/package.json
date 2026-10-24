@@ -1,5 +1,5 @@
 {
-  "name": "@nixie/foxhole-planner-sdk",
+  "name": "@nixiejs/foxhole-planner-sdk",
   "version": "0.3.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "publish:extension": "nixie-extension publish artifacts/extension.nxext"
   },
   "dependencies": {
-    "@nixie/extension-sdk": "0.1.0-preview.1"
+    "@nixiejs/extension-sdk": "0.1.0-preview.1"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
@@ -25,6 +25,6 @@
     "sharp": "0.35.3",
     "typescript": "6.0.3",
     "vite": "7.3.6",
-    "@nixie/extension-package": "0.1.0-preview.1"
+    "@nixiejs/extension-package": "0.1.0-preview.1"
   }
 }

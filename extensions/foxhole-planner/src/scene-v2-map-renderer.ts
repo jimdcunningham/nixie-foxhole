@@ -1,4 +1,4 @@
-import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionRenderNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
 import { foxholeSceneV2MapBounds, FOXHOLE_MAP_TEXTURE_DIRECTORIES } from './scene-v2-map-metadata.ts';
 import { renderFoxholePlanningMapIcons } from './scene-v2-map-icons.ts';

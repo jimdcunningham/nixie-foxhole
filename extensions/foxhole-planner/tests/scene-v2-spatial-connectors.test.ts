@@ -1,5 +1,5 @@
-import type { NixieExperimentalSpatialNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalSpatialNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -8,7 +8,7 @@ import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from '../src/scene-v2-spatial-attachments.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 import { FOXHOLE_POWERLINE_INVALID_COLOR } from '../src/powerline-stroke.ts';
 

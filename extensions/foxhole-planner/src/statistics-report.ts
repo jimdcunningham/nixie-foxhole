@@ -1,4 +1,4 @@
-import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { readSceneStatistics, readStatisticsPreferences } from './scene-statistics.ts';
 import { FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';

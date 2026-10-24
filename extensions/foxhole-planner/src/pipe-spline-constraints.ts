@@ -1,4 +1,4 @@
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import type { FoxholeConnectorBehaviorSource } from './connector-behavior.ts';
 

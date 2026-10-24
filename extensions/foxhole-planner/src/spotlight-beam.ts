@@ -1,4 +1,4 @@
-import type { NixieExtensionGraphicsCommandV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionGraphicsCommandV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 export interface FoxholeSpotlightBeam {
     planarProjectionScale: number;

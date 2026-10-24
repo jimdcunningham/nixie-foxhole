@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { isFoxholeRoofRenderLayer } from '../src/structure-render-layer-visibility.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const entity = (assetId: string): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: 'bunker', revision: 1, components: [
     { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,

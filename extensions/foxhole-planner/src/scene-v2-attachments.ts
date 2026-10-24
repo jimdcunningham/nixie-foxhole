@@ -1,7 +1,7 @@
 import type {
     NixieExperimentalComponentEntitySnapshotV1,
     NixieExperimentalEntityRendererContextV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';

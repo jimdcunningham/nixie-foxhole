@@ -6,8 +6,8 @@ import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import { createFoxholeSceneV2SplineProductData } from '../src/scene-v2-connector-products.ts';
 import { getFoxholeSceneV2ModelComponentData, readFoxholeSpatialPathProfile } from '../src/scene-v2-models.ts';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 test('overhead and insulated pipelines retain rigid endpoint origins and native span insets at both length limits', () => {
     const asset = assets.facilitypipeoverhead!;

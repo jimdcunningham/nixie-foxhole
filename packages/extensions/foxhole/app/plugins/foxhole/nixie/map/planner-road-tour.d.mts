@@ -1,4 +1,4 @@
-import type { BakedRegion } from '@nixie/foxhole-world';
+import type { BakedRegion } from '@nixiejs/foxhole-world';
 import type { PlannerRoadTourStatus } from './road-tour-state.ts';
 
 type Point = { x: number; y: number; z: number; };

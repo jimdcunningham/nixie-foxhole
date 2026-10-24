@@ -188,7 +188,7 @@ The Monitor's **Publish Assets** action publishes the full library; this overlay
 command is currently a separate explicit step.
 
 Build the extension from Nixie with
-`npm run build --workspace @nixie/foxhole-planner-sdk`. The build checks local
+`npm run build --workspace @nixiejs/foxhole-planner-sdk`. The build checks local
 catalog, model, map and localization metadata against the published receipts,
 then requires every logical resource binding in the pinned SDK index. Updated
 local exports therefore need a new library publication and overlay before a

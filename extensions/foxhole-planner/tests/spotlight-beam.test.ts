@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { createFoxholeSpotlightBeamGraphics, readFoxholeAuthoredSpotlight } from '../src/spotlight-beam.ts';
 import { FOXHOLE_BUNKER_SPOTLIGHT_BEAM, resolveFoxholeBunkerSpotlightLights } from '../src/bunker-spotlights.ts';
 

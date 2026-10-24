@@ -4,7 +4,7 @@ import { hostSourceUrl } from './host-source-url.mjs';
 const hostLayer = pathToFileURL(process.env.NIXIE_HOST_ROOT + '/packages/nixie/');
 // Resolve host pressure-test imports without installing any private extension adapter.
 registerHooks({ resolve(specifier, context, next) {
-    if (specifier === '@nixie/extension-sdk' || specifier.startsWith('@nixie/extension-sdk/')) {
+    if (specifier === '@nixiejs/extension-sdk' || specifier.startsWith('@nixiejs/extension-sdk/')) {
         return next(specifier, { ...context, parentURL: new URL('package.json', hostLayer).href });
     }
     if (specifier.startsWith('.') || specifier.startsWith('file:')) {

@@ -1,7 +1,7 @@
 import { getNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
 import { FOXHOLE_COMPLETE_CATALOG_SETTINGS as allSettings } from './sdk-catalog-settings.ts';
 import { createNixieIconAssetSnapshot } from '#nixie/plugins/nixie/contributions/assets/shared/icon-asset.ts';
-import type { NixieExperimentalComponentProductV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentProductV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { createFoxholeAssetIdentityResolver } from '../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
 import { getFoxholeManifest } from '../plugins/foxhole/nixie/manifest.ts';
 import { foxholeSceneV2StateAdapter } from '../plugins/foxhole/nixie/scene-v2-state-adapter.ts';

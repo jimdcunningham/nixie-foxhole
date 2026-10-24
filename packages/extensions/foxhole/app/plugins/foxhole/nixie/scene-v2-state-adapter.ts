@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2StateAdapter, NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { convertFoxholeSceneV1NodeToV2 } from './scene-v2-conversion.ts';
 import { getFoxholeRangeMetrics, resolveFoxholeRangeState, normalizeFoxholeRangeState } from './range.ts';

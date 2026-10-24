@@ -4,7 +4,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { nixieSceneV2ModelPosition, prepareNixieSceneV2ModelGlb, registerNixieSceneV2ModelAnchor } from '../../../../nixie/app/plugins/nixie/scene-v2/spatial-model-resource.ts';
 import { readNixieSceneV2Model } from '../../../../nixie/desktop-extensions/scene-v2-spatial.ts';
-import { parseNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
 import { registerNixieSceneV2ModelAssembly, resolveNixieSceneV2ModelParts } from '../../../../nixie/app/plugins/nixie/scene-v2/spatial-model-assembly.ts';
 
 const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);

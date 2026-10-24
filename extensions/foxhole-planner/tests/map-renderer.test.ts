@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholePlanningMap } from '../src/scene-v2-map-renderer.ts';
 import maps from '../src/scene-v2-map-data-node.ts';
 

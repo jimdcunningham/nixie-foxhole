@@ -1,7 +1,7 @@
 import { NixiePersistentExtensionResourceCache } from '#nixie-internal/desktop-extensions/persistent-resource-cache.ts';
 import { loadFoxholeAssetRelease, type AssetReceipt } from '#foxhole-planner-assets/asset-release.ts';
 import pin from '#foxhole-planner-assets/asset-release-pin.json';
-import { configureWorldAssetLocations } from '@nixie/foxhole-world/asset-locations';
+import { configureWorldAssetLocations } from '@nixiejs/foxhole-world/asset-locations';
 import { installFoxholeAssetLocations } from '../plugins/foxhole/nixie/asset-locations.ts';
 import { useRuntimeConfig } from '#app';
 import { createLocalFoxholeAssetDelivery } from './local-asset-delivery.ts';

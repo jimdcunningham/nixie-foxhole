@@ -1,5 +1,5 @@
 {
-  "name": "@nixie/foxhole-schema",
+  "name": "@nixiejs/foxhole-schema",
   "version": "0.1.0",
   "private": true,
   "type": "module",

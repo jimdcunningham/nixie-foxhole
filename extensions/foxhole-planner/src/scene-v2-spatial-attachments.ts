@@ -1,5 +1,5 @@
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalEntityRendererContextV1 as Context,
-    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';

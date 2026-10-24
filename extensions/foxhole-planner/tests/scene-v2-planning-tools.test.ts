@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { parseNixieExtensionManifestV1, validateNixieExperimentalComponentDataV1 } from '@nixie/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExtensionRenderNodeV1, NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionManifestV1, validateNixieExperimentalComponentDataV1 } from '@nixiejs/extension-sdk';
+import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderNodeV1, NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { inspectFoxholeSceneV2PlanningPath } from '../src/scene-v2-inspector.ts';
 import { FOXHOLE_TACTICAL_PRESET_CHOICES, FOXHOLE_TACTICAL_PRESET_FIELDS } from '../src/tactical-line-presets.ts';

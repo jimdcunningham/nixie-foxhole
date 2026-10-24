@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { listFoxholeSceneV2Products } from '../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 
 import { resolveNixieSdkCatalogAsset } from '#nixie/utils/nixie-sdk-catalog-assets.ts';

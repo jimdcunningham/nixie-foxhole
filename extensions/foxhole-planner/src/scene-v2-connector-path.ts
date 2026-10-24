@@ -1,5 +1,5 @@
-import { buildArcLengthTable } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixie/extension-sdk/experimental/scene-v2';
+import { buildArcLengthTable } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import { isBarbedWireFence, sampleBarbedWireFencePath } from './barbed-wire-fence.ts';
 import { blendConnectorPathSamples, sampleExtensionPipePath } from './pipe-extension-path.ts';

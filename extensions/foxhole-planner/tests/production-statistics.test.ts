@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregateFoxholeEcsProduction, createFoxholeStatisticsRecipe } from '../src/production-statistics.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const ownerId = 'nixie.foxhole-planner';
 const entity = (id: string, assetId: string, orders: NixieExperimentalComponentJsonObjectV1[], disabled = false, variants: string[] = []): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: id, revision: 1,

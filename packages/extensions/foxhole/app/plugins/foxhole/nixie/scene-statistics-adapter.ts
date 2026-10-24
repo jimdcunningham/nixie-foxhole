@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { BoardNodeSnapshot } from '#nixie/plugins/nixie/board/types/node.ts';
 import { foxholeSceneV2StateAdapter } from './scene-v2-state-adapter.ts';
 

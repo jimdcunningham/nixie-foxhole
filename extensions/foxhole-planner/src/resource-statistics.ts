@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeStatisticsRecipe } from './production-statistics.ts';
 import { filterFoxholeSameWallInfrastructureSelections } from './modification-wall-conflicts.ts';
 import type { FoxholeWallModificationSlot } from './modification-wall-conflicts.ts';

@@ -5,14 +5,14 @@ import test from 'node:test';
 
 const extensionRoot = resolve(import.meta.dirname, '..');
 const allowedStandaloneImports = new Set([
-    '@nixie/extension-sdk',
-    '@nixie/extension-sdk/experimental/scene-v2',
-    '@nixie/extension-sdk/testing',
+    '@nixiejs/extension-sdk',
+    '@nixiejs/extension-sdk/experimental/scene-v2',
+    '@nixiejs/extension-sdk/testing',
     'vue',
 ]);
 const forbiddenTokens = [
     '#nixie',
-    '@nixie/platform',
+    '@nixiejs/platform',
     'from \'electron\'',
     'from "electron"',
     'pixi.js',
@@ -60,7 +60,7 @@ test('Planner package declares only standalone public dependencies', async () =>
         assert.equal(allowedStandaloneImports.has(name), true, `Planner depends on non-public package ${name}`);
         assert.equal(version.startsWith('workspace:'), false, `Planner has a workspace dependency on ${name}`);
     }
-    const sdkVersion = extensionPackage.dependencies?.['@nixie/extension-sdk'];
+    const sdkVersion = extensionPackage.dependencies?.['@nixiejs/extension-sdk'];
     assert.ok(
         sdkVersion === '0.1.0-preview.1'
         || sdkVersion === 'file:./vendor/nixie-extension-sdk-0.1.0-preview.1.tgz',

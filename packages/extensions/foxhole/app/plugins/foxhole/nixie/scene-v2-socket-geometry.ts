@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeBuildSocketPosition, resolveFoxholeEffectiveBuildSockets } from './structure-socket-resolution.ts';

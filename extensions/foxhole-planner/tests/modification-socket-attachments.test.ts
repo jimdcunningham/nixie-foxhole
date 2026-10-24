@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
 import { resolveFoxholeSceneV2SplineAttachments, resolveFoxholeSceneV2ConnectorAttachments } from '../src/scene-v2-attachments.ts';

@@ -1,5 +1,5 @@
 {
-  "name": "@nixie/extension-foxhole",
+  "name": "@nixiejs/extension-foxhole",
   "version": "4.0.0",
   "productName": "Foxhole Planner",
   "description": "Create blueprints for a bunker, facility, and more using this fan-made tool for the video game Foxhole.",
@@ -34,7 +34,7 @@
     "nuxt": "4.5.2"
   },
   "dependencies": {
-    "@nixie/platform": "0.9.4",
+    "@nixiejs/platform": "0.9.4",
     "@supabase/supabase-js": "2.112.3",
     "@turf/helpers": "7.4.0",
     "@turf/intersect": "7.4.0",
@@ -48,6 +48,6 @@
     "voronoi": "1.0.0",
     "vue": "3.5.41",
     "zod": "4.4.3",
-    "@nixie/foxhole-world": "0.1.0"
+    "@nixiejs/foxhole-world": "0.1.0"
   }
 }

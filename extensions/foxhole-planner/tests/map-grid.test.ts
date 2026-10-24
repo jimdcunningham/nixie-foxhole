@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholePlanningGrid } from '../src/scene-v2-map-grid.ts';
 
 test('planning grids stay derived, pick only displayed regions and retain clipped/zoomed-out behavior', () => {

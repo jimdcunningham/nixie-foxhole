@@ -1,4 +1,4 @@
-import type { NixieExtensionRenderNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeStockpileGroupSelection, stockpileEntriesToSelections } from './stockpile-groups.ts';
 

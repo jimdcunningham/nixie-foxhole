@@ -5,8 +5,8 @@ import type {
     NixieExtensionRenderMeshV1,
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderSpriteV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
-import { resolveSplineControlPoints, isSplinePathViable, SPLINE_PATH_INVALID_TINT } from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { resolveSplineControlPoints, isSplinePathViable, SPLINE_PATH_INVALID_TINT } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveIntervalMarkerSamples, resolveMeshConfigIntervalMarkerSamples, resolveCenteredMeshConfigIntervalBoundarySamples, resolveMineSplineMarkerSample } from './interval-connector-path.ts';
 import { isExtensionPipeGeometryViable } from './pipe-extension-path.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2VisualMetadata } from './scene-v2-asset-metadata.ts';

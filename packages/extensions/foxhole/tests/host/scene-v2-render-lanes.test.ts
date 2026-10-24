@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { preserveTestGlobal } from '../../../../nixie/tests/nixie/preserve-test-global.ts';
 import * as PIXI from 'pixi.js';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import { NixieSceneV2RenderLanes } from '../../../../nixie/app/plugins/nixie/scene-v2/render-lanes.ts';
 import { NixieExtensionRenderPlanHost } from '../../../../nixie/app/plugins/nixie/scene-v2/render-plan-host.ts';
 import { renderDiagramNode } from '../../../../../extensions/scene-v2-diagram/src/scene-v2.ts';

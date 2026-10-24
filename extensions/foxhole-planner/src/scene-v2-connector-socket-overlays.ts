@@ -1,4 +1,4 @@
-import type { NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveConnectorBehavior, requiresStraightConnectorSocketAlignment } from './connector-behavior.ts';

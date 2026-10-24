@@ -1,4 +1,4 @@
-import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialVolumeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialVolumeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2StructureRange } from './scene-v2-asset-metadata.ts';
 import { isFoxholeStructureRangeVisible, foxholeStructureRangeColor } from './structure-range-settings.ts';
 import { FOXHOLE_RANGE_RENDER_LANE, foxholeRenderLane } from './render-lanes.ts';

@@ -53,11 +53,11 @@ From the `nixie-foxhole` checkout:
 
 ```powershell
 npm install
-npm run dev --workspace @nixie/foxwatch-desktop
+npm run dev --workspace @nixiejs/foxwatch-desktop
 ```
 
-For a built inspector, run `npm run build --workspace @nixie/foxwatch-desktop`,
-then `npm run start --workspace @nixie/foxwatch-desktop`.
+For a built inspector, run `npm run build --workspace @nixiejs/foxwatch-desktop`,
+then `npm run start --workspace @nixiejs/foxwatch-desktop`.
 An alternate initial directory can be supplied with `-- --assets C:\Assets`.
 
 The default is `packages/extensions/foxhole/public/foxhole/assets` in this checkout.
@@ -188,12 +188,12 @@ files or render HTML from inspected content.
 Validation:
 
 ```powershell
-npm run typecheck --workspace @nixie/foxwatch-desktop
-npm test --workspace @nixie/foxwatch-desktop
-npm run build --workspace @nixie/foxwatch-desktop
+npm run typecheck --workspace @nixiejs/foxwatch-desktop
+npm test --workspace @nixiejs/foxwatch-desktop
+npm run build --workspace @nixiejs/foxwatch-desktop
 ```
 
-Run `npm run test:desktop --workspace @nixie/foxwatch-desktop` for the Electron UI
+Run `npm run test:desktop --workspace @nixiejs/foxwatch-desktop` for the Electron UI
 smoke test. It uses isolated temporary assets and a temporary profile, opens its
 own inspector, and intercepts Explorer launches. It checks native menus, browsing,
 immediate keyboard selection, image/JSON/model previews, model orbit controls,

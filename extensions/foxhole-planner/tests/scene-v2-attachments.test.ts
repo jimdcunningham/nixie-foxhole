@@ -3,7 +3,7 @@ import test from 'node:test';
 import type {
     NixieExperimentalComponentEntitySnapshotV1,
     NixieExperimentalEntityRendererContextV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import {
     resolveFoxholeSceneV2ConnectorAttachments,
     resolveFoxholeSceneV2SplineAttachments,

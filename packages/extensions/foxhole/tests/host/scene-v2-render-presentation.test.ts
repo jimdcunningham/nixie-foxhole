@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
 import * as PIXI from 'pixi.js';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExtensionRenderPlanV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import {
     registerNixieSceneV2RenderPresentationAdapter,
     prepareNixieSceneV2RenderPresentation,

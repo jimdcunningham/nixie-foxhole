@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import test from 'node:test';
-import { foxholeManifestSchema } from '@nixie/foxhole-schema';
+import { foxholeManifestSchema } from '@nixiejs/foxhole-schema';
 
 const source=await readFile(new URL('./publish-manifest.mjs',import.meta.url),'utf8');
 const declarations=[...source.matchAll(/^(?:async )?function (\w+)\(/gm)];

@@ -2,7 +2,7 @@ import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { readNixieSceneV2EditableSpline } from '../../../../nixie/desktop-extensions/scene-v2-spline-editing.ts';
 import { readNixieSceneV2EditablePolyline } from '../../../../nixie/desktop-extensions/scene-v2-polyline-editing.ts';
 import { getNixieSceneV2EditableHandles, buildNixieSceneV2EditableHandleUpdates,

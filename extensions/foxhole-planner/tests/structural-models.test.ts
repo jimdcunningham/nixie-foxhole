@@ -5,7 +5,7 @@ import assets from '../src/scene-v2-assets-node.ts';
 import {bindFoxholeModelLayerNodes} from '../src/model-layer-nodes.ts';
 import {renderFoxholeSceneV2Entity} from '../src/scene-v2-renderers.ts';
 import {getFoxholeSceneV2ModelComponentData,readFoxholeStructuralModelProfile} from '../src/scene-v2-models.ts';
-import type {NixieExperimentalComponentEntitySnapshotV1 as Entity} from '@nixie/extension-sdk/experimental/scene-v2';
+import type {NixieExperimentalComponentEntitySnapshotV1 as Entity} from '@nixiejs/extension-sdk/experimental/scene-v2';
 const make=(id:string,sockets:string[]=[]):Entity=>({entityId:'structure',revision:1,components:[
  {ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:id}},
  {ownerId:'nixie.foxhole-planner',componentId:'socket-attachments',version:1,definitionAvailable:true,data:{attachments:sockets.map(localSocketName=>({localSocketName,targetEntityId:'neighbor',targetSocketName:'BackSocket'}))}}]});

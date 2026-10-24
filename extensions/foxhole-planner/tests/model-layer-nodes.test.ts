@@ -5,7 +5,7 @@ import assets from '../src/scene-v2-assets-node.ts';
 import type { FoxholeModelLayerMetadata } from '../src/model-layer-nodes.ts';
 import { bindFoxholeModelLayerNodes } from '../src/model-layer-nodes.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonValueV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonValueV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 test('packed foundation borders follow the same socket visibility as flat layers', () => {
     const metadata = assets.foundation012x2t3 as FoxholeModelLayerMetadata;

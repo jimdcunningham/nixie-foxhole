@@ -1,5 +1,5 @@
-import { parseNixieExperimentalAssetPackIndexV1, parseNixieExperimentalAssetPackV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalAssetPackEntryV1, NixieExperimentalAssetPackV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalAssetPackIndexV1, parseNixieExperimentalAssetPackV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalAssetPackEntryV1, NixieExperimentalAssetPackV1 } from '@nixiejs/extension-sdk';
 export interface AssetReceipt { url: string; sha256: string; byteLength: number; }
 export interface FoxholeAssetReleaseDocument {
     schemaVersion: 1;

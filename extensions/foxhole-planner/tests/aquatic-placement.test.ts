@@ -4,7 +4,7 @@ import assets from '../src/scene-v2-assets-node.ts';
 import {foxholeAquaticWaterline} from '../src/aquatic-placement.ts';
 import {finalizeFoxholeSurfacePlacement} from '../src/surface-placement.ts';
 import {createFoxholeSpatialProjection} from '../src/scene-v2-spatial-transforms.ts';
-import type {NixieExperimentalComponentEntitySnapshotV1 as Entity} from '@nixie/extension-sdk/experimental/scene-v2';
+import type {NixieExperimentalComponentEntitySnapshotV1 as Entity} from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 function entity(assetId:string):Entity{return{entityId:'placed',revision:0,components:[
  {ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{assetId,catalogId:'foxhole.structures'}},

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExtensionRenderSpriteV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderSpriteV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';
 import { allowsFoxholeConnectorGuideRotation, renderFoxholeConnectorGuides } from '../src/scene-v2-connector-guides.ts';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FOXHOLE_POWER_POLE_LAMP, POWER_POLE_LAMP_STOPS, powerPoleLampFootprint, showFoxholePowerPoleLamp } from '../src/power-pole-lamps.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { FOXHOLE_STRUCTURE_RENDER_LANES } from '../src/render-lanes.ts';
 
 test('lamp uses the authored warm color and downward cone footprint', () => {

@@ -1,5 +1,5 @@
-import { parseNixieExperimentalAssetPackIndexV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalAssetPackEntryV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalAssetPackIndexV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalAssetPackEntryV1 } from '@nixiejs/extension-sdk';
 export function createPlannerRemoteResourceIndex(
     bindings: readonly { path: string; source: string; }[],
     library: { files: Map<string, { entry: NixieExperimentalAssetPackEntryV1; }>; entries: Map<string, NixieExperimentalAssetPackEntryV1>; },

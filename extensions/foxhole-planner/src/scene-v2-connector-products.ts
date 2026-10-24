@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentJsonObjectV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2ConnectorMetadata } from './scene-v2-asset-metadata.ts';
 
 const PIXELS_PER_CENTIMETER = 32 / 100;

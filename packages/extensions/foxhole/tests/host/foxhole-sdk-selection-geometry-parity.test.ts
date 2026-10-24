@@ -5,7 +5,7 @@ import test from 'node:test';
 import assets from '../../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
 import { resolveFoxholeSceneV2StructureSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { registerHooks } from 'node:module';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 registerHooks({ resolve(specifier, context, nextResolve) {
     if (context.parentURL?.includes('/packages/extensions/foxhole/') && specifier.startsWith('#nixie/')) {

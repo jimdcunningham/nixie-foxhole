@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatNixieExperimentalPanelReportV1 } from '@nixie/extension-sdk';
+import { formatNixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk';
 import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText,
     FOXHOLE_STATS_EXPORT_SECTION_IDS, FOXHOLE_STATS_EXPORT_SECTION_LABELS } from '../../../../../extensions/foxhole-planner/src/statistics-export-formats.ts';
 import type { FoxholeStatsExportScopePayload } from '../../../../../extensions/foxhole-planner/src/statistics-export-formats.ts';

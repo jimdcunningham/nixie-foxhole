@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { structuralGroundCutouts } from '../src/scene-v2-ground-cutouts.ts';
 import { renderSpatialTrench } from '../src/scene-v2-spatial-trench.ts';

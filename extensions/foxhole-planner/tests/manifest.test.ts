@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
-import { createFakeNixieExtensionHost } from '@nixie/extension-sdk/testing';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
+import { createFakeNixieExtensionHost } from '@nixiejs/extension-sdk/testing';
 import foxholeSceneV2Assets from '../src/scene-v2-assets-node.ts';
 
 const extensionRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

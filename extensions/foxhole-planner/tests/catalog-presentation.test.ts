@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import { resolveFoxholeCatalogLocale } from '../src/catalog-presentation.ts';
-import { parseNixieExperimentalProductResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const find = (settings: Record<string, string | boolean>, query = 'facilityrefinery1') =>
     parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100,

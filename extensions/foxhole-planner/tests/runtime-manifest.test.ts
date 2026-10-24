@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { createFoxholeRuntimeManifest } from '../build/runtime-manifest.ts';
 
 test('switching local and remote modes derives fresh manifests without mutating authored input', async () => {

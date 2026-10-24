@@ -3,7 +3,7 @@ import type {
     NixieExperimentalEntityRendererContextV1,
     NixieExperimentalSpatialPlanV1,
     NixieExtensionRenderNodeV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveFoxholeSceneV2WorldMatrices } from './scene-v2-attachments.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import {

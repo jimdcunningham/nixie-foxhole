@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk';
-import { createFakeNixieExtensionHost } from '@nixie/extension-sdk/testing';
+import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
+import { createFakeNixieExtensionHost } from '@nixiejs/extension-sdk/testing';
 import { NixieSceneV2EditorRuntimeController } from '../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
 import { NixieSceneV2TransformFinalizerAdapter } from '../../../nixie/app/utils/nixie-scene-v2-transform-finalizer-adapter.ts';
 import { withNixieSceneV2CoreComponents, NIXIE_SCENE_V2_CORE_COMPONENTS } from '../../../nixie/desktop-extensions/scene-v2-core-components.ts';
@@ -14,7 +14,7 @@ import { finalizeFoxholeSceneV2Transform } from '../../../../extensions/foxhole-
 import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
-import type { NixieExperimentalGeometryGestureV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalGeometryGestureV1 } from '@nixiejs/extension-sdk';
 
 test('Planner placement and endpoint gestures run through the SDK without the Nuxt integration', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));

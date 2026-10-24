@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalSceneV2DocumentV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalSceneV2DocumentV1 } from '@nixiejs/extension-sdk';
 import {
     NixieSceneV2ComponentHost,
     NixieSceneV2ComponentHostError,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
 import { resolveFoxholeEntityStructureSockets } from '../src/effective-structure-sockets.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const positions = { BackModSlot: [-299.42903, -147.27136, 180], FrontModSlot: [299.42903, 147.27136, 0],
     LeftModSlot: [147.27136, -299.42903, -90], RightModSlot: [-147.27136, 299.42903, 90] };

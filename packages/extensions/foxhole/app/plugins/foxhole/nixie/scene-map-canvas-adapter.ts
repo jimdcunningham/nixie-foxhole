@@ -26,7 +26,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         manageEnvironment: false,
         baseUrl: delivery.baseUrl,
         indexLoader: delivery.loadIndex,
-        loadRegion: async (options: Parameters<typeof import('@nixie/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixie/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
+        loadRegion: async (options: Parameters<typeof import('@nixiejs/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixiejs/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });
     const roadTour = import.meta.dev && context.cameraPose && context.setCameraPose ? createPlannerRoadTour({
         canvas: context.app.canvas,

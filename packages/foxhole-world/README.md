@@ -30,7 +30,7 @@ The qualified `BirchBushSnow` and `BirchBushSmall` instances use Materiality blu
 
 ## Viewer
 
-Run `npm run build:viewer --workspace @nixie/foxhole-world` in the Nixie host, which supplies the pinned Pixi 3D beta renderer. Set `FOXWATCH_WORLD_OUTPUT` to a published world directory and run `serve-viewer.mjs`. Open `/ab-built/viewer.html`. It uses the same compact loader as Nixie, with region selection, camera controls, projection and load/FPS diagnostics. `build:authoring` retains the detailed research/generation viewer separately. Neither renderer is required to publish compact prepared assets.
+Run `npm run build:viewer --workspace @nixiejs/foxhole-world` in the Nixie host, which supplies the pinned Pixi 3D beta renderer. Set `FOXWATCH_WORLD_OUTPUT` to a published world directory and run `serve-viewer.mjs`. Open `/ab-built/viewer.html`. It uses the same compact loader as Nixie, with region selection, camera controls, projection and load/FPS diagnostics. `build:authoring` retains the detailed research/generation viewer separately. Neither renderer is required to publish compact prepared assets.
 
 ## Verification And Remaining Work
 

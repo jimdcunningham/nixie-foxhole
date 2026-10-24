@@ -2,7 +2,7 @@ import { renderSpatialTrench } from './scene-v2-spatial-trench.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalSpatialEndpointBindingsV1,
-    NixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+    NixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';

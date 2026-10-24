@@ -1,4 +1,4 @@
-import type { NixieExtensionRenderNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2MapMetadata } from './scene-v2-map-metadata.ts';
 
 type MapRegion = FoxholeSceneV2MapMetadata['regions'][number];

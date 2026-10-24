@@ -1,6 +1,6 @@
 # Foxhole Planner (SDK)
 
-This is the first-class migration target for Foxhole Planner on the public Nixie extension SDK. It is discovered from a configured local extensions folder like any third-party extension and imports only the published `@nixie/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
+This is the first-class migration target for Foxhole Planner on the public Nixie extension SDK. It is discovered from a configured local extensions folder like any third-party extension and imports only the published `@nixiejs/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
 
 ## Map Status: Frozen Standalone Fallback
 
@@ -24,7 +24,7 @@ The pure legacy socket ID/name map lives in `src/legacy-plan-socket-id-map.ts`. 
 
 ## Development
 
-Run `npm run dev --workspace @nixie/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.
+Run `npm run dev --workspace @nixiejs/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.
 
 The Explorer uses the SDK `assets` provider in both Scene V1 and Scene V2. Language, default/rendered icons, search aliases, categories, filters and upgrade entries come from that provider. The bundled layer no longer contributes an Explorer catalog.
 

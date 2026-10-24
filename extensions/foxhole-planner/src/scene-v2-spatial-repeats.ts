@@ -1,5 +1,5 @@
 import type { NixieExperimentalSpatialNodeV1, NixieExperimentalSpatialPlanV1,
-    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { resolveMeshConfigIntervalMarkerDistances } from './interval-marker-distances.ts';
 import { resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';

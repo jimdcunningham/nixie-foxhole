@@ -1,7 +1,7 @@
 import type {
     NixieExtensionGraphicsCommandV1,
     NixieExtensionRenderNodeV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 export interface FoxholeSceneV2TriangulationData {
     edgePoints: number[];

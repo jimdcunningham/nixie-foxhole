@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { filterFoxholeSameWallInfrastructureSelections, hasFoxholeSameWallModificationConflict } from '../src/modification-wall-conflicts.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';

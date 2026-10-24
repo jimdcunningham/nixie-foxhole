@@ -1,12 +1,12 @@
 import {
     parseNixieExperimentalComponentProductV1,
     validateNixieExperimentalComponentDataV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 
-type NixieExperimentalComponentJsonObjectV1 = import('@nixie/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonObjectV1;
-type NixieExperimentalComponentProductV1 = import('@nixie/extension-sdk/experimental/scene-v2').NixieExperimentalComponentProductV1;
-type NixieExtensionManifestV1 = import('@nixie/extension-sdk').NixieExtensionManifestV1;
+type NixieExperimentalComponentJsonObjectV1 = import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonObjectV1;
+type NixieExperimentalComponentProductV1 = import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentProductV1;
+type NixieExtensionManifestV1 = import('@nixiejs/extension-sdk').NixieExtensionManifestV1;
 
 export const FOXHOLE_COMPONENT_OWNER_ID = 'nixie.foxhole-planner';
 export const FOXHOLE_FACILITY_PRODUCT_ID = 'facility.ammo-factory';

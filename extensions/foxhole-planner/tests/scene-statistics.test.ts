@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { encodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { readSceneStatistics, readStatisticsPreferences } from '../src/scene-statistics.ts';
 
 test('Planner summary counts typed owned assets and configured orders from complete ECS snapshots', () => {

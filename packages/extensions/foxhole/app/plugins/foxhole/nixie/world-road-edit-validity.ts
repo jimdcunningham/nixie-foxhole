@@ -1,6 +1,6 @@
 import { buildSplineRibbonMeshData } from '../../../../../../../extensions/foxhole-planner/src/spline-ribbon-mesh.ts';
 import type { BuildSplineRibbonMeshOptions } from '../../../../../../../extensions/foxhole-planner/src/spline-ribbon-mesh.ts';
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 export const REFERENCE_ROAD_SPLINE_KEYS: ReadonlySet<string> = new Set([
     'dirtroad', 'gravelroad', 'greatmarchroad', 'packeddirtroad',

@@ -5,7 +5,7 @@ import published from '../../../packages/extensions/foxhole/public/foxhole/asset
 import { createFoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 import type { PublishedFoxholeManifestForSceneV2 } from '../src/scene-v2-asset-metadata.ts';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const layer = { width: 864, height: 410, offsetY: 0 };
 const start = { x: 0, y: 0, rotation: 0 };

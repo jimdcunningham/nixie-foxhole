@@ -1,6 +1,6 @@
 import { samplePolylineArcLengthPoint } from './spline-ribbon-mesh.ts';
 import type { ConnectorSplinePathSample } from './spline-ribbon-mesh.ts';
-import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES } from '@nixie/extension-sdk/experimental/scene-v2';
+import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 /** Native local XYZ in cm (Y points down on the board); image U runs along the road. */
 export interface NativeSplineSurfaceMesh {

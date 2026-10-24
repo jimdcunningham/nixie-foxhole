@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { findFoxholePowerlineObstructions } from '../src/powerline-clearance.ts';
 import type { FoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';

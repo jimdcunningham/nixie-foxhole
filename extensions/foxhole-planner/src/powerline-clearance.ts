@@ -1,7 +1,7 @@
 import type {
     NixieExperimentalComponentEntitySnapshotV1,
     NixieExperimentalEntityRendererContextV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import {
     resolveFoxholeSceneV2WorldMatrices,
     transformFoxholeSceneV2Point,

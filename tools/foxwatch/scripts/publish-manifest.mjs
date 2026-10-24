@@ -87,7 +87,7 @@ import {
     foxholeManifestSchema,
     normalizeFoxholePackagedPalletKey,
     rebaseFoxholeManifestAssetUrls,
-} from '@nixie/foxhole-schema';
+} from '@nixiejs/foxhole-schema';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(currentDir, '..', '..', '..');

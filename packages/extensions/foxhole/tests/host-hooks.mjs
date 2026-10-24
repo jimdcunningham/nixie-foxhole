@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, next) {
         const remapped = hostSourceUrl(specifier, context.parentURL || import.meta.url);
         if (remapped.href !== new URL(specifier, context.parentURL || import.meta.url).href) return next(remapped.href, context);
     }
-    if (specifier === '@nixie/extension-sdk' || specifier.startsWith('@nixie/extension-sdk/')) {
+    if (specifier === '@nixiejs/extension-sdk' || specifier.startsWith('@nixiejs/extension-sdk/')) {
         return next(specifier, { ...context, parentURL: new URL('package.json', hostLayer).href });
     }
     if (specifier.startsWith('../../../../nixie/')) {
@@ -56,7 +56,7 @@ registerFoxholeLegacyDiscoveryProfile();
 const { registerFoxholeSceneV2HostPolicy } = await import('../app/utils/scene-v2-host-policy.ts');
 registerFoxholeSceneV2HostPolicy();
 const { readFileSync } = await import('node:fs');
-const { parseNixieExtensionManifestV1 } = await import('@nixie/extension-sdk');
+const { parseNixieExtensionManifestV1 } = await import('@nixiejs/extension-sdk');
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
 const { replaceNixieSdkExtensionCatalog } = await import(new URL('app/plugins/nixie/extensions/index.ts', hostLayer).href);
 const { registerNixieInternalExtensionAdapter, setNixieInternalExtensionActiveOwners } = await import(new URL('desktop-extensions/internal-extension-adapters.ts', hostLayer).href);

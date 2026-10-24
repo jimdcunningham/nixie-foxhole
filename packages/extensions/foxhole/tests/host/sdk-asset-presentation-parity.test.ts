@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixie/extension-sdk';
+import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
 import { createFoxholeSceneV2AssetMetadata } from '../../../../../extensions/foxhole-planner/src/scene-v2-asset-metadata.ts';
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 import { createNixieExtensionAssetCard, getNixieExtensionAssetCardImages } from '../../../../nixie/app/utils/nixie-extension-asset-card.ts';

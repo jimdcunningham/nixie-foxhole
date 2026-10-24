@@ -4,8 +4,8 @@ import type {
     NixieExperimentalComponentJsonObjectV1,
     NixieExperimentalTransformFinalizeRequestV1,
     NixieExperimentalTransformFinalizeResultV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
-import { clampDraggedSplineEndpoint, selectNixieExperimentalConnectionTargetV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { clampDraggedSplineEndpoint, selectNixieExperimentalConnectionTargetV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import foxholeSceneV2Assets from '#foxhole-scene-v2-assets';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { sampleFoxholeSceneV2Connector, foxholeSceneV2ConnectorConstraints, foxholeSceneV2ConnectorEndpoints } from './scene-v2-connector-path.ts';
@@ -421,7 +421,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
         !(item.targetEntityId === moved.entityId && (!gesture || normalizedName(item.targetSocketName) === normalizedName(dragged!.socket.name)))
         && !(gesture && entity.entityId === moved.entityId && normalizedName(item.localSocketName) === normalizedName(dragged!.socket.name)))]));
     const operations: NixieExperimentalComponentOperationV1[] = [];
-    const set: Record<string, import('@nixie/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonValueV1> = {};
+    const set: Record<string, import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonValueV1> = {};
     const unset: string[] = [];
     const claimed = new Set<string>();
     const movingSockets = sockets(moved, matrix, projection);

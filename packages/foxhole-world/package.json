@@ -1,5 +1,5 @@
 {
-  "name": "@nixie/foxhole-world",
+  "name": "@nixiejs/foxhole-world",
   "version": "0.1.0",
   "private": true,
   "type": "module",

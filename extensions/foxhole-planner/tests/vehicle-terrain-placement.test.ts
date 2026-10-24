@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalTransformFinalizeRequestV1 as Request } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalTransformFinalizeRequestV1 as Request } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { finalizeFoxholeSurfacePlacement } from '../src/surface-placement.ts';
 

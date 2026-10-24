@@ -1,4 +1,4 @@
-import { samplePointAlongSplinePath } from '@nixie/extension-sdk/experimental/scene-v2';
+import { samplePointAlongSplinePath } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { ConnectorSplinePathSample } from './spline-ribbon-mesh.ts';
 import { usesRailTrackSpline } from './spline-connector.ts';
 

@@ -1,7 +1,7 @@
 import type {
     NixieExtensionGraphicsCommandV1,
     NixieExtensionRenderGraphicsV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { foxholeRenderLane, NIXIE_DEFAULT_RENDER_LANE } from './render-lanes.ts';
 
 export interface FoxholeSceneV2TacticalLineData {

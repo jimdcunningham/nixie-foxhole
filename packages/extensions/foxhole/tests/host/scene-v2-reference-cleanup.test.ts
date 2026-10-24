@@ -2,7 +2,7 @@ import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
 import { collectNixieSceneV2ReferenceCleanup } from '../../../../nixie/desktop-extensions/scene-v2-reference-cleanup.ts';
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';

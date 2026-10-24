@@ -1,5 +1,5 @@
 {
-  "name": "@nixie/foxwatch-desktop",
+  "name": "@nixiejs/foxwatch-desktop",
   "productName": "FoxWatch",
   "version": "0.1.0",
   "private": true,

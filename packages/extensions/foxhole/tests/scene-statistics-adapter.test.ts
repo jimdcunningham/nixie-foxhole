@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { projectFoxholeSceneStatistics } from '../app/plugins/foxhole/nixie/scene-statistics-adapter.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 function entity(id: string, parentId: string | null, asset = false): Entity {
     return { entityId: id, revision: 1, components: [

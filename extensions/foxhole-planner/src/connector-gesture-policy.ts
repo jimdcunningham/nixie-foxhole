@@ -1,4 +1,4 @@
-import type { NixieExperimentalGeometryWheelControlV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalGeometryWheelControlV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { usesPipeCurveScale, DEFAULT_PIPE_CURVE_T_WHEEL_STEP } from './pipe-spline-constraints.ts';
 import { resolveConnectorBehavior, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';

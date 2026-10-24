@@ -8,12 +8,14 @@ an extension does not deploy or replace them.
 
 Before enabling the workflow:
 
-1. Distribute `@nixie/extension-sdk` and `@nixie/extension-package` at the exact
+1. Distribute `@nixiejs/extension-sdk` and `@nixiejs/extension-package` at the exact
    versions declared in `package.json`. Both are standalone npm packages; the
    publisher is the package tool's `nixie-extension publish` command. No access to
    the private Nixie repository is required by this workflow.
-2. Deploy Nixie's existing publishing broker/registry and the generic published
-   extension loader. Apply the registry migrations if they are not already present.
+2. Ensure the registry migrations and publishing broker exist in the target
+   Supabase project. If the broker is not deployed yet, run the new Nixie server
+   locally against that project for the first publication. Studio's cutover
+   deployment requires a compatible published package before it can proceed.
 3. Provision a publisher grant for `nixie.foxhole-planner` from
    `jimdcunningham/nixie-foxhole`, then create a scoped `nxp_` automation token.
 4. Store that token as the repository secret `NIXIE_EXTENSION_PUBLISH_TOKEN`.

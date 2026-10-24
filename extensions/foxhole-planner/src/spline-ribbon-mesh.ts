@@ -5,8 +5,8 @@ import {
     evaluateCubicBezierTangent,
     resolveSplineControlPoints,
     samplePointAlongSplinePath,
-} from '@nixie/extension-sdk/experimental/scene-v2';
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
 const FOXHOLE_BOARD_SPRITE_SCALE = 0.5;
 const centimetersToFoxholeBoardPixels = (value: number) => Math.max(0, value) * 0.32;
 import type { SpanTextureMapping } from './span-texture-mapping.ts';

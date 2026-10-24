@@ -4,7 +4,7 @@ import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-ex
 import { foxholeConnectorGeometryWheel } from '../../../../extensions/foxhole-planner/src/connector-gesture-policy.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../../../../extensions/foxhole-planner/src/scene-v2-spline-connectors.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentDefinitionV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentDefinitionV1 } from '@nixiejs/extension-sdk';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

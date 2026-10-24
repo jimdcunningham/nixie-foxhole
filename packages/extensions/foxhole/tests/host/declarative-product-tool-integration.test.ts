@@ -2,7 +2,7 @@ import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { createExternalDeclarativeContribution } from '../../../../nixie/desktop-extensions/contribution-adapter.ts';
 import type {
     NixieCommandContext,

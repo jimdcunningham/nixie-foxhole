@@ -1,4 +1,4 @@
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
 export interface ConnectorSplinePathSample {
     points: Array<{ x: number; y: number; }>;
     lengths: number[];

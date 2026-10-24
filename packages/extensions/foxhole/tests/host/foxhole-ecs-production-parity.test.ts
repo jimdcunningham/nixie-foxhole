@@ -5,7 +5,7 @@ import assets, { productionRecipesById } from '../../../../../extensions/foxhole
 import { getFoxholeManifest } from '../../app/plugins/foxhole/nixie/manifest.ts';
 import { getFoxholeProductionIndex } from '../../app/plugins/foxhole/nixie/production/index.ts';
 import { aggregateFoxholeProduction } from '../../app/plugins/foxhole/nixie/production/aggregation.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk';
 
 const manifest = getFoxholeManifest('/foxhole/assets/');
 const index = getFoxholeProductionIndex('/foxhole/assets/');

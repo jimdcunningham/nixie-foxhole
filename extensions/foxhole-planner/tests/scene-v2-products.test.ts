@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../src/scene-v2-products.ts';
 import foxholeSceneV2Assets from '../src/scene-v2-assets-node.ts';
-import { parseNixieExperimentalProductResultV1, parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalProductResultV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { createFoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';

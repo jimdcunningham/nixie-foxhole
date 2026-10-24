@@ -9,7 +9,7 @@ import { isFoxholeBunkerUnionMember } from '../../app/plugins/foxhole/nixie/stru
 import { buildFoxholeBunkerHealthSummary } from '../../app/plugins/foxhole/nixie/bunker-health.ts';
 import { buildFoxholeBunkerDestructionSummary } from '../../app/plugins/foxhole/nixie/bunker-destruction.ts';
 import { deduplicateFoxholeBuildSockets as nativeSockets } from '../../app/plugins/foxhole/nixie/structure-socket-resolution.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
 const entity = (entityId: string, assetId: string, attachments: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }> = []): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId, revision: 1,

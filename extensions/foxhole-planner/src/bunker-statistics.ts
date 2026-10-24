@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { buildFoxholeBunkerHealthSummary } from './bunker-statistics-health.ts';
 import { buildFoxholeBunkerDestructionSummary } from './bunker-statistics-destruction.ts';
 import type { FoxholeBunkerDestructionWeaponInput } from './bunker-statistics-destruction.ts';

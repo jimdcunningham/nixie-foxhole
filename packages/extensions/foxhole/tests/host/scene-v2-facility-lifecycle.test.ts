@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import * as Y from 'yjs';
-import { parseNixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import type { BoardNodeSnapshot } from '../../../../nixie/app/plugins/nixie/board/types/node.ts';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';

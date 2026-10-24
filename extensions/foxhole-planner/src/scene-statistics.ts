@@ -1,6 +1,6 @@
-import type { NixieExtensionConnection, SceneSnapshotV1, SelectionSnapshotV1 } from '@nixie/extension-sdk';
-import { decodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionConnection, SceneSnapshotV1, SelectionSnapshotV1 } from '@nixiejs/extension-sdk';
+import { decodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets, { productionRecipesById, bunkerDestructionWeapons } from '#foxhole-scene-v2-assets';
 import { aggregateFoxholeEcsProduction, FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';
 import { aggregateFoxholeEcsResources } from './resource-statistics.ts';

@@ -7,7 +7,7 @@ import { readFoxholeAuthoredSpotlight } from './spotlight-beam.ts';
 import type { FoxholeAuthoredSpotlight } from './spotlight-beam.ts';
 import { isFoxholeModificationSlotTierEligible } from './modification-tier.ts';
 import { resolveFoxholeEmplacementModificationSplineEnd } from './modification-spline.ts';
-import type { NixieExperimentalProductAttributeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalProductAttributeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveConnectorBehavior, resolveConnectorEndpointSocketNames, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import { createFoxholeStatisticsRecipe } from './production-statistics.ts';
 import type { FoxholePublishedProductionEntry, FoxholeStatisticsRecipe, FoxholeStatisticsStructure } from './production-statistics.ts';

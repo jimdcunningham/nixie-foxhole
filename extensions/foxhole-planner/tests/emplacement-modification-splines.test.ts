@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import { sampleTextureMesh } from './helpers/sample-texture-mesh.ts';

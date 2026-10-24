@@ -6,7 +6,7 @@ import type {
     NixieExperimentalProductResultV1,
     NixieExperimentalProductPresentationV1,
     NixieExperimentalProductDetailCellV1,
-} from '@nixie/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import foxholeSceneV2Assets, { productionRecipesById, catalogLocalizations } from '#foxhole-scene-v2-assets';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeSceneV2SplineProductData } from './scene-v2-connector-products.ts';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExtensionRenderPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { FOXHOLE_STRUCTURE_RENDER_LANES } from '../src/render-lanes.ts';
 import { renderFoxholeSceneV2TacticalLine } from '../src/scene-v2-tactical-lines.ts';
@@ -47,7 +47,7 @@ test('Bowhead grouped cargo renders exact vehicle, structure and resource icons 
             ] } },
     ] }));
     const resources: string[] = [];
-    const visit = (node: import('@nixie/extension-sdk/experimental/scene-v2').NixieExtensionRenderNodeV1) => { if (node.kind === 'sprite') resources.push(node.resourceId); if (node.kind === 'group') node.children.forEach(visit); };
+    const visit = (node: import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExtensionRenderNodeV1) => { if (node.kind === 'sprite') resources.push(node.resourceId); if (node.kind === 'group') node.children.forEach(visit); };
     plan.root.children.filter(node => node.id === 'marked-cargo').forEach(visit);
     assert.deepEqual(resources.sort(), ['foxhole.icon.harvester','foxhole.icon.resourcecontainer','foxhole.icon.coal','foxhole.icon.sulfur','foxhole.icon.components'].sort());
 });

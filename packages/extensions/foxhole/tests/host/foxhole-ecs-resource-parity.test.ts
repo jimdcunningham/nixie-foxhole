@@ -6,7 +6,7 @@ import { getFoxholeStructureCatalog } from '../../app/plugins/foxhole/nixie/cata
 import { resolveFoxholeStructureLiquidCapacity, resolveFoxholeLiquidCapacityKind, accumulateFoxholeLiquidCapacity, createEmptyFoxholeLiquidCapacityBreakdown } from '../../app/plugins/foxhole/nixie/liquid-capacity.ts';
 import { resolveFoxholePowerDeltaMw, accumulateFoxholeFacilityPower, createEmptyFoxholeFacilityPowerBreakdown } from '../../app/plugins/foxhole/nixie/facility-power.ts';
 import { resolveFoxholeMaintenanceSupplyDrain, resolveFoxholeMaintenanceSuppliesForInterval } from '../../app/plugins/foxhole/nixie/maintenance-supplies.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
 const quantities = (source: Record<string, { quantity: number; }>) => Object.fromEntries(Object.entries(source).map(([id, resource]) => [id, resource.quantity]));

@@ -6,7 +6,7 @@ import { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, isFoxhole
 import spatialPolicy from '../src/scene-v2-model-policy.json' with { type: 'json' };
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { validateNixieExperimentalComponentDataV1 } from '@nixie/extension-sdk';
+import { validateNixieExperimentalComponentDataV1 } from '@nixiejs/extension-sdk';
 import fullModelBundle from '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
 import catalog from '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json' with { type: 'json' };
 import { modelArtifactBounds, readModelArtifact } from './helpers/model-artifact-bounds.ts';

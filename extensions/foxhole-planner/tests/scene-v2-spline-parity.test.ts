@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '#foxhole-scene-v2-assets';
-import { SPLINE_PATH_INVALID_TINT } from '@nixie/extension-sdk/experimental/scene-v2';
+import { SPLINE_PATH_INVALID_TINT } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 

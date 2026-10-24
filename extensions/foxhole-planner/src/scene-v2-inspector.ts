@@ -1,5 +1,5 @@
 import type { NixieExperimentalComponentJsonObjectV1, NixieExperimentalInspectorFieldV1,
-    NixieExperimentalInspectorRequestV1, NixieExperimentalInspectorResultV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+    NixieExperimentalInspectorRequestV1, NixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets, { productionOutputsByRecipeId } from '#foxhole-scene-v2-assets';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import { formatFoxholeStockpileLimits } from './stockpile-groups.ts';

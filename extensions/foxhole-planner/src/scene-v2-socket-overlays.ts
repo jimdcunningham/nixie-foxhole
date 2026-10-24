@@ -1,5 +1,5 @@
 import { resolveLegacyPlanSocketId } from './legacy-plan-socket-id-map.ts';
-import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveFoxholeEffectiveStructureSocketSources } from './effective-structure-sockets.ts';
 import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2ModificationVariantMetadata } from './scene-v2-asset-metadata.ts';

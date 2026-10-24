@@ -1,4 +1,4 @@
-import type { NixieExperimentalAssetPackV1, NixieExtensionManifestV1 } from '@nixie/extension-sdk';
+import type { NixieExperimentalAssetPackV1, NixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 
 /** Build-specific declarations belong to the runtime output, never the authored input. */
 export function createFoxholeRuntimeManifest(

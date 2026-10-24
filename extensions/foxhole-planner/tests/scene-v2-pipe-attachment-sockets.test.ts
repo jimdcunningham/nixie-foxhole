@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';

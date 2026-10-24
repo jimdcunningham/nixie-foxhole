@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "build:foxwatch": "npm run build --workspace @nixie/foxwatch",
+    "build:foxwatch": "npm run build --workspace @nixiejs/foxwatch",
     "build:monitor": "dotnet build ./tools/foxwatch/monitor/FoxWatchMonitor.csproj",
     "foxwatch": "node ./tools/foxwatch/run-foxwatch.mjs",
     "test:source-media": "node ./tools/check-source-media.mjs && node --test ./tools/check-source-media.test.mjs",
@@ -18,8 +18,8 @@
     "assets:publish": "node ./tools/foxwatch/run-foxwatch.mjs assets-publish",
     "assets:inventory": "node ./tools/foxwatch/scripts/asset-publication-inventory.mjs",
     "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs",
-    "dev:desktop": "npm run dev --workspace @nixie/foxwatch-desktop",
-    "build:desktop": "npm run build --workspace @nixie/foxwatch-desktop"
+    "dev:desktop": "npm run dev --workspace @nixiejs/foxwatch-desktop",
+    "build:desktop": "npm run build --workspace @nixiejs/foxwatch-desktop"
   },
   "engines": {
     "node": ">=24 <25"

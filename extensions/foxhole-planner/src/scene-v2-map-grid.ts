@@ -1,4 +1,4 @@
-import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
 
 const CELL = 125 * 32;

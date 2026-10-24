@@ -188,7 +188,7 @@ From `C:/Code/nixie`, start the Studio development server against an explicitly 
 
 ```powershell
 $env:NODE_OPTIONS = '--max-old-space-size=8192'
-npm run dev --workspace @nixie/studio -- --host 127.0.0.1 --port 3100
+npm run dev --workspace @nixiejs/studio -- --host 127.0.0.1 --port 3100
 ```
 
 Visit `http://127.0.0.1:3100/discover`, `/discover/library`, `/discover/foxhole-blueprint-<source-UUID>` or `/discover/<native-public-ID>`. Open an editable project scene and choose **File → Discovery Library** for insertion. Native publication uses the existing **Publish Project** section in project management and still requires the current workspace owner and the existing public profile/use terms. Both source copies require a cloud destination.
@@ -269,7 +269,7 @@ $env:NUXT_PUBLIC_NIXIE_CLOUD_ORIGIN = 'http://127.0.0.1:3100'
 $env:NUXT_NIXIE_REALTIME_SIGNING_SECRET = '<random secret for this local gateway>'
 $env:NIXIE_BUILD_SCHEDULED_TASKS = 'false'
 $env:FOXHOLE_BUILD_SCHEDULED_TASKS = 'false'
-npm run dev --workspace @nixie/studio -- --host 127.0.0.1 --port 3100
+npm run dev --workspace @nixiejs/studio -- --host 127.0.0.1 --port 3100
 ```
 
 Replace placeholders using only the selected test backend's configuration. Set the verified legacy origin only after both Planner and Nixie target that same test database/Auth project. Existing billing/image-moderation policy still applies; no policy bypass was added. The normal gateway ticket flow uses the local signing secret. Use authorized test accounts, a ready test image-storage bucket and moderation configuration, and approved public fixtures. If testing a remote isolated backend, replace its URL and keys explicitly while retaining the local gateway settings.
