@@ -5,6 +5,7 @@ name: Publish Planner SDK Extension
     branches: [main]
     paths:
       - 'extensions/foxhole-planner/**'
+      - 'tools/foxwatch/catalog/**'
       - '.github/workflows/publish-planner.yml'
   workflow_dispatch:
 
@@ -19,7 +20,6 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     env:
-      NIXIE_FOXHOLE_ASSET_MODE: remote
       PLANNER_ROOT: ${{ runner.temp }}/planner-consumer/extensions/foxhole-planner
       NIXIE_FOXHOLE_ASSETS_ROOT: ${{ runner.temp }}/planner-consumer/packages/extensions/foxhole/public/foxhole/assets
     steps:
@@ -38,8 +38,9 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/planner-consumer/extensions"
           cp -R extensions/foxhole-planner "$PLANNER_ROOT"
+          node extensions/foxhole-planner/build/prepare-authoring-consumer.mjs --target "$PLANNER_ROOT"
           npm install --prefix "$PLANNER_ROOT" --ignore-scripts --no-audit --no-fund --package-lock=false
-          # Preserve the sparse asset-input layout used by Node-side imports.
+          # Catalog is the ordinary build input; source/model fixtures are for regression tests.
           # Models are downloaded only for geometry tests, never for the runtime archive.
           node "$PLANNER_ROOT/build/prepare-publication-inputs.mjs" --output "$NIXIE_FOXHOLE_ASSETS_ROOT"
 
@@ -47,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node --test "$PLANNER_ROOT/build/prepare-build-inputs.test.mjs" "$PLANNER_ROOT/build/prepare-publication-inputs.test.mjs"
+          node --test "$PLANNER_ROOT/build/prepare-catalog-input.test.mjs" "$PLANNER_ROOT/build/prepare-publication-inputs.test.mjs"
           npm run typecheck --prefix "$PLANNER_ROOT"
           npm test --prefix "$PLANNER_ROOT"
           npm run build --prefix "$PLANNER_ROOT"

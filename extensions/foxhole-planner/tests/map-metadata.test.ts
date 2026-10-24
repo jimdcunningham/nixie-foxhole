@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { parseNixieExtensionManifestV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
-import maps, { foxholeMapResources } from '../src/scene-v2-map-data-node.ts';
+import maps from '../src/scene-v2-map-data-node.ts';
+import {catalog} from '../build/catalog-node.ts';
+const foxholeMapResources = catalog.sharedResources.filter(row => row.id.startsWith('map.')).map(row => ({...row, id: 'foxhole.map.' + row.id.slice(4)}));
 import { createFoxholeSceneV2MapMetadata, foxholeSceneV2MapBounds } from '../src/scene-v2-map-metadata.ts';
 
-test('all offline map resources resolve through the declared package-local texture template', async () => {
+test('all catalog map resources resolve through the declared texture template', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
     assert.equal(maps.regions.length, 53);
     assert.equal(Object.keys(maps.icons).length, 39);
@@ -16,7 +18,8 @@ test('all offline map resources resolve through the declared package-local textu
     for (const resource of foxholeMapResources) {
         assert.equal(resolveNixieExperimentalResourceV1(manifest.contributes.experimentalResources ?? [],
             manifest.contributes.experimentalResourceTemplates ?? [], resource.id)?.path, resource.path, resource.id);
-        assert.match(resource.sourcePath, /^(maps|types)\/[A-Za-z0-9/._-]+\.webp$/);
+        assert.match(resource.path, /^maps\/[a-z0-9/._-]+\.webp$/);
+        assert.match(resource.sha256, /^[a-f0-9]{64}$/);
     }
 });
 

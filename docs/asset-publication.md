@@ -171,57 +171,24 @@ Steam polling does not publish assets, and the normal Stop Run action stops the
 uploader's process tree. Opening the configuration panel defers new automatic
 polls until it closes.
 
-## Connect the Planner to a Published Release
+## Portable Planner Product Catalogs
 
-After publishing the full library, generate the Planner resource aliases and
-browser atlases, upload their small overlay, and update its authored pin:
+Planner now consumes a FoxWatch-generated packaged catalog and readable immutable
+asset-release paths. The old Planner alias-overlay publication command has been
+removed. See [Packaged Product Catalogs](./product-catalog-assets.md) for preparation,
+publication ordering, local verification, and the catalog/CI-fixture distinction.
 
-```powershell
-node tools/foxwatch/scripts/asset-pack-planner-resources.mjs --upload --update-pin
-```
+## Private Integration Metadata Builds
 
-This uses the same local config, saved credentials and FoxWatch process lock.
-Models, textures and region objects remain shared with the library; only new UI
-atlases and the immutable SDK resource index upload. Without `--upload`, it only
-prepares a local plan. The pin changes only after uploads verify successfully.
-The Monitor's **Publish Assets** action publishes the full library; this overlay
-command is currently a separate explicit step.
+The compiled private Foxhole server/map integration retains its existing world
+publication pin and metadata bootstrap. Its legacy `build/prepare-build-inputs.mjs`
+helper still retrieves the eight verified source JSON inputs and checks the pinned
+build metadata for those consumers. It is not the portable Planner build path.
 
-Build the extension from Nixie with
-`npm run build --workspace @nixiejs/foxhole-planner-sdk`. The build checks local
-catalog, model, map and localization metadata against the published receipts,
-then requires every logical resource binding in the pinned SDK index. Updated
-local exports therefore need a new library publication and overlay before a
-remote build. Commit `extensions/foxhole-planner/src/asset-release-pin.json`
-with the resulting extension manifest. Previous pins remain valid for rollback.
-
-Remote builds contain code and small map metadata only. The compiled world
-integration also uses this publication pin and excludes the layer's bulk public
-assets from Nitro output. `NIXIE_FOXHOLE_ASSET_MODE=bundled` is an explicit
-standalone extension authoring override; it does not change the host world's pin.
-Runtime downloads use verified, bounded caches. Cached placed objects and loaded
-regions can be reused offline; uncached assets still require a connection. This
-is demand caching, not an installation of the entire library.
-
-The checked-in pin targets `assets.nixiejs.com`. Production HTTPS, CORS and
-CDN cache hits are verified. Application deployment remains a separate step.
-
-## Metadata-Only Application Builds
-
-The Planner overlay now includes a pinned foundation-layer extraction document.
-The local publisher verifies each source GLB against the library receipt; builds
-consume the extracted layer names and surface heights without opening a GLB.
-An extraction-source hash rejects stale derived metadata after extraction code changes.
-
-`node extensions/foxhole-planner/build/prepare-build-inputs.mjs` retrieves eight
-verified catalog, model, map and localization JSON files to the normal build-input
-location. Use `--output <empty-directory>` for an isolated verification. Existing
-matching files are reused; mismatching local exports fail rather than being overwritten.
-`--identity-only` prints the pin identity without any asset requests.
-`--expected <sha256>` checks the normalized JSON pin used by a coordinating build.
-Pin identity ignores checkout line endings and JSON whitespace.
-Application builds do not need the generated-assets Git repository or any images/models.
-Source-level model geometry tests still use the local FoxWatch outputs.
+Ordinary Planner builds use `build/prepare-catalog-input.mjs` instead and require
+only the single generated catalog. New Planner catalog pins never replace the
+private world pin or silently update an installed extension. Cached resources
+remain demand-loaded; uncached resources still require a connection.
 
 ## Production Asset Delivery
 

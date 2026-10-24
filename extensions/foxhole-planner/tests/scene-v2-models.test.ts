@@ -110,8 +110,8 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.equal(binary.subarray(view.byteOffset + 8, view.byteOffset + 12).toString(), 'WEBP');
         }
         if (declaredBuild.has(metadata.resourceId)) assert.deepEqual(manifest.contributes.experimentalResources.find((resource: { id: string; }) => resource.id === metadata.resourceId),
-            { contractVersion: 1, id: metadata.resourceId, kind: 'model', path: `dist/assets/scene-v2/assets/${metadata.assetId ?? assetId}/${assetId}.glb`,
-                ...(manifest.contributes.experimentalAssetPacks?.some((pack: { id: string }) => pack.id === 'foxhole.runtime') ? { assetPack: 'foxhole.runtime' } : {}) });
+            { contractVersion: 1, id: metadata.resourceId, kind: 'model', path: `models/${metadata.assetId ?? assetId}.${metadata.assetId && metadata.assetId !== assetId ? assetId.slice(metadata.assetId.length + 1) : 'base'}.glb`,
+                assetPack: 'foxhole.catalog' });
     }
 });
 
@@ -129,10 +129,10 @@ test('packaged models share their owning asset directory with textures and icons
     const manifest = JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8'));
     const templates = Object.fromEntries(manifest.contributes.experimentalResourceTemplates
         .map((template: { idPrefix: string; pathTemplate: string; }) => [template.idPrefix, template.pathTemplate]));
-    assert.equal(templates['foxhole.asset.'], 'dist/assets/scene-v2/assets/{id}/texture.webp');
-    assert.equal(templates['foxhole.icon.'], 'dist/assets/scene-v2/assets/{id}/icon.webp');
-    assert.equal(templates['foxhole.mod.'], 'dist/assets/scene-v2/shared/modifications/{id}.webp');
-    assert.equal(templates['foxhole.visual.'], 'dist/assets/scene-v2/shared/visuals/{id}.webp');
+    assert.equal(templates['foxhole.asset.'], 'textures/{id}.webp');
+    assert.equal(templates['foxhole.icon.'], 'icons/{id}.webp');
+    assert.equal(templates['foxhole.mod.'], 'shared/modifications/{id}.webp');
+    assert.equal(templates['foxhole.visual.'], 'shared/visuals/{id}.webp');
 });
 
 test('catalog-wide models bind every exportable category and keep unavailable models optional', () => {

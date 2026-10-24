@@ -6,7 +6,8 @@ test('Planner publishing builds an independent remote package with scoped author
     const text = await readFile(new URL('../../../.github/workflows/publish-planner.yml', import.meta.url), 'utf8');
     assert.match(text, /permissions:\s+contents: read/);
     assert.match(text, /branches: \[main\]/);
-    assert.match(text, /NIXIE_FOXHOLE_ASSET_MODE: remote/);
+    assert.match(text, /prepare-authoring-consumer\.mjs/);
+    assert.match(text, /prepare-catalog-input\.test\.mjs/);
     assert.match(text, /PLANNER_ROOT:.*\/planner-consumer\/extensions\/foxhole-planner/);
     assert.match(text, /NIXIE_FOXHOLE_ASSETS_ROOT:.*\/planner-consumer\/packages\/extensions\/foxhole\/public\/foxhole\/assets/);
     assert.match(text, /cp -R extensions\/foxhole-planner/);

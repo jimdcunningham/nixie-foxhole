@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "baseUrl": "https://assets.nixiejs.com/",
+  "catalog": {
+    "url": "https://assets.nixiejs.com/foxhole-planner/releases/2026-10-24.1/catalog.v1.json",
+    "sha256": "5a5ecd81d5f47b7b8862c713366329ad716a95f418ddf5bd6ba7e94413ee1e54",
+    "byteLength": 7343090
+  },
+  "completion": {
+    "url": "https://assets.nixiejs.com/foxhole-planner/releases/2026-10-24.1/release.json",
+    "sha256": "8cb2a72a3ad6bb1ccf5fa90353358661dbd92c94fb29ea178060f844709417ce",
+    "byteLength": 1587
+  }
+}

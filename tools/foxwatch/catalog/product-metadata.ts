@@ -68,7 +68,7 @@ export interface FoxholeSceneV2PackagedMetadata {
 }
 
 export interface FoxholeSceneV2CargoMetadata {
-    groups?: import('./stockpile-groups.ts').FoxholeStockpileSelectionGroup[];
+    groups?: import('../../../extensions/foxhole-planner/src/stockpile-groups.ts').FoxholeStockpileSelectionGroup[];
     limit: number | null;
     retainsWhenPackaged: boolean;
     offsetX: number;
@@ -100,7 +100,7 @@ export interface FoxholeSceneV2ConnectorMeshMetadata {
 
 export interface FoxholeSceneV2ConnectorMetadata {
     pathStyle: string;
-    behavior?: import('./connector-behavior.ts').FoxholeConnectorBehaviorManifest;
+    behavior?: import('../../../extensions/foxhole-planner/src/connector-behavior.ts').FoxholeConnectorBehaviorManifest;
     enforceSplineModeCornerRadius?: boolean;
     meshConfigs: FoxholeSceneV2ConnectorMeshMetadata[];
     spline?: boolean;
@@ -116,7 +116,7 @@ export interface FoxholeSceneV2ConnectorMetadata {
 }
 
 export interface FoxholeSceneV2AssetMetadata {
-    model?: import('./scene-v2-models.ts').FoxholeSceneV2ModelMetadata;
+    model?: import('../../../extensions/foxhole-planner/src/scene-v2-models.ts').FoxholeSceneV2ModelMetadata;
     browserAttributes?: NixieExperimentalProductAttributeV1[];
     description?: string;
     categoryOrder?: number;
@@ -228,7 +228,7 @@ interface PublishedFoxholeConnectorMesh {
 
 interface PublishedFoxholeConnector {
     pathStyle?: string;
-    behavior?: import('./connector-behavior.ts').FoxholeConnectorBehaviorManifest;
+    behavior?: import('../../../extensions/foxhole-planner/src/connector-behavior.ts').FoxholeConnectorBehaviorManifest;
     enforceSplineModeCornerRadius?: boolean;
     enforceRadius?: boolean;
     meshConfigs?: PublishedFoxholeConnectorMesh[];
@@ -371,7 +371,7 @@ interface PublishedFoxholeModificationSlot {
 }
 
 export interface PublishedFoxholeAssetForSceneV2 {
-    stockpiles?: import('./stockpile-groups.ts').NativeStockpileGroup[];
+    stockpiles?: import('../../../extensions/foxhole-planner/src/stockpile-groups.ts').NativeStockpileGroup[];
     spotlights?: unknown[];
     bIsBuiltOnFoundation?: boolean;
     bIsBuiltOnLandscape?: boolean;

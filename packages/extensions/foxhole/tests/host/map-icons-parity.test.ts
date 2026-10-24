@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import { hostSourceUrl } from "../host-source-url.mjs";
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -39,8 +41,13 @@ test('all map icon hover names, categories and declared preview resources match 
         const expected = native.resolveMapIconHoverTooltipData(icon);
         const actual = maps.icons[key]!;
         const preview = foxholeMapResources.find(resource => resource.id === actual.previewResourceId);
-        assert.deepEqual([actual.name, actual.tooltipCategory, preview ? `/foxhole/assets/${preview.sourcePath}` : null],
-            [expected.iconName, expected.categoryLabel, expected.previewUrl], key);
+        assert.deepEqual([actual.name, actual.tooltipCategory], [expected.iconName, expected.categoryLabel], key);
+        if (expected.previewUrl) {
+            assert.ok(preview, key);
+            assert.ok(expected.previewUrl.startsWith('/foxhole/assets/'));
+            const source = readFileSync(new URL('../../public/foxhole/assets/' + expected.previewUrl.slice('/foxhole/assets/'.length), import.meta.url));
+            assert.equal(preview.sha256, createHash('sha256').update(source).digest('hex'), key);
+        } else assert.equal(preview, undefined, key);
     }
 });
 
