@@ -232,6 +232,7 @@ export function listFoxholeSceneV2Products(
                         } satisfies NixieExperimentalComponentProductTemplateV1]
                         : [])],
                 };
+            product.interactionProfile = { move: true, rotate: true };
             return {
                 label: metadata.label,
                 category: metadata.categoryLabel ?? metadata.category,

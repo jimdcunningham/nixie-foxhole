@@ -75,3 +75,27 @@ test('the real Planner index retains hidden upgrades and resolves them without a
         assert.equal(calls, before);
     } finally { unregister(); service.destroy(); replaceNixieSceneV2ExtensionCatalog([]); }
 });
+
+test('SDK products request transforms without a registered bundled capability policy', async () => {
+    const { resolveNixieSceneV2ProductCapabilities } = await import('#nixie-internal/desktop-extensions/scene-v2-capabilities.ts');
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
+    const definitions = new Map(manifest.contributes.experimentalComponents!.components.map(component => [manifest.id + '\0' + component.id, component]));
+    for (const query of ['facilitypipe', 'tank', 'rifle']) {
+        const page = listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100,
+            settings: manifest.contributes.experimentalProductProviders![0]!.indexSettings });
+        assert.ok(page.items.length > 0, query);
+        for (const item of page.items) {
+            assert.deepEqual(item.product.interactionProfile, { move: true, rotate: true }, item.product.id);
+            const capabilities = resolveNixieSceneV2ProductCapabilities(item.product, manifest.id, definitions);
+            assert.ok(capabilities.includes('move'), item.product.id);
+            assert.ok(capabilities.includes('rotate'), item.product.id);
+            assert.ok(!capabilities.includes('scale'), item.product.id);
+            assert.ok(!capabilities.includes('mirror'), item.product.id);
+        }
+    }
+    for (const product of manifest.contributes.experimentalProducts ?? []) {
+        if (product.components.some(component => component.ownerId === manifest.id && component.componentId === 'asset')) {
+            assert.deepEqual(product.interactionProfile, { move: true, rotate: true }, product.id);
+        }
+    }
+});
