@@ -5,6 +5,7 @@
   "description": "Create blueprints for a bunker, facility, and more using this fan-made tool for the video game Foxhole.",
   "homepage": "https://foxholeplanner.com/app",
   "private": true,
+  "type": "module",
   "imports": {
     "#foxhole/*": "./app/*"
   },
