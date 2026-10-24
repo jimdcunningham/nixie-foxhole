@@ -5,7 +5,7 @@ import type { Database } from '#nixie-internal/types/database.types.ts';
 import { serverSupabaseServiceRole } from '#supabase/server';
 import { useRuntimeConfig } from '#imports';
 import { legacyBlueprintFlag, legacyBlueprintSourceId } from '#nixie-internal/app/utils/legacy-blueprints.ts';
-import { isEligibleLegacyBlueprint, foxholeLegacyBlueprintCursor, foxholeLegacyBlueprintSearchText, toLegacyBlueprintListing } from './legacy-blueprint-source.ts';
+import { isEligibleLegacyBlueprint, foxholeLegacyBlueprintCursor, foxholeLegacyBlueprintSearchText, toLegacyBlueprintListing, toOwnedLegacyBlueprintListing } from './legacy-blueprint-source.ts';
 import { decodeDiscoveryCursor, discoveryPosition, discoveryBeforeFilter, encodeDiscoveryCursor } from '#nixie-internal/server/utils/discovery-cursor.ts';
 import type { LegacyBlueprintRow, LegacyBlueprintVersion } from './legacy-blueprint-source.ts';
 
@@ -54,14 +54,22 @@ export async function getFoxholeLegacyBlueprint(event: H3Event, listingId: strin
     return toLegacyBlueprintListing(row, version.data as LegacyBlueprintVersion);
 }
 
-export async function searchFoxholeLegacyBlueprints(event: H3Event, options: { q?: unknown; cursor?: unknown; limit?: unknown; tag?: unknown; ids?: string[]; } = {}) {
+export async function searchFoxholeLegacyBlueprints(event: H3Event, options: { q?: unknown; cursor?: unknown; limit?: unknown; tag?: unknown; ids?: string[]; personal?: { actorId: string; scope: 'subscriptions' | 'uploads'; }; } = {}) {
     requireFoxholeLegacyBlueprintFeature(event);
     const client = serverSupabaseServiceRole(event);
     const limit = Math.min(48, Math.max(1, Math.floor(Number(options.limit) || 24)));
     const cursor = options.cursor ? discoveryPosition(decodeDiscoveryCursor(options.cursor)) : null;
     if (cursor) foxholeLegacyBlueprintCursor(cursor.id);
     const q = foxholeLegacyBlueprintSearchText(options.q);
-    let request = eligibleQuery(client).order('updated_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1);
+    const ownUploads = options.personal?.scope === 'uploads';
+    const subscriptions = options.personal?.scope === 'subscriptions';
+    let request = ownUploads
+        ? client.from('blueprints').select(COLUMNS).eq('game', 'foxhole').is('deleted_at', null).eq('user_id', options.personal!.actorId)
+        : subscriptions
+            ? client.from('blueprints').select(COLUMNS + ',bp_subscriptions!inner(user_id)').eq('game', 'foxhole').eq('privacy', 'public')
+                .eq('approved', true).is('deleted_at', null).not('version', 'is', null).eq('bp_subscriptions.user_id', options.personal!.actorId)
+            : eligibleQuery(client);
+    request = request.order('updated_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1);
     if (options.ids) request = request.in('id', options.ids.map(legacyBlueprintSourceId));
     if (cursor) {
         request = request.or(discoveryBeforeFilter(cursor));
@@ -103,7 +111,9 @@ export async function searchFoxholeLegacyBlueprints(event: H3Event, options: { q
     return {
         blueprints: page.flatMap(row => {
             const version = byId.get(row.version!);
-            return isEligibleLegacyBlueprint(row) && version?.blueprint_id === row.id ? [toLegacyBlueprintListing(row, version)] : [];
+            if (!ownUploads) return isEligibleLegacyBlueprint(row) && version?.blueprint_id === row.id ? [toLegacyBlueprintListing(row, version)] : [];
+            const listing = toOwnedLegacyBlueprintListing(row, version?.blueprint_id === row.id ? version : null);
+            return [listing];
         }),
         nextCursor: rows.length > limit ? encodeDiscoveryCursor({ updatedAt: page.at(-1)!.updated_at, id: page.at(-1)!.id }) : null,
     };

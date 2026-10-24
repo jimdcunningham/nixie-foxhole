@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isEligibleLegacyBlueprint, foxholeLegacyBlueprintCursor, foxholeLegacyBlueprintSearchText, toLegacyBlueprintListing } from '../../server/utils/legacy-blueprint-source.ts';
+import { isEligibleLegacyBlueprint, foxholeLegacyBlueprintCursor, foxholeLegacyBlueprintSearchText, toLegacyBlueprintListing, toOwnedLegacyBlueprintListing } from '../../server/utils/legacy-blueprint-source.ts';
 import { legacyBlueprintSourceId, legacyBlueprintFlag } from '../../../../nixie/app/utils/legacy-blueprints.ts';
 
 const id = '00000000-0000-0000-0000-000000000001';
@@ -34,4 +34,16 @@ test('cursor and search reject filter injection; production flags fail closed', 
     assert.equal(legacyBlueprintFlag('false'), false);
     assert.equal(legacyBlueprintFlag(undefined), false);
     assert.equal(legacyBlueprintFlag('true'), true);
+});
+
+
+test('owner metadata includes pending uploads without making them public', () => {
+    const pending = { ...row, privacy: 'private', approved: null, version: null };
+    const dto = toOwnedLegacyBlueprintListing(pending, null);
+    assert.equal(dto.title, 'Plan');
+    assert.equal(dto.thumbnailUrl, '');
+    assert.equal(dto.version.id, '');
+    assert.deepEqual(dto.upload, { status: 'Pending Review', visibility: 'private', canView: false, sourceUrl: dto.sourceUrl });
+    assert.equal(isEligibleLegacyBlueprint(pending), false);
+    assert.throws(() => toLegacyBlueprintListing(pending, { id: versionId, blueprint_id: id, version: '1' }));
 });

@@ -26,6 +26,20 @@ export function toLegacyBlueprintListing(row: LegacyBlueprintRow, version: Legac
     if (!isEligibleLegacyBlueprint(row) || version.id !== row.version || version.blueprint_id !== row.id) {
         throw createError({ statusCode: 404, statusMessage: 'Blueprint is unavailable.' });
     }
+    return formatLegacyBlueprintListing(row, version);
+}
+
+/** Called only after the search query restricts rows to the verified publisher. */
+export function toOwnedLegacyBlueprintListing(row: LegacyBlueprintRow, version: LegacyBlueprintVersion | null): LegacyBlueprintListing {
+    const listing = formatLegacyBlueprintListing(row, version);
+    const canView = isEligibleLegacyBlueprint(row) && Boolean(version);
+    return { ...listing, thumbnailUrl: canView ? listing.thumbnailUrl : '', upload: {
+        status: row.approved === true ? 'Approved' : row.approved === false ? 'Not Approved' : 'Pending Review',
+        visibility: row.privacy, canView, sourceUrl: listing.sourceUrl,
+    } };
+}
+
+function formatLegacyBlueprintListing(row: LegacyBlueprintRow, version: LegacyBlueprintVersion | null): LegacyBlueprintListing {
     const id = `${LEGACY_BLUEPRINT_PREFIX}${row.id}`;
     return {
         sourceKind: 'legacy-foxhole-blueprint', id, sourceId: row.id,
@@ -35,7 +49,7 @@ export function toLegacyBlueprintListing(row: LegacyBlueprintRow, version: Legac
         sourceUrl: `https://foxholeplanner.com/?hub=blueprints&page=view/${row.id}`,
         thumbnailUrl: `/api/nixie/legacy-blueprints/${id}/thumbnail`,
         requiredExtensionIds: ['foxhole'], format: 'foxhole-legacy-plan',
-        version: { id: version.id, label: text(version.version, 120), ...(version.created_at ? { publishedAt: version.created_at } : {}) },
+        version: { id: version?.id ?? '', label: text(version?.version, 120), ...(version?.created_at ? { publishedAt: version.created_at } : {}) },
     };
 }
 
