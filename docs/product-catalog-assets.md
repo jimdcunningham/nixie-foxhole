@@ -1,6 +1,6 @@
 # Packaged Product Catalogs
 
-The Planner is migrating to a FoxWatch-generated catalog packaged inside its
+The Planner uses a FoxWatch-generated catalog packaged inside its
 `.nxext`. This is local preparation of the new experimental contract; publication
 and Studio deployment are separate actions.
 
@@ -86,3 +86,30 @@ paths, receipts, shared model dependencies, interruption/resume, and refused
 overwrites. It does not contact R2. Real delivery rehearsal additionally requires
 SDK validation, standalone Planner build/package verification, browser loading,
 and private integration smoke checks before remote cutover.
+
+## Local Migration Rehearsal
+
+The October 24, 2026 local candidate is Planner `0.4.0`, using SDK
+`0.1.0-preview.2` and CLI `0.1.0-preview.3`. None of those candidates or their
+new asset snapshot was published during this migration. The checked-in pin
+names future release URLs; use `NIXIE_FOXHOLE_CATALOG_FILE` for local builds until
+the complete snapshot has been published and verified.
+
+The prepared snapshot has 831 products and 4,718 resource records. An independent
+consumer passed typechecking, 1,099 tests, build, packing, and publication-package
+validation with one 7,343,090-byte catalog and no game media or remote alias
+index. The resulting five-file archive is 8,052,274 bytes. Source/model regression
+fixtures were verified independently and stay outside the package.
+
+A local browser loaded the actual SDK runtime, decoded Hospital's atlas icon,
+texture, model and shared part, produced a render plan, and restored a saved
+component snapshot after reload using the verified media cache. It requested
+readable release paths without a remote index. This isolated harness did not
+exercise the full editor's placement or Undo UI. Studio also passed a fresh
+production build and read-only API/published-loader smoke check with its
+unchanged private integration pin; that smoke resolved existing Planner `0.3.1`.
+
+Remote HTTPS/CORS/content-encoding checks and a fresh extension-browser install
+remain part of the explicitly authorized cutover. Publishing the prepared SDK/CLI
+and deploying the catalog-aware host/broker must precede the new Planner release.
+Keep private world data/indexes and source pins intact throughout that cutover.
