@@ -72,6 +72,7 @@ const workflowCommands = [
     'refresh-modifications',
     'publish-manifest',
     'assets-prepare',
+    'catalog-prepare',
     'assets-publish',
     'export-3d',
     'export-world',
@@ -157,6 +158,12 @@ if (steamMonitorCommands.includes(command)) {
         repoRoot,
         runnerScriptPath,
     });
+    process.exit(0);
+}
+
+if (command === 'catalog-prepare') {
+    const {runCatalogPreparation} = await import('./catalog/cli.mjs');
+    await runCatalogPreparation(rawArgs);
     process.exit(0);
 }
 

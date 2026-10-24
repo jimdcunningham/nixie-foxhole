@@ -16,7 +16,7 @@ generated assets directory, output directory, and R2 target. Preparation does
 not read upload credentials or send requests:
 
 ```powershell
-node tools/foxwatch/catalog/cli.mjs --release 2026-10-24.1 --output C:\path\to\new-snapshot
+node tools/foxwatch/run-foxwatch.mjs catalog-prepare --release 2026-10-24.1 --output C:\path\to\new-snapshot
 ```
 
 Choose a new readable release ID. The output must be a new directory outside

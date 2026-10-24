@@ -19,7 +19,8 @@
     "assets:inventory": "node ./tools/foxwatch/scripts/asset-publication-inventory.mjs",
     "assets:refresh-world-receipts": "node ./packages/foxhole-world/catalog-references.mjs",
     "dev:desktop": "npm run dev --workspace @nixiejs/foxwatch-desktop",
-    "build:desktop": "npm run build --workspace @nixiejs/foxwatch-desktop"
+    "build:desktop": "npm run build --workspace @nixiejs/foxwatch-desktop",
+    "catalog:prepare": "node ./tools/foxwatch/run-foxwatch.mjs catalog-prepare"
   },
   "engines": {
     "node": ">=24 <25"
