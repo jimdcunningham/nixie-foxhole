@@ -1,3 +1,5 @@
+import type { NixieExperimentalGeometryWheelControlV1 } from '@nixie/extension-sdk/experimental/scene-v2';
+import { usesPipeCurveScale, DEFAULT_PIPE_CURVE_T_WHEEL_STEP } from './pipe-spline-constraints.ts';
 import { resolveConnectorBehavior, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
@@ -16,4 +18,12 @@ export function foxholeConnectorGeometryHandles(data: FoxholeSceneV2SplineConnec
             y: data[role + 'Y' as 'startY' | 'endY'] + Math.sin(angle) * 36 } });
     }
     return handles;
+}
+
+/** The host applies input and writes; Planner declares which curves support this field. */
+export function foxholeConnectorGeometryWheel(data: FoxholeSceneV2SplineConnectorData, asset?: FoxholeSceneV2AssetMetadata): NixieExperimentalGeometryWheelControlV1 | undefined {
+    const style = resolveConnectorVisualPathStyle(asset?.connector?.pathStyle, data.foxholeKey);
+    return usesPipeCurveScale(style, data.foxholeKey, asset?.connector)
+        ? { componentId: 'spline-connector', propertyId: 'curveT', step: DEFAULT_PIPE_CURVE_T_WHEEL_STEP, minimum: 0, maximum: 1 }
+        : undefined;
 }

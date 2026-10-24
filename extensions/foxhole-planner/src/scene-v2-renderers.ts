@@ -1,4 +1,4 @@
-import { foxholeConnectorGeometryHandles } from './connector-gesture-policy.ts';
+import { foxholeConnectorGeometryHandles, foxholeConnectorGeometryWheel } from './connector-gesture-policy.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
@@ -566,9 +566,11 @@ function renderFoxholeSceneV2EntityPlan(
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, context.settings ?? {});
         }
+        const wheel = foxholeConnectorGeometryWheel(resolved, splineAsset);
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset) },
+            experimentalSelectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
+                ...(wheel ? { geometryWheelControl: wheel } : {}) },
             ...(spatial ? { experimentalSpatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered,
                 splineAsset, destroyedAsset), ...renderFoxholeConnectorGuides(resolved,

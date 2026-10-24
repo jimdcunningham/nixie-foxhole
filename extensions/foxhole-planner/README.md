@@ -14,7 +14,7 @@ Scene V2 placement previews and endpoint handles use the public SDK geometry ges
 
 From the repository root, run `node packages/extensions/foxhole/tools/test-sdk-host.mjs` for the adapter-free placement/endpoint/persistence/reload pressure test. Its loader registers no private host policy, discovery profile, or Nuxt state adapter. The standalone package's `npm test` covers connector types, socket capacity, reciprocal cleanup, and domain handle presentation.
 
-Legacy V1 insertion, bundled panels, and private drawing refinements such as curve-scale wheel controls remain compiled integrations. They are not required for SDK product placement, socket previews, or endpoint edits.
+Ctrl/Cmd+wheel curve controls are declared through SDK selection geometry. Studio validates the owner-local numeric field, applies bounded steps, and retains placement drafts without saving until placement completes. Planner supplies pipe curve policy; it does not receive native wheel events. Legacy V1 insertion and bundled panels remain compiled integrations.
 
 ## Development
 

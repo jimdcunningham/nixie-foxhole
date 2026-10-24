@@ -1,3 +1,10 @@
+import { NixieSceneV2TransformFinalizerAdapter } from '../../../nixie/app/utils/nixie-scene-v2-transform-finalizer-adapter.ts';
+import { finalizeFoxholeSceneV2Transform } from '../../../../extensions/foxhole-planner/src/scene-v2-transform-finalizer.ts';
+import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
+import { foxholeConnectorGeometryWheel } from '../../../../extensions/foxhole-planner/src/connector-gesture-policy.ts';
+import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
+import type { FoxholeSceneV2SplineConnectorData } from '../../../../extensions/foxhole-planner/src/scene-v2-spline-connectors.ts';
+import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentDefinitionV1 } from '@nixie/extension-sdk';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -472,14 +479,22 @@ test('legacy point connector edits and target deletion preserve their nested end
     assert.deepEqual(host.exportDocument(), before);
 });
 
+function portableCurveUpdates(entity: NixieExperimentalComponentEntitySnapshotV1, delta: number) {
+    const geometry = entity.components.find(c => c.componentId === 'spline-connector' && c.ownerId === 'nixie.foxhole-planner');
+    if (!geometry) return null;
+    const data = geometry.data as unknown as FoxholeSceneV2SplineConnectorData;
+    const manifest = JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8'));
+    const definitions = new Map<string, NixieExperimentalComponentDefinitionV1>(manifest.contributes.experimentalComponents.components.map((c: NixieExperimentalComponentDefinitionV1) => ['nixie.foxhole-planner\0' + c.id, c]));
+    return buildNixieSceneV2GeometryWheelUpdates(entity, 'nixie.foxhole-planner', foxholeConnectorGeometryWheel(data, assets[data.foxholeKey]), delta, definitions);
+}
+
 test('placed pipeline wheel edits preserve bindings through history and skip unsupported or unchanged curves', () => {
     const { host, id } = fixture('foxholeSplineConnector', { foxholeKey: 'facilitypipe',
         start: { x: 0, y: 0, rotation: 0 }, end: { x: 160, y: 0, rotation: Math.PI }, curveT: 0,
         startAttachment: { nodeId: 'source', socketName: 'PipeOutput0' } });
-    assert.equal(typeof foxholeSceneV2StateAdapter.curveScaleUpdates, 'function');
     const before = host.exportDocument();
     const entity = host.readEntity(id);
-    const updates = foxholeSceneV2StateAdapter.curveScaleUpdates!(entity, -120)!;
+    const updates = portableCurveUpdates(entity, -120)!;
     assert.deepEqual(updates, [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', set: { curveT: 0.05 } }]);
     assert.equal(host.applyEditorComponentPatches(updates.map(update => ({ ...update, entityId: id }))).length, 1);
     const after = host.exportDocument();
@@ -490,14 +505,14 @@ test('placed pipeline wheel edits preserve bindings through history and skip uns
     assert.deepEqual(host.exportDocument(), before);
     host.redo();
     assert.deepEqual(host.exportDocument(), after);
-    assert.deepEqual(foxholeSceneV2StateAdapter.curveScaleUpdates!(entity, 120), []);
-    assert.equal(foxholeSceneV2StateAdapter.curveScaleUpdates!(entity, Number.NaN), null);
-    assert.equal(foxholeSceneV2StateAdapter.curveScaleUpdates!({ ...entity,
+    assert.deepEqual(portableCurveUpdates(entity, 120), []);
+    assert.equal(portableCurveUpdates(entity, Number.NaN), null);
+    assert.equal(portableCurveUpdates({ ...entity,
         components: entity.components.map(component => ({ ...component, definitionAvailable: false })) }, -120), null);
     for (const key of ['wallsplinet1', 'powerline']) {
         const unsupported = fixture('foxholeSplineConnector', { foxholeKey: key,
             start: { x: 0, y: 0, rotation: 0 }, end: { x: 160, y: 0, rotation: 0 } });
-        assert.equal(foxholeSceneV2StateAdapter.curveScaleUpdates!(unsupported.host.readEntity(unsupported.id), -120), null);
+        assert.equal(portableCurveUpdates(unsupported.host.readEntity(unsupported.id), -120), null);
     }
 });
 
@@ -523,7 +538,7 @@ test('pipeline wheel writes reject stale, locked, read-only, detached and failed
         const before = controller.exportDocument();
         const result = controller.reshapeComponentGeometry({ entityId: id,
             sourceRevision: entity.revision + (scenario === 'stale' ? 1 : 0),
-            updates: foxholeSceneV2StateAdapter.curveScaleUpdates!(entity, -120)! });
+            updates: portableCurveUpdates(entity, -120)! });
         assert.equal(result.ok, scenario === 'accepted', scenario);
         assert.equal(saves, scenario === 'accepted' || scenario === 'rejected' ? 1 : 0, scenario);
         if (!result.ok) {
@@ -818,6 +833,12 @@ test('Explorer powerline drafts preview socket links and retain the snapped anch
         applyEntityMutations: () => { writes++; return true; } });
     assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name,
         contribution: manifest.contributes.experimentalComponents }]).ok, true);
+    runtime.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
+        getCatalog: () => [{ ownerId: manifest.id, name: manifest.name, generationHash: 'test',
+            contribution: manifest.contributes.experimentalComponents!, transformFinalizers: manifest.contributes.experimentalTransformFinalizers! }],
+        isSettingEnabled: () => true,
+        getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, _system, request) => finalizeFoxholeSceneV2Transform(request) }),
+    }));
     runtime.canvas.attach({} as never);
     const { listFoxholeSceneV2Products } = await import('../../../../extensions/foxhole-planner/src/scene-v2-products.ts');
     const product = listFoxholeSceneV2Products({ contractVersion: 1, query: 'powerline', offset: 0, limit: 100 }).items

@@ -13,7 +13,6 @@ import type { FoxholeSplinePlacementState } from './spline-connector-placement.t
 import { normalizeFoxholeSplineConnectorState, resolveEffectiveConnectorPathStyle, getFoxholeSplineConnectorConstraints,
     isPowerlineConnector, worldRotationToEndpointLocal, resolveConnectorSocketSnapStemRotation, usesSplineConnectorSocketSnapping } from './spline-connector.ts';
 import { allowsConnectorRotationHandles, resolveConnectorPathStyle } from './pipe-connector-path.ts';
-import { adjustPipeCurveT, usesPipeCurveScale } from './pipe-spline-constraints.ts';
 import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeStockpileSelectionGroups, stockpileEntriesToSelections } from './stockpile-groups.ts';
 import { reconcileFoxholeAssetCargoPatch } from './hold-profile.ts';
@@ -287,22 +286,7 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
                     session.manualEndRotation = true;
                 }
             },
-            wheel(delta) {
-                if (!usesPipeCurveScale(pathStyle, state.foxholeKey)) {
-                    return null;
-                }
-                state = { ...state, curveT: adjustPipeCurveT(state.curveT, delta) };
-                return updates();
-            },
         };
-    },
-    curveScaleUpdates(entity, delta) {
-        const spline = editableSpline(entity);
-        if (!spline || !Number.isFinite(delta) || !usesPipeCurveScale(spline.pathStyle, spline.state.foxholeKey)) {
-            return null;
-        }
-        const curveT = adjustPipeCurveT(spline.state.curveT, delta);
-        return curveT === spline.state.curveT ? [] : [{ ownerId: OWNER, componentId: 'spline-connector', set: { curveT } }];
     },
     editableHandles(entity) {
         const spline = editableSpline(entity);

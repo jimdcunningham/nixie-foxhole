@@ -12,6 +12,7 @@ import { getNixieInternalSceneV2Adapter } from '../../../nixie/desktop-extension
 import { listFoxholeSceneV2Products } from '../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 import { finalizeFoxholeSceneV2Transform } from '../../../../extensions/foxhole-planner/src/scene-v2-transform-finalizer.ts';
 import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
+import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
 import type { NixieExperimentalGeometryGestureV1 } from '@nixie/extension-sdk';
 
@@ -92,4 +93,54 @@ test('Planner placement and endpoint gestures run through the SDK without the Nu
     assert.equal(geometry().startAttachmentNodeId, 'plant');
     assert.equal(geometry().endAttachmentNodeId, undefined);
     connection.dispose();
+});
+
+test('pipe curve wheels work during SDK-only placement and emit field-only saved edits', async () => {
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
+    const owner = manifest.id, contribution = manifest.contributes.experimentalComponents!;
+    assert.equal(listNixieSceneV2StateAdapters().length, 0);
+    assert.equal(getNixieInternalSceneV2Adapter(owner), undefined);
+    const definitions = new Map(contribution.components.map(c => [owner + '\0' + c.id, c]));
+    const products = (key: string) => listFoxholeSceneV2Products({ contractVersion: 1, query: key, offset: 0, limit: 100 }).items.find(i => i.product.id === 'asset.' + key)!.product;
+    for (const key of ['facilitypipe', 'facilitypipeunderground']) {
+        const runtime = new NixieSceneV2EditorRuntimeController();
+        let writes = 0;
+        runtime.setEditable(true);
+        runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
+            applyEntityMutations: () => { writes++; return true; } });
+        assert.equal(runtime.load({ type: 'scene-v2', contractVersion: 1, entities: [] }, [{ ownerId: owner, name: manifest.name, contribution }]).ok, true);
+        runtime.canvas.attach({} as never);
+        assert.equal(runtime.beginProductPlacement(products(key), owner, key, () => key, () => true), true);
+        const render = () => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(runtime.productPlacement!.entity, { contractVersion: 1, entities: [] }));
+        const control = render().experimentalSelectionGeometry!.geometryWheelControl!;
+        assert.deepEqual(control, { componentId: 'spline-connector', propertyId: 'curveT', step: 0.05, minimum: 0, maximum: 1 });
+        const data = () => runtime.productPlacement!.entity.components.find(c => c.componentId === 'spline-connector')!.data;
+        const initial = Number(data().curveT);
+        const before = render();
+        assert.equal(runtime.adjustProductPlacementWheel(owner, control, -120), true);
+        assert.equal(data().curveT, initial + 0.05);
+        assert.equal((await runtime.commitProductPlacement({ x: 10, y: 20 })).ok, true);
+        runtime.updateProductPlacement({ x: 250, y: 150 });
+        assert.equal(data().curveT, initial + 0.05);
+        assert.equal(writes, 0);
+        assert.notDeepEqual(render().root, before.root);
+        assert.equal((await runtime.commitProductPlacement({ x: 250, y: 150 })).ok, true);
+        assert.equal(writes, 1);
+        const placed = runtime.entities[0]!;
+        const withLinks = { ...placed, components: placed.components.map(c => c.componentId === 'spline-connector'
+            ? { ...c, data: { ...c.data, startAttachmentNodeId: 'peer', startAttachmentSocketName: 'BackSocket' } } : c) };
+        const updates = buildNixieSceneV2GeometryWheelUpdates(withLinks, owner, control, -1, definitions)!;
+        assert.deepEqual(Object.keys(updates[0]!.set), ['curveT']);
+        assert.equal((await runtime.reshapeComponentGeometryBatch([{ entityId: placed.entityId, sourceRevision: placed.revision, updates }])).ok, true);
+        assert.equal(writes, 2);
+        const saved = runtime.exportDocument();
+        assert.equal(runtime.load(saved, [{ ownerId: owner, name: manifest.name, contribution }]).ok, true);
+        assert.equal(runtime.entities[0]!.components.find(c => c.componentId === 'spline-connector')!.data.curveT, Number((initial + 0.1).toPrecision(15)));
+    }
+    for (const key of ['powerline']) {
+        const result = listFoxholeSceneV2Products({ contractVersion: 1, query: key, offset: 0, limit: 100 }).items.find(i => i.product.id === 'asset.' + key);
+        assert.ok(result);
+        const entity = { entityId: key, revision: 0, components: withNixieSceneV2CoreComponents(result.product, { name: key, x: 0, y: 0 }).components.map(c => ({ ...c, definitionAvailable: true })) };
+        assert.equal(parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [] })).experimentalSelectionGeometry?.geometryWheelControl, undefined);
+    }
 });
