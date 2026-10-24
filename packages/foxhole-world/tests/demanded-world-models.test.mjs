@@ -38,3 +38,66 @@ test('tree, nature and blueprint rock requests load only their own native meshes
   }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());}
  }}finally{globalThis.location=saved;}
 });
+
+test('buildings load promoted native assemblies while props retain independent scenery',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};
+ const prototypes=[
+  {name:'UniqueWWarehouseG3_C/HouseMesh',file:'warehouse.glb'},
+  {name:'UniqueWWarehouseG3_C/RoofMesh',file:'roof.glb'},
+  {name:'Barn2',file:'barn.glb'},
+  {name:'Crate',file:'crate.glb'},
+  {name:'MetalLightBarn',file:'lamp.glb'},
+ ].map(p=>({...p,category:'structures',kind:'environment',placements:[{actor:p.name.startsWith('Unique')?'warehouse':p.name,matrix:identity}]}));
+ try{for(const [category,files]of [['building',['warehouse.glb','roof.glb','barn.glb']],['structures',['crate.glb','lamp.glb']]]){
+  const root=new Container3D(),sources=[],requests=[];let world;
+  try{world=await loadWorldModels({region:'fixture',root,categories:[category],optimize:false,status(){},teamAt:()=> 'NONE',
+   worldData:{prototypes},json:async()=>({assets:{}}),loadModel:async path=>{requests.push(path);const source=await triangle();sources.push(source);return source;}});
+   assert.deepEqual(requests.sort(),files.map(file=>'fixture/'+file).sort());
+   assert.equal(world.counts.placements,files.length);assert.deepEqual(world.counts.failed,[]);
+   assert.equal(world.layers[category==='building'?'structures':'building'].children.length,0,'the other toggle owns none of these meshes');
+  }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());}
+ }}finally{globalThis.location=saved;}
+});
+
+test('transport loads bridge fixtures and rail assemblies while props keep independent scenery',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};
+ const prototypes=[
+  {name:'BPTrainBridgeA_C/TrimMesh',path:'War/Content/Meshes/Environment/Props/SteelBeam01.uasset',file:'bridge-beam.glb'},
+  {name:'BPLoadingDock_C/Rope01',file:'dock-rope.glb'},
+  {name:'BPPreplacedRailTrackSplineFoundation_C/BackSwitchMesh',file:'switch.glb'},
+  {name:'BPRailBumper_C/StaticMesh',file:'buffer.glb'},
+  {name:'BPAircraftRunwayT1_C/$Catalog',file:'runway.glb'},
+  {name:'StaticMeshActor',path:'War/Content/Meshes/Environment/Props/TrainCar02.uasset',file:'train-car.glb'},
+  {name:'Wagon02',file:'wagon.glb'},
+  {name:'CastleFence3_C/StaticMesh',path:'War/Content/Meshes/Environment/Props/WetlandsWalkwayPlanks07.uasset',file:'fence.glb'},
+  {name:'UniqueWTrainStationG1_C/StaticMesh',path:'War/Content/Meshes/Environment/Props/Railroad_03.uasset',file:'station.glb'},
+ ].map(p=>({...p,category:'structures',kind:'environment',placements:[{actor:p.name,matrix:identity}]}));
+ try{for(const [category,files]of [['infrastructure',['bridge-beam.glb','dock-rope.glb','buffer.glb','runway.glb','train-car.glb']],['structures',['wagon.glb','fence.glb']],['building',['station.glb']]]){
+  const root=new Container3D(),sources=[],requests=[];let world;
+  try{world=await loadWorldModels({region:'fixture',root,categories:[category],optimize:false,status(){},teamAt:()=> 'NONE',worldData:{prototypes},json:async()=>({assets:{}}),loadModel:async path=>{requests.push(path);const source=await triangle();sources.push(source);return source;}});
+   assert.deepEqual(requests.sort(),files.map(file=>'fixture/'+file).sort());assert.equal(world.counts.placements,files.length);assert.deepEqual(world.counts.failed,[]);
+   assert.ok(!requests.includes('fixture/switch.glb'),'rail switch proxies remain owned by the dedicated native rail pass');
+   for(const other of ['infrastructure','structures','building'].filter(key=>key!==category))assert.equal(world.layers[other].children.length,0);
+  }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());}
+ }}finally{globalThis.location=saved;}
+});
+
+
+test('Rocks requests natural ice and underwater meshes while Props keeps masonry and planks',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};
+ const prototypes=[
+  {name:'BPIcePlatform02_C/StaticMesh9',path:'War/Content/Meshes/Environment/Props/IcePlatformSharp_03.uasset',file:'ice-cluster.glb'},
+  {name:'IcePlatformSoft_09',file:'ice.glb'},
+  {name:'SnowRocks',file:'snow-rocks.glb'},
+  {name:'StaticMeshActor',path:'War/Content/Meshes/Environment/Props/UnderWaterRockShorelineLarge.uasset',file:'underwater-rock.glb'},
+  {name:'BrokenRockStoneWall1_C/Brick1h',path:'War/Content/Meshes/Environment/Towns/Walls/Brick1h.uasset',file:'wall.glb'},
+  {name:'PlatformPeice01',file:'plank.glb'},
+ ].map(p=>({...p,category:'structures',kind:'environment',placements:[{actor:p.name,matrix:identity}]}));
+ try{for(const [category,files]of [['rocks',['ice-cluster.glb','ice.glb','snow-rocks.glb','underwater-rock.glb']],['structures',['wall.glb','plank.glb']]]){
+  const root=new Container3D(),sources=[],requests=[];let world;
+  try{world=await loadWorldModels({region:'fixture',root,categories:[category],optimize:false,status(){},teamAt:()=> 'NONE',worldData:{prototypes},json:async()=>({assets:{}}),loadModel:async path=>{requests.push(path);const source=await triangle();sources.push(source);return source;}});
+   assert.deepEqual(requests.sort(),files.map(file=>'fixture/'+file).sort());assert.equal(world.counts.placements,files.length);assert.deepEqual(world.counts.failed,[]);
+   assert.equal(world.layers[category==='rocks'?'structures':'rocks'].children.length,0);
+  }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());}
+ }}finally{globalThis.location=saved;}
+});
