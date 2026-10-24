@@ -20,40 +20,49 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NIXIE_FOXHOLE_ASSET_MODE: remote
-      NIXIE_FOXHOLE_ASSETS_ROOT: ${{ runner.temp }}/planner-assets
+      PLANNER_ROOT: ${{ runner.temp }}/planner-consumer/extensions/foxhole-planner
+      NIXIE_FOXHOLE_ASSETS_ROOT: ${{ runner.temp }}/planner-consumer/packages/extensions/foxhole/public/foxhole/assets
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
 
+      - name: Verify publication workflow boundary
+        run: node --test extensions/foxhole-planner/build/publishing-workflow.test.mjs
+
       # A standalone consumer must never need access to the private Nixie repo.
       - name: Prepare independent extension consumer
         shell: bash
         run: |
           set -euo pipefail
-          cp -R extensions/foxhole-planner "$RUNNER_TEMP/planner"
-          npm install --prefix "$RUNNER_TEMP/planner" --ignore-scripts --no-audit --no-fund --package-lock=false
-          node "$RUNNER_TEMP/planner/build/prepare-build-inputs.mjs" --output "$NIXIE_FOXHOLE_ASSETS_ROOT"
+          mkdir -p "$RUNNER_TEMP/planner-consumer/extensions"
+          cp -R extensions/foxhole-planner "$PLANNER_ROOT"
+          npm install --prefix "$PLANNER_ROOT" --ignore-scripts --no-audit --no-fund --package-lock=false
+          # Preserve the sparse asset-input layout used by Node-side imports.
+          # Models are downloaded only for geometry tests, never for the runtime archive.
+          node "$PLANNER_ROOT/build/prepare-publication-inputs.mjs" --output "$NIXIE_FOXHOLE_ASSETS_ROOT"
 
       - name: Verify and build Planner
         shell: bash
         run: |
           set -euo pipefail
-          npm run typecheck --prefix "$RUNNER_TEMP/planner"
-          npm test --prefix "$RUNNER_TEMP/planner"
-          npm run build --prefix "$RUNNER_TEMP/planner"
-          npm run pack --prefix "$RUNNER_TEMP/planner"
+          node --test "$PLANNER_ROOT/build/prepare-build-inputs.test.mjs" "$PLANNER_ROOT/build/prepare-publication-inputs.test.mjs"
+          npm run typecheck --prefix "$PLANNER_ROOT"
+          npm test --prefix "$PLANNER_ROOT"
+          npm run build --prefix "$PLANNER_ROOT"
+          npm run pack --prefix "$PLANNER_ROOT"
+          node "$PLANNER_ROOT/build/verify-publication-package.mjs" "$PLANNER_ROOT/artifacts/extension.nxext"
 
       - name: Retain verified package
         uses: actions/upload-artifact@v4
         with:
           name: planner-extension
-          path: ${{ runner.temp }}/planner/artifacts/extension.nxext
+          path: ${{ runner.temp }}/planner-consumer/extensions/foxhole-planner/artifacts/extension.nxext
           if-no-files-found: error
 
       - name: Publish immutable extension release
-        run: npm run publish:extension --prefix "$RUNNER_TEMP/planner"
+        run: npm run publish:extension --prefix "$PLANNER_ROOT"
         env:
           NIXIE_EXTENSION_PUBLISH_API_URL: https://nixiejs.com/api/nixie/extensions/publish
           NIXIE_EXTENSION_PUBLISH_TOKEN: ${{ secrets.NIXIE_EXTENSION_PUBLISH_TOKEN }}

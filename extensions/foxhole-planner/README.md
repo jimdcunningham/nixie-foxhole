@@ -1,6 +1,45 @@
 # Foxhole Planner
 
-This is the first-class migration target for Foxhole Planner on the public Nixie extension SDK. It is discovered from a configured local extensions folder like any third-party extension and imports only the published `@nixiejs/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
+Foxhole Planner is an independently published Nixie SDK extension. Studio installs compatible `.nxext` releases through the extension browser; explicit development roots also support unpublished builds. It imports only the published `@nixiejs/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
+
+## Publication and R2 Asset Contract
+
+Supabase stores the immutable extension archive and marketplace metadata/media. The
+game asset library belongs to R2, served through `https://assets.nixiejs.com/foxhole-planner/`.
+`src/asset-release-pin.json` identifies immutable publication and resource-pack
+indexes by URL, SHA-256, and byte length. Builds do not follow a mutable latest channel.
+
+R2 owns the canonical catalog/model manifests, localization and map metadata,
+models, textures, icons, and map payloads. The extension build downloads pinned
+JSON inputs and compiles a derived catalog snapshot into its JavaScript. Models
+and images remain in R2 and are loaded on demand through the host resource path.
+An existing extension release keeps its snapshot and resource-pack pin; updating
+R2 alone does not change its catalog. A catalog/asset update needs a reviewed pin
+change, a rebuild, and a new immutable extension version.
+
+The publishing workflow copies only this extension into a disposable consumer
+under `extensions/foxhole-planner`, with sparse verified asset inputs alongside
+it at `packages/extensions/foxhole/public/foxhole/assets`. This layout supports
+existing Node-side imports without requiring the private Nixie repository.
+`build/prepare-publication-inputs.mjs` downloads metadata plus model bytes needed
+by geometry tests. Those test inputs are not part of `dist` or the `.nxext`.
+`build/verify-publication-package.mjs` checks the completed archive retains the
+exact R2 pack and contains no game model/image bytes before publication.
+
+Publication needs only public R2 reads and a scoped Nixie publisher token; it
+does not write R2 or require R2 credentials. Publishing the game library remains
+a separate FoxWatch operation. Studio's compiled private APIs/adapters have their
+own source/asset pin and deployment lifecycle.
+
+The workflow requires the retry-capable `@nixiejs/extension-package@0.1.0-preview.2`.
+That tooling release and the matching Studio broker must be available before
+enabling automated publication; a local rehearsal can install its reviewed npm
+tarball instead without publishing it.
+
+Version `0.3.2` is the next prepared release. The original `0.3.1` publication's
+HTML used CRLF; clean builds use LF. `index.html` is explicitly checked out with
+LF so future publications use consistent source line endings. The changed
+archive must use a new version even though its runtime behavior is unchanged.
 
 ## Map Status: Frozen Standalone Fallback
 
