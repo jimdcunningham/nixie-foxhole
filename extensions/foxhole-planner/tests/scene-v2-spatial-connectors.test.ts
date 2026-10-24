@@ -6,6 +6,7 @@ import test from 'node:test';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
+import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from '../src/scene-v2-spatial-attachments.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixie/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
@@ -136,4 +137,46 @@ test('underground terminals keep independent heights, upright poses and endpoint
     const collapsed = renderFoxholeSpatialConnector(pipe, { ...resolved, endX: resolved.startX, endY: resolved.startY, endZ: resolved.startZ }, assets.facilitypipeunderground)!;
     assert.equal(collapsed.nodes.length, 1, 'overlapping pending endpoints must not double-render the same mesh');
     assert.deepEqual(resolved, before);
+});
+
+test('elevated cables sag toward world gravity independently of their local origin and parent tilt', () => {
+    const start = product('facilitypowerdiesel'), end = product('facilitypowerdiesel', 464, -400);
+    const cable = product('powerline');
+    Object.assign(cable.components.find(c => c.componentId === 'spline-connector')!.data, {
+        startAttachmentNodeId: start.entityId, startAttachmentSocketName: 'PowerSocket',
+        endAttachmentNodeId: end.entityId, endAttachmentSocketName: 'PowerSocket',
+    });
+    end.entityId = 'second-plant';
+    cable.components.find(c => c.componentId === 'spline-connector')!.data.endAttachmentNodeId = end.entityId;
+    const entities = [start, end, cable];
+    const worldPath = () => {
+        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).experimentalSpatial!.nodes[0]!;
+        const projection = createFoxholeSpatialProjection(entities);
+        return Array.from({ length: node.points.length / 3 }, (_, i) => projection.toWorld(cable,
+            [node.points[i * 3]!, node.points[i * 3 + 1]!, node.points[i * 3 + 2]!]));
+    };
+    const expected = worldPath();
+    const socket = assets.facilitypowerdiesel!.buildSockets.find(socket => socket.name.includes('PowerSocket'))!;
+    Object.assign(cable.components.find(c => c.componentId === 'transform')!.data, { x: socket.x, y: socket.y });
+    cable.components.push({ ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1, definitionAvailable: true,
+        data: { elevation: socket.z! } });
+    const assertGravity = (label: string) => {
+        const actual = worldPath();
+        const midpoint = actual[16]!;
+        assert.ok(midpoint[2] < (actual[0]![2] + actual.at(-1)![2]) / 2 - 10,
+            `${label}: the cable must hang below its sockets even when its local start height is zero`);
+        actual.forEach((point, i) => point.forEach((value, axis) => assert.ok(Math.abs(value - expected[i]![axis]!) < 1e-7,
+            `${label}: changing the cable frame must not change its world curve`)));
+    };
+    assertGravity('socket-rebased origin');
+    const parent: Entity = { entityId: 'tilted-cable-parent', revision: 1, components: [
+        { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true,
+            data: { x: 50, y: -30, rotation: .2, scaleX: 1.2, scaleY: .8 } },
+        { ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1, definitionAvailable: true,
+            data: { elevation: 80, rotationX: .4, rotationY: -.3, scaleZ: 1.4 } },
+    ] };
+    entities.push(parent);
+    cable.components.push({ ownerId: 'nixie.core', componentId: 'hierarchy', version: 1, definitionAvailable: true,
+        data: { parentId: parent.entityId } });
+    assertGravity('tilted scaled parent');
 });

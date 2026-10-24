@@ -561,7 +561,7 @@ function renderFoxholeSceneV2EntityPlan(
         const powerlineObstructions = findFoxholePowerlineObstructions(entity, resolved, context, assetMetadataById);
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
-        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, context.settings ?? {}) : undefined;
+        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, context.settings ?? {}, context.entities) : undefined;
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, context.settings ?? {});
         }

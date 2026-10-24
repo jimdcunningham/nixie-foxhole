@@ -1,4 +1,5 @@
 import { renderSpatialTrench } from './scene-v2-spatial-trench.ts';
+import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalSpatialEndpointBindingsV1,
     NixieExperimentalSpatialPlanV1 } from '@nixie/extension-sdk/experimental/scene-v2';
@@ -10,23 +11,31 @@ import { isFoxholePowerlineOverLength, resolveFoxholePowerlineStroke } from './p
 /** Spatial geometry is derived from the same state and attachment-resolved path as the 2D view. */
 export function renderFoxholeSpatialConnector(entity: NixieExperimentalComponentEntitySnapshotV1,
     data: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number;
-        endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string,unknown>> = {}): NixieExperimentalSpatialPlanV1 | undefined {
+        endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string,unknown>> = {},
+    entities: readonly NixieExperimentalComponentEntitySnapshotV1[] = [entity]): NixieExperimentalSpatialPlanV1 | undefined {
     if (/^trenchconnectort[123]$/.test(data.foxholeKey) && asset) return renderSpatialTrench(entity,data,asset,settings);
     if (data.foxholeKey === 'powerline') {
         const count = 32, startZ = data.startZ ?? 0, endZ = data.endZ ?? 0;
-        const distance = Math.hypot(data.endX - data.startX, data.endY - data.startY);
+        const projection = createFoxholeSpatialProjection(entities);
+        const start = projection.toWorld(entity, [data.startX, data.startY, startZ]);
+        const end = projection.toWorld(entity, [data.endX, data.endY, endZ]);
+        const distance = Math.hypot(end[0] - start[0], end[1] - start[1]);
         const invalid = data.powerlineObstructed === true || isFoxholePowerlineOverLength(
             { x: data.startX, y: data.startY },
             { x: data.endX, y: data.endY },
             data.maxLength,
         );
-        // Gravity-shaped sag is visual only; endpoints remain exact. No physics state is persisted.
-        const sag = Math.max(0, Math.min(distance * 0.04, Math.min(startZ, endZ) * 0.4));
+        // Sag follows world gravity and height, independently of the cable's rebased local origin.
+        // Only the render plan changes; authored endpoints and attachment records remain exact.
+        const sag = Math.max(0, Math.min(distance * 0.04, Math.min(start[2], end[2]) * 0.4));
         const phase = [...entity.entityId].reduce((value, character) => (value * 31 + character.charCodeAt(0)) % 6283, 0) / 1000;
-        const points = Array.from({ length: count + 1 }, (_, i) => { const t = i / count; return [
-            data.startX + (data.endX - data.startX) * t, data.startY + (data.endY - data.startY) * t,
-            startZ + (endZ - startZ) * t - 4 * sag * t * (1 - t),
-        ]; }).flat();
+        const points = Array.from({ length: count + 1 }, (_, i) => {
+            if (i === 0) return [data.startX, data.startY, startZ];
+            if (i === count) return [data.endX, data.endY, endZ];
+            const t = i / count;
+            return projection.toLocal(entity, [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t,
+                start[2] + (end[2] - start[2]) * t - 4 * sag * t * (1 - t)]);
+        }).flat();
         if (distance < 1e-8) return undefined;
         return { contractVersion: 1, nodes: [{ id: 'power-cable', kind: 'tube', points, radius: 0.8,
             color: invalid ? resolveFoxholePowerlineStroke(1, true).color : 0x191919, radialSegments: 12,
