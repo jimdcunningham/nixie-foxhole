@@ -47,7 +47,9 @@ test('AO and shadows change live without region reload, vegetation reloads, and 
  const settings={enabled:true,regionKeys:['fixtureHex'],ambientOcclusion:true,shadowQuality:'medium',vegetationDensity:'full'},sync=()=>c.sync({view,settings,mode:'3d'}),flush=()=>new Promise(r=>setTimeout(r,0));
  try{
   sync();await flush();assert.equal(seen[0].ambientOcclusion,true);assert.equal(seen[0].vegetationDensity,'full');
-  for(const [quality,filter]of [['off','pcf-high'],['low','hard'],['high','pcf-high'],['medium','pcf-high']]){settings.shadowQuality=quality;settings.ambientOcclusion=!settings.ambientOcclusion;sync();await flush();assert.equal(view[key],quality);assert.equal(view.shadowQuality,quality==='off'?'medium':quality);assert.equal(view.shadowFilter,filter);assert.equal(changes.at(-1),settings.ambientOcclusion);assert.equal(seen.length,1);assert.equal(seen[0].signal.aborted,false);}
+  for(const [quality,filter]of [['off','pcf-high'],['low','pcf'],['high','pcf-high'],['medium','pcf-high']]){settings.shadowQuality=quality;settings.ambientOcclusion=!settings.ambientOcclusion;sync();await flush();assert.equal(view[key],quality);assert.equal(view.shadowQuality,quality==='off'?'medium':quality);assert.equal(view.shadowFilter,filter);assert.equal(changes.at(-1),settings.ambientOcclusion);assert.equal(seen.length,1);assert.equal(seen[0].signal.aborted,false);}
+  settings.shadowQuality='low';settings.softShadows=false;sync();await flush();assert.equal(view.shadowFilter,'hard');assert.equal(seen.length,1);
+  settings.softShadows=true;sync();await flush();assert.equal(view.shadowFilter,'pcf');assert.equal(seen.length,1);
   settings.vegetationDensity='minimal';sync();await flush();assert.equal(seen.length,2);assert.equal(seen[0].signal.aborted,true);assert.equal(seen[1].vegetationDensity,'minimal');assert.equal(view.camera,camera);
   settings.enabled=false;sync();assert.equal(view.shadowQuality,'ultra');assert.equal(view.shadowFilter,'pcf');assert.equal(view[key],'prior');
  }finally{c.destroy();}
