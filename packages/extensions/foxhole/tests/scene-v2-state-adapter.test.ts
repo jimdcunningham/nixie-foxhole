@@ -771,3 +771,80 @@ test('tier changes carry compatible modifications through canonical SDK state an
         assert.deepEqual(host.exportDocument(), after);
     }
 });
+
+test('power handle hover targets a building socket away from its point and detaches in the free preview', () => {
+    const { host } = fixture();
+    const converted = convertNixieSceneV1ToV2([
+        { id: 'plant', type: 'foxholeAsset', state: { foxholeKey: 'facilitypowerdiesel', x: 0, y: 0 }, children: [] },
+        { id: 'line', type: 'foxholeSplineConnector', state: { foxholeKey: 'powerline',
+            start: { x: -300, y: 0, rotation: 0 }, end: { x: 200, y: 0, rotation: 0 },
+            startSocketName: 'BackSocket', endSocketName: 'FrontSocket', minLength: 3.2, maxLength: 800 }, children: [] },
+    ], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+    host.replaceDocument(converted.content);
+    const entities = host.listEntities(), line = entities[1]!, building = entities[0]!;
+    const context = { entities, worldPoint: { x: 100, y: 100 }, hoveredEntityIds: [building.entityId], isSettingEnabled: () => true,
+        worldTransforms: new Map([...resolveNixieSceneV2Transforms(entities)].map(([id, resolved]) => [id, resolved.world])) };
+    const socket = collectNixieSceneV2FoxholeSockets(context).find(socket => socket.nodeId === building.entityId && socket.socketName.includes('PowerSocket'))!;
+    assert.ok(Math.hypot(socket.x - context.worldPoint.x, socket.y - context.worldPoint.y) > 32);
+    const before = host.exportDocument();
+    const updates = buildNixieSceneV2EditableHandleUpdates(line, 'end', context.worldPoint, false, undefined, context)!;
+    const preview = previewNixieSceneV2EditableHandleUpdates(line, updates);
+    const geometry = preview.components.find(component => component.componentId === 'spline-connector')!.data;
+    assert.equal(geometry.endAttachmentNodeId, building.entityId);
+    assert.equal(geometry.endAttachmentSocketName, socket.socketName);
+    assert.ok(Math.abs(Number(geometry.endX) - socket.x) < 1e-8);
+    assert.ok(Math.abs(Number(geometry.endY) - socket.y) < 1e-8);
+    const away = { ...context, entities: [building, preview], hoveredEntityIds: [], worldPoint: { x: 500, y: 400 } };
+    const detached = previewNixieSceneV2EditableHandleUpdates(preview,
+        buildNixieSceneV2EditableHandleUpdates(preview, 'end', away.worldPoint, false, undefined, away)!);
+    assert.equal(detached.components.find(component => component.componentId === 'spline-connector')!.data.endAttachmentNodeId, undefined);
+    const disabled = { ...context, isSettingEnabled: () => false };
+    const unsnapped = previewNixieSceneV2EditableHandleUpdates(line,
+        buildNixieSceneV2EditableHandleUpdates(line, 'end', context.worldPoint, false, undefined, disabled)!);
+    assert.equal(unsnapped.components.find(component => component.componentId === 'spline-connector')!.data.endAttachmentNodeId, undefined);
+    assert.deepEqual(host.exportDocument(), before, 'hover and drag previews do not persist');
+});
+
+test('Explorer powerline drafts preview socket links and retain the snapped anchor through commit', async () => {
+    const { manifest } = fixture();
+    const content = convertNixieSceneV1ToV2([
+        { id: 'plant', type: 'foxholeAsset', state: { foxholeKey: 'facilitypowerdiesel', x: 0, y: 0 }, children: [] },
+        { id: 'pole', type: 'foxholeAsset', state: { foxholeKey: 'powerpole', x: 400, y: 0 }, children: [] },
+    ], { nodeConverters: [convertFoxholeSceneV1NodeToV2] }).content;
+    const runtime = new NixieSceneV2EditorRuntimeController();
+    let writes = 0;
+    runtime.setEditable(true);
+    runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
+        applyEntityMutations: () => { writes++; return true; } });
+    assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name,
+        contribution: manifest.contributes.experimentalComponents }]).ok, true);
+    runtime.canvas.attach({} as never);
+    const { listFoxholeSceneV2Products } = await import('../../../../extensions/foxhole-planner/src/scene-v2-products.ts');
+    const product = listFoxholeSceneV2Products({ contractVersion: 1, query: 'powerline', offset: 0, limit: 100 }).items
+        .find(item => item.product.id === 'asset.powerline')!.product;
+    assert.equal(runtime.beginProductPlacement(product, manifest.id, 'Power Line', () => 'drawing-line', () => true), true);
+    const [plant, pole] = runtime.entities;
+    const context = (targetId: string, worldPoint: { x: number; y: number; }) => ({ entities: runtime.entities, worldPoint,
+        hoveredEntityIds: [targetId], isSettingEnabled: () => true,
+        worldTransforms: new Map([...resolveNixieSceneV2Transforms(runtime.entities)].map(([id, resolved]) => [id, resolved.world])) });
+    const start = { x: 100, y: 100 }, startContext = context(plant!.entityId, start);
+    const first = await runtime.previewProductPlacement(start, startContext);
+    assert.equal(first?.components.find(c => c.componentId === 'spline-connector')!.data.startAttachmentNodeId, plant!.entityId);
+    assert.equal(writes, 0);
+    const socket = collectNixieSceneV2FoxholeSockets(startContext).find(s => s.nodeId === plant!.entityId && s.socketName.includes('PowerSocket'))!;
+    assert.equal((await runtime.commitProductPlacement(start, false, startContext)).ok, true);
+    assert.ok(Math.abs(runtime.productPlacement!.anchor!.x - socket.x) < 1e-8);
+    assert.ok(Math.abs(runtime.productPlacement!.anchor!.y - socket.y) < 1e-8);
+    const end = { x: 400, y: 100 }, endContext = context(pole!.entityId, end);
+    runtime.updateProductPlacement(end);
+    const preview = await runtime.previewProductPlacement(end, endContext);
+    const spline = preview!.components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.equal(spline.startAttachmentNodeId, plant!.entityId);
+    assert.equal(spline.endAttachmentNodeId, pole!.entityId);
+    assert.equal(writes, 0);
+    assert.equal((await runtime.commitProductPlacement(end, false, endContext)).ok, true);
+    assert.equal(writes, 1);
+    const saved = runtime.entities.find(entity => entity.entityId === 'drawing-line')!.components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.equal(saved.startAttachmentNodeId, plant!.entityId);
+    assert.equal(saved.endAttachmentNodeId, pole!.entityId);
+});

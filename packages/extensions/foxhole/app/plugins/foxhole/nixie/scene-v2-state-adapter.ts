@@ -164,6 +164,44 @@ function structureGeometry(entity: NixieExperimentalComponentEntitySnapshotV1) {
         manifest: catalog.structureByKey[destroyed && structure.destroyedStructureId ? structure.destroyedStructureId : asset.assetId] };
 }
 
+function resolveEndpointSocketSnap(entity: NixieExperimentalComponentEntitySnapshotV1,
+    state: ReturnType<typeof normalizeFoxholeSplineConnectorState>, role: 'start' | 'end',
+    point: { x: number; y: number; }, context?: NixieSceneV2PlacementContext) {
+    const matrix = context?.worldTransforms.get(entity.entityId);
+    const sockets = context && matrix && usesSplineConnectorSocketSnapping(state.foxholeKey)
+        && context.isSettingEnabled(FOXHOLE_SOCKET_SNAPPING_SETTING_ID)
+        ? collectNixieSceneV2FoxholeSockets(context)
+        : [];
+    const socket = context && matrix && isPowerlineConnector(state.foxholeKey)
+        && context.isSettingEnabled(FOXHOLE_SOCKET_SNAPPING_SETTING_ID)
+        ? resolveHoveredFoxholePowerSocketPoint(context.worldPoint,
+            sockets.filter(candidate => context.hoveredEntityIds.includes(candidate.nodeId)),
+            role === 'start' ? state.endAttachment : state.startAttachment,
+            candidate => isNixieSceneV2FoxholeSocketAvailable(context, candidate, entity.entityId, String(state[`${role}SocketName`] ?? '')))
+        : null;
+    const local = socket && matrix ? invertNixieSceneV2Point(matrix, socket) : null;
+    let snapped = socket && local && matrix
+        ? { local,
+            rotation: worldRotationToEndpointLocal(socket.rotation - (role === 'end' ? Math.PI : 0), Math.atan2(matrix.b, matrix.a)),
+            attachment: { nodeId: socket.nodeId, socketName: socket.socketName } }
+        : null;
+    const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === state.foxholeKey);
+    const endpointSocket = structure && resolveFoxholeConnectorEndpointSockets(structure, state)[role];
+    if (!snapped && context && matrix && endpointSocket && hasFoxholeSnapSocketTags(endpointSocket.socketTags) && sockets.length) {
+        const nodeRotation = Math.atan2(matrix.b, matrix.a);
+        const result = resolveFoxholeSplineEndpointSocketSnap({ state, role, local: point, world: context.worldPoint,
+            nodeRotation, movingSocket: { nodeId: entity.entityId, socketName: String(state[`${role}SocketName`] ?? ''),
+                ...context.worldPoint, rotation: resolveConnectorSocketSnapStemRotation(role, state[role].rotation, nodeRotation, state.foxholeKey),
+                socketTags: endpointSocket.socketTags }, targetSockets: sockets,
+            toLocal: target => invertNixieSceneV2Point(matrix, target),
+            isAvailable: (moving, target) => isNixieSceneV2FoxholeSocketAvailable(context, target, moving.nodeId, moving.socketName) });
+        if (result.rotation !== undefined && result.attachment) {
+            snapped = { local: result.local, rotation: result.rotation, attachment: result.attachment };
+        }
+    }
+    return snapped;
+}
+
 export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
     hitboxHostMetrics(entity) {
         const geometry = structureGeometry(entity);
@@ -205,45 +243,14 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
                 endX: state.end.x - origin.x, endY: state.end.y - origin.y, endRotation: state.end.rotation, curveT: state.curveT,
                 startAttachmentNodeId: state.startAttachment?.nodeId, startAttachmentSocketName: state.startAttachment?.socketName,
                 endAttachmentNodeId: state.endAttachment?.nodeId, endAttachmentSocketName: state.endAttachment?.socketName };
-            const set = Object.fromEntries(Object.entries(fields).filter(([key, value]) => value !== undefined && source[key] !== value));
+            const set = Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string | number] => entry[1] !== undefined && source[entry[0]] !== entry[1]));
             const unset = Object.keys(fields).filter(key => fields[key as keyof typeof fields] === undefined && key in source);
             return [{ ownerId: OWNER, componentId: 'spline-connector', set, ...(unset.length ? { unset } : {}) },
                 ...(x !== initialTransform.x || y !== initialTransform.y ? [{ ownerId: 'nixie.core', componentId: 'transform', set: { x, y } }] : [])];
         };
         const update = (point: { x: number; y: number; }, rotate = false, context?: NixieSceneV2PlacementContext) => {
             const role = session.phase === 'pick-start' ? 'start' : 'end';
-            const matrix = context?.worldTransforms.get(entity.entityId);
-            const sockets = context && matrix && usesSplineConnectorSocketSnapping(state.foxholeKey)
-                && context.isSettingEnabled(FOXHOLE_SOCKET_SNAPPING_SETTING_ID)
-                ? collectNixieSceneV2FoxholeSockets(context)
-                : [];
-            const socket = context && matrix && isPowerlineConnector(state.foxholeKey)
-                && context.isSettingEnabled(FOXHOLE_SOCKET_SNAPPING_SETTING_ID)
-                ? resolveHoveredFoxholePowerSocketPoint(context.worldPoint,
-                    sockets.filter(candidate => context.hoveredEntityIds.includes(candidate.nodeId)),
-                    role === 'start' ? state.endAttachment : state.startAttachment,
-                    candidate => isNixieSceneV2FoxholeSocketAvailable(context, candidate, entity.entityId, String(state[`${role}SocketName`] ?? '')))
-                : null;
-            const local = socket && matrix ? invertNixieSceneV2Point(matrix, socket) : null;
-            let snapped = socket && local && matrix
-                ? { local,
-                    rotation: worldRotationToEndpointLocal(socket.rotation - (role === 'end' ? Math.PI : 0), Math.atan2(matrix.b, matrix.a)),
-                    attachment: { nodeId: socket.nodeId, socketName: socket.socketName } }
-                : null;
-            const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === state.foxholeKey);
-            const endpointSocket = structure && resolveFoxholeConnectorEndpointSockets(structure, state)[role];
-            if (!snapped && context && matrix && endpointSocket && hasFoxholeSnapSocketTags(endpointSocket.socketTags) && sockets.length) {
-                const nodeRotation = Math.atan2(matrix.b, matrix.a);
-                const result = resolveFoxholeSplineEndpointSocketSnap({ state, role, local: point, world: context.worldPoint,
-                    nodeRotation, movingSocket: { nodeId: entity.entityId, socketName: String(state[`${role}SocketName`] ?? ''),
-                        ...context.worldPoint, rotation: resolveConnectorSocketSnapStemRotation(role, state[role].rotation, nodeRotation, state.foxholeKey),
-                        socketTags: endpointSocket.socketTags }, targetSockets: sockets,
-                    toLocal: target => invertNixieSceneV2Point(matrix, target),
-                    isAvailable: (moving, target) => isNixieSceneV2FoxholeSocketAvailable(context, target, moving.nodeId, moving.socketName) });
-                if (result.rotation !== undefined && result.attachment) {
-                    snapped = { local: result.local, rotation: result.rotation, attachment: result.attachment };
-                }
-            }
+            const snapped = resolveEndpointSocketSnap(entity, state, role, point, context);
             state = { ...state, ...resolveFoxholeSplinePlacementPreview(state, session, point,
                 { pathStyle, maxArcAngleDeg, rotateActiveEndpoint: rotate, snapped, startAttached: !!state.startAttachment }),
             ...(usesSplineConnectorSocketSnapping(state.foxholeKey)
@@ -305,13 +312,16 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         const source = editablePoints(entity);
         return source ? getPolylineEditableLocalHandles(source.points, source.options) : [];
     },
-    editableHandlePatch(entity, handleId, localPoint, committed) {
+    editableHandlePatch(entity, handleId, localPoint, committed, context) {
         const spline = editableSpline(entity);
         if (spline && (handleId === 'start' || handleId === 'end')) {
             const { state, pathStyle } = spline;
+            const snapped = resolveEndpointSocketSnap(entity, state, handleId, localPoint, context);
+            if (snapped) return { [handleId]: { ...state[handleId], ...snapped.local, rotation: snapped.rotation },
+                [`${handleId}Attachment`]: snapped.attachment };
             const next = clampDraggedSplineEndpoint(handleId, { ...state.start, ...(handleId === 'start' ? localPoint : {}) },
                 { ...state.end, ...(handleId === 'end' ? localPoint : {}) }, getFoxholeSplineConnectorConstraints(state, pathStyle));
-            return { start: next.start, end: next.end };
+            return { start: next.start, end: next.end, ...(context ? { [`${handleId}Attachment`]: null } : {}) };
         }
         if (spline && (handleId === 'start-rotation' || handleId === 'end-rotation')) {
             const role = handleId === 'start-rotation' ? 'start' : 'end';
