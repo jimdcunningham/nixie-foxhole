@@ -1,6 +1,6 @@
 import { initializeFoxholeAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
-import { registerNixieExtension } from '#nixie/plugins/nixie/extensions/index.ts';
+import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
 
 import { registerNixieInternalModelResource } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import { registerFoxholeSceneV2HostPolicy } from '#foxhole/utils/scene-v2-host-policy.ts';
@@ -12,29 +12,30 @@ import LegacySettingsImport from '#foxhole/components/nixie/NixieLegacySettingsI
 import { registerNixieSettingsImportIntegration } from '#nixie/composables/useNixieSettingsImportIntegration.ts';
 
 export default defineNuxtPlugin({
-    name: 'foxhole-nixie-contributions',
+    name: 'nixie-private-extension-adapters',
     enforce: 'pre',
     dependsOn: ['nixie-registry'],
-    async setup() {
+    async setup(nuxtApp) {
         const assetDelivery = await initializeFoxholeAssetDelivery();
         registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport);
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
-        registerFoxholeSceneV2HostPolicy();
+        const stopPolicy = registerFoxholeSceneV2HostPolicy();
         // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
         registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', assetDelivery.resolve('types/structures/facilitytransferresource/facilitytransferresource.glb'));
-        registerNixieExtension({
-            id: 'nixie.foxhole-planner',
+        const stopAdapter = registerNixieInternalExtensionAdapter({
+            ownerId: 'nixie.foxhole-planner',
             aliases: ['foxhole'],
-            internalSdkIntegration: true,
+            replacesSdkUi: true,
             enabledForLegacyProjects: true,
-            label: 'Foxhole Planner',
-            description: 'Structures, connectors, war map tools, and Foxhole-specific planning features.',
-            icon: 'ph:strategy',
-            contributionSourcePrefix: 'layer:foxhole:',
+            contributionSourcePrefixes: ['layer:foxhole:'],
             loadContributions: async () => {
                 const { registerFoxholeNixieContributions } = await import('#foxhole/utils/foxhole-nixie-contributions.ts');
                 registerFoxholeNixieContributions();
             },
+        });
+        nuxtApp.vueApp.onUnmount(() => {
+            stopAdapter();
+            stopPolicy();
         });
     },
 });

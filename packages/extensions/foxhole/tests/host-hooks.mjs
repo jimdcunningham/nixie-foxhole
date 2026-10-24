@@ -55,5 +55,11 @@ registerFoxholeLegacyDiscoveryProfile();
 
 const { registerFoxholeSceneV2HostPolicy } = await import('../app/utils/scene-v2-host-policy.ts');
 registerFoxholeSceneV2HostPolicy();
-const { registerNixieExtension } = await import(new URL('app/plugins/nixie/extensions/index.ts', hostLayer).href);
-registerNixieExtension({ id: 'nixie.foxhole-planner', aliases: ['foxhole'], label: 'Foxhole Planner', contributionSourcePrefix: 'layer:foxhole:', internalSdkIntegration: true, enabledForLegacyProjects: true });
+const { readFileSync } = await import('node:fs');
+const { parseNixieExtensionManifestV1 } = await import('@nixie/extension-sdk');
+const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
+const { replaceNixieSdkExtensionCatalog } = await import(new URL('app/plugins/nixie/extensions/index.ts', hostLayer).href);
+const { registerNixieInternalExtensionAdapter, setNixieInternalExtensionActiveOwners } = await import(new URL('desktop-extensions/internal-extension-adapters.ts', hostLayer).href);
+registerNixieInternalExtensionAdapter({ ownerId: manifest.id, aliases: ['foxhole'], contributionSourcePrefixes: ['layer:foxhole:'], replacesSdkUi: true, enabledForLegacyProjects: true });
+replaceNixieSdkExtensionCatalog([{ manifest, projectManaged: true }]);
+setNixieInternalExtensionActiveOwners([manifest.id]);
