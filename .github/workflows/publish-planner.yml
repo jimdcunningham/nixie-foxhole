@@ -1,0 +1,61 @@
+name: Publish Planner SDK Extension
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/foxhole-planner/**'
+      - '.github/workflows/publish-planner.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-planner
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      NIXIE_FOXHOLE_ASSET_MODE: remote
+      NIXIE_FOXHOLE_ASSETS_ROOT: ${{ runner.temp }}/planner-assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+
+      # A standalone consumer must never need access to the private Nixie repo.
+      - name: Prepare independent extension consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -R extensions/foxhole-planner "$RUNNER_TEMP/planner"
+          npm install --prefix "$RUNNER_TEMP/planner" --ignore-scripts --no-audit --no-fund --package-lock=false
+          node "$RUNNER_TEMP/planner/build/prepare-build-inputs.mjs" --output "$NIXIE_FOXHOLE_ASSETS_ROOT"
+
+      - name: Verify and build Planner
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck --prefix "$RUNNER_TEMP/planner"
+          npm test --prefix "$RUNNER_TEMP/planner"
+          npm run build --prefix "$RUNNER_TEMP/planner"
+          npm run pack --prefix "$RUNNER_TEMP/planner"
+
+      - name: Retain verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: planner-extension
+          path: ${{ runner.temp }}/planner/artifacts/extension.nxext
+          if-no-files-found: error
+
+      - name: Publish immutable extension release
+        run: npm run publish:extension --prefix "$RUNNER_TEMP/planner"
+        env:
+          NIXIE_EXTENSION_PUBLISH_API_URL: https://nixiejs.com/api/nixie/extensions/publish
+          NIXIE_EXTENSION_PUBLISH_TOKEN: ${{ secrets.NIXIE_EXTENSION_PUBLISH_TOKEN }}
+          NIXIE_EXTENSION_SOURCE_REPOSITORY: ${{ github.repository }}
+          NIXIE_EXTENSION_SOURCE_COMMIT: ${{ github.sha }}
