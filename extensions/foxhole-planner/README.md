@@ -8,6 +8,14 @@ As of October 17, 2026, Studio uses the bundled Foxhole War panel and map contro
 
 Local development builds expose **Foxhole War → More Options → Use SDK Map** in Scene V2 for comparison. Production omits the setting and menu item and always selects the bundled map, even if a saved local preference requests the SDK renderer. Scene V1 always uses the bundled map. SDK-only development hosts can still use the packaged fallback renderers. This freeze applies to the map, not the Planner's ECS components, products or other SDK capabilities.
 
+## Live Connector Gestures
+
+Scene V2 placement previews and endpoint handles use the public SDK geometry gesture path. Planner owns socket compatibility, capacity, attachment records, connector constraints, and handle presentation. Nixie owns pointer capture, bounded target snapshots, detached previews, validation, persistence, and undo. Power lines target a compatible power terminal when hovering the building body; pipes and rails use world-space socket proximity. Disabled snapping detaches the edited endpoint while preserving the opposite end and side branches.
+
+From the repository root, run `node packages/extensions/foxhole/tools/test-sdk-host.mjs` for the adapter-free placement/endpoint/persistence/reload pressure test. Its loader registers no private host policy, discovery profile, or Nuxt state adapter. The standalone package's `npm test` covers connector types, socket capacity, reciprocal cleanup, and domain handle presentation.
+
+Legacy V1 insertion, bundled panels, and private drawing refinements such as curve-scale wheel controls remain compiled integrations. They are not required for SDK product placement, socket previews, or endpoint edits.
+
 ## Development
 
 Run `npm run dev --workspace @nixie/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.

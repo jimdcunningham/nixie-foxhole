@@ -419,3 +419,94 @@ test('a foundation group shares height correction and detaches external links wi
     }
     for (const target of entities.slice(2)) assert.deepEqual(target.components[2].data.attachments, []);
 });
+
+
+test('live power endpoint hover selects the building terminal away from the pointer', () => {
+    const line = pipe('line', 0), building = structure('building', 500);
+    Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', endX: 500, endY: 100 });
+    building.components[1]!.data.assetId = 'facilityrefinery1';
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'preview', handleId: 'end', snappingEnabled: true, worldPoint: { x: 500, y: 100, z: 0 }, hoveredEntityIds: [building.entityId] },
+        context: { contractVersion: 1, entities: [line, building] } });
+    const patch = result.transaction?.operations.find(op => op.entityId === line.entityId);
+    assert.ok(patch?.op === 'patch');
+    assert.equal(patch.set?.endAttachmentNodeId, building.entityId);
+    assert.equal(patch.set?.endAttachmentSocketName, 'PowerSocket');
+    assert.ok(Math.abs(Number(patch.set?.endX) - 490.73504) < 1e-6);
+    assert.ok(Math.abs(Number(patch.set?.endY) - 156.71904) < 1e-6);
+    assert.equal(line.components[1]!.data.endAttachmentNodeId, undefined, 'preview input stays immutable');
+});
+
+test('live connector edit only changes the dragged endpoint and disabled snapping detaches it reciprocally', () => {
+    const line = pipe('line', 0), old = structure('old', 300), tempting = structure('tempting', 0);
+    old.components[1]!.data.assetId = tempting.components[1]!.data.assetId = 'facilitypipe';
+    Object.assign(line.components[1]!.data, { endAttachmentNodeId: 'old', endAttachmentSocketName: 'BackSocket' });
+    old.components[2]!.data.attachments = [{ localSocketName: 'BackSocket', targetEntityId: 'line', targetSocketName: 'FrontSocket' }];
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'commit', handleId: 'end', snappingEnabled: false, worldPoint: { x: 300, y: 0 }, hoveredEntityIds: ['old'] },
+        context: { contractVersion: 1, entities: [line, old, tempting] } });
+    const patch = result.transaction?.operations.find(op => op.entityId === line.entityId);
+    assert.ok(patch?.op === 'patch');
+    assert.ok(patch.unset?.includes('endAttachmentNodeId'));
+    assert.equal(patch.set?.startAttachmentNodeId, undefined, 'the untouched start must not snap to a nearby unrelated port');
+    const reciprocal = result.transaction?.operations.find(op => op.entityId === old.entityId);
+    assert.ok(reciprocal?.op === 'patch');
+    assert.deepEqual(reciprocal.set?.attachments, []);
+});
+
+test('connector proximity snapping respects socket world elevation', () => {
+    const line = pipe('line', 95), target = structure('target', 100);
+    target.components[1]!.data.assetId = 'facilitypipe';
+    target.components.push({ ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1, definitionAvailable: true, data: { elevation: 300 } });
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'preview', handleId: 'start', snappingEnabled: true, worldPoint: { x: 95, y: 0, z: 0 }, hoveredEntityIds: [] },
+        context: { contractVersion: 1, entities: [line, target] } });
+    assert.ok(!result.transaction?.operations.some(op => op.op === 'patch' && op.set?.startAttachmentNodeId));
+});
+
+
+test('editing the receiving endpoint clears an inbound peer link without erasing side branches', () => {
+    const moved = pipe('moved', 0), peer = pipe('peer', 0), branch = pipe('branch', 0);
+    Object.assign(peer.components[1]!.data, { endAttachmentNodeId: moved.entityId, endAttachmentSocketName: 'BackSocket' });
+    moved.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1, definitionAvailable: true,
+        data: { attachments: [{ localSocketName: 'BackSocket', targetEntityId: peer.entityId, targetSocketName: 'FrontSocket' },
+            { localSocketName: 'LeftSocket', targetEntityId: branch.entityId, targetSocketName: 'FrontSocket' }] } });
+    Object.assign(branch.components[1]!.data, { endAttachmentNodeId: moved.entityId, endAttachmentSocketName: 'LeftSocket' });
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: moved.entityId,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'commit', handleId: 'start', snappingEnabled: false, worldPoint: { x: -100, y: -100 }, hoveredEntityIds: [] },
+        context: { contractVersion: 1, entities: [moved, peer, branch] } });
+    const peerPatch = result.transaction?.operations.find(op => op.entityId === peer.entityId && op.componentId === 'spline-connector');
+    assert.ok(peerPatch?.op === 'patch');
+    assert.ok(peerPatch.unset?.includes('endAttachmentNodeId'));
+    assert.ok(!result.transaction?.operations.some(op => op.entityId === peer.entityId && op.op === 'patch' && (op.set?.startX !== undefined || op.set?.endX !== undefined)), 'detachment must leave the peer geometry in place');
+    const occupancy = result.transaction?.operations.find(op => op.entityId === moved.entityId && op.componentId === 'socket-attachments');
+    assert.ok(occupancy?.op === 'patch');
+    assert.deepEqual(occupancy.set?.attachments, [{ localSocketName: 'LeftSocket', targetEntityId: branch.entityId, targetSocketName: 'FrontSocket' }]);
+});
+
+
+test('pipe, underground pipe, and rail endpoint previews use the same portable gesture path', () => {
+    for (const foxholeKey of ['facilitypipe', 'facilitypipeunderground', 'railtrackspline', 'smallrailtrackspline']) {
+        const moving = pipe('moving', -300), target = pipe('target', 0);
+        Object.assign(moving.components[1]!.data, { foxholeKey, endX: 298 });
+        target.components[1]!.data.foxholeKey = foxholeKey;
+        target.components[0]!.data.x = 300;
+        const request = { contractVersion: 1 as const, entityId: moving.entityId,
+            transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+            geometryGesture: { phase: 'preview' as const, handleId: 'end', snappingEnabled: true, worldPoint: { x: 299, y: 0 }, hoveredEntityIds: [] },
+            context: { contractVersion: 1 as const, entities: [moving, target] } };
+        const result = finalizeFoxholeSceneV2Transform(request);
+        const patch = result.transaction?.operations.find(op => op.entityId === moving.entityId && op.componentId === 'spline-connector');
+        assert.ok(patch?.op === 'patch', foxholeKey);
+        assert.equal(patch.set?.endAttachmentNodeId, target.entityId, foxholeKey);
+        assert.equal(patch.set?.endX, 300, foxholeKey);
+        assert.equal(patch.set?.startX, undefined, foxholeKey);
+        assert.deepEqual(result.transform, { x: 0, y: 0 }, foxholeKey);
+        const committed = finalizeFoxholeSceneV2Transform({ ...request, geometryGesture: { ...request.geometryGesture, phase: 'commit' } });
+        assert.deepEqual(committed.transaction?.operations, result.transaction?.operations, foxholeKey);
+    }
+});
