@@ -1,10 +1,10 @@
 import {waterScreenReflectionsBit} from './water-screen-reflections.mjs';
 import {RefractiveWaterMaterial} from './refractive-water.mjs';import {nativeWaterBit} from './native-water-bit.mjs';import {waterStencilBit} from './water-stencil.mjs';
-export async function createNativeWaterMaterial({region,json,texture,hexBit}){
+export async function createNativeWaterMaterial({region,json,texture,hexBit,extraBits=[]}){
  const [meta,masks]=await Promise.all([json(`${region}/water-source/render.json`),json(`${region}/water-source/boat-stencils.json`)]);
  const [large,small,foam,modulation,clouds,bed]=await Promise.all([texture(meta.textures.waveLarge,true),texture(meta.textures.waveSmall,true),texture(meta.textures.foam,true),texture(meta.textures.modulation,true),texture(meta.textures.clouds,true),texture(`${region}/water-source/terrain-height.png`)]);
  bed.source.autoGenerateMipmaps=false;bed.source.style.addressMode='clamp-to-edge';
- const material=new RefractiveWaterMaterial({roughness:.13,metallic:0,ior:1.333,doubleSided:true,extraBits:[...(hexBit?[hexBit]:[]),waterStencilBit(masks),nativeWaterBit,waterScreenReflectionsBit]});
+ const material=new RefractiveWaterMaterial({roughness:.13,metallic:0,ior:1.333,doubleSided:true,extraBits:[...(hexBit?[hexBit]:[]),waterStencilBit(masks),nativeWaterBit,waterScreenReflectionsBit,...extraBits]});
  // Water composites its transmission itself and outputs alpha 1. Publish its
  // surface depth so later SSAO cannot shade the submerged terrain through it.
  material.state.depthMask=true;

@@ -31,7 +31,7 @@ export class LiveTerrainPass extends Pass3D {
  build(graph,io){graph.addPass(new NativeTerrainDraw(io.renderer,this));}
  clear(){this.generation++;this.textureContext=null;const old=this.current;this.current=null;if(old){old.group.destroy();old.textureSet?.release();for(const source of old.ownedSources||old.sources)source.destroy();}}
  destroy(){this.clear();this.planning.destroy();}
- setPlanningOverlays(options,state){if(this.planning.set(options,state))this.current?.uniforms.update();}
+ setPlanningOverlays(options,state){const changed=this.planning.set(options,state);if(changed)this.current?.uniforms.update();return changed;}
  async load(region,geometry,{json,zipped,status,prepareTerrain=()=>{},terrainDescriptor,texturePool,signal,surface='native',texture}){
   this.clear();const generation=this.generation;
   if(surface==='plain'||surface==='map'){

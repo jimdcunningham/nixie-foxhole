@@ -82,6 +82,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const reveal=progressive?createRegionRevealQueue({signal}):null;
  const targets={roads:[],water:[],shell:[],decals:[]};
  const applyLayers=createRegionLayerVisibility({targets,details:{syncLayers:flags=>{for(const detail of detailGroups.values())detail.syncLayers(flags);}},terrain:liveTerrainPass,shoulders:roadShoulders});
+ function syncPlanningOverlays(){if(liveTerrainPass.setPlanningOverlays(terrainOverlays,warState)&&waterMat)liveTerrainPass.planning.bindWater(waterMat);}
  function applyWarState(force=false){sharedActorVisibility?.setWarState(warState);for(const group of modelGroups.values()){const world=group.world;if(!world)continue;const changed=world.setWarState(warState);if(changed||force){group.cranes?.setActorVisibility?.(world.actorVisible);group.catalog?.setWarState(warState,world.actorVisible);}}const visible=actor=>sharedActorVisibility?sharedActorVisibility.visible(actor):[...modelGroups.values()].every(group=>!group.world||group.world.actorVisible(actor));for(const detail of detailGroups.values())detail.setActorVisibility(visible);}
 
  function refresh(){applyWarState(true);applyLayers(layerFlags,true);}
@@ -95,8 +96,8 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
    if(!loading&&!demand?.busy&&!streamingBusy())provider.finish();return tour;
   },
   setShellEdges(visible){shellEdgeFlags=visible;shellWalls.forEach((wall,i)=>wall.visible=visible[i]!==false);},
-  setWarState(state){if(state===warState)return;warState=state;liveTerrainPass.setPlanningOverlays?.(terrainOverlays,warState);applyWarState(true);},
-  setPlanningOverlays(options={}){terrainOverlays=options;liveTerrainPass.setPlanningOverlays?.(options,warState);},
+  setWarState(state){if(state===warState)return;warState=state;syncPlanningOverlays();applyWarState(true);},
+  setPlanningOverlays(options={}){terrainOverlays=options;syncPlanningOverlays();},
   setWaterReflections(enabled){waterReflections=enabled!==false;if(waterMat)waterMat.data.waterReflectionStrength=waterReflections?1:0;},
   prepareWindShadows:prepareVegetationWindShadows,
   prepareWaterSurfaceDepth,
@@ -230,7 +231,7 @@ async function loadRoads(seamsReady,ctx){
   }
   const tasks={
    terrain:{needed:f=>enabled(f,'terrain'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Terrain Loading');try{const geometry=await geometryReady();taskSignal.throwIfAborted();await liveTerrainPass.load(region,geometry,{surface:terrainSurface,texture:ctx.texture,json:ctx.json,zipped:ctx.zipped,status,prepareTerrain,signal:taskSignal,terrainDescriptor:adaptiveTextures?provider.terrainDescriptor:undefined,texturePool:adaptiveTextures&&provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined});taskSignal.throwIfAborted();if(terrainPreview){terrainPreview.removeFromParent();terrainPreview.destroy();terrainPreview=null;targets.terrain=[];}framePreparation?.prepare();refresh();}catch(error){liveTerrainPass.clear?.();ctx.rollback();throw error;}}},
-   water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const prepared=await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit});waterMat=ctx.mat(prepared.material);waterMat.data.waterReflectionStrength=waterReflections?1:0;targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
+   water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const prepared=await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit,extraBits:[liveTerrainPass.planning.waterBit]});waterMat=ctx.mat(prepared.material);liveTerrainPass.planning.bindWater(waterMat);waterMat.data.waterReflectionStrength=waterReflections?1:0;targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
    weather:{needed:()=>false,load:weather},
    bridges:{needed:()=>false,load:taskSignal=>models('bridges',taskSignal,true),unload:()=>modelGroups.get('bridges')?.dispose?.()},
    ...Object.fromEntries(worldModelLayers.map(key=>[key,{needed:f=>enabled(f,key),load:taskSignal=>streamModels(key,taskSignal),unload:()=>retireModels(key)}])),
