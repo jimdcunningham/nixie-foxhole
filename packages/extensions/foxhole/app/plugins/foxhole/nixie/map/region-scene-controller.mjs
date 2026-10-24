@@ -102,7 +102,10 @@ export class FoxholeRegionSceneController {
    const cp=this.view.camera?.position;
    const scene=await this.loadRegion({baseUrl:this.baseUrl,entry,frame:{...position,scale:32},signal,progressive:true,ambientOcclusion:this.ambientOcclusion,waterReflections:this.waterReflections,vegetationShadows:this.vegetationShadows,vegetationWind:this.vegetationWind,vegetationDensity:this.vegetationDensity,adaptiveStreaming:this.adaptiveStreaming,modelLod:this.modelLod,terrainLod:this.terrainLod,adaptiveTextures:this.adaptiveTextures,frustumCulling:this.frustumCulling,terrainSurface:this.terrainSurface,layers:this.detailLayers(record),onSceneCreated:scene=>{record.preparing=scene;},priorityPosition:cp?[(cp.x-position.x)/32,cp.z/32,(cp.y+position.y)/32]:undefined,onSceneReady:adopt,onProgress:state=>{if(valid()){record.state=this.onStatus?{...state,totalBytes:entry.downloadBytes}:state;this.report();}}});
    if(!adopt(scene))return;record.state={phase:'Ready',...scene.metrics};this.report();
-  }catch(error){const scene=record.scene;record.scene=null;this.reconcile();this.disposeScene(scene);if(valid()){record.state={...record.state,phase:'error',error:error instanceof Error?error.message:String(error)};console.error('Foxhole region load failed',id,error);this.report();}}
+  }catch(error){const scene=record.scene;record.scene=null;this.reconcile();this.disposeScene(scene);if(valid()){record.state={...record.state,phase:'error',error:error instanceof Error?error.message:String(error)};console.error('Foxhole region load failed',id,error);this.report();}}finally{
+   // Settled loaders release preparation; failed scenes have already retired their resources.
+   record.preparing=null;
+  }
  }
  diagnostics(){
   const records=[...this.records.values()];if(!records.length)return[];
