@@ -1,3 +1,4 @@
+import { readFoxholeModelLightHints } from '../../../../../extensions/foxhole-planner/src/model-light-hints.ts';
 import { FOXHOLE_COMPLETE_CATALOG_SETTINGS } from './sdk-catalog-settings.ts';
 import { registerNixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
@@ -7,6 +8,7 @@ import { FOXHOLE_SCENE_FACTION_SETTING_ID, normalizeFoxholeSceneFaction } from '
 const OWNER_ID = 'nixie.foxhole-planner';
 export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     ownerId: OWNER_ID,
+    modelLightHints: readFoxholeModelLightHints,
     spatialPresentation(readSetting) {
         const faction = normalizeFoxholeSceneFaction(readSetting(FOXHOLE_SCENE_FACTION_SETTING_ID));
         return {
