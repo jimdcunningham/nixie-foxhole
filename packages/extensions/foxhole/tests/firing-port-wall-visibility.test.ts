@@ -48,7 +48,7 @@ function createHost(hostAsset = asset) {
     node.layered = true;
     node.occupied = new Set();
     node.offLaneRoofSprites = new Set();
-    node.settingsStore = { getValue: (id: string) => flags.get(id) ?? false };
+    node.settingsStore = { getValueOr: (id: string) => flags.get(id) ?? false };
     node.isPackagedVisualEnabled = () => node.boardState.packaged;
     node.isUsingStructureRenderLayers = () => node.layered && node.boardState.destroyed !== true && node.boardState.packaged !== true;
     node.getResolvedAsset = () => asset;

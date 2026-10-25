@@ -54,7 +54,7 @@ function setup(sourceKey: string) {
         assetResolver: (key: string) => catalog.assetByKey[key],
         structureResolver: (key: string) => catalog.structureByKey[key],
     };
-    node.settingsStore = { getValue: (_key: string) => false };
+    node.settingsStore = { getValueOr: (_key: string) => false };
     node.isOperationalStructureEnabled = () => true;
     node.getResolvedTextureUrl = () => '/target.webp';
     node.isPreviewingUpgradeReplacementBase = () => false;
@@ -172,7 +172,7 @@ test('unresolved targets, other nodes, and overlay hovers retain the canonical r
         assert.equal(node.renderedStructure.id, 'trencht2');
     }
     activeNixieStructureModificationHoverPreview.value = null;
-    node.settingsStore.getValue = (key: string) => key === FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender;
+    node.settingsStore.getValueOr = (key: string) => key === FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender;
     node.syncStructureRenderLayers();
     assert.equal(node.isUsingStructureRenderLayers(), false);
     assert.equal(node.structureFloorTextureOverlay.visible, false);
