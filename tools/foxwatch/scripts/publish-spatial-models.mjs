@@ -1,4 +1,4 @@
-import { readFile, unlink } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -9,7 +9,7 @@ import { resolveSpatialExportPolicy, filterSpatialModelManifest } from './spatia
 import { spatialExportCatalog } from './spatial-export-catalog.mjs';
 import { spatialWorkerCount, runSpatialWorkerPool } from './spatial-worker-pool.mjs';
 import { createSpatialModelExporter } from './spatial-model-engine.mjs';
-import { mergeSharedPartPublications } from './spatial-shared-parts.mjs';
+import { runSpatialManifestPublication } from './spatial-manifest-publication.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const args = process.argv.slice(2);
@@ -48,30 +48,21 @@ try {
     abort.signal.addEventListener('abort', () => sharedExporter.cancel(), { once: true });
     const sharedParts = await sharedExporter.exportSharedParts(ids);
     manifest.sharedParts = { ...manifest.sharedParts, ...sharedParts };
-    await runSpatialWorkerPool(ids, { count, workerPath: resolve(root, 'tools/foxwatch/scripts/spatial-model-worker.mjs'),
-        options: { args, catalog, blenderVersion, sharedParts }, signal: abort.signal,
-        onEvent(event) {
-            if (event.kind === 'spatial-asset-start') active.set(event.worker, event.assetId + ' · Preparing');
-            if (event.kind === 'spatial-phase') active.set(event.worker, event.modelId + ' · ' + event.phase);
-            if (event.kind === 'spatial-asset') active.delete(event.worker);
-            emit({ ...event, result: undefined });
-        },
-        async onResult(result) {
-            const { timing, asset, resources } = result;
-            timings.push(timing); states[timing.status]++;
-            if (timing.status === 'failed') return;
-            const old = [manifest.assets[timing.id], ...Object.values(manifest.resources).filter(model => model.assetId === timing.id)].filter(Boolean);
-            delete manifest.assets[timing.id];
-            for (const [key, model] of Object.entries(manifest.resources)) if (model.assetId === timing.id) delete manifest.resources[key];
-            if (asset) manifest.assets[timing.id] = asset;
-            Object.assign(manifest.resources, resources);
-            manifest.sharedParts = mergeSharedPartPublications(manifest, sharedParts);
-            await writeJsonAtomic(manifestPath, manifest);
-            // Remove old locations only after the owning group has a durable new manifest entry.
-            for (const model of old) if (asset && model.path?.startsWith('models/') && /^models\/[a-z0-9.-]+\.glb$/.test(model.path))
-                await unlink(resolve(outputRoot, model.path)).catch(error => { if (error.code !== 'ENOENT') throw error; });
-        } });
-    await writeJsonAtomic(manifestPath, manifest);
+    await runSpatialManifestPublication({ manifestPath, manifest, outputRoot, sharedParts, signal: abort.signal,
+        generate: record => runSpatialWorkerPool(ids, { count, workerPath: resolve(root, 'tools/foxwatch/scripts/spatial-model-worker.mjs'),
+            options: { args, catalog, blenderVersion, sharedParts }, signal: abort.signal,
+            onEvent(event) {
+                if (event.kind === 'spatial-asset-start') active.set(event.worker, event.assetId + ' · Preparing');
+                if (event.kind === 'spatial-phase') active.set(event.worker, event.modelId + ' · ' + event.phase);
+                if (event.kind === 'spatial-asset') active.delete(event.worker);
+                emit({ ...event, result: undefined });
+            },
+            async onResult(result) {
+                const { timing } = result;
+                timings.push(timing); states[timing.status]++;
+                record(result);
+            } }),
+    });
 } catch (error) { failure = error; }
 finally {
     process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, utimes, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -100,8 +100,13 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     await run(); assert.equal((await result()).reused, 1);
     assert.ok(JSON.parse(await readFile(resolve(root, 'output/models/manifest.v1.json'), 'utf8')).assets[id]);
     assert.deepEqual(await readFile(resolve(root, `output/types/structures/${id}/${id}.glb`)), packed);
+    const liveManifest = resolve(root, 'output/models/manifest.v1.json');
+    await utimes(liveManifest, 1, 1);
+    await run(); assert.equal((await result()).reused, 1);
+    assert.equal((await stat(liveManifest)).mtimeMs, 1000, 'unchanged CLI retry must not write the live manifest');
     await run(['--force-render']); assert.equal((await result()).exported, 1);
     await put(`output/types/structures/${id}/${id}.glb`, 'corrupt'); await run(); assert.equal((await result()).exported, 1);
+    const successfulManifest = await readFile(liveManifest, 'utf8');
     await rm(resolve(root, `raw/${id}.glb`)); await assert.rejects(run()); assert.equal((await result()).failed, 1);
     assert.ok((await result()).assets[0].error);
     assert.ok((await result()).totalMs > 0);
@@ -112,6 +117,7 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     assert.equal((await result()).failed, 1);
     assert.equal((await result()).skipped, 1);
     assert.equal((await result()).assets[1].id, 'powerline');
+    assert.equal(await readFile(liveManifest, 'utf8'), successfulManifest, 'mixed failed/skipped CLI run must preserve the published manifest');
     await rm(resolve(root, `scenes/${id}/scene.json`));
     await run(); assert.equal((await result()).skipped, 1);
     assert.equal((await result()).assets[0].reason, 'No extracted scene');
