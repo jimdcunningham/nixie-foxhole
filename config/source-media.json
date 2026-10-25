@@ -13,6 +13,14 @@
     "packages/extensions/foxhole/tools/legacy-plans/recipe-id-seed-report.json"
   ],
   "files": {
+    "tools/foxwatch-desktop/build/icon.ico": {
+      "sha256": "3c7b6007fdcc7accf8967dd9459b1fb5e27d9470e253a14c4b4989858c290734",
+      "provenance": "FoxWatch Desktop installer branding: authored geometric F monogram. Its embedded 256px PNG was decoded and verified pixel-identical to build/icon.svg; no Foxhole game artwork."
+    },
+    "tools/foxwatch-desktop/build/icon.svg": {
+      "sha256": "b25296a0fc0887d1be716f7622ac8016726487acbde960021cf1543b92dc5735",
+      "provenance": "FoxWatch Desktop authored geometric F monogram: a rounded green rectangle and a single letter path, used for installer branding; no Foxhole game artwork."
+    },
     "tests/fixtures/foxhole/icon-publish/blank-render-256.webp": {
       "sha256": "8eff5d6bcd0fe68d06288bc4e29ecf7e220ce0234ff9fe1a09d8b29a871b8f7b",
       "provenance": "Synthetic constant-color or transparent regression image; all pixels verified, no game artwork."
