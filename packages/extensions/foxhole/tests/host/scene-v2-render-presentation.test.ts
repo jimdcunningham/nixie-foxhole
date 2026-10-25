@@ -18,6 +18,8 @@ import { NixieExtensionRenderPlanHost } from '../../../../nixie/app/plugins/nixi
 import { NixieSceneV2RenderLanes } from '../../../../nixie/app/plugins/nixie/scene-v2/render-lanes.ts';
 import { DEFAULT_FOXHOLE_RANGE_STATE } from '../../app/plugins/foxhole/nixie/range.ts';
 import { renderFoxholeSceneV2Range, resolveFoxholeRangeSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-ranges.ts';
+import { isFoxholeStructureRangeVisible } from '../../../../../extensions/foxhole-planner/src/structure-range-settings.ts';
+import { renderFoxholeStructureRange } from '../../../../../extensions/foxhole-planner/src/scene-v2-structure-range-overlays.ts';
 import { renderFoxholeSceneV2Entity } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { renderFoxholeSceneV2TacticalLine } from '../../../../../extensions/foxhole-planner/src/scene-v2-tactical-lines.ts';
 import { DEFAULT_FOXHOLE_TACTICAL_LINE_STATE } from '../../app/plugins/foxhole/nixie/tactical-line.ts';
@@ -60,6 +62,9 @@ test('older structure range plans retain Native fallback drawing and visibility'
     // Plans from older extension generations lack the spatial overlay declaration.
     for (const node of plan.root.children) {
         if (node.experimentalPresentation) delete node.experimentalPresentation.groundOverlay;
+        if (node.kind === 'group') for (const child of node.children) {
+            if (child.experimentalPresentation) delete child.experimentalPresentation.groundOverlay;
+        }
     }
     assert.ok(plan.root.children.some(node => node.id === 'selected-structure-ranges'));
     const original = structuredClone({ entity, plan });
@@ -377,7 +382,16 @@ test('SDK ground range groups survive the Native compatibility adapter', () => {
         const settings = { 'foxhole.ranges.selectionOnly': true, 'foxhole.ranges.machineGun': enabled };
         const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings });
         const original = JSON.stringify(plan);
-        assert.ok(plan.root.children.some(node => node.experimentalPresentation?.groundOverlay));
+        const ranges = plan.root.children.filter(node => node.id === 'selected-structure-ranges' || node.id === 'structure-ranges');
+        const renderedIds = ranges.flatMap(group => group.children?.map(node => node.id) ?? []);
+        for (const [index, range] of assets.mgait2!.ranges.entries()) {
+            const visible = isFoxholeStructureRangeVisible(range, settings, true, false) && Boolean(renderFoxholeStructureRange(range, 'fixture'));
+            assert.equal(renderedIds.includes(`structure-range-${index}`), visible, `range ${index}/${range.type}/${enabled}`);
+        }
+        for (const group of ranges) {
+            assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
+            assert.ok(group.children?.every(node => typeof node.experimentalPresentation?.groundOverlay === 'boolean'));
+        }
         const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings);
         assert.equal(presentation === null, true, 'the host must render the portable ranges without a private replacement');
         assert.equal(JSON.stringify(plan), original);

@@ -136,7 +136,9 @@ function prepareStructurePresentation(...args: Parameters<NixieSceneV2RenderPres
     const [entity, plan, , settings] = args;
     const sockets = prepareStructureSocketPresentation(...args);
     if (plan.root.children.some(node => (node.id === 'structure-ranges' || node.id === 'selected-structure-ranges')
-        && node.experimentalPresentation?.groundOverlay === true)) {
+        && (node.experimentalPresentation?.groundOverlay === true
+            || (node.kind === 'group' && node.children.length > 0
+                && node.children.every(child => typeof child.experimentalPresentation?.groundOverlay === 'boolean'))))) {
         return sockets;
     }
 
