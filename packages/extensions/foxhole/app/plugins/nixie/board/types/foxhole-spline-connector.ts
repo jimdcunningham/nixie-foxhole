@@ -2165,7 +2165,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
     resolveMoveSnap(context: Parameters<BoardNodeMoveSnapProvider['resolveMoveSnap']>[0]): BoardNodeMoveSnapResult | null {
         if (
             !this.usesSocketSnapping()
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
         ) {
             return null;
         }
@@ -2240,7 +2240,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
         if (
             !this.usesSocketSnapping()
             || !context.rotatePivot
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
         ) {
             return null;
         }
@@ -2328,7 +2328,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
     ): void {
         if (
             !this.usesSocketSnapping()
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
         ) {
             return;
         }
@@ -3650,7 +3650,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
                         asset: this.getResolvedRenderAsset(), selections: this.boardState.modificationVariantIds,
                         hover: activeNixieStructureModificationHoverPreview.value, nodeId: String(this.boardId),
                         start: renderedState.start, end: renderedState.end,
-                        hideRoofs: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true,
+                        hideRoofs: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true,
                     }),
             });
             this.trenchVisual.setRoofHoverAlpha(this.roofHoverAlpha);
@@ -3732,10 +3732,10 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
 
     private getDebugOverlaySettings(): FoxholeSplineConnectorDebugOverlaySettings {
         return {
-            showAllSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
-            showPowerSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets) === true,
-            showPipeSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets) === true,
-            showSocketLabels: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels) === true,
+            showAllSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, undefined) === true,
+            showPowerSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets, undefined) === true,
+            showPipeSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets, undefined) === true,
+            showSocketLabels: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels, undefined) === true,
         };
     }
 
@@ -4352,7 +4352,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
             !socketName
             || !socket
             || !hasFoxholeSnapSocketTags(socket.socketTags)
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
         ) {
             return { local: localPoint };
         }

@@ -1616,7 +1616,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     }
 
     private isUsingStructureRenderLayers(): boolean {
-        return this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender) !== true
+        return this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender, undefined) !== true
             && (!this.getEffectiveStructureReplacementSelection()
                 || Boolean(activeNixieStructureModificationHoverPreview.value?.nodeId === String(this.boardId)
                     && activeNixieStructureModificationHoverPreview.value?.targetAssetKey))
@@ -2179,7 +2179,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         if (resolveStructureAssetHoverTargetKey(activeNixieStructureModificationHoverPreview.value, String(this.boardId))) {
             return new Set();
         }
-        const hideRoofs = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true
+        const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
         const hovered = this.getResolvedModificationHoverPreview();
         const hoveredPreview = hideRoofs && hovered && isFoxholeRoofModification(hovered.variant) ? null : hovered;
@@ -2215,12 +2215,12 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             this.getLocalAttachmentOccupancyKeys(true),
             String(this.boardId),
         );
-        const hideRoofs = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true
+        const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
-        const hideFloors = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors) === true;
-        const hideWalls = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls) === true;
-        const hideDirt = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt) === true;
-        const hideCorners = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners) === true;
+        const hideFloors = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors, undefined) === true;
+        const hideWalls = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls, undefined) === true;
+        const hideDirt = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt, undefined) === true;
+        const hideCorners = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners, undefined) === true;
         const replacedLayers = [...this.getModificationReplacedRenderLayerIds()].sort().join(',');
         return `${hideRoofs ? 'hide-roofs' : 'show-roofs'}|${hideFloors ? 'hide-floors' : 'show-floors'}|${hideWalls ? 'hide-walls' : 'show-walls'}|${hideDirt ? 'hide-dirt' : 'show-dirt'}|${hideCorners ? 'hide-corners' : 'show-corners'}|${[...occupiedSocketTags].sort().join('|')}|${replacedLayers}`;
     }
@@ -2260,12 +2260,12 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             )
             : new Set<string>();
 
-        const hideRoofs = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true
+        const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
-        const hideFloors = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors) === true;
-        const hideWalls = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls) === true;
-        const hideDirt = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt) === true;
-        const hideCorners = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners) === true;
+        const hideFloors = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors, undefined) === true;
+        const hideWalls = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls, undefined) === true;
+        const hideDirt = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt, undefined) === true;
+        const hideCorners = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners, undefined) === true;
         const renderLayers = orderFoxholeStructureRenderLayers(this.getResolvedRenderLayers(), structure?.codeName);
         const replacedLayers = this.getModificationReplacedRenderLayerIds(renderLayers);
         for (const layer of renderLayers) {
@@ -2346,7 +2346,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         const selections = asset ? resolveModificationHoverPreviewSelections(asset,
             this.getResolvedModificationSelections(), this.getResolvedModificationHoverPreview()) : {};
         if (this.boardState.visible === false || !showFoxholePowerPoleLamp(asset?.codeName,
-            Object.values(selections), id => this.settingsStore.getValue(id), this.boardState)) {
+            Object.values(selections), id => this.settingsStore.getValueOr(id, undefined), this.boardState)) {
             return;
         }
         const glow = createFoxholePowerPoleLampGlow();
@@ -2358,7 +2358,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     private syncBunkerSpotlightGlow(): void {
         const lamp = this.getResolvedRenderLayers().find(layer => layer.id === 'topmesh');
         if (this.boardState.visible !== false && showFoxholeBunkerSpotlightGlow(this.getResolvedAsset()?.codeName,
-            id => this.settingsStore.getValue(id), this.boardState)) {
+            id => this.settingsStore.getValueOr(id, undefined), this.boardState)) {
             const fallbackLamp = lamp ? { width: lamp.width * FOXHOLE_BOARD_SPRITE_SCALE,
                 offsetX: (lamp.offsetX ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE,
                 offsetY: (lamp.offsetY ?? 0) * FOXHOLE_BOARD_SPRITE_SCALE } : undefined;
@@ -2634,7 +2634,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         // Conversion clicks clear the old structure's modifications as well.
         if (activeNixieStructureModificationHoverPreview.value?.nodeId === String(this.boardId)
             && activeNixieStructureModificationHoverPreview.value?.targetAssetKey) return;
-        const hideRoofs = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true
+        const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
         const hovered = this.getResolvedModificationHoverPreview();
         const hoveredPreview = hideRoofs && hovered && isFoxholeRoofModification(hovered.variant) ? null : hovered;
@@ -3100,20 +3100,20 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     private getDebugOverlaySettings(): FoxholeStructureDebugOverlaySettings {
         const visibleVolumeCategories = new Set<string>();
         for (const definition of FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS) {
-            if (this.settingsStore.getValue(definition.settingId) === true) {
+            if (this.settingsStore.getValueOr(definition.settingId, undefined) === true) {
                 visibleVolumeCategories.add(definition.category);
             }
         }
 
         return {
-            showAllSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
-            showPowerSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets) === true,
-            showPipeSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets) === true,
-            showBreachIndicators: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators) === true,
-            showSocketLabels: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels) === true,
-            showModificationSlots: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots) === true,
-            showVehicleSeats: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats) === true,
-            showSpotlights: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights) === true,
+            showAllSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, undefined) === true,
+            showPowerSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets, undefined) === true,
+            showPipeSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets, undefined) === true,
+            showBreachIndicators: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators, undefined) === true,
+            showSocketLabels: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels, undefined) === true,
+            showModificationSlots: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots, undefined) === true,
+            showVehicleSeats: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats, undefined) === true,
+            showSpotlights: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights, undefined) === true,
             visibleVolumeCategories,
         };
     }
@@ -4434,7 +4434,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     }
 
     resolveMoveSnap(context: Parameters<BoardNodeMoveSnapProvider['resolveMoveSnap']>[0]): BoardNodeMoveSnapResult | null {
-        if (this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false) {
+        if (this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false) {
             return null;
         }
 
@@ -4882,7 +4882,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         if (
             !this.hasSnapSocketStructure()
             || !context.rotatePivot
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
         ) {
             return null;
         }
@@ -5976,7 +5976,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             || movingNode === this
             || movingNode.destroyed
             || this.destroyed
-            || this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false
+            || this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false
             || !movingNode.hasRailCouplerStructure()
             || !this.hasRailCouplerStructure()
         ) {
@@ -6682,7 +6682,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         // Selected assets render their editable hitbox directly from each
         // hitbox facet. Keeping this debug renderer selection-driven as well
         // produces a stale second polygon during live vertex previews.
-        const showHitboxes = this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes) === true;
+        const showHitboxes = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes, undefined) === true;
         if (!showHitboxes) {
             return;
         }
@@ -6705,7 +6705,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     }
 
     private getRangeSettings() {
-        return readFoxholeRangeSettingsFromGetter(settingId => this.settingsStore.getValue(settingId));
+        return readFoxholeRangeSettingsFromGetter(settingId => this.settingsStore.getValueOr(settingId, undefined));
     }
 
     private clearRangeOverlayGraphics(): void {
@@ -6717,7 +6717,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     }
 
     private isLineOfSightEnabled(): boolean {
-        return this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight) === true
+        return this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight, undefined) === true
             && isFoxholeLineOfSightStructureKey(this.boardState.foxholeKey);
     }
 
@@ -7047,8 +7047,8 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             return [];
         }
         const intervalSeconds = resolveFoxholeMaintenanceIntervalSeconds(
-            String(this.settingsStore.getValue(FOXHOLE_STATS_SETTING_KEYS.timeInterval) ?? ''),
-            Number(this.settingsStore.getValue(FOXHOLE_STATS_SETTING_KEYS.customIntervalSeconds)),
+            String(this.settingsStore.getValueOr(FOXHOLE_STATS_SETTING_KEYS.timeInterval, undefined) ?? ''),
+            Number(this.settingsStore.getValueOr(FOXHOLE_STATS_SETTING_KEYS.customIntervalSeconds, undefined)),
         );
         return orders.flatMap(order => (resolveOutputs(order.recipeId) ?? []).map(output => ({
             ...output,
@@ -7303,7 +7303,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             return;
         }
 
-        if (this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.markedCargo) !== true) {
+        if (this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.markedCargo, undefined) !== true) {
             this.clearMarkedCargoOverlayGraphics();
             this.clearProductionOutputOverlayGraphics();
             return;
@@ -7405,7 +7405,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     }
 
     private getRangeOverlayCacheKey(structure: FoxholeManifestStructure): string {
-        const nightSettings = FOXHOLE_NIGHT_RANGE_SETTING_IDS.map(id => this.settingsStore.getValue(id));
+        const nightSettings = FOXHOLE_NIGHT_RANGE_SETTING_IDS.map(id => this.settingsStore.getValueOr(id, undefined));
         return `${this.boardState.foxholeKey}|${this.isLineOfSightEnabled()}|${JSON.stringify(nightSettings)}|${JSON.stringify(structure.ranges)}`;
     }
 
@@ -7420,7 +7420,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
         for (const range of structure.ranges) {
             const entry = createFoxholeStructureRangeVisual(range, this.isLineOfSightEnabled(),
-                resolveFoxholeNightVisionRadius(structure, range, id => this.settingsStore.getValue(id)));
+                resolveFoxholeNightVisionRadius(structure, range, id => this.settingsStore.getValueOr(id, undefined)));
             if (!entry) {
                 continue;
             }

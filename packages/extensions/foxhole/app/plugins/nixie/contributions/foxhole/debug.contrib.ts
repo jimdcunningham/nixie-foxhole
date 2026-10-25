@@ -98,7 +98,7 @@ const foxholeWarDebugPreset = getFoxholeWarDebugPresetRef();
 
 function areAllStructureVolumesEnabled(): boolean {
     const settingsStore = useNixieSettingsStore();
-    return FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS.every(definition => settingsStore.getValue(definition.settingId) === true);
+    return FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS.every(definition => settingsStore.getValueOr(definition.settingId, undefined) === true);
 }
 
 function setAllStructureVolumesEnabled(value: boolean): void {
@@ -850,7 +850,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Nighttime Ranges',
                 icon: 'ph:moon',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_NIGHTTIME_RANGES_SETTING_ID) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_NIGHTTIME_RANGES_SETTING_ID, undefined) === true,
                 closeOnClick: false,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_NIGHTTIME_RANGES_SETTING_ID);
@@ -864,7 +864,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Powered Spotlights',
                 icon: 'ph:flashlight',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID, undefined) === true,
                 closeOnClick: false,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID);
@@ -878,7 +878,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Selection Ranges',
                 icon: 'ph:cursor-click',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_RANGE_SETTING_KEYS.selectionOnly) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_RANGE_SETTING_KEYS.selectionOnly, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_RANGE_SETTING_KEYS.selectionOnly);
                 },
@@ -896,7 +896,7 @@ export default defineContribution({
                 type: 'checkbox' as const,
                 label: definition.label,
                 icon: definition.icon,
-                checked: () => readFoxholeRangeSettingsFromGetter(settingId => useNixieSettingsStore().getValue(settingId)).overlays[key as keyof typeof FOXHOLE_RANGE_OVERLAY_DEFINITIONS],
+                checked: () => readFoxholeRangeSettingsFromGetter(settingId => useNixieSettingsStore().getValueOr(settingId, undefined)).overlays[key as keyof typeof FOXHOLE_RANGE_OVERLAY_DEFINITIONS],
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_RANGE_SETTING_KEYS[key as keyof typeof FOXHOLE_RANGE_OVERLAY_DEFINITIONS]);
                 },
@@ -909,7 +909,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Storage and Production Outputs',
                 icon: 'ph:package',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.markedCargo) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.markedCargo, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.markedCargo);
                 },
@@ -941,7 +941,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Hitboxes',
                 icon: 'ph:polygon',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hitboxes);
                 },
@@ -955,7 +955,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Placement Warnings',
                 icon: 'ph:warning',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.placementWarnings);
                 },
@@ -969,7 +969,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Line of Sight',
                 icon: 'ph:eye',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.lineOfSight);
                 },
@@ -983,7 +983,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Vehicle Weapon Ranges',
                 icon: 'ph:crosshair-simple',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_RANGE_DEBUG_SETTING_KEYS.vehicleWeapons) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_RANGE_DEBUG_SETTING_KEYS.vehicleWeapons, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_RANGE_DEBUG_SETTING_KEYS.vehicleWeapons);
                 },
@@ -997,7 +997,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'All Sockets',
                 icon: 'ph:plugs-connected',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets);
                 },
@@ -1011,7 +1011,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Socket Labels',
                 icon: 'ph:text-t',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels);
                 },
@@ -1025,7 +1025,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Modification Slots',
                 icon: 'ph:square',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modificationSlots);
                 },
@@ -1039,7 +1039,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Vehicle Seats',
                 icon: 'ph:seat',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.vehicleSeats);
                 },
@@ -1053,7 +1053,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Spotlights',
                 icon: 'ph:flashlight',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.spotlights);
                 },
@@ -1067,7 +1067,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Use Static Render',
                 icon: 'ph:image-square',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender);
                 },
@@ -1081,7 +1081,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Hide Floor',
                 icon: 'ph:selection-background',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideFloors);
                 },
@@ -1095,7 +1095,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Hide Walls',
                 icon: 'ph:wall',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideWalls);
                 },
@@ -1109,7 +1109,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Hide Dirt',
                 icon: 'ph:mountains',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideDirt);
                 },
@@ -1123,7 +1123,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: 'Hide Corners',
                 icon: 'ph:corner-down-right',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideCorners);
                 },
@@ -1176,7 +1176,7 @@ export default defineContribution({
                 accessibleInDev: true,
                 label: definition.label,
                 icon: definition.icon,
-                checked: () => useNixieSettingsStore().getValue(definition.settingId) === true,
+                checked: () => useNixieSettingsStore().getValueOr(definition.settingId, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(definition.settingId);
                 },
@@ -1189,7 +1189,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Power Sockets',
                 icon: 'ph:cell-tower',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets);
                 },
@@ -1202,7 +1202,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Pipe Sockets',
                 icon: 'ph:pipe',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets);
                 },
@@ -1215,7 +1215,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Breach Indicators',
                 icon: 'ph:shield-warning',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators);
                 },
@@ -1228,7 +1228,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Hide Roofs',
                 icon: 'ph:house-line',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs);
                 },
@@ -1241,7 +1241,7 @@ export default defineContribution({
                 type: 'checkbox',
                 label: 'Hide Roofs on Hover',
                 icon: 'ph:eye',
-                checked: () => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover) === true,
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover, undefined) === true,
                 onClick: () => {
                     useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover);
                 },

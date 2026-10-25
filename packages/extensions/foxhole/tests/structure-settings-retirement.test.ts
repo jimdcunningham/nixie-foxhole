@@ -103,3 +103,35 @@ test('map controller tolerates retired user settings without changing saved proj
     definitions.set(FOXHOLE_MAP_SETTING_KEYS.hourlyCasualties, false);
     assert.equal(settings.value.hourlyCasualties, false, 'user preferences return when registered');
 });
+
+for (const [file, className] of [
+    ['foxhole-structure', 'FoxholeStructureNode'],
+    ['foxhole-connector', 'FoxholeConnectorNode'],
+    ['foxhole-spline-connector', 'FoxholeSplineConnectorNode'],
+] as const) {
+    test(`${file} can read overlay settings during a late redraw after retirement`, () => {
+        const { source, declaration } = parseClass(`../app/plugins/nixie/board/types/${file}.ts`, className);
+        const method = declaration.members.find(member => ts.isMethodDeclaration(member) && member.name.getText(source) === 'getDebugOverlaySettings')!;
+        const code = ts.transpileModule(`class Host { ${method.getText(source)} } return Host;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const ids = { allSockets: 'sockets', powerSockets: 'power', pipeSockets: 'pipes', socketLabels: 'labels' };
+        const definitions = new Map(Object.values(ids).map(id => [id, true]));
+        const Host = new Function('FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS', 'FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS', code)(ids, []);
+        const node = new Host();
+        node.settingsStore = {
+            getValue(id: string) {
+                assert.ok(definitions.has(id), 'strict reads cannot access retired settings');
+                return definitions.get(id);
+            },
+            getValueOr(id: string, fallback: unknown) {
+                return definitions.has(id) ? definitions.get(id) : fallback;
+            },
+        };
+        assert.equal(node.getDebugOverlaySettings().showAllSockets, true);
+        definitions.clear();
+        const retired = node.getDebugOverlaySettings();
+        assert.equal(retired.showAllSockets, false);
+        assert.equal(retired.showSocketLabels, false);
+        definitions.set('sockets', true);
+        assert.equal(node.getDebugOverlaySettings().showAllSockets, true);
+    });
+}

@@ -490,7 +490,7 @@ export class FoxholeConnectorNode extends BoardNodeBase<FoxholeConnectorState, F
                 } satisfies FoxholeSocketSnapPoint];
             });
 
-        const match = this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) !== false && movingSockets.length
+        const match = this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) !== false && movingSockets.length
             ? findBestFoxholeSocketSnap({
                 movingSockets,
                 targetSockets: targets.flatMap(target => target.sockets),
@@ -702,7 +702,7 @@ export class FoxholeConnectorNode extends BoardNodeBase<FoxholeConnectorState, F
     }
 
     resolveMoveSnap(context: Parameters<BoardNodeMoveSnapProvider['resolveMoveSnap']>[0]): BoardNodeMoveSnapResult | null {
-        if (this.settingsStore.getValue(FOXHOLE_SOCKET_SNAPPING_SETTING_ID) === false) {
+        if (this.settingsStore.getValueOr(FOXHOLE_SOCKET_SNAPPING_SETTING_ID, false) === false) {
             return null;
         }
 
@@ -949,10 +949,10 @@ export class FoxholeConnectorNode extends BoardNodeBase<FoxholeConnectorState, F
 
     private getDebugOverlaySettings(): FoxholeConnectorDebugOverlaySettings {
         return {
-            showAllSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
-            showPowerSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets) === true,
-            showPipeSockets: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets) === true,
-            showSocketLabels: this.settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels) === true,
+            showAllSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, undefined) === true,
+            showPowerSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.powerSockets, undefined) === true,
+            showPipeSockets: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.pipeSockets, undefined) === true,
+            showSocketLabels: this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.socketLabels, undefined) === true,
         };
     }
 

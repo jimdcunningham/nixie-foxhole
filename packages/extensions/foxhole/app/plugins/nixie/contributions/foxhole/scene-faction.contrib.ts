@@ -17,7 +17,7 @@ export default defineContribution({
             availableWhen: { surfaces: ['scene-v2'] },
             children: FOXHOLE_SCENE_FACTION_OPTIONS.map(option => ({
                 type: 'checkbox' as const, label: option.label,
-                checked: () => normalizeFoxholeSceneFaction(useNixieSettingsStore().getValue(FOXHOLE_SCENE_FACTION_SETTING_ID)) === option.value,
+                checked: () => normalizeFoxholeSceneFaction(useNixieSettingsStore().getValueOr(FOXHOLE_SCENE_FACTION_SETTING_ID, undefined)) === option.value,
                 onClick: () => useNixieSettingsStore().setValue(FOXHOLE_SCENE_FACTION_SETTING_ID, option.value),
             })),
         },
