@@ -1,3 +1,4 @@
+import { finalizeGeneratedAssetPublication } from './prune-obsolete-previews.mjs';
 import { normalizeRenderedIconAssociations, publishedRenderedIconValidator } from './rendered-icon-associations.mjs';
 import { alignFiringVolume } from './firing-volume-metadata.mjs';
 import { readFileSync } from 'node:fs';
@@ -8395,6 +8396,12 @@ try {
         }
     }
 
+    const finalization = await finalizeGeneratedAssetPublication({
+        assetsRoot: publicFoxholeAssetsDirectory, manifest, metadataOnly: metadataOnlyPublish,
+    });
+    if (finalization.regions || finalization.removed) {
+        logPublishSummary(`publish-manifest: refreshed ${finalization.regions} world catalog receipts; removed ${finalization.removed} obsolete preview files (${finalization.bytes} bytes)`);
+    }
     sharedModificationHashDiagnosticsSummary.outputPaths = outputPaths;
     if (publicationCachePromise) {
         try {

@@ -481,7 +481,17 @@ Use `npm run foxwatch -- clear-cache` to clear both render and publication cache
 Limited/debug renders and partial selections within a dependent structure group render
 normally so they cannot reuse incomplete wall-component postprocessing.
 
-The slowest publish step is usually copying/converting Blender output (`tmp/rendered-assets` → `public/foxhole/assets`), especially preview PNG → WebP and derived `icon.rendered` generation.
+Blender produces one 256 × 256 PNG source for each rendered icon. Publishing applies
+subtype badges and converts it to `icon.rendered.webp`; preview URLs reuse that icon.
+The internal `.preview.png` filename is still used for the sole rendered-icon source,
+not for a separate delivered preview.
+
+After committing the generated manifest, publishing refreshes the world regions’
+external catalog-model receipts, then removes unreferenced `.preview.webp` files
+(including directional variants) beneath generated `types/` and `shared/`.
+Cleanup validates the full deletion set first and refuses referenced previews or
+symbolic links. PNG sources, current icons/textures/models, and map payloads remain.
+Metadata-only publication skips both finalization steps. Neither step contacts R2.
 
 Defaults now:
 
