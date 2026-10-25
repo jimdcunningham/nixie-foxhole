@@ -1,69 +1,74 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { prepareStandalone, verifyStandalone, verifyStandaloneManifest } from './standalone-verification.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {prepareStandalone, verifyStandalone} from './standalone-verification.mjs';
 
-test('standalone hooks detach catalog input and verify exact map payload bytes', async () => {
-    const taskRoot = await fs.mkdtemp(join(tmpdir(), 'foxhole-standalone-hooks-'));
-    const oldAssetsRoot = process.env.NIXIE_FOXHOLE_ASSETS_ROOT;
-    try {
-        const fixtureRoot = join(taskRoot, 'fixture');
-        const assets = join(taskRoot, 'packages/extensions/foxhole/public/foxhole/assets');
-        for (const path of [join(fixtureRoot, 'src'), join(fixtureRoot, 'tests'), join(assets, 'models'), join(assets, 'maps'), join(assets, 'localizations'), join(fixtureRoot, 'dist/assets/maps')]) await fs.mkdir(path, { recursive: true });
-        await fs.writeFile(join(assets, 'manifest.v1.json'), '{"assets":[]}');
-        await fs.writeFile(join(assets, 'models/manifest.v1.json'), '{"assets":{},"resources":{}}');
-        await fs.writeFile(join(assets, 'maps/map-data.v1.json'), '{}');
-        for (const locale of ['de', 'fr', 'pt', 'ru', 'zh']) await fs.writeFile(join(assets, `localizations/${locale}.json`), '{}');
-        await fs.copyFile(new URL('../src/scene-v2-models.ts', import.meta.url), join(fixtureRoot, 'src/scene-v2-models.ts'));
-        await fs.copyFile(new URL('../src/scene-v2-model-policy.json', import.meta.url), join(fixtureRoot, 'src/scene-v2-model-policy.json'));
-        await fs.writeFile(join(fixtureRoot, 'nixie.extension.json'), JSON.stringify({ contributes: { experimentalResources: [] } }));
-        await fs.writeFile(join(fixtureRoot, 'src/scene-v2-assets-node.ts'), "export default '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json';");
-        const metadata = { regions: [{ labels: [], staticIcons: [] }] };
-        await fs.writeFile(join(fixtureRoot, 'src/scene-v2-map-data-node.ts'), 'export default ' + JSON.stringify(metadata) + '; export const foxholeMapResources = [{ id: "map", sourcePath: "maps/source.bin", path: "dist/assets/maps/tile.bin" }];');
-        await fs.writeFile(join(fixtureRoot, 'tests/catalog.test.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json';");
-        await fs.writeFile(join(fixtureRoot, 'tests/generated-models.ts'), "const path = '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json';");
-        await prepareStandalone({ extensionSource: fileURLToPath(new URL('..', import.meta.url)), fixtureRoot, foxholeAssetsRoot: assets });
-        assert.match(await fs.readFile(join(fixtureRoot, 'src/scene-v2-assets-node.ts'), 'utf8'), /.nixie-build-input/);
-        assert.match(await fs.readFile(join(fixtureRoot, 'tests/catalog.test.ts'), 'utf8'), /.nixie-build-input/);
-        assert.match(await fs.readFile(join(fixtureRoot, 'tests/generated-models.ts'), 'utf8'), /.nixie-build-input\/models.v1.json/);
-        const bytes = Buffer.from('map bytes');
-        await fs.writeFile(join(assets, 'maps/source.bin'), bytes);
-        await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), bytes);
-        await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/metadata.json'), JSON.stringify(metadata));
-        const packageVerification = { manifest: { contributes: {} }, metadata: { files: [{ path: 'dist/assets/maps/tile.bin', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] } };
-        const result = await verifyStandalone({ fixtureRoot, packageVerification });
-        assert.deepEqual(result.mapResourceVerification, { regions: 1, resources: 1, bytes: bytes.length, labels: 0, staticIcons: 0 });
-        await fs.writeFile(join(fixtureRoot, 'dist/assets/maps/tile.bin'), 'changed');
-        await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification }), /differs from its source/);
-        const receipt = { url: 'https://assets.example.test/index.json', sha256: 'a'.repeat(64), byteLength: 100 };
-        await fs.writeFile(join(fixtureRoot, 'nixie.extension.json'), JSON.stringify({ contributes: {
-            experimentalAssetPacks: [{ contractVersion: 1, id: 'foxhole.runtime', manifest: receipt }],
-        } }));
-        const readAssetIndex = async requested => {
-            assert.deepEqual(requested, receipt);
-            return { contractVersion: 1, assets: [{ path: 'dist/assets/maps/tile.bin', sourcePath: 'objects/map.bin',
-                sha256: createHash('sha256').update(bytes).digest('hex'), byteLength: bytes.length, mediaType: 'application/octet-stream' }] };
-        };
-        const remoteManifest = JSON.parse(await fs.readFile(join(fixtureRoot, 'nixie.extension.json'), 'utf8'));
-        const remotePackage = { manifest: remoteManifest, metadata: { files: [] } };
-        packageVerification.manifest = remoteManifest;
-        assert.deepEqual((await verifyStandalone({ fixtureRoot, packageVerification: remotePackage, readAssetIndex })).mapResourceVerification,
-            result.mapResourceVerification);
-        await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification, readAssetIndex }), /remote map/);
-        await fs.writeFile(join(assets, 'maps/source.bin'), 'new map bytes');
-        await assert.rejects(verifyStandalone({ fixtureRoot, packageVerification: remotePackage, readAssetIndex }), /remote map/);
-    } finally {
-        if (oldAssetsRoot === undefined) delete process.env.NIXIE_FOXHOLE_ASSETS_ROOT; else process.env.NIXIE_FOXHOLE_ASSETS_ROOT = oldAssetsRoot;
-        assert.ok(resolve(taskRoot).startsWith(resolve(tmpdir())));
-        await fs.rm(taskRoot, { recursive: true, force: true });
-    }
+async function fixture(t) {
+    const root = await fs.mkdtemp(path.join(tmpdir(), 'foxhole-standalone-hooks-'));
+    const previous = {catalog: process.env.NIXIE_FOXHOLE_CATALOG_FILE, assets: process.env.NIXIE_FOXHOLE_ASSETS_ROOT};
+    t.after(async () => {
+        for (const [key, value] of [['NIXIE_FOXHOLE_CATALOG_FILE', previous.catalog], ['NIXIE_FOXHOLE_ASSETS_ROOT', previous.assets]]) {
+            if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir()) + path.sep));
+        await fs.rm(root, {recursive: true, force: true});
+    });
+    const fixtureRoot = path.join(root, 'fixture'), assets = path.join(root, 'assets');
+    const write = async (name, bytes) => {await fs.mkdir(path.dirname(name), {recursive: true}); await fs.writeFile(name, bytes);};
+    await fs.mkdir(path.join(fixtureRoot, 'src'), {recursive: true});
+    await write(path.join(fixtureRoot, 'tests/catalog.test.ts'), "const source = '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json';");
+    const modelManifest = {schemaVersion: 1, assets: {hospital: {path: 'types/structures/hospital/hospital.glb'}},
+        resources: {variant: {path: 'types/structures/hospital/hospital.destroyed.glb'}}, sharedParts: {part: {path: 'shared/models/part.glb'}}};
+    for (const name of ['manifest.v1.json', 'maps/map-data.v1.json', ...['de', 'fr', 'pt', 'ru', 'zh'].map(locale => 'localizations/' + locale + '.json')]) await write(path.join(assets, name), '{}');
+    await write(path.join(assets, 'models/manifest.v1.json'), JSON.stringify(modelManifest));
+    for (const model of [...Object.values(modelManifest.assets), ...Object.values(modelManifest.resources), ...Object.values(modelManifest.sharedParts)]) await write(path.join(assets, model.path), 'model: ' + model.path);
+    const catalogFile = path.join(root, 'published-catalog.json');
+    await write(catalogFile, '{"catalogSchemaVersion":1,"products":[]}');
+    process.env.NIXIE_FOXHOLE_CATALOG_FILE = catalogFile;
+    return {root, fixtureRoot, assets, modelManifest, catalogFile, write};
+}
+
+test('standalone preparation detaches the selected catalog, model dependencies and metadata from the checkout', async t => {
+    const {fixtureRoot, assets, modelManifest, catalogFile} = await fixture(t);
+    await prepareStandalone({extensionSource: fileURLToPath(new URL('..', import.meta.url)), fixtureRoot, foxholeAssetsRoot: assets});
+    const input = path.join(fixtureRoot, 'src/.nixie-build-input');
+    assert.equal(process.env.NIXIE_FOXHOLE_CATALOG_FILE, path.join(input, 'catalog.v1.json'));
+    assert.equal(process.env.NIXIE_FOXHOLE_ASSETS_ROOT, input);
+    assert.deepEqual(await fs.readFile(path.join(input, 'catalog.v1.json')), await fs.readFile(catalogFile));
+    for (const model of [...Object.values(modelManifest.assets), ...Object.values(modelManifest.resources), ...Object.values(modelManifest.sharedParts)]) assert.deepEqual(await fs.readFile(path.join(input, model.path)), await fs.readFile(path.join(assets, model.path)));
+    assert.match(await fs.readFile(path.join(fixtureRoot, 'tests/catalog.test.ts'), 'utf8'), /\.\.\/src\/\.nixie-build-input\/models\/manifest\.v1\.json/);
+    assert.match(await fs.readFile(path.join(fixtureRoot, 'src/scene-v2-asset-metadata.ts'), 'utf8'), /\.nixie-authoring/);
+    await fs.rm(assets, {recursive: true});
+    assert.ok((await fs.readFile(path.join(input, 'models/manifest.v1.json'))).length > 0);
 });
-test('Planner contribution requirements stay extension-owned', async () => {
-    const manifest = JSON.parse(await fs.readFile(new URL('../nixie.extension.json', import.meta.url)));
-    verifyStandaloneManifest(manifest);
-    assert.throws(() => verifyStandaloneManifest({ contributes: {} }), /migrated contributions/);
+
+test('standalone preparation rejects model paths outside the detached input directory', async t => {
+    const {root, fixtureRoot, assets} = await fixture(t);
+    await fs.writeFile(path.join(assets, 'models/manifest.v1.json'), JSON.stringify({assets: {escape: {path: '../outside.glb'}}}));
+    await assert.rejects(prepareStandalone({extensionSource: fileURLToPath(new URL('..', import.meta.url)), fixtureRoot, foxholeAssetsRoot: assets}), /Unsafe standalone model input/);
+    await assert.rejects(fs.access(path.join(root, 'outside.glb')), {code: 'ENOENT'});
+});
+
+test('standalone verification delegates archive checks and rejects changed or duplicated catalog bytes', async t => {
+    const {fixtureRoot, catalogFile, write} = await fixture(t);
+    // Archive integrity is exercised by verify-publication-package and the real packed-consumer gate.
+    // This fixture isolates the hook's additional byte-identity and runtime-module requirements.
+    await write(path.join(fixtureRoot, 'build/verify-publication-package.mjs'), 'export async function verifyRemotePublicationPackage(file) { if (!file.endsWith(".nxext")) throw Error("invalid archive"); return {verified:true}; }');
+    const builtCatalog = path.join(fixtureRoot, 'dist/catalog.v1.json'), runtime = path.join(fixtureRoot, 'dist/assets/index.js');
+    await write(builtCatalog, await fs.readFile(catalogFile));
+    const validRuntime = 'import catalog from "../catalog.v1.json" with {type:"json"}; export default catalog;';
+    await write(runtime, validRuntime);
+    const args = {fixtureRoot, packageVerification: {packagePath: path.join(fixtureRoot, 'extension.nxext')}};
+    await verifyStandalone(args);
+    await assert.rejects(verifyStandalone({...args, packageVerification: {packagePath: 'wrong.zip'}}), /invalid archive/);
+    await fs.appendFile(builtCatalog, ' ');
+    await assert.rejects(verifyStandalone(args), /changed FoxWatch catalog bytes/);
+    await fs.writeFile(builtCatalog, await fs.readFile(catalogFile));
+    await fs.writeFile(runtime, 'export default {};');
+    await assert.rejects(verifyStandalone(args), /single packaged JSON module/);
+    await fs.writeFile(runtime, validRuntime + 'const duplicated = {catalogSchemaVersion:1};');
+    await assert.rejects(verifyStandalone(args), /duplicates its catalog/);
 });

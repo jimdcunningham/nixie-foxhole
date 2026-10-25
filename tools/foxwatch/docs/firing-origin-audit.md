@@ -80,3 +80,20 @@ AI coverage and physical muzzle FX now carry independent frames. `fv.coverage` r
 All four pillboxes (Rifle, MG, AT and ISG) have an explicit 4 m Planner display cutoff, requested for comparison with the placement-preview screenshot. This is an authored display assumption, not extracted evidence of a gameplay minimum. Rifle/MG/AT bunker AI keep their source minimums, with no added 4 m cutoff. Existing 25 m artillery minimums remain intact.
 
 Focused extraction verified component origins `[0,0,0]` and identity orientations for all 13 affected assets while preserving their original muzzle offsets. Both 2D annular graphics and 3D cones retain the inner boundary at night; existing category, selection, nighttime and spotlight gates still apply. The schema/publication checks cover independent frame rotation and idempotence. Planner: 1,019 tests; FoxWatch: 260 tests; typecheck and offline C# extraction/policy checks passed.
+## Refreshed Source-Frame Regression Fixtures: October 25, 2026
+
+The completed refresh exposed two obsolete Planner firing-origin tests. A fresh,
+targeted extraction of Tankette Offensive C and Harpy reproduced the published
+coordinates. The decoded Blueprint inspections and saved model-generation scenes
+confirm the source hierarchy: Tankette Offensive C's `CharacterMesh0` has yaw 270;
+aircraft `FuselageGroup` has yaw -90, composed with each actor mesh's own rotation.
+The Harpy mesh has identity local rotation; the Torpedo W, Dive C and Bomber C
+meshes add yaw 270. The older fixtures omitted these inherited mesh/group frames.
+
+Updated the fixed actor/model-space socket coordinates and Tankette Offensive C
+orientation in `extensions/foxhole-planner/tests/firing-origins.test.ts`. The offline
+C# regression now checks the Tankette parent/chassis translation and quarter turns,
+and the aircraft group rotation, even when cached absolute accessors contain zeros.
+Existing checks still protect independent 2D ranges, hierarchy composition, socket
+ownership, ambiguity rejection, and the vehicle debug gate. No extractor, generated
+asset, catalog pin, or R2 object changed for this correction.

@@ -29,10 +29,11 @@ test('AI coverage uses component origins without discarding physical muzzle coor
 });
 
 test('tankette sockets retain physical model frames independently of legacy ground ranges', () => {
-    // Legacy planar corrections must not rotate a resolved model-space muzzle.
+    // Source Blueprint hierarchy: the Offensive chassis inherits CharacterMesh0 yaw 270.
+    // These are actor/model-space sockets; legacy planar corrections must not rotate them again.
     for (const [id,origin,orientation] of [
         ['tankettec',[1.85378,0.28763,0.12808],[0,0,0,-1]],
-        ['tanketteoffensivec',[-0.22763,2.10036,0.2143],[0,0,-Math.SQRT1_2,-Math.SQRT1_2]],
+        ['tanketteoffensivec',[2.16036,0.28763,0.2143],[0,0,0,1]],
     ] as const) {
         const asset=assets[id]!, source=asset.ranges![0]!.firingVolume!;
         assert.equal(source.originSource,'muzzle-socket');
@@ -85,10 +86,11 @@ test('remaining initialization-bound guns retain their source origins and launch
         scoutvehicleoffensivew:[['S_Muzzle',0.28917,0.00001,0.82404]],
         truckoffensivec:[['S_Muzzle',3.60915,0.5552,1.65804]],
         scoutvehicleoffensivec:[['S_Muzzle',-0.38509,0.32216,0.90299]],
-        aircraftfighter2c:[['S_AircraftFighter2C_Top_Gunner_0',0.72919,2.07726,1.40527]],
-        aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',0.00393,-6.16677,0.28913]],
-        aircraftdivec:[['S_AircraftDiveC_Muzzle_L',-0.06061,-2.0636,0.9044]],
-        aircraftbomberc:[['S_Muzzle_Fore_0',0,7.11152,0.46479],['S_Muzzle_Mid_0',-0.00005,-7.46581,1.46248],['S_Muzzle_Aft_0',0.01029,-15.62941,0.23921]],
+        // Aircraft sockets include the composed mesh/group rotation (Harpy -90; the others 180).
+        aircraftfighter2c:[['S_AircraftFighter2C_Top_Gunner_0',2.07726,-0.72919,1.40527]],
+        aircrafttorpedow:[['S_AircraftTorpedoW_Muzzle',-0.00393,6.16677,0.28913]],
+        aircraftdivec:[['S_AircraftDiveC_Muzzle_L',0.06061,2.0636,0.9044]],
+        aircraftbomberc:[['S_Muzzle_Fore_0',0,-7.11152,0.46479],['S_Muzzle_Mid_0',0.00005,7.46581,1.46248],['S_Muzzle_Aft_0',-0.01029,15.62941,0.23921]],
         armoredcar2multiw:[['PayloadInstancedStaticMesh',-1.73084,-0.56515,0.8299]],
         truckmultic:[['PayloadInstancedStaticMesh',-4.00573,1.52788,1.1481]],
         gunboat2c:[['PayloadInstancedStaticMesh',-4.47388,-1.2613,5.07751]],

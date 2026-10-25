@@ -98,6 +98,29 @@ try {
     frames=(IReadOnlyList<FoxWatchBlueprintComponentReference>)readFrames.Invoke(extractor,[new object[]{unknownNative},blueprint,new Dictionary<string,object>{{"CharacterMesh0",unknownNative}}])!;
     Check(frames.Count==0,"Unknown native constructor rotation invented a model-space muzzle");
     cache[path]=knownRefs;
+    // Source-derived examples: stale absolute accessor zeros must not erase an authored parent chain.
+    // These frames are also present in the decoded inspection and the model-generation scene.
+    var resolveReferences=type.GetMethod("ResolveFiringSocketReferences",flags)!;
+    boneMap.Add("S_SnapshotMuzzle",Activator.CreateInstance(transformType,[-28.763d,210.036d,190.43d,Quaternion.CreateFromAxisAngle(Vector3.UnitZ,MathF.PI/2)])!);
+    var tanketteReferences=new FoxWatchBlueprintComponentReference[]{
+        new(){ComponentName="CollisionCylinder",RelativeRotation="P=0 Y=0 R=0"},
+        new(){ComponentName="CharacterMesh0",AttachParentName="CollisionCylinder",RelativeLocation="X=6 Y=0 Z=-169",RelativeRotation="P=0 Y=270 R=0",AbsoluteLocation="X=6 Y=0 Z=-169",AbsoluteRotation="P=0 Y=0 R=0"},
+        new(){ComponentName="Chassis",AttachParentName="CharacterMesh0",MeshType="skeletal",MeshPath=mesh,RelativeRotation="P=0 Y=0 R=0",AbsoluteLocation="X=0 Y=0 Z=0",AbsoluteRotation="P=0 Y=0 R=0"}
+    };
+    var snapshotFrame=resolveReferences.Invoke(extractor,[tanketteReferences,"S_SnapshotMuzzle"])!;
+    var snapshotTransform=Read(snapshotFrame,"Transform");
+    Check(Math.Abs((double)Read(snapshotTransform,"X")-216.036)<.001 && Math.Abs((double)Read(snapshotTransform,"Y")-28.763)<.001 && Math.Abs((double)Read(snapshotTransform,"Z")-21.43)<.001,"Tankette muzzle lost the model's inherited chassis rotation or translation");
+    Check(Math.Abs(((Quaternion)Read(snapshotTransform,"Rotation")).W)>0.99999,"Tankette mesh/socket quarter turns did not cancel");
+    boneMap.Add("S_AircraftSnapshotMuzzle",Activator.CreateInstance(transformType,[72.919d,207.726d,140.527d,Quaternion.Identity])!);
+    var aircraftReferences=new FoxWatchBlueprintComponentReference[]{
+        new(){ComponentName="Collision",RelativeRotation="P=0 Y=0 R=0"},
+        new(){ComponentName="FuselageGroup",AttachParentName="Collision",RelativeRotation="P=0 Y=-90 R=0"},
+        new(){ComponentName="CharacterMesh0",AttachParentName="FuselageGroup",MeshType="skeletal",MeshPath=mesh,RelativeRotation="P=0 Y=0 R=0",AbsoluteLocation="X=0 Y=0 Z=0",AbsoluteRotation="P=0 Y=0 R=0"}
+    };
+    snapshotFrame=resolveReferences.Invoke(extractor,[aircraftReferences,"S_AircraftSnapshotMuzzle"])!;
+    snapshotTransform=Read(snapshotFrame,"Transform");
+    Check(Math.Abs((double)Read(snapshotTransform,"X")-207.726)<.001 && Math.Abs((double)Read(snapshotTransform,"Y")+72.919)<.001 && Math.Abs((double)Read(snapshotTransform,"Z")-140.527)<.001,"Aircraft muzzle lost its authored FuselageGroup rotation");
+    Console.WriteLine("Decoded model hierarchy firing-frame checks passed");
     var socketResolver=type.GetMethod("ResolveFiringSocket",flags)!;
     resolved=socketResolver.Invoke(extractor,[blueprint,"S_Muzzle"])!;
     transform=Read(resolved,"Transform");
