@@ -920,7 +920,7 @@ export function useFoxholeWarPanelData() {
     const settingsStore = useNixieSettingsStore();
     const mapSettings = computed(() => readFoxholeMapSettings(
         runtime.projectStore.settings,
-        settingId => settingsStore.getValue(settingId),
+        settingId => settingsStore.getValueOr(settingId, undefined),
     ));
     const playbackEnabled = computed(() => runtimeConfig.public?.foxholePlaybackApiEnabled !== false);
 

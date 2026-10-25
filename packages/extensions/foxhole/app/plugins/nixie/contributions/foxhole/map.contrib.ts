@@ -145,7 +145,7 @@ export default defineContribution({
                 const settingsStore = useNixieSettingsStore();
                 const settings = readFoxholeMapSettings(
                     context.project.settings.value,
-                    settingId => settingsStore.getValue(settingId),
+                    settingId => settingsStore.getValueOr(settingId, undefined),
                 );
                 if (!settings.enabled) {
                     return null;

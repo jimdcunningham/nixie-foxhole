@@ -19,7 +19,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     let lastSpatialRegion: string | null = null;
     const settingsStore = useNixieSettingsStore();
     // Frame callbacks share one reactive snapshot; Pinia action reads allocate.
-    const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValue(id)));
+    const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValueOr(id, undefined)));
     const delivery = foxholeWorldAssetDelivery();
     const world = new FoxholeRegionSceneController({
         // Scene time of day owns the shared sky; a region must not install Noon Sky.

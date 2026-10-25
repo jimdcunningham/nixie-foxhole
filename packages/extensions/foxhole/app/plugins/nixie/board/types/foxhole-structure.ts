@@ -2957,10 +2957,12 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             return;
         }
 
+        // Retired settings can disappear before the old board node is destroyed.
+        // Skip overlay work until their definitions are registered again.
         this.settingsWatcher = watch(() => {
-            return FOXHOLE_STRUCTURE_DEBUG_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValue(settingId));
-        }, () => {
-            if (this.destroyed) {
+            return FOXHOLE_STRUCTURE_DEBUG_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValueOr(settingId, undefined));
+        }, values => {
+            if (this.destroyed || values.some(value => typeof value === 'undefined')) {
                 return;
             }
 
@@ -2970,11 +2972,11 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
         this.rangeSettingsWatcher = watch(() => {
             return [
-                ...FOXHOLE_STRUCTURE_RANGE_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValue(settingId)),
+                ...FOXHOLE_STRUCTURE_RANGE_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValueOr(settingId, undefined)),
                 this.settingsStore.getValue('nixie.debug.overlay'),
             ];
         }, (values, previousValues) => {
-            if (!this.destroyed) {
+            if (!this.destroyed && values.every(value => typeof value !== 'undefined')) {
                 if (values.slice(0, FOXHOLE_NIGHT_RANGE_SETTING_IDS.length).some((value, index) => value !== previousValues[index])) {
                     this.syncStructureRenderLayers();
                 }
@@ -2997,11 +2999,11 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
         this.itemTileSettingsWatcher = watch(() => [
             resolveNxTheme(this.settingsStore.getValue(NIXIE_COLOR_THEME_SETTING_ID) as NxThemePreference),
-            this.settingsStore.getValue(FOXHOLE_STATS_SETTING_KEYS.timeInterval),
-            this.settingsStore.getValue(FOXHOLE_STATS_SETTING_KEYS.customIntervalSeconds),
+            this.settingsStore.getValueOr(FOXHOLE_STATS_SETTING_KEYS.timeInterval, undefined),
+            this.settingsStore.getValueOr(FOXHOLE_STATS_SETTING_KEYS.customIntervalSeconds, undefined),
             canvasHoverPopover.value?.owner,
-        ] as const, ([theme], [previousTheme]) => {
-            if (!this.destroyed) {
+        ] as const, ([theme, interval, customSeconds], [previousTheme]) => {
+            if (!this.destroyed && typeof interval !== 'undefined' && typeof customSeconds !== 'undefined') {
                 if (theme !== previousTheme) {
                     this.markedCargoOverlayCacheKey = '';
                 }

@@ -494,7 +494,7 @@ export function startFoxholePlaybackEventService(context: NixieRuntimeServiceCon
     const settingsStore = useNixieSettingsStore();
     const mapSettings = computed(() => readFoxholeMapSettings(
         context.runtime.projectStore.settings,
-        settingId => settingsStore.getValue(settingId),
+        settingId => settingsStore.getValueOr(settingId, undefined),
     ));
     const playbackEnabled = computed(() => context.publicRuntimeConfig?.foxholePlaybackApiEnabled !== false);
 

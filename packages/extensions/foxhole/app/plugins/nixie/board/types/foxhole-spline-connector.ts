@@ -3722,9 +3722,9 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
         }
 
         this.settingsWatcher = watch(() => {
-            return FOXHOLE_SPLINE_CONNECTOR_DEBUG_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValue(settingId));
-        }, () => {
-            if (!this.destroyed) {
+            return FOXHOLE_SPLINE_CONNECTOR_DEBUG_OVERLAY_SETTING_IDS.map(settingId => this.settingsStore.getValueOr(settingId, undefined));
+        }, values => {
+            if (!this.destroyed && values.every(value => typeof value !== 'undefined')) {
                 this.syncFromState();
             }
         });

@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { nextTick, reactive, shallowRef, watch } from 'vue';
 import * as networks from '../app/plugins/foxhole/nixie/structure-socket-networks.ts';
 
-test('a connector-only scene installs roof hover, fades its host, and releases listeners on unmount', () => {
+test('a connector-only scene installs roof hover, fades its host, and releases listeners on unmount', async () => {
+    const settings = reactive(new Map([['hover', true]]));
     const listeners = new Map<string, unknown>();
     const tickerCallbacks = new Set<unknown>();
     class Container {
         destroyed = false; parent: Container | null = null;
+        on() {}
+        off() {}
     }
     class Point {
         x: number; y: number; constructor(x: number, y: number) {
@@ -46,16 +50,16 @@ test('a connector-only scene installs roof hover, fades its host, and releases l
             } } };
         }
         if (name === 'vue') {
-            return { watch: () => () => {} };
+            return { watch };
         }
         if (name.endsWith('shared-state.ts')) {
-            return { activeNixieViewport: { value: viewport }, activeNixiePlacementPreviewTransforms: { value: {} }, activeNixieStructureModificationHoverPreview: { value: null } };
+            return { activeNixieViewport: shallowRef(viewport), activeNixiePlacementPreviewTransforms: shallowRef({}), activeNixieStructureModificationHoverPreview: shallowRef(null) };
         }
         if (name.endsWith('structure-debug-settings.ts')) {
             return { FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS: { hideRoofsOnHover: 'hover' } };
         }
         if (name.endsWith('settings.ts')) {
-            return { useNixieSettingsStore: () => ({ getValue: () => true }) };
+            return { useNixieSettingsStore: () => ({ getValueOr: (id: string, fallback: unknown) => settings.has(id) ? settings.get(id) : fallback }) };
         }
         if (name.endsWith('nixie-board-perf.ts')) {
             return { boardPerfMeasure: (_label: string, action: () => void) => action() };
@@ -81,6 +85,12 @@ test('a connector-only scene installs roof hover, fades its host, and releases l
     runtime.flush();
     assert.deepEqual(calls, [[true, undefined]]);
     assert.equal(tickerCallbacks.size, 1);
+    settings.delete('hover');
+    await nextTick();
+    assert.equal(listeners.size, 0, 'retiring settings releases roof hover listeners');
+    settings.set('hover', true);
+    await nextTick();
+    assert.ok(listeners.has('pointermove'), 're-registration restores roof hover');
     runtime.unregisterFoxholeRoofHoverHost(host);
     assert.deepEqual(calls.at(-1), [false, true]);
     assert.equal(tickerCallbacks.size, 0);

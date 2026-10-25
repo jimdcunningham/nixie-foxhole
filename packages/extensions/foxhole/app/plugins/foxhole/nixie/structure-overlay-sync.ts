@@ -204,7 +204,7 @@ function resolveOverlaySyncContext(): FoxholeStructureOverlaySyncContext {
 
     return {
         hoveredNodeId: preview?.nodeId ? String(preview.nodeId) : null,
-        showAllSockets: settingsStore.getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets) === true,
+        showAllSockets: settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, false) === true,
     };
 }
 
@@ -263,7 +263,7 @@ function ensureOverlaySyncWatchers(): void {
                 markAllFoxholeStructureOverlaysDirty();
             }
         }),
-        watch(() => useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover), enabled => {
+        watch(() => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover, false), enabled => {
             if (enabled === true) {
                 installBunkerRoofHoverListeners();
             } else {
@@ -271,7 +271,7 @@ function ensureOverlaySyncWatchers(): void {
             }
         }),
     ];
-    if (useNixieSettingsStore().getValue(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover) === true) {
+    if (useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover, false) === true) {
         installBunkerRoofHoverListeners();
     }
 }

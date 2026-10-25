@@ -216,7 +216,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private readonly settingsStore = useNixieSettingsStore();
     private readonly mapSettings = computed(() => readFoxholeMapSettings(
         this.pluginContext.projectStore.settings,
-        settingId => this.settingsStore.getValue(settingId),
+        settingId => this.settingsStore.getValueOr(settingId, undefined),
     ));
 
     readonly updatePresentation = (): void => {
