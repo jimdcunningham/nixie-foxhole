@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
+import { createBrowserAtlas } from '../../../../../extensions/foxhole-planner/build/browser-atlas-images.ts';
 import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
 import { createFoxholeSceneV2AssetMetadata } from '../../../../../extensions/foxhole-planner/src/scene-v2-asset-metadata.ts';
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
@@ -38,6 +39,7 @@ test('SDK library icons and hover text preserve the visible authored Native asse
     const manifest = JSON.parse(await readFile(hostSourceUrl('manifest.v1.json', root), 'utf8'));
     const generated = createFoxholeSceneV2AssetMetadata(manifest);
     const strings = manifest.localizations.find((entry: { locale: string; }) => entry.locale === 'en').strings;
+    const atlases = new Map<number, Promise<Buffer>>();
     const samples = [manifest.assets.find((asset: { id: string; }) => asset.id === 'facilityrefinery1'),
         manifest.assets.find((asset: { id: string; }) => asset.id === 'facilityfactoryammo'),
         manifest.assets.find((asset: { id: string; }) => asset.id === 'rifleammo'),
@@ -58,8 +60,15 @@ test('SDK library icons and hover text preserve the visible authored Native asse
             const resource = resolveNixieExperimentalResourceV1(extension.contributes.experimentalResources ?? [],
                 extension.contributes.experimentalResourceTemplates ?? [], image.resourceId);
             assert.equal(resource?.kind, 'texture');
-            const sheet = hostSourceUrl(resource!.path, plannerRoot);
-            const actual = await sharp(fileURLToPath(sheet)).extract({ left: image.frame.x, top: image.frame.y,
+            const atlasIndex = Number(image.resourceId.split('.').at(-1));
+            assert.equal(resource!.path, `shared/icons/browser-${atlasIndex}.webp`);
+            // Atlas files are remote release resources, not checked-in Planner files.
+            // Build this test fixture with the publisher's real assembler from authored inputs.
+            if (!atlases.has(atlasIndex)) {
+                atlases.set(atlasIndex, createBrowserAtlas(generated.browserImageSources.slice(atlasIndex * 64, (atlasIndex + 1) * 64)
+                    .map(path => fileURLToPath(hostSourceUrl(path.slice('/foxhole/assets/'.length), root)))));
+            }
+            const actual = await sharp(await atlases.get(atlasIndex)!).extract({ left: image.frame.x, top: image.frame.y,
                 width: image.frame.width, height: image.frame.height }).ensureAlpha().raw().toBuffer();
             const expected = await sharp(fileURLToPath(hostSourceUrl(source.slice('/foxhole/assets/'.length), root)))
                 .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).ensureAlpha().raw().toBuffer();

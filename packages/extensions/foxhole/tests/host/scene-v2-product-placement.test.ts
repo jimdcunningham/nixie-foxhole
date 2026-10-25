@@ -474,9 +474,12 @@ test('pending creation finalizers remain detached, reject duplicate confirmation
         (f: ReturnType<typeof splineFixture>) => f.runtime.attachPersistence(null)]) {
         const f = splineFixture('scene-v2-diagram');
         let complete!: (value: { transform: { x: number; y: number; rotation: number; scaleX: number; scaleY: number; }; transactions: []; warnings: []; }) => void;
-        f.runtime.attachTransformFinalizer({ replaceEntities: () => {}, finalize: async () => new Promise(resolve => {
-            complete = resolve;
-        }) });
+        let finalizations = 0;
+        f.runtime.attachTransformFinalizer({ replaceEntities: () => {}, finalize: async (_id, transform) => {
+            // The first click now finalizes the detached anchor as well.
+            if (finalizations++ === 0) return { transform, transactions: [], warnings: [] };
+            return new Promise(resolve => { complete = resolve; });
+        } });
         assert.equal(f.begin(), true);
         await f.runtime.commitProductPlacement({ x: 0, y: 0 });
         const pending = f.runtime.commitProductPlacement({ x: 120, y: 0 });
@@ -522,10 +525,11 @@ test('Foxhole and neutral owned splines draw with two host clicks, detached prev
         assert.equal((await f.runtime.commitProductPlacement({ x: 100, y: 60 })).ok, true);
         assert.equal(f.runtime.entities.length, 0);
         assert.equal(f.mutations.length, 0);
+        const anchored = readNixieSceneV2EditableSpline(f.runtime.productPlacement!.entity, f.runtime.definitions)!.data;
         assert.equal(f.runtime.updateProductPlacement({ x: 220, y: 180 }), true);
         const draft = readNixieSceneV2EditableSpline(f.runtime.productPlacement!.entity, f.runtime.definitions)!;
         assert.deepEqual([draft.data.startX, draft.data.startY, draft.data.endX, draft.data.endY], [0, 0, 120, 120]);
-        assert.ok(Math.abs(draft.data.startRotation - Math.PI / 4) < 1e-8);
+        assert.deepEqual([draft.data.startRotation, draft.data.endRotation], [anchored.startRotation, anchored.endRotation], 'moving the endpoint preserves both fitting rotations');
         assert.equal(f.mutations.length, 0);
         assert.equal((await f.runtime.commitProductPlacement({ x: 220, y: 180 })).ok, true);
         assert.equal(f.mutations.length, 1);
@@ -702,7 +706,9 @@ for (const reject of [false, true]) test(`placement previews surface elevation w
 
 test('real Planner surface finalizer grounds placement and live moves even with socket snapping disabled', async () => {
     const f = splineFixture('foxhole-planner');
-    bindFoxholeModelLayerNodes(foxholeAssets.foundation012x2t1!, readFileSync(hostSourceUrl('../../public/foxhole/assets/models/foundation012x2t1.glb', import.meta.url)));
+    const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);
+    const modelManifest = JSON.parse(readFileSync(new URL('models/manifest.v1.json', assetsRoot), 'utf8'));
+    bindFoxholeModelLayerNodes(foxholeAssets.foundation012x2t1!, readFileSync(new URL(modelManifest.assets.foundation012x2t1.path, assetsRoot)));
     const product = (id: string) => listFoxholeSceneV2Products({ contractVersion: 1, query: id, offset: 0, limit: 100 })
         .items.find(entry => entry.product.id === `asset.${id}`)!.product;
     assert.equal(f.runtime.instantiateProduct(product('foundation012x2t1'), f.manifest.id, 'Floor', () => 'floor').ok, true);

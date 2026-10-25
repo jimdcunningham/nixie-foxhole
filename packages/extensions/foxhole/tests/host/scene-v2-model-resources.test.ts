@@ -13,9 +13,9 @@ const readGeneratedModel = (id: string): Buffer => readFileSync(new URL(modelBun
 
 test('the saved station preview identity resolves the canonical asset-repository model', () => {
     const plugin = readFileSync(new URL('../../app/plugins/foxhole-host-adapters.client.ts', import.meta.url), 'utf8');
-    const registration = /registerNixieInternalModelResource\('nixie\.core\/resource-transfer-station-preview', '([^']+)'\)/.exec(plugin);
+    const registration = /registerNixieInternalModelResource\('nixie\.core\/resource-transfer-station-preview', assetDelivery\.resolve\('([^']+)'\)\)/.exec(plugin);
     assert.ok(registration, 'old development documents retain their preview identity');
-    assert.equal(registration[1], '/foxhole/assets/' + modelBundle.assets.facilitytransferresource.path);
+    assert.equal(registration[1], modelBundle.assets.facilitytransferresource.path);
     assert.equal(readGeneratedModel('facilitytransferresource').readUInt32LE(0), 0x46546c67);
 });
 

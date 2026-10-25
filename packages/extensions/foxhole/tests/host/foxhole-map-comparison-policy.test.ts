@@ -30,6 +30,7 @@ for (const development of [false, true]) {
         const sceneV2 = ref(true);
         const items = evaluate(`${itemsScript}\nitems;`, development, {
             computed, documentSession: { isSceneV2Active: sceneV2 },
+            mapSettings: ref({ coloredIcons: true, adaptiveStreaming: true, modelLod: true }),
             settingsStore: { getValueOr: () => true }, FOXHOLE_USE_SDK_MAP_SETTING_ID: settingId,
             notificationsEnabled: ref(true), shards: ref([]),
         });

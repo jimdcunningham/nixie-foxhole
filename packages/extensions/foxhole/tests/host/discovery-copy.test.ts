@@ -4,6 +4,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import JSZip from 'jszip';
+import { readProjectExtensionReleases } from '#nixie-internal/desktop-extensions/project-releases.ts';
 import { NixieProjectArchive } from '../../../../nixie/app/plugins/nixie/project-archive.ts';
 import { checkDiscoveryNodeTree, checkNativeDiscoveryZip } from '../../../../nixie/app/utils/discovery-archive.ts';
 
@@ -19,6 +20,7 @@ test('signed-out native Discovery copies select a local destination and retain r
     const provenance = { listingId: 'public-plan', releaseId: 'release' };
     let imported: Record<string, unknown> | undefined;
     const copy = loadCopy({
+        readProjectExtensionReleases,
         useSupabaseUser: () => ({ value: null }),
         NixieProjectArchive: { readProjectArchive: async () => archive },
         prepareDiscoveryProjectExtensions: async () => {},
@@ -37,7 +39,7 @@ test('signed-out native Discovery copies select a local destination and retain r
         },
     }, 'importNixieProjectArchive');
     assert.equal(await copy(new File([], 'plan.zip'), { discovery: { provenance } }), 'local-copy');
-    assert.deepEqual(imported, { archive, name: 'Plan Copy', enabledExtensionIds: ['foxhole'], provenance });
+    assert.deepEqual(imported, { archive, name: 'Plan Copy', enabledExtensionIds: ['foxhole'], extensionReleases: undefined, provenance });
 });
 
 test('local native copies persist content, extensions and source provenance before navigation', async () => {

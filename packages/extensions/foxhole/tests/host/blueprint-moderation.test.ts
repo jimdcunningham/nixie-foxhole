@@ -5,6 +5,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import JSZip from 'jszip';
+import { discoverySceneV2ImageIds, checkDiscoverySceneV2, discoverySceneV2HasContent } from '#nixie-internal/app/utils/discovery-scene-v2.ts';
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
 import { createError } from 'h3';
@@ -23,6 +24,7 @@ function loadFunction(file: string, name: string, dependencies: Record<string, u
 const nativeManifest = loadFunction('../../../../nixie/server/utils/nixie-registry-projects.ts', 'readProjectArchiveManifest', {
     checkNativeDiscoveryZip, checkDiscoveryNodeTree, readCheckedZipEntry, JSZip, LEGACY_BLUEPRINT_LIMITS,
     createHash, createError, sceneHasPublicationContent, spreadsheetHasPublicationContent, documentHasPublicationContent,
+    discoverySceneV2ImageIds, checkDiscoverySceneV2, discoverySceneV2HasContent,
 });
 const review = loadFunction('../../server/utils/blueprint-moderation.ts', 'reviewBlueprintContent', { blueprintModerationFlags, BLUEPRINT_MODERATION_POLICY });
 

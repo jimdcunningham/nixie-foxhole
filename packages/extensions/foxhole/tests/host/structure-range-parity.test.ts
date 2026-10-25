@@ -38,7 +38,11 @@ test('all published range metadata and visibility categories match Native select
         if (!metadata) {
             continue;
         }
-        assert.deepEqual(metadata.ranges, asset.ranges, asset.id);
+        assert.deepEqual(metadata.ranges.map(({ firingVolume, ...range }) => range), asset.ranges, asset.id);
+        const sourceRanges = published.assets.find(source => source.id === asset.id)?.ranges ?? [];
+        for (const [index, range] of metadata.ranges.entries()) {
+            if (range.firingVolume) assert.deepEqual(range.firingVolume, (sourceRanges[index]?.firingVolume ?? sourceRanges[index]?.fv), asset.id + '/firing-volume');
+        }
         for (const range of asset.ranges) {
             ranges++;
             for (const setting of [null, ...FOXHOLE_STRUCTURE_RANGE_SETTING_IDS]) {
