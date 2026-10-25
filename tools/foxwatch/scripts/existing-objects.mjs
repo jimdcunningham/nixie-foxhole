@@ -30,8 +30,10 @@ export function existingAssetObjects(inventory, input) {
     for(const row of inventory.objects){
         portablePath(row.key); if(!row.key.startsWith(target.prefix+'/') || byKey.has(row.key)) throw Error('Invalid existing-object key');
         byKey.set(row.key,row);
-        // Unversioned roots and mutable channels are not immutable asset candidates.
-        if(!/[a-f0-9]{64}/.test(row.key) && !row.key.startsWith(target.prefix+'/releases/')) continue;
+        // Reuse only shared content-addressed storage. Legacy release copies and
+        // publication indexes must never become dependencies of a new catalog.
+        if ((!row.key.startsWith(target.prefix+'/objects/') && !row.key.startsWith(target.prefix+'/world/content/'))
+            || !/[a-f0-9]{64}/.test(row.key)) continue;
         if(!validHash(row.sha256)||!validHash(row.decodedSha256)||!validSize(row.bytes)||!validSize(row.decodedBytes)
             || !['image/webp','model/gltf-binary','application/json'].includes(row.mediaType)
             || ![undefined,'br','gzip'].includes(row.contentEncoding)

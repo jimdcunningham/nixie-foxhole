@@ -76,3 +76,33 @@ test('FoxWatch produces one catalog and shared content objects that resumes with
     await assert.rejects(publishAssetPublication({planPath: prepared.planPath, transport}), /different bytes or headers/);
     await assert.rejects(prepareProductCatalog({assetsRoot, output: path.join(root, 'snapshot'), assetRelease: '2026-10-24.1', target, sources}), /EEXIST/);
 });
+
+
+test('legacy release objects migrate to hashed paths and subsequent catalogs reuse the established paths', async t => {
+    const root = await fs.mkdtemp(path.join(tmpdir(), 'foxwatch-canonical-'));
+    t.after(() => fs.rm(root, {recursive: true, force: true}));
+    const assetsRoot = path.join(root, 'assets'); await fs.mkdir(assetsRoot);
+    const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+    const model = Buffer.from('model bytes'), image = Buffer.from('image bytes');
+    await fs.writeFile(path.join(assetsRoot, 'hospital.glb'), model);
+    await fs.writeFile(path.join(assetsRoot, 'icon.webp'), image);
+    const legacy = {key: 'foxhole-planner/releases/old/hospital.model.base.glb', bytes: model.length,
+        sha256: hash(model), decodedSha256: hash(model), decodedBytes: model.length,
+        mediaType: 'model/gltf-binary', cacheControl: 'public, max-age=31536000, immutable'};
+    const sources = {assets: [{id: 'hospital', assetGroup: 'structures', icon: 'icon.webp', texture: 'icon.webp'}],
+        models: [{id: 'hospital', assetId: 'hospital', path: 'hospital.glb'}], metadata: {hospital: {}}, data: {},
+        browserImageSources: [], modifications: [], visuals: [], maps: {resources: []}};
+    const stored = new Map([[legacy.key, legacy]]);
+    const prepare = output => prepareProductCatalog({assetsRoot, output: path.join(root, output), target, sources,
+        existingInventory: {schemaVersion: 1, target, capturedAt: 'fixture', objects: [...stored.values()]}});
+    const prepared = await prepare('first');
+    const catalog = JSON.parse(await fs.readFile(path.join(prepared.directory, 'catalog.v1.json')));
+    const resource = resolveNixieExperimentalProductCatalogResourcesV1(catalog).assets.find(row => row.path === 'models/hospital.base.glb');
+    assert.equal(resource.sourcePath, 'foxhole-planner/objects/' + hash(model) + '.glb');
+    assert.equal(JSON.stringify(catalog).includes('/releases/'), false);
+    const transport = {head: async key => stored.get(key), put: async row => {assert.equal(stored.has(row.key), false); stored.set(row.key, row);}, putChannel: async row => {stored.set(row.key, row);}};
+    await publishAssetPublication({planPath: prepared.planPath, transport});
+    const next = await prepare('second');
+    assert.equal(next.pin.catalog.sha256, prepared.pin.catalog.sha256);
+    assert.equal((await publishAssetPublication({planPath: next.planPath, transport})).stats.uploaded, 0);
+});
