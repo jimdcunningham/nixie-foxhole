@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { buildFoxholeStructureCatalog } from '../app/plugins/foxhole/nixie/catalog.ts';
@@ -16,6 +16,11 @@ const catalog = buildFoxholeStructureCatalog(getFoxholeManifest('/foxhole/assets
 const activeNixieStructureModificationHoverPreview = { value: null as previews.FoxholeModificationHoverPreviewState | null };
 let observer: { getter: () => unknown; refresh: () => void; } | null = null;
 let queuedNeighborIds: string[] = [];
+beforeEach(() => {
+    activeNixieStructureModificationHoverPreview.value = null;
+    observer = null;
+    queuedNeighborIds = [];
+});
 class Container {
     children: any[] = [];
     visible = true;
@@ -68,9 +73,11 @@ function setup(sourceKey: string) {
     node.getResolvedBuildSockets = (structure: any) => structure.buildSockets;
     node.shouldHideRoofForModificationPreview = () => false;
     node.createStructureRenderLayerVisual = (layer: any) => ({ layer, visible: true });
-    node.applyStructureTextureVisualState = () => {};
+    // These cases exercise base layers; modification replacement and lamp glows have separate coverage.
+    node.applyStructureTextureVisualState = node.syncPowerPoleLampGlow = node.syncBunkerSpotlightGlow = () => {};
+    node.getModificationReplacedRenderLayerIds = () => new Set();
     for (const name of ['structureFloorTextureOverlay', 'floorDetailTextureOverlay', 'structureDirtTextureOverlay',
-        'structureRoofTextureOverlay', 'structureWallTextureOverlay', 'structureCornerTextureOverlay']) node[name] = new Container();
+        'structureRoofTextureOverlay', 'structureWallTextureOverlay', 'structureCornerTextureOverlay', 'bunkerSpotlightOverlay']) node[name] = new Container();
     node.clearOverlay = (overlay: Container) => { overlay.children = []; };
     node.clearStructureFloorTextureOverlay = () => { node.structureFloorTextureOverlay.children = []; node.structureFloorTextureOverlay.mask = null; };
     const mask = node.syncStructureFloorTextureMask.bind(node);
