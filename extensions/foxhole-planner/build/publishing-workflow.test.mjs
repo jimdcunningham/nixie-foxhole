@@ -21,7 +21,7 @@ test('Planner publishing builds an independent remote package with scoped author
     assert.match(text, /NIXIE_EXTENSION_PUBLISH_TOKEN: \$\{\{ secrets\.NIXIE_EXTENSION_PUBLISH_TOKEN \}\}/);
     assert.doesNotMatch(text, /SERVICE_ROLE|GITHUB_TOKEN|R2_ACCESS|R2_SECRET|nixie\/\.github|repository:.*jimdcunningham\/nixie\s/);
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-    assert.equal(pkg.devDependencies['@nixiejs/extension-package'], '0.1.0-preview.3');
+    assert.equal(pkg.devDependencies['@nixiejs/extension-package'], '0.1.0-preview.4');
     assert.match(pkg.scripts.pack, /^nixie-extension pack /);
     assert.match(pkg.scripts['publish:extension'], /^nixie-extension publish /);
 });
