@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { triangleGlb, whitePng } from '../tests/preview-fixtures.mjs';
-export async function checkPublishedLibrary(app, page, project) {
+export async function checkPublishedLibrary(app, page) {
+  const project = await app.evaluate(({app}) => app.getAppPath());
   const base = 'https://assets.nixiejs.com/foxhole-planner/';
   const objects = new Map();
   const add = (name, body) => {

@@ -20,9 +20,10 @@ import type { PublishedStatus } from '../shared/contracts.js';
 import { AssetReview } from './asset-review.js';
 import { AssetDirectory } from './asset-directory.js';
 import { readAssetPreview } from './preview-file.js';
+import { resolveToolsCheckout } from './checkout.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, '../../../..');
+let repo: string;
 let window: BrowserWindow;
 let monitor: MonitorService;
 let tray: Tray;
@@ -80,7 +81,7 @@ const publishStatus = () => {
   if (window && !window.isDestroyed())
     window.webContents.send('published:progress', publishedStatus);
 };
-const devUrl = process.env.FOXWATCH_DESKTOP_DEV_URL;
+const devUrl = app.isPackaged ? undefined : process.env.FOXWATCH_DESKTOP_DEV_URL;
 const pageUrl = new URL(
   devUrl ?? new URL('../../dist/index.html', import.meta.url).href,
 ).href;
@@ -269,6 +270,22 @@ async function handlePublishedAction(action: unknown, scope: unknown) {
 
 async function launch() {
   await app.whenReady();
+  app.setAppUserModelId('com.nixie.foxwatch');
+  const checkout = await resolveToolsCheckout({
+    profile: app.getPath('userData'),
+    developmentRoot: app.isPackaged ? undefined : path.resolve(here, '../../../..'),
+    explicitRoot: process.env.FOXWATCH_CHECKOUT,
+    pickDirectory: async () => {
+      await dialog.showMessageBox({ type: 'info', title: 'Connect FoxWatch Tools',
+        message: 'Choose your nixie-foxhole checkout.',
+        detail: 'FoxWatch uses its generation tools and your existing settings, credentials, and assets from this folder. Choose the repository folder containing tools/foxwatch.' });
+      const result = await dialog.showOpenDialog({ title: 'Choose FoxWatch Tools Checkout',
+        buttonLabel: 'Use This Checkout', properties: ['openDirectory'] });
+      return result.canceled ? undefined : result.filePaths[0];
+    },
+  });
+  if (!checkout) { app.quit(); return; }
+  repo = checkout;
   monitor = new MonitorService(repo, app.getPath('userData'), monitorChanged);
   await monitor.initialize();
   const bundled = JSON.parse(

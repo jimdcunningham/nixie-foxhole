@@ -39,12 +39,14 @@ for (let start = 0; start < 1200; start += 100)
       ),
     ),
   );
-const env = { ...process.env };
+const env = { ...process.env, FOXWATCH_CHECKOUT: path.resolve(project, '../..') };
+const executablePath = process.env.FOXWATCH_DESKTOP_TEST_EXECUTABLE || require('electron');
+const appArguments = process.env.FOXWATCH_DESKTOP_TEST_EXECUTABLE ? [] : [project];
 delete env.ELECTRON_RUN_AS_NODE;
 const app = await electron.launch({
-  executablePath: require('electron'),
+  executablePath,
   args: [
-    project,
+    ...appArguments,
     '--assets',
     root,
     '--user-data-dir=' + path.join(base, 'profile'),
@@ -255,7 +257,7 @@ try {
   assert.equal(settings.assetsDirectory, alternate);
   await checkAssetReview(app, page, alternate);
   await checkComparisons(app, page, base);
-  await checkPublishedLibrary(app, page, project);
+  await checkPublishedLibrary(app, page);
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -305,6 +307,6 @@ try {
   throw cause;
 } finally {
   await app.close();
-  if (!errors.length) await checkBackground(electron, require('electron'), project, base, env);
+  if (!errors.length) await checkBackground(electron, executablePath, appArguments, base, env);
   await rm(base, { recursive: true, force: true });
 }

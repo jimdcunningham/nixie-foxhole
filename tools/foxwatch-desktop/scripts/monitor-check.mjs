@@ -31,6 +31,9 @@ export async function checkMonitor(app, page) {
       assert.equal(calls.at(-1).openAtLogin,true);
       assert.equal(calls.at(-1).name,'Nixie FoxWatch Monitor');
       assert.equal(calls.at(-1).args.at(-1),'--background');
+      const runtime = await app.evaluate(({app}) => ({ packaged: app.isPackaged, executable: process.execPath }));
+      assert.equal(calls.at(-1).path, runtime.executable);
+      assert.equal(calls.at(-1).args.length, runtime.packaged ? 1 : 2);
     }
   } finally {
     // The mocked save restores only the isolated controller's in-memory settings.

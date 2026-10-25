@@ -49,6 +49,29 @@ automatically uploads, and publishing changes neither the local approved baselin
 nor Nixie's checked-in release pin. Inspection/downloads work without Windows;
 Steam, generation, DPAPI credentials, and this publishing controller are Windows-only.
 
+## Windows Installer
+
+Build the installer from the `nixie-foxhole` checkout:
+
+```powershell
+npm run installer --workspace @nixiejs/foxwatch-desktop
+```
+
+Open `artifacts/foxwatch-desktop/FoxWatch-Setup-0.1.0-x64.exe`. The per-user
+installer adds **FoxWatch** to the Start menu and an uninstaller to Windows Settings;
+it does not require administrator access or launch a terminal. Launch FoxWatch from
+the Start menu after installation. Closing its window hides it in the tray;
+**Quit FoxWatch** exits it.
+
+The installer includes Electron and the built inspector, not game assets or the
+generation toolchain. On first launch, choose your `nixie-foxhole` checkout if it
+cannot be found from the existing desktop profile. That location is remembered;
+existing checkout settings, encrypted credentials, generated assets, and installed
+Node/.NET/Blender/Steam tools continue to be used. Keep the checkout available.
+If it moves, the app asks for its new location. Uninstalling preserves your profile
+and checkout. **Start With Windows** in Settings registers the installed executable
+when saved; installation itself does not enable polling or Windows startup.
+
 From the `nixie-foxhole` checkout:
 
 ```powershell
