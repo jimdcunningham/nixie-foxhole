@@ -38,7 +38,7 @@ def parse_args():
     raw_args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
     parser.add_argument("--save", action="store_true", help="Save the current blend file after configuring the template")
-    parser.add_argument("--preview-size", type=int, default=512)
+    parser.add_argument("--preview-size", type=int, default=256)
     parser.add_argument("--icon-size", type=int, default=256)
     return parser.parse_args(raw_args)
 

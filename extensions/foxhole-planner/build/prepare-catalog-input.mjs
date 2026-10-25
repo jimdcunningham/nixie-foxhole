@@ -5,6 +5,8 @@ import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+export const catalogPinPath = () => path.resolve(process.env.NIXIE_FOXHOLE_CATALOG_PIN_FILE?.trim() || fileURLToPath(new URL('../src/catalog-release-pin.json', import.meta.url)));
+export const readCatalogPin = async () => JSON.parse(await fs.readFile(catalogPinPath(), 'utf8'));
 export async function readCatalogReceipt(receipt, fetcher = fetch, maxBytes = 16 * 1024 ** 2) {
     const url = new URL(receipt.url);
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.href !== receipt.url
@@ -25,8 +27,9 @@ export async function prepareCatalogInput({pin, output, localFile, fetcher = fet
     const bytes = existing ?? (localFile ? await fs.readFile(localFile) : await readCatalogReceipt(pin.catalog, fetcher));
     verifyCatalogInput(bytes, pin.catalog);
     const catalog = parseNixieExperimentalProductCatalogV1(JSON.parse(bytes));
-    const expected = new URL(catalog.releaseRoot + 'catalog.v1.json', pin.baseUrl).href;
-    if (expected !== pin.catalog.url) throw Error('Catalog input does not belong to its pinned release');
+    const base = new URL(pin.baseUrl), location = new URL(pin.catalog.url);
+    if (location.origin !== base.origin || !location.pathname.startsWith(base.pathname)) throw Error('Catalog input is outside its pinned origin/namespace');
+    if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', base).href !== location.href) throw Error('Catalog input does not belong to its pinned release');
     if (!existing) {
         await fs.mkdir(path.dirname(output), {recursive: true});
         const temporary = output + '.' + randomUUID() + '.tmp';
@@ -38,7 +41,7 @@ export async function prepareCatalogInput({pin, output, localFile, fetcher = fet
 async function run() {
     const {values} = parseArgs({options: {output: {type: 'string'}, local: {type: 'string'}, 'identity-only': {type: 'boolean'}}});
     const extension = path.resolve(import.meta.dirname, '..');
-    const pin = JSON.parse(await fs.readFile(path.join(extension, 'src/catalog-release-pin.json'), 'utf8'));
+    const pin = await readCatalogPin();
     if (values['identity-only']) {console.log(JSON.stringify({catalog: pin.catalog})); return;}
     const output = path.resolve(values.output ?? path.join(extension, '../../packages/extensions/foxhole/public/foxhole/assets/catalog.v1.json'));
     const result = await prepareCatalogInput({pin, output, localFile: values.local});

@@ -31,16 +31,14 @@ export interface FoxholeMapResourceSource {
 export interface FoxholeMapTooltipAsset {
     id: string; isItem: boolean; keys: string[]; category: string; previewSourcePath: string | null;
 }
-export function createFoxholeMapTooltipAssets(published: { assets?: Array<{ id: string; codeName?: string; legacyKey?: string; previewUrl?: string; icons?: { default?: string; }; }>; },
+export function createFoxholeMapTooltipAssets(published: { assets?: Array<{ id: string; codeName?: string; legacyKey?: string; previewUrl?: string; icons?: { default?: string; rendered?: string; }; }>; },
     metadata: Readonly<Record<string, { label: string; codeName: string; categoryLabel?: string; isItem: boolean; colorVariants?: Record<string, unknown>; }>>): FoxholeMapTooltipAsset[] {
     return (published.assets ?? []).flatMap(asset => {
         const data = metadata[asset.id];
         if (!data) {
             return [];
         }
-        const base = asset.icons?.default?.replace(/\.icon\.default\.webp$/, '.preview.webp');
-        const color = Object.keys(data.colorVariants ?? {})[0];
-        const preview = asset.previewUrl ?? (data.isItem ? null : color && base ? base.replace('.preview.webp', `.preview.${color}.webp`) : base ?? null);
+        const preview = asset.icons?.rendered ?? asset.icons?.default ?? null;
         const source = preview?.startsWith('/foxhole/assets/') ? preview.slice('/foxhole/assets/'.length) : null;
         if (source && (source.split('/').some(part => part === '..' || part === '.') || !/^[A-Za-z0-9/._-]+\.webp$/.test(source))) {
             throw new Error('Invalid map tooltip preview source.');

@@ -1,3 +1,6 @@
+import {shallowReactive} from 'vue';
+import {onFoxholeMapDataChanged} from './data.ts';
+import {resolveFoxholeAssetUrl} from '../asset-locations.ts';
 import {
     rawFoxholePublishedMapIcons,
     rawFoxholePublishedMaps,
@@ -49,11 +52,7 @@ export const FOXHOLE_WORLD_BACKGROUND_SIZE = {
     height: 2160 * FOXHOLE_WORLD_BACKGROUND_SCALE,
 } as const;
 
-const rawMaps = rawFoxholePublishedMaps;
-
-const rawMapIcons = rawFoxholePublishedMapIcons;
-
-export const FOXHOLE_MAP_REGIONS: readonly FoxholeMapRegionRecord[] = Object.entries(rawMaps)
+function createMapRegions(): FoxholeMapRegionRecord[] {return Object.entries(rawFoxholePublishedMaps)
     .map(([key, region]) => ({
         key,
         name: String(region?.name ?? key).trim() || key,
@@ -85,6 +84,9 @@ export const FOXHOLE_MAP_REGIONS: readonly FoxholeMapRegionRecord[] = Object.ent
         }
         return left.name.localeCompare(right.name);
     });
+}
+const regions = shallowReactive(createMapRegions());
+export const FOXHOLE_MAP_REGIONS: readonly FoxholeMapRegionRecord[] = regions;
 
 export function resolveFoxholeMapActiveRegions(
     regionKeys: readonly string[],
@@ -95,9 +97,8 @@ export function resolveFoxholeMapActiveRegions(
         : FOXHOLE_MAP_REGIONS;
 }
 
-export const FOXHOLE_MAP_ICONS: Readonly<Record<string, FoxholeMapIconRecord>> = Object.freeze(
-    Object.fromEntries(
-        Object.entries(rawMapIcons).map(([key, icon]) => {
+function createMapIcons(): Record<string, FoxholeMapIconRecord> {return Object.fromEntries(
+        Object.entries(rawFoxholePublishedMapIcons).map(([key, icon]) => {
             const category = icon?.category === 'bases' || icon?.category === 'resources' || icon?.category === 'structures'
                 ? icon.category
                 : 'structures';
@@ -116,8 +117,15 @@ export const FOXHOLE_MAP_ICONS: Readonly<Record<string, FoxholeMapIconRecord>> =
                 color: Number.isFinite(rawColor) ? rawColor : null,
             } satisfies FoxholeMapIconRecord];
         }),
-    ),
-);
+    );
+}
+const icons = shallowReactive(createMapIcons());
+export const FOXHOLE_MAP_ICONS: Readonly<Record<string, FoxholeMapIconRecord>> = icons;
+onFoxholeMapDataChanged(() => {
+    regions.splice(0, regions.length, ...createMapRegions());
+    for (const key of Object.keys(icons)) delete icons[key];
+    Object.assign(icons, createMapIcons());
+});
 
 export function getFoxholeRegionPosition(region: Pick<FoxholeMapRegionRecord, 'gridCoord'>): { x: number; y: number; } {
     return {
@@ -132,5 +140,5 @@ export function resolveFoxholeMapIconUrl(baseAssetsUrl: string, icon: Pick<Foxho
         return null;
     }
 
-    return `${baseAssetsUrl}maps/MapIcons/${iconName}.webp`;
+    return resolveFoxholeAssetUrl(`${baseAssetsUrl}maps/MapIcons/${iconName}.webp`, baseAssetsUrl);
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import {readCatalogPin} from './prepare-catalog-input.mjs';
 import { preparePublicationCatalogInputs } from './publication-catalog-inputs.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -64,7 +65,7 @@ async function run() {
     const { values } = parseArgs({ options: { output: { type: 'string' } } });
     const extension = path.resolve(import.meta.dirname, '..');
     const output = path.resolve(values.output ?? path.join(extension, '../../packages/extensions/foxhole/public/foxhole/assets'));
-    const pin = JSON.parse(await fs.readFile(path.join(extension, 'src/catalog-release-pin.json'), 'utf8'));
+    const pin = await readCatalogPin();
     const {metadata, library} = await preparePublicationCatalogInputs({pin, output, localFile: process.env.NIXIE_FOXHOLE_CATALOG_FILE});
     const models = await preparePublicationModels({ output, library });
     console.log(JSON.stringify({ output, metadata, models }));

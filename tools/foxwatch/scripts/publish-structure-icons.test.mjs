@@ -69,8 +69,8 @@ test('shouldSyncRenderedAssetToPublic rejects icon webp patterns', () => {
     assert.equal(shouldSyncRenderedAssetToPublic('wood.icon.default.webp'), false);
     assert.equal(shouldSyncRenderedAssetToPublic('wood.icon.rendered.webp'), false);
     assert.equal(shouldSyncRenderedAssetToPublic('ambulancec.destroyed.icon.rendered.webp'), false);
-    assert.equal(shouldSyncRenderedAssetToPublic('wood.preview.webp'), true);
-    assert.equal(shouldSyncRenderedAssetToPublic('wood.destroyed.preview.webp'), true);
+    assert.equal(shouldSyncRenderedAssetToPublic('wood.preview.webp'), false);
+    assert.equal(shouldSyncRenderedAssetToPublic('wood.destroyed.preview.webp'), false);
     assert.equal(shouldSyncRenderedAssetToPublic('wood.texture.webp'), true);
 });
 

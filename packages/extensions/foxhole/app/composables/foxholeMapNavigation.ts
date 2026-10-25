@@ -1,3 +1,4 @@
+import {computed} from 'vue';
 import type { FoxholePlaybackEventRecord } from '#foxhole/composables/useFoxholeWarPanelData.ts';
 import {
     FOXHOLE_MAP_REGIONS,
@@ -80,7 +81,7 @@ export interface ActivateFoxholePlaybackEventOptions {
     reason?: string;
 }
 
-const FOXHOLE_MAP_REGION_BY_KEY = new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region]));
+const FOXHOLE_MAP_REGION_BY_KEY = computed(() => new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region])));
 
 function normalizeString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
@@ -112,7 +113,7 @@ function getFoxholeRegionLabel(mapKey: string | null | undefined): string {
         return '';
     }
 
-    return FOXHOLE_MAP_REGION_BY_KEY.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
+    return FOXHOLE_MAP_REGION_BY_KEY.value.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
 }
 
 function getFoxholePlaybackEventLocationEntry(event: FoxholePlaybackEventRecord): FoxholeMapSearchEntry | null {
@@ -135,7 +136,7 @@ function getFoxholePlaybackEventLocationEntry(event: FoxholePlaybackEventRecord)
         return null;
     }
 
-    const region = FOXHOLE_MAP_REGION_BY_KEY.get(regionKey);
+    const region = FOXHOLE_MAP_REGION_BY_KEY.value.get(regionKey);
     if (!region) {
         return null;
     }

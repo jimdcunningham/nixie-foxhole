@@ -1,8 +1,9 @@
+import {computed} from 'vue';
 import { FOXHOLE_MAP_REGIONS } from '#foxhole/plugins/foxhole/nixie/map/constants.ts';
 import type { FoxholePlaybackEventRecord } from '#foxhole/composables/useFoxholeWarPanelData.ts';
 import { formatFoxholePlaybackEventTypeLabel } from '#foxhole/components/nixie/foxhole/foxholeWarHistoryFilters.ts';
 
-const FOXHOLE_MAP_REGION_BY_KEY = new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region]));
+const FOXHOLE_MAP_REGION_BY_KEY = computed(() => new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region])));
 
 interface FoxholeTownOwnershipEventData {
     mapKey?: string;
@@ -92,7 +93,7 @@ function getFoxholeRegionLabel(mapKey: string | null | undefined): string {
         return '';
     }
 
-    return FOXHOLE_MAP_REGION_BY_KEY.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
+    return FOXHOLE_MAP_REGION_BY_KEY.value.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
 }
 
 function getPlaybackEventMapKey(event: FoxholePlaybackEventRecord): string {

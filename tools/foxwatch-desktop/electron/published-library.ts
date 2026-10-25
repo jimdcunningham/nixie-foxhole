@@ -1,3 +1,4 @@
+import {loadFoxholeCatalogLibrary, type FoxholeCatalogPin} from '../shared/catalog-library.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
 import {
@@ -41,7 +42,7 @@ export interface PublishedPlan {
 }
 interface Options {
   root: string;
-  pin: ReleaseReceipt;
+  pin: FoxholeCatalogPin;
   channelUrl: string;
   fetcher?: typeof fetch;
 }
@@ -118,16 +119,16 @@ async function concurrent<T>(
 export class PublishedLibrary {
   readonly baseUrl: string;
   private root: string;
-  private pin: ReleaseReceipt;
+  private pin: FoxholeCatalogPin;
   private channel: string;
   private fetcher: typeof fetch;
   constructor(options: Options) {
     this.root = path.resolve(options.root);
-    this.pin = receipt(options.pin, 8 * 1024 ** 2);
-    this.baseUrl = new URL('.', this.pin.url).href;
+    this.pin = options.pin;
+    this.baseUrl = new URL('foxhole-planner/', this.pin.baseUrl).href;
     this.channel = options.channelUrl;
     this.fetcher = options.fetcher ?? fetch;
-    this.url(this.pin.url);
+    this.url(this.pin.catalog.url);
     this.url(this.channel);
   }
   private url(value: string) {
@@ -177,7 +178,7 @@ export class PublishedLibrary {
     throw error;
   }
   private async metadata(ref: ReleaseReceipt, signal: AbortSignal) {
-    receipt(ref, 8 * 1024 ** 2);
+    receipt(ref, 16 * 1024 ** 2);
     const response = await this.response(ref.url, signal);
     if (!response.ok || !response.body) {
       await response.body?.cancel();
@@ -204,7 +205,7 @@ export class PublishedLibrary {
       if ((await stat(pointer)).size > 16384)
         throw new Error('The downloaded-library index is invalid.');
       const info: PublishedInfo = JSON.parse(await readFile(pointer, 'utf8'));
-      receipt(info.release, 8 * 1024 ** 2);
+      receipt(info.release, 16 * 1024 ** 2);
       const relative = path
         .relative(this.root, info.assetsPath)
         .split(path.sep)
@@ -237,7 +238,7 @@ export class PublishedLibrary {
       throw new Error('Invalid download scope.');
     progress('Checking published release…');
     const response = await this.response(this.channel, signal);
-    let release = this.pin,
+    let pin = this.pin,
       source: PublishedPlan['source'] = 'bundled';
     if (response.status === 404) await response.body?.cancel();
     else {
@@ -259,81 +260,29 @@ export class PublishedLibrary {
       const channel = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if (channel.schemaVersion !== 1)
         throw new Error('Invalid published channel.');
-      release = receipt(channel.release, 8 * 1024 ** 2);
-      this.url(release.url);
+      pin = channel.pin;
+      if (!pin?.catalog || new URL('foxhole-planner/', pin.baseUrl).href !== this.baseUrl) throw new Error('Channel pin differs from trusted HTTPS asset root.');
+      this.url(pin.catalog.url);
       source = 'channel';
     }
-    const document = await this.metadata(release, signal);
-    if (
-      document.schemaVersion !== 1 ||
-      document.format !== 'foxwatch-asset-release-v1' ||
-      document.worldBaseUrl !== new URL('world/', this.baseUrl).href ||
-      !document.packs ||
-      Object.keys(document.packs).length > 256
-    )
-      throw new Error('Unsupported published release.');
-    const files = new Map<string, FileReceipt>(),
-      folded = new Map<string, string>();
-    const add = (logical: string, object: any) => {
-      if (!portable(logical) || !portable(object?.path))
-        throw new Error('A published path is not portable.');
-      const ref = receipt({
-        ...object,
-        url: new URL(object.path, this.baseUrl).href,
-      });
-      const row = {
-        path: logical,
-        sha256: ref.sha256,
-        byteLength: ref.byteLength,
-        url: this.url(ref.url),
-      };
-      const previous = files.get(logical),
-        collision = folded.get(logical.toLowerCase());
-      if (
-        (collision && collision !== logical) ||
-        (previous && JSON.stringify(previous) !== JSON.stringify(row))
-      )
-        throw new Error('Conflicting published file paths.');
-      files.set(logical, row);
-      folded.set(logical.toLowerCase(), logical);
-      if (files.size > 100000)
-        throw new Error('Published release has too many files.');
-    };
-    for (const [logical, object] of Object.entries(document.bootstrap ?? {}))
-      add(logical, object);
-    const groups = Object.entries(document.packs).filter(
-      ([key]) => scope === 'all' || key === 'catalog' || key === 'support',
-    );
-    if (!groups.length)
-      throw new Error('The release has no matching asset packs.');
-    let completed = 0;
-    await concurrent(groups, async ([, raw]) => {
-      const group = raw as any;
-      const [index, mapping] = await Promise.all([
-        this.metadata(receipt(group.pack?.manifest, 8 * 1024 ** 2), signal),
-        this.metadata(receipt(group.mapping, 8 * 1024 ** 2), signal),
-      ]);
-      if (
-        index.contractVersion !== 1 ||
-        !Array.isArray(index.assets) ||
-        index.assets.length > 65536 ||
-        mapping.schemaVersion !== 1 ||
-        !mapping.files ||
-        Object.keys(mapping.files).length > 100000
-      )
-        throw new Error('Invalid published pack index.');
-      const objects = new Map<string, any>(
-        index.assets.map((object: any) => [object.path, object]),
-      );
-      for (const [logical, rawFile] of Object.entries(mapping.files)) {
-        const file = rawFile as any,
-          object = objects.get(file.path);
-        if (!object)
-          throw new Error('A published mapping has no asset receipt.');
-        add(logical, object);
+    const library = await loadFoxholeCatalogLibrary(pin, <T>(ref: ReleaseReceipt) => this.metadata(ref, signal) as Promise<T>);
+    const release = receipt(pin.completion ?? pin.catalog, 16 * 1024 ** 2);
+    this.url(release.url);
+    if (pin.completion) {
+      const completion = await this.metadata(pin.completion, signal);
+      if (completion.schemaVersion !== 1 || completion.format !== 'foxwatch-product-catalog-release-v1'
+          || !['url','sha256','byteLength'].every(key => completion.catalog?.[key] === pin.catalog[key as keyof ReleaseReceipt])) {
+        throw new Error('Catalog completion differs from pin.');
       }
-      progress(`Reading asset indexes · ${++completed} / ${groups.length}`);
-    });
+    }
+    const files = new Map<string, FileReceipt>(), folded = new Set<string>();
+    for (const [logical, location] of library.files) {
+      if (scope === 'catalog' && logical.startsWith('world/')) continue;
+      if (!portable(logical) || folded.has(logical.toLowerCase())) throw new Error('A published path is not portable or unique.');
+      folded.add(logical.toLowerCase());
+      files.set(logical, {path: logical, url: this.url(location.url), sha256: location.entry.sha256, byteLength: location.entry.byteLength});
+    }
+    if (!files.size) throw new Error('The catalog has no matching assets.');
     const rows = [...files.values()];
     return {
       release,
@@ -354,7 +303,7 @@ export class PublishedLibrary {
       path: string;
     }) => void = () => {},
   ): Promise<PublishedInfo> {
-    receipt(plan.release, 8 * 1024 ** 2);
+    receipt(plan.release, 16 * 1024 ** 2);
     if (
       plan.baseUrl !== this.baseUrl ||
       !['all', 'catalog'].includes(plan.scope)

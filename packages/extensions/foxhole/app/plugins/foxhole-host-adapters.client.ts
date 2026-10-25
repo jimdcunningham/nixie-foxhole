@@ -1,4 +1,4 @@
-import { initializeFoxholeAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
+import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration, resolveSelectedFoxholeAsset } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
 import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
 
@@ -16,15 +16,25 @@ export default defineNuxtPlugin({
     enforce: 'pre',
     dependsOn: ['nixie-registry'],
     async setup(nuxtApp) {
-        const assetDelivery = await initializeFoxholeAssetDelivery();
+        initializeFoxholeAssetDelivery();
+        let stopPreview = () => {};
         registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport);
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
         const stopPolicy = registerFoxholeSceneV2HostPolicy();
         // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
-        registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', assetDelivery.resolve('types/structures/facilitytransferresource/facilitytransferresource.glb'));
+
         const stopAdapter = registerNixieInternalExtensionAdapter({
             ownerId: 'nixie.foxhole-planner',
             aliases: ['foxhole'],
+            prepareGeneration: async generation => {
+                const activate = await prepareFoxholeAssetGeneration(generation);
+                return () => {
+                    activate();
+                    stopPreview();
+                    const url = generation ? resolveSelectedFoxholeAsset('types/structures/facilitytransferresource/facilitytransferresource.glb') : undefined;
+                    stopPreview = url ? registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', url) : () => {};
+                };
+            },
             replacesSdkUi: true,
             enabledForLegacyProjects: true,
             contributionSourcePrefixes: ['layer:foxhole:'],
@@ -34,6 +44,7 @@ export default defineNuxtPlugin({
             },
         });
         nuxtApp.vueApp.onUnmount(() => {
+            stopPreview();
             stopAdapter();
             stopPolicy();
         });

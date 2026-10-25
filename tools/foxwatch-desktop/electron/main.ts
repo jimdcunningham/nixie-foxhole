@@ -276,10 +276,10 @@ async function launch() {
   );
   library = new PublishedLibrary({
     root: path.join(app.getPath('userData'), 'published-library'),
-    pin: bundled.publication,
+    pin: bundled,
     channelUrl: new URL(
       'channels/stable.json',
-      new URL('.', bundled.publication.url),
+      new URL('foxhole-planner/', bundled.baseUrl),
     ).href,
   });
   publishedStatus.current = await library.current();

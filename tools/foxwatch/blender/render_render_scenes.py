@@ -184,7 +184,7 @@ def parse_args():
     parser.add_argument("--scene-variant", action="append", default=[])
     parser.add_argument("--mode", action="append", choices=["topdown", "preview", "icon", "flat"], default=[])
     parser.add_argument("--pixels-per-meter", type=float, default=PIXELS_PER_METER)
-    parser.add_argument("--preview-size", type=int, default=512)
+    parser.add_argument("--preview-size", type=int, default=256)
     parser.add_argument("--icon-size", type=int, default=256)
     parser.add_argument("--debug-bounds", action="store_true")
     parser.add_argument("--purge-existing", action="store_true")

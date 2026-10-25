@@ -34,7 +34,7 @@ export async function checkPublishedLibrary(app, page, project) {
       triangleGlb(),
     ),
     file(
-      'types/structures/factory/factory.preview.webp',
+      'types/structures/factory/factory.icon.rendered.webp',
       'objects/image.webp',
       whitePng(),
     ),
@@ -44,24 +44,15 @@ export async function checkPublishedLibrary(app, page, project) {
       Buffer.from('{"version":1}'),
     ),
   ];
-  const index = add('smoke-pack.json', {
-    contractVersion: 1,
-    assets: files.map(({ logical, ...row }) => row),
+  const catalog = add('smoke-catalog.json', {
+    catalogSchemaVersion: 1, resourceDefaults: {}, products: [],
+    sharedResources: files.map((row, i) => ({id:'smoke-' + i, path:'shared/smoke-' + i,
+      sourcePath:'foxhole-planner/' + row.path, sha256:row.sha256, byteLength:row.byteLength,
+      mediaType:row.path.endsWith('.glb')?'model/gltf-binary':row.path.endsWith('.json')?'application/json':'image/webp'})),
+    data: {privateFiles:Object.fromEntries(files.map((row,i)=>[row.logical,'shared/smoke-' + i]))},
   });
-  const mapping = add('smoke-mapping.json', {
-    schemaVersion: 1,
-    files: Object.fromEntries(
-      files.map((row) => [row.logical, { path: row.path }]),
-    ),
-  });
-  const release = add('smoke-release.json', {
-    schemaVersion: 1,
-    format: 'foxwatch-asset-release-v1',
-    worldBaseUrl: new URL('world/', base).href,
-    packs: { catalog: { pack: { manifest: index }, mapping } },
-    bootstrap: {},
-  });
-  add('channels/stable.json', { schemaVersion: 1, release });
+  const pin = {schemaVersion:1,baseUrl:'https://assets.nixiejs.com/',catalog};
+  add('channels/stable.json', {schemaVersion:1,pin});
   await app.evaluate(
     async (_, { module, objects }) => {
       const { PublishedLibrary } = process

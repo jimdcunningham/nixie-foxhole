@@ -124,3 +124,42 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(destroyed, 1);
     assert.deepEqual(suppression, [false]);
 });
+
+test('mounted spatial worlds retire on catalog revision, clear on disable, and reselect older content', () => {
+    let selected: any = {baseUrl: '/same-content-root/', revision: 1, loadIndex: async () => ({version: 'a'})};
+    const worlds: any[] = [];
+    const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
+        FoxholeRegionSceneController: class {
+            constructor(options: any) {
+                const record = {options, destroyed: 0, syncs: 0, sync() {this.syncs++;}, destroy() {this.destroyed++;}};
+                worlds.push(record); return record;
+            }
+        },
+        FoxholeMapViewportPlugin: class {updatePresentation() {} getSpatialWarState() {return null;} destroy() {}},
+        selectedSpatialRegions, regionIdForKey, computed, shallowRef,
+        foxholeWorldAssetDelivery: () => selected,
+        subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => true,
+        plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
+        FOXHOLE_MAP_REGIONS: [{key: 'WestgateHex'}], getFoxholeRegionPosition: () => ({x: 0, y: 0}),
+        useNixieSettingsStore: () => ({getValueOr() {}}),
+        readFoxholeMapSettings: () => ({enabled: true, regionKeys: ['WestgateHex']}),
+    });
+    const adapter = factory({app: {}, viewport: {}, before: {}, runtime: {projectStore: {settings: {}}},
+        viewMode: () => '3d', nodeCount: () => 0, zoom: () => 1, pointer: () => null,
+        interacting: () => false, suppressGrid() {}, cameraTo() {}});
+    const frame = () => adapter.updateSpatialPresentation({view: {}, mode: '3d', deltaMS: 16});
+    frame(); frame();
+    assert.equal(worlds.length, 1); assert.equal(worlds[0].syncs, 2);
+    selected = {...selected, revision: 2, loadIndex: async () => ({version: 'b'})};
+    frame();
+    assert.equal(worlds[0].destroyed, 1); assert.equal(worlds.length, 2);
+    assert.equal(worlds[1].options.indexLoader, selected.loadIndex);
+    selected = null; frame(); frame();
+    assert.equal(worlds[1].destroyed, 1);
+    assert.equal(worlds[2].syncs, 0, 'disabled worlds never load a region');
+    selected = {baseUrl: '/same-content-root/', revision: 3, loadIndex: worlds[0].options.indexLoader};
+    frame();
+    assert.equal(worlds[2].destroyed, 1); assert.equal(worlds[3].syncs, 1);
+    assert.equal(worlds[3].options.indexLoader, worlds[0].options.indexLoader);
+    adapter.destroy(); assert.equal(worlds[3].destroyed, 1);
+});

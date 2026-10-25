@@ -751,7 +751,7 @@ export function createFoxholeSceneV2AssetMetadata(
                     localizedText: { name: resolved.name, description: resolved.description },
                     browserRenderedIcon: browserImage(resolved.icons?.rendered ?? resolved.icons?.default),
                     browserIcon: browserImage(resolved.icons?.default),
-                    browserPreview: browserImage(resolved.previewUrl ?? resolved.icons?.rendered),
+                    browserPreview: browserImage(resolved.icons?.rendered ?? resolved.icons?.default),
                     description: strings[resolved.description ?? '']?.trim() || undefined,
                     id: variantId,
                     overlaySockets: overlaySocketMetadata(resolved.buildSockets),
@@ -903,12 +903,7 @@ export function createFoxholeSceneV2AssetMetadata(
             localizedText: { name: asset.name, description: asset.description, category: manifest.categories?.find(category => category.id === asset.categoryId)?.name },
             browserRenderedIcon: browserImage(asset.icons?.rendered ?? asset.icons?.default),
             browserIcon: browserImage(asset.icons?.default),
-            // Compact published manifests omit conventional preview URLs. Match
-            // the authored card preview rather than substituting the library icon.
-            browserPreview: browserImage(asset.previewUrl ?? (asset.isItem
-                ? asset.icons?.rendered ?? asset.icons?.default
-                : asset.colors?.[0]?.previewUrl
-                    ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${asset.colors?.[0]?.hex ? `.${asset.colors[0].hex.replace(/^#/, '').toLowerCase()}` : ''}.webp`)),
+            browserPreview: browserImage(asset.icons?.rendered ?? asset.icons?.default),
             browserAttributes: [asset.inventorySlots ? `Slots: ${Math.round(asset.inventorySlots)}` : '',
                 // Native's badge uses the explicit blueprint flag. Keep the
                 // separate placement-support inference above out of presentation.

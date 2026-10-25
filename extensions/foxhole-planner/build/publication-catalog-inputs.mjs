@@ -14,9 +14,9 @@ export async function preparePublicationCatalogInputs({pin, output, fetcher = fe
     let downloadedBytes = 0, reusedBytes = 0;
     for (const name of INPUTS) {
         const row = completion.buildInputs?.[name];
-        if (!row || row.path !== 'source/' + name) throw Error('Missing catalog test input: ' + name);
+        if (!row || (catalog.releaseRoot ? row.path !== 'source/' + name : (!/^foxhole-planner\/[a-z0-9._/-]+$/.test(row.path) || row.path.split('/').some(part => !part || part === '.' || part === '..')))) throw Error('Missing catalog test input: ' + name);
         const destination = path.join(output, name);
-        const receipt = {url: new URL(catalog.releaseRoot + row.path, pin.baseUrl).href, sha256: row.sha256, byteLength: row.byteLength};
+        const receipt = {url: new URL((catalog.releaseRoot ?? '') + row.path, pin.baseUrl).href, sha256: row.sha256, byteLength: row.byteLength};
         const local = await fs.readFile(destination).catch(error => {if (error.code === 'ENOENT') return null; throw error;});
         if (local) {verifyCatalogInput(local, receipt); reusedBytes += local.length;}
         else {
@@ -42,7 +42,7 @@ export async function preparePublicationCatalogInputs({pin, output, fetcher = fe
     for (const [id, model] of Object.entries({...modelManifest.assets, ...modelManifest.resources, ...modelManifest.sharedParts})) {
         const entry = models.get(id);
         if (!entry) throw Error('Test model is absent from the generated catalog: ' + id);
-        files.set(model.path, {entry, url: new URL(catalog.releaseRoot + (entry.sourcePath ?? entry.path), pin.baseUrl).href});
+        files.set(model.path, {entry, url: new URL((catalog.releaseRoot ?? '') + (entry.sourcePath ?? entry.path), pin.baseUrl).href});
     }
     return {metadata: {files: INPUTS.length, downloadedBytes, reusedBytes}, library: {files}};
 }

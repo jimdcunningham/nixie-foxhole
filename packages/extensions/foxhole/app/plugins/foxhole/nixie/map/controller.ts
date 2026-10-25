@@ -29,7 +29,7 @@ import {
     FOXHOLE_WORLD_BACKGROUND_SIZE,
     getFoxholeRegionPosition,
 } from './constants.ts';
-import { buildFoxholePublishedMapFallbackCache } from './data.ts';
+import { buildFoxholePublishedMapFallbackCache, getFoxholeMapDataRevision } from './data.ts';
 import {
     clearFoxholeMapSearchCache,
     publishFoxholeMapSearchCache,
@@ -209,6 +209,8 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private fitMapOnNextSync = false;
     private rendererCreation: Promise<void> | null = null;
     private isDestroyed = false;
+    private mapGeneration = 0;
+    private stopMapDataWatch: WatchStopHandle | null = null;
     private readonly pluginContext: FoxholeMapViewportContext;
     private readonly warAPIStorage = foxholeWarApiStorage;
     private readonly playbackPreviewRef = getFoxholeMapPlaybackPreviewRef();
@@ -231,6 +233,17 @@ export class FoxholeMapViewportPlugin extends Plugin {
     constructor(parent: Viewport, pluginContext: FoxholeMapViewportContext) {
         super(parent);
         this.pluginContext = pluginContext;
+        this.stopMapDataWatch = watch(getFoxholeMapDataRevision, () => {
+            this.mapGeneration++;
+            this.syncPending = false;
+            this.disconnectLiveUpdates();
+            this.renderer?.destroy();
+            this.renderer = null;
+            this.lastSettingsSignature = '';
+            this.appliedLiveDataRevision = -1;
+            clearFoxholeMapSearchCache();
+            void this.syncRenderer();
+        }, {flush:'sync'});
         void this.ensureRenderer();
         if (!pluginContext.manualPresentation) this.pluginContext.session.appRef.value?.ticker.add(this.updatePresentation);
         this.stopSettingsWatch = watch(
@@ -309,6 +322,8 @@ export class FoxholeMapViewportPlugin extends Plugin {
 
     override destroy(): void {
         this.isDestroyed = true;
+        this.stopMapDataWatch?.();
+        this.stopMapDataWatch = null;
         this.pluginContext.session.appRef.value?.ticker.remove(this.updatePresentation);
         this.stopSettingsWatch?.();
         this.stopSettingsWatch = null;
@@ -445,6 +460,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             return;
         }
 
+        const generation = this.mapGeneration;
         const settings = this.readMapSettings();
         const settingsSignature = JSON.stringify(settings);
         const needsLiveData = this.needsLiveData(settings);
@@ -461,24 +477,25 @@ export class FoxholeMapViewportPlugin extends Plugin {
         }
 
         await this.mountRendererIfNeeded();
-        if (!this.renderer) {
+        if (generation !== this.mapGeneration || !this.renderer) {
             return;
         }
 
         await this.ensureCacheLoaded();
-        if (this.isDestroyed || !this.renderer) return;
+        if (this.isDestroyed || generation !== this.mapGeneration || !this.renderer) return;
 
         if (!this.renderer.hasInitialized) {
             this.syncPending = true;
             try {
                 await this.renderer.ensureInitialized();
+                if (this.isDestroyed || generation !== this.mapGeneration) return;
                 this.lastSettingsSignature = settingsSignature;
             } finally {
-                this.syncPending = false;
+                if (generation === this.mapGeneration) this.syncPending = false;
             }
         }
 
-        if (this.isDestroyed || !this.renderer) return;
+        if (this.isDestroyed || generation !== this.mapGeneration || !this.renderer) return;
         if (settingsSignature !== this.lastSettingsSignature) {
             this.renderer.sync();
             this.lastSettingsSignature = settingsSignature;
@@ -489,6 +506,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             this.disconnectLiveUpdates();
             if (needsLiveData) {
                 await this.renderer.applyLiveData(this.buildPlaybackPreviewCache(playbackPreview));
+                if (generation !== this.mapGeneration) return;
             } else {
                 this.renderer.clearLiveDisplayData();
             }
@@ -511,6 +529,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
 
         if (this.appliedLiveDataRevision !== this.liveDataRevision) {
             await this.renderer.applyLiveData(this.cachedMaps);
+            if (generation !== this.mapGeneration) return;
             this.appliedLiveDataRevision = this.liveDataRevision;
         }
         this.refreshViewportConstraints(true);

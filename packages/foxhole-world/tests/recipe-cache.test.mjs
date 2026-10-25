@@ -1,12 +1,11 @@
+import {memoryWorldCaches} from './cache-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {cachedRecipe} from '../runtime/recipe-cache.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-function storage(){
- const entries=new Map();
- return {entries,api:{open:async()=>({match:async key=>entries.get(key)?.clone(),put:async(key,response)=>{entries.set(key,response);},delete:async key=>entries.delete(key),keys:async()=>[...entries.keys()]})}};
-}
+function storage(){const value=memoryWorldCaches();return {entries:value.rows('foxhole-world-recipes-v1'),api:value.api};}
+
 test('lossless derived buffers survive a new load without replaying their recipes',async()=>{
  const bytes=new Float32Array([Math.PI,-1.25,0,78.5]).buffer,h=hash(new Uint8Array(bytes)),cache=storage(),metrics={};let builds=0;
  const options={cachesApi:cache.api,metrics},build=async()=>{builds++;return bytes;};

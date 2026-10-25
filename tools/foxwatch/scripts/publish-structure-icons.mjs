@@ -63,11 +63,10 @@ async function writeOutputFile(filePath, content) {
 
 const LOSSLESS_WEBP_OPTIONS = LOSSLESS_PUBLISHED_ICON_WEBP_OPTIONS;
 
-const LIVING_ICON_KINDS = ['icon.default', 'icon.rendered', 'preview', 'texture'];
+const LIVING_ICON_KINDS = ['icon.default', 'icon.rendered', 'texture'];
 const DESTROYED_ICON_KINDS = [
     'destroyed.icon.default',
     'destroyed.icon.rendered',
-    'destroyed.preview',
     'destroyed.texture',
 ];
 
@@ -105,6 +104,7 @@ export function isCopyOnlyAssetKind(assetKind) {
 
 export function shouldSyncRenderedAssetToPublic(fileName) {
     const normalized = String(fileName ?? '').toLowerCase();
+    if (/\.preview(?:\.[^.]+)*\.webp$/.test(normalized)) return false;
     if (normalized.endsWith('.icon.default.webp')) {
         return false;
     }
@@ -753,7 +753,7 @@ export async function resolveRawIconSource({
                 continue;
             }
 
-            return readRawSourceFile(generatedIconPath, roots);
+            return {...await readRawSourceFile(generatedIconPath, roots), fellBackToIconDefault: true};
         }
     }
 
@@ -767,7 +767,7 @@ export async function resolveRawIconSource({
             continue;
         }
 
-        return readRawSourceFile(generatedIconPath, roots);
+        return {...await readRawSourceFile(generatedIconPath, roots), fellBackToIconDefault: true};
     }
 
     const generatedIconPathForAsset = await resolveGeneratedIconFilePathForAssetId(
@@ -1175,12 +1175,15 @@ export async function publishStructureIconsForAsset({
     for (const entry of publishedEntries) {
         if (entry) {
             publishedUrls[entry[0]] = entry[1].url;
-            if (entry[0] === 'preview' && entry[1].fellBackToIconDefault) {
+            if (entry[0] === 'icon.rendered' && entry[1].fellBackToIconDefault) {
                 publishedUrls.previewIsIconFallback = true;
             }
         }
     }
 
+    publishedUrls.preview = publishedUrls['icon.rendered'] ?? publishedUrls['icon.default'];
+    publishedUrls.previewIsIconFallback ??= !publishedUrls['icon.rendered'];
+    publishedUrls['destroyed.preview'] = publishedUrls['destroyed.icon.rendered'] ?? publishedUrls['destroyed.icon.default'];
     return publishedUrls;
 }
 

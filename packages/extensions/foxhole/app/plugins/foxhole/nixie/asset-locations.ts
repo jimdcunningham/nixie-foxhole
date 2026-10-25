@@ -1,5 +1,5 @@
 let resolvePublished: ((path: string) => string) | null = null;
-export function installFoxholeAssetLocations(resolve: (path: string) => string): void { resolvePublished = resolve; }
+export function installFoxholeAssetLocations(resolve: ((path: string) => string) | null): void { resolvePublished = resolve; }
 export function hasFoxholeAssetLocations(): boolean { return resolvePublished !== null; }
 export function resolveFoxholeAssetUrl(url: string, baseUrl = '/foxhole/assets/'): string {
     if (!resolvePublished) return url;

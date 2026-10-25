@@ -1,4 +1,4 @@
-import {S3Client, HeadObjectCommand, PutObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client, HeadObjectCommand, PutObjectCommand, ListObjectsV2Command, GetObjectCommand} from '@aws-sdk/client-s3';
 import {createReadStream} from 'node:fs';
 
 /** Explicit credentials only: never fall through to an unrelated AWS profile. */
@@ -18,6 +18,23 @@ export function createAssetPublicationS3(target, env = process.env, options = {}
         } finally {body.destroy();}
     };
     return {
+        async list(signal) {
+            const rows=[]; let token;
+            do {
+                const page=await client.send(new ListObjectsV2Command({Bucket:target.bucket,Prefix:target.prefix+'/',ContinuationToken:token}),{abortSignal:signal});
+                for(const row of page.Contents??[]) rows.push({key:row.Key,bytes:row.Size});
+                if(rows.length>100000) throw Error('Asset inventory exceeds publication budget');
+                token=page.IsTruncated?page.NextContinuationToken:undefined;
+                if(page.IsTruncated&&!token) throw Error('Storage listing ended without a continuation token');
+            }while(token);
+            return rows;
+        },
+        async readEncoded(key,signal) {
+            if(!key.startsWith(target.prefix+'/'))throw Error('Encoded read escaped publication prefix');
+            const object=await client.send(new GetObjectCommand({Bucket:target.bucket,Key:key}),{abortSignal:signal}),chunks=[];let bytes=0;
+            try{for await(const chunk of object.Body){bytes+=chunk.length;if(bytes>512*1024**2)throw Error('Encoded object exceeds publication budget');chunks.push(chunk);}}finally{object.Body?.destroy?.();}
+            return Buffer.concat(chunks);
+        },
         async head(key, signal) {
             try {
                 const row = await client.send(new HeadObjectCommand({Bucket: target.bucket, Key: key}), {abortSignal: signal});

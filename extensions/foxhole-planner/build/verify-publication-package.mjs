@@ -1,10 +1,11 @@
+import {readCatalogPin} from './prepare-catalog-input.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyNixieExtensionPackage} from '@nixiejs/extension-package';
 export async function verifyRemotePublicationPackage(packageFile) {
     const verified = await verifyNixieExtensionPackage(packageFile);
-    const pin = JSON.parse(await fs.readFile(new URL('../src/catalog-release-pin.json', import.meta.url), 'utf8'));
+    const pin = await readCatalogPin();
     const catalogs = verified.manifest.contributes.experimentalProductCatalogs ?? [];
     const declaration = catalogs.find(catalog => catalog.id === 'foxhole.catalog');
     if (catalogs.length !== 1 || !declaration || declaration.baseUrl !== pin.baseUrl || declaration.document.path !== 'dist/catalog.v1.json'

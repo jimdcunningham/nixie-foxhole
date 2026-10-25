@@ -20,14 +20,15 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const settingsStore = useNixieSettingsStore();
     // Frame callbacks share one reactive snapshot; Pinia action reads allocate.
     const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValueOr(id, undefined)));
-    const delivery = foxholeWorldAssetDelivery();
-    const world = new FoxholeRegionSceneController({
+    let delivery = foxholeWorldAssetDelivery();
+    const createWorld = () => new FoxholeRegionSceneController({
         // Scene time of day owns the shared sky; a region must not install Noon Sky.
         manageEnvironment: false,
-        baseUrl: delivery.baseUrl,
-        indexLoader: delivery.loadIndex,
+        baseUrl: delivery?.baseUrl ?? '',
+        indexLoader: delivery?.loadIndex ?? (async () => {throw new Error('No selected world catalog.');}),
         loadRegion: async (options: Parameters<typeof import('@nixiejs/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixiejs/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });
+    let world = createWorld();
     const roadTour = import.meta.dev && context.cameraPose && context.setCameraPose ? createPlannerRoadTour({
         canvas: context.app.canvas,
         getRegions: () => world.tourRegions().map(record => ({ ...record,
@@ -80,6 +81,18 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             return { minX: bounds.left, minY: bounds.top, maxX: bounds.right, maxY: bounds.bottom };
         },
         updateSpatialPresentation({ view, mode, deltaMS }) {
+            const selected = foxholeWorldAssetDelivery();
+            if (!selected) {
+                if (delivery) {world.destroy(); delivery = null; world = createWorld(); roadTour?.stop();}
+                return;
+            }
+            if (selected.revision !== delivery?.revision) {
+                world.destroy();
+                delivery = selected;
+                world = createWorld();
+                lastSpatialRegion = null;
+                roadTour?.stop();
+            }
             const settings = mapSettings.value;
             const regions = FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key));
             const selection = regions.map(region => region.key).sort().join('|');

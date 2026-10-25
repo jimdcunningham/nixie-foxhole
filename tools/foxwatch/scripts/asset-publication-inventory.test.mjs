@@ -127,3 +127,19 @@ test('the CLI refuses to overwrite the served tree and rejects misspelled argume
     await assert.rejects(() => run(process.execPath, [command, '--asssets', f.root]), /Unknown option/);
     assert.match((await run(process.execPath, [command, '--help'])).stdout, /--assets/);
 });
+
+test('world-only inventory excludes unrelated media and includes catalog model dependencies', async t => {
+    const f = await fixture(t), modelPath = 'types/structures/hospital/hospital.glb', partPath = 'shared/models/part.glb';
+    const model = Buffer.from('hospital geometry'), part = Buffer.from('shared geometry');
+    await f.write(modelPath, model); await f.write(partPath, part); await f.write('obsolete.preview.webp', 'not selected');
+    await f.write('models/manifest.v1.json', json({assets: {
+        hospital: {path:modelPath,sha256:hash(model),bytes:model.length,modelParts:{parts:[{resourceId:'shared.part'}]}},
+        unused: {path:'not-needed.glb',sha256:'0'.repeat(64),bytes:10,modelParts:{parts:[{resourceId:'unused.part'}]}},
+    }, sharedParts: {part: {path:partPath,resourceId:'shared.part',sha256:hash(part),bytes:part.length},
+        unused: {path:'not-needed-part.glb',resourceId:'unused.part',sha256:'0'.repeat(64),bytes:10}}}));
+    await f.region('a', [], {catalogResources:[{assetId:'hospital',path:modelPath,sha256:hash(model),bytes:model.length}]});
+    const inventory = await f.inventory({worldOnly:true});
+    assert.equal(inventory.valid,true,JSON.stringify(inventory.issues));
+    assert.ok(inventory.objects.some(row=>row.path===modelPath)); assert.ok(inventory.objects.some(row=>row.path===partPath));
+    assert.ok(!inventory.objects.some(row=>row.path==='obsolete.preview.webp' || row.path==='not-needed.glb'));
+});

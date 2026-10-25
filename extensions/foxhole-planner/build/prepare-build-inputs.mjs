@@ -17,8 +17,7 @@ export async function readVerifiedBuildInput(receipt,fetcher=fetch){
     return bytes;
 }
 export async function prepareBuildInputs({pin,output,library,fetcher=fetch}){
-    if(!pin.buildMetadata)throw Error('Publish derived Planner build metadata first');
-    library??=await (await import('../src/asset-release.ts')).loadFoxholeAssetRelease(pin.publication);
+    library??=await (await import('../src/catalog-library.mjs')).loadFoxholeCatalogLibrary(pin);
     let downloadedBytes=0,reusedBytes=0;
     for(const name of BUILD_INPUT_PATHS){
         const location=library.files.get(name);if(!location)throw Error('Missing published build input: '+name);
@@ -31,14 +30,12 @@ export async function prepareBuildInputs({pin,output,library,fetcher=fetch}){
         const temporary=destination+'.'+randomUUID()+'.tmp';await fs.writeFile(temporary,bytes,{flag:'wx'});await fs.rename(temporary,destination);
         downloadedBytes+=bytes.length;
     }
-    // Verify the derived document before a build can depend on its pin.
-    await readVerifiedBuildInput(pin.buildMetadata,fetcher);
     return {files:BUILD_INPUT_PATHS.length,downloadedBytes,reusedBytes};
 }
 async function run(){
     const {values}=parseArgs({options:{output:{type:'string'},expected:{type:'string'},'identity-only':{type:'boolean'}}});
     const extension=path.resolve(import.meta.dirname,'..');
-    const bytes=await fs.readFile(path.join(extension,'src/asset-release-pin.json')),assetPin=assetPinIdentity(bytes);
+    const bytes=await fs.readFile(path.resolve(process.env.NIXIE_FOXHOLE_CATALOG_PIN_FILE?.trim() || path.join(extension,'src/catalog-release-pin.json'))),assetPin=assetPinIdentity(bytes);
     if(values.expected&&values.expected!==assetPin)throw Error('Requested asset pin differs from the pinned source revision');
     const started=performance.now();
     const result=values['identity-only']?{}:await prepareBuildInputs({pin:JSON.parse(bytes),output:path.resolve(values.output??path.join(extension,'../../packages/extensions/foxhole/public/foxhole/assets'))});

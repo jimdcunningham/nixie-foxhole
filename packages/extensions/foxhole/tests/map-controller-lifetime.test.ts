@@ -52,3 +52,26 @@ test('a region texture finishing after its initialization retires cannot create 
     finish({});
     await loading;
 });
+
+test('retired map initialization cannot replace the accepted generation settings', async () => {
+    const method = controller.match(/    private async syncRenderer\([\s\S]*?\n    \}/)![0];
+    const sync = runInNewContext(stripTypeScriptTypes(method.replace('private async syncRenderer', 'async function syncRenderer') + '\nsyncRenderer;'));
+    let finish!: () => void;
+    const initialization = new Promise<void>(resolve => {finish = resolve;});
+    let started!: () => void;
+    const initializationStarted = new Promise<void>(resolve => {started = resolve;});
+    const state = {isDestroyed: false, syncPending: false, mapGeneration: 1,
+        renderer: {hasInitialized: false, ensureInitialized: () => {started(); return initialization;}},
+        lastSettingsSignature: '', readMapSettings: () => ({enabled: true}), needsLiveData: () => true,
+        syncViewportGridSuppression() {}, pluginContext: {session: {sceneViewActive: {value: true}}},
+        mountRendererIfNeeded: async () => {}, ensureCacheLoaded: async () => {}};
+    const pending = sync.call(state);
+    await initializationStarted;
+    state.mapGeneration = 2;
+    state.renderer = {hasInitialized: true, ensureInitialized: async () => {}};
+    state.lastSettingsSignature = 'accepted-generation';
+    state.syncPending = true;
+    finish(); await pending;
+    assert.equal(state.lastSettingsSignature, 'accepted-generation');
+    assert.equal(state.syncPending, true, 'the retired initializer does not unlock the accepted initializer');
+});

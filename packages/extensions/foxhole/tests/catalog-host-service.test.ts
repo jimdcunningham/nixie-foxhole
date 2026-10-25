@@ -1,3 +1,5 @@
+import {getFoxholeManifest, getFoxholeManifestRevision, installFoxholeManifest} from '../app/plugins/foxhole/nixie/manifest.ts';
+import {installFoxholeAssetLocations} from '../app/plugins/foxhole/nixie/asset-locations.ts';
 import { readFileSync } from 'node:fs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { listFoxholeSceneV2Products } from '../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
@@ -25,7 +27,7 @@ test('Inspector, upgrades, scene, and item callers share activation-owned catalo
         assert.equal(items, getFoxholeItemCatalog('/foxhole/assets/'));
         const key = Object.keys(structures.assetByKey)[0]!;
         assert.equal(getFoxholeStructureAsset(key, '/foxhole/assets/'), structures.assetByKey[key]);
-        assert.equal(service.domainData('nixie.foxhole-planner', 'structures:/foxhole/assets/', () => null), structures);
+        assert.equal(service.domainData('nixie.foxhole-planner', 'structures:/foxhole/assets/', () => null, getFoxholeManifestRevision()), structures);
         replaceNixieSceneV2ExtensionCatalog([entry('replacement')]);
         assert.notEqual(getFoxholeStructureCatalog('/foxhole/assets/'), structures);
         assert.notEqual(getFoxholeItemCatalog('/foxhole/assets/'), items);
@@ -97,5 +99,30 @@ test('SDK products request transforms without a registered bundled capability po
         if (product.components.some(component => component.ownerId === manifest.id && component.componentId === 'asset')) {
             assert.deepEqual(product.interactionProfile, { move: true, rotate: true }, product.id);
         }
+    }
+});
+
+test('private inspector indexes replace bootstrap URLs when the same active generation installs its manifest', () => {
+    const service = createNixieExtensionProductCatalog({catalog:useNixieSceneV2ExtensionCatalog(),getPort:()=>null,
+        readSetting:(_id,fallback)=>fallback,canCreateSnapshot:()=>true,createSnapshot:async()=>null});
+    const unregister=registerNixieExtensionProductCatalog(service);
+    try {
+        replaceNixieSceneV2ExtensionCatalog([entry('bootstrap-to-selected')]);
+        const bootstrap=getFoxholeStructureCatalog('/foxhole/assets/');
+        assert.match(bootstrap.assetByKey.hospital!.iconUrl!, /^\/foxhole\/assets\//);
+        const selected=JSON.parse(readFileSync(new URL('../public/foxhole/assets/manifest.v1.json',import.meta.url),'utf8'));
+        const hospital=selected.assets.find((asset:{id:string})=>asset.id==='hospital');
+        hospital.icons={default:'/foxhole/assets/test-default.webp',rendered:'/foxhole/assets/test-rendered.webp'};
+        installFoxholeAssetLocations(path=>'https://assets.example/foxhole-planner/objects/'+path);
+        installFoxholeManifest(selected);
+        const hydrated=getFoxholeManifest('/foxhole/assets/').assets.find(asset=>asset.id==='hospital')!;
+        assert.equal(hydrated.icons!.default,'https://assets.example/foxhole-planner/objects/test-default.webp');
+        const current=getFoxholeStructureCatalog('/foxhole/assets/').assetByKey.hospital!;
+        assert.equal(current.iconUrl,hydrated.icons!.default);
+        assert.equal(current.previewIconUrl,hydrated.icons!.rendered);
+        assert.equal(getFoxholeStructureCatalog('/foxhole/assets/').assetByKey.hospital,current);
+    } finally {
+        installFoxholeAssetLocations(null);installFoxholeManifest(null);
+        unregister();service.destroy();replaceNixieSceneV2ExtensionCatalog([]);
     }
 });

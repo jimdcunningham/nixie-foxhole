@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument("--replace-existing", action="store_true")
     parser.add_argument("--mode", choices=["topdown", "preview", "icon"], default="preview")
     parser.add_argument("--scene-variant", default=None)
-    parser.add_argument("--preview-size", type=int, default=512)
+    parser.add_argument("--preview-size", type=int, default=256)
     parser.add_argument("--icon-size", type=int, default=256)
     parser.add_argument("--debug-bounds", action="store_true")
     parser.add_argument("--purge-existing", action="store_true")

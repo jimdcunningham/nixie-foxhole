@@ -1,3 +1,4 @@
+import { normalizeRenderedIconAssociations, publishedRenderedIconValidator } from './rendered-icon-associations.mjs';
 import { alignFiringVolume } from './firing-volume-metadata.mjs';
 import { readFileSync } from 'node:fs';
 import { access, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
@@ -1416,7 +1417,7 @@ function compactDestroyedStructure(value, asset) {
         icons: isPlainObject(value.icons)
             ? {
                 ...value.icons,
-                rendered: omitIfGeneratedAssetUrl(asset, value.icons.rendered, '.destroyed.icon.rendered'),
+                rendered: value.icons.rendered,
             }
             : value.icons,
         previewIconUrl: value.previewIconUrl === (value.icons?.rendered ?? null)
@@ -1636,8 +1637,8 @@ function compactSharedModificationVariant(sharedModificationId, value) {
         icons: isPlainObject(value.icons)
             ? {
                 ...sourceIcons,
-                default: omitIfGeneratedSharedModificationAssetUrl(sharedModificationId, sourceIcons.default, '.icon.default'),
-                rendered: omitIfGeneratedSharedModificationAssetUrl(sharedModificationId, sourceIcons.rendered, '.icon.rendered'),
+                default: sourceIcons.default,
+                rendered: sourceIcons.rendered,
             }
             : value.icons,
         previewUrl: omitIfGeneratedSharedModificationAssetUrl(sharedModificationId, value.previewUrl, '.preview'),
@@ -1790,7 +1791,7 @@ function compactStructure(value) {
                 ? {
                     ...value.icons,
                     default: keepPublishedDefaultAssetUrl(value.icons.default),
-                    rendered: keepExplicitItemAssetUrl(value, value.icons.rendered, '.icon.rendered'),
+                    rendered: value.icons.rendered,
                 }
                 : value.icons,
             iconUrl: keepPublishedDefaultAssetUrl(value.iconUrl),
@@ -4033,7 +4034,7 @@ async function syncRawRenderedAssetCandidate(candidate, manifest = null) {
             [await readFileWithRetries(filePath), subtype?.content ?? null],
             { subtypeUrl, maxRenderedIconEdgePx, lossyPreviewWebpOptions,
                 lossyRenderedIconWebpOptions, losslessPublishedWebpOptions },
-            isPreview ? [webpPath, iconPath] : [webpPath]);
+            [iconPath]);
         if (await cache.matches(identity)) {
             const stats = createEmptyRawRenderedAssetSyncStats();
             stats.reused = identity.outputs.length;
@@ -4056,20 +4057,6 @@ async function syncRawRenderedAssetCandidateUncached(candidate, manifest = null)
         const previewWebpPath = outputPath.replace(/\.png$/i, '.webp');
         if (basename(filePath).toLowerCase().endsWith('.preview.png')) {
             const previewPngHasVisiblePixels = await imageFileHasVisiblePixels(filePath);
-            if (previewPngHasVisiblePixels) {
-                await mkdir(dirname(previewWebpPath), { recursive: true });
-                const previewPng = await readFileWithRetries(filePath);
-                const previewWebp = await sharp(previewPng).webp(lossyPreviewWebpOptions).toBuffer();
-                if (await writeFileIfChanged(previewWebpPath, previewWebp)) {
-                    stats.previewSynced += 1;
-                    logPublishDetail(`synced preview master ${filePath} -> ${previewWebpPath}`);
-                } else {
-                    stats.reused += 1;
-                }
-            } else {
-                logPublishDetail(`skipping blank preview master ${filePath}`);
-            }
-
             const renderedIconPath = previewWebpPath.replace(/\.preview\.webp$/i, '.icon.rendered.webp');
             {
                 await mkdir(dirname(renderedIconPath), { recursive: true });
@@ -4304,7 +4291,6 @@ async function syncSharedModificationDefaultIconAssets(manifest) {
         const sourceEntries = [
             ['.icon.default', defaultIconSourceUrl],
             ['.icon.rendered', sharedModificationSources?.renderedIconSourceUrl ?? null],
-            ['.preview', sharedModificationSources?.previewSourceUrl ?? null],
             ['.texture', sharedModificationSources?.textureSourceUrl ?? null],
         ].filter(([, sourceUrl]) => Boolean(sourceUrl));
         if (sourceEntries.length === 0) {
@@ -4492,15 +4478,13 @@ async function generateSyntheticOilfieldAssets(manifest) {
     await mkdir(outputDirectory, { recursive: true });
 
     const texturePath = resolve(outputDirectory, 'oilfield.texture.webp');
-    const previewPath = resolve(outputDirectory, 'oilfield.preview.webp');
     const renderedIconPath = resolve(outputDirectory, 'oilfield.icon.rendered.webp');
     const textureSidecarPath = resolve(outputDirectory, 'oilfield.texture.json');
 
     const reuseTexture = await shouldReuseExistingAssetOutput(texturePath);
-    const reusePreview = await shouldReuseExistingAssetOutput(previewPath);
     const reuseRenderedIcon = await shouldReuseExistingAssetOutput(renderedIconPath);
     const reuseTextureSidecar = await shouldReuseExistingAssetOutput(textureSidecarPath);
-    if (reuseTexture && reusePreview && reuseRenderedIcon && reuseTextureSidecar) {
+    if (reuseTexture && reuseRenderedIcon && reuseTextureSidecar) {
         return;
     }
 
@@ -4511,12 +4495,6 @@ async function generateSyntheticOilfieldAssets(manifest) {
 
     if (!reuseTexture) {
         await writeFileWithRetries(texturePath, baseBuffer);
-    }
-    if (!reusePreview) {
-        await sharp(baseBuffer)
-            .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-            .webp({ quality: 96, alphaQuality: 100 })
-            .toFile(previewPath);
     }
     if (!reuseRenderedIcon) {
         await sharp(baseBuffer)
@@ -4563,7 +4541,7 @@ function restoreSyntheticOilfieldManifestVisuals(manifest) {
                     ...(structure.icons ?? {}),
                     rendered: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.icon.rendered.webp')),
                 },
-                previewUrl: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.preview.webp')),
+                previewUrl: toPublicFoxholeAssetUrl(resolve(outputDirectory, 'oilfield.icon.rendered.webp')),
                 previewIsIconFallback: false,
                 variants: {
                     default: {
@@ -8395,9 +8373,12 @@ try {
     await writeLocalizationFiles(publicLocalizationsDirectory, manifestWithStableRecipeIds);
     await writeLocalizationFiles(fixtureLocalizationsDirectory, manifestWithStableRecipeIds);
 
+    const normalizedIconManifest = await normalizeRenderedIconAssociations(
+        manifestWithStableRecipeIds, publishedRenderedIconValidator(publicFoxholeAssetsDirectory),
+    );
     const manifest = compactPublishedFoxholeManifest(stripSyntheticFactionTextureVariants(
         normalizeOptionalStructureProperties(splitManifestLocalizations(
-            applyPublishedCanBlueprintFlags(manifestWithStableRecipeIds, prunedMergedManifest),
+            applyPublishedCanBlueprintFlags(normalizedIconManifest, prunedMergedManifest),
         )),
     ));
     const serializedManifest = stringifyJsonAscii(manifest);

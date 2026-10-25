@@ -36,47 +36,17 @@ async function setup(t: test.TestContext) {
       body: brotliCompressSync(world),
       encoding: 'br',
     });
-    const assets = [
-      {
-        path: 'objects/' + version + '.glb',
-        sha256: hash(model),
-        byteLength: model.length,
-      },
-      {
-        path: 'world/content/br/example/asset.json',
-        sha256: hash(world),
-        byteLength: world.length,
-      },
-    ];
-    const index = metadata(
-      { contractVersion: 1, assets },
-      'pack-' + version + '.json',
-    );
-    const mapping = metadata(
-      {
-        schemaVersion: 1,
-        files: {
-          [invalidPath ?? 'types/structures/factory/factory.glb']: {
-            path: assets[0]!.path,
-          },
-          'shared/models/factory.glb': { path: assets[0]!.path },
-          'world/content/br/example/asset.json': { path: assets[1]!.path },
-        },
-      },
-      'mapping-' + version + '.json',
-    );
-    const release = metadata(
-      {
-        schemaVersion: 1,
-        format: 'foxwatch-asset-release-v1',
-        worldBaseUrl: new URL('world/', base).href,
-        packs: { catalog: { pack: { manifest: index }, mapping } },
-        bootstrap: {},
-      },
-      'release-' + version + '.json',
-    );
-    const channel = Buffer.from(JSON.stringify({ schemaVersion: 1, release }));
-    objects.set('/foxhole-planner/channels/stable.json', { body: channel });
+    const contentPath = 'content/br/' + hash(brotliCompressSync(world)) + '/asset.json';
+    objects.set('/foxhole-planner/world/' + contentPath, {body:brotliCompressSync(world), encoding:'br'});
+    const worldIndex = metadata({version:1,format:'compact-recipes-v1',regions:{}}, 'world-index.json');
+    const catalog = metadata({catalogSchemaVersion:1, resourceDefaults:{}, products:[], sharedResources:[
+      {id:'model',path:'shared/models/model.glb',sourcePath:'foxhole-planner/objects/' + version + '.glb',sha256:hash(model),byteLength:model.length,mediaType:'model/gltf-binary'},
+      {id:'world-index',path:'shared/world-index.json',sourcePath:'foxhole-planner/world-index.json',sha256:worldIndex.sha256,byteLength:worldIndex.byteLength,mediaType:'application/json'},
+    ], data:{privateFiles:{[invalidPath ?? 'types/structures/factory/factory.glb']:'shared/models/model.glb', 'shared/models/factory.glb':'shared/models/model.glb'},
+      world:{indexResourcePath:'shared/world-index.json',contentRoot:'foxhole-planner/world/',contentResources:{[contentPath]:{sha256:hash(world),byteLength:world.length,mediaType:'application/json'}}}}}, 'catalog-' + version + '.json');
+    const release = {schemaVersion:1,baseUrl:'https://assets.example/',catalog};
+    const channel = Buffer.from(JSON.stringify({schemaVersion:1,pin:release}));
+    objects.set('/foxhole-planner/channels/stable.json',{body:channel});
     return release;
   };
   const pin = makeRelease('one');
@@ -135,7 +105,7 @@ test('downloads verified readable paths, restores Brotli files, and reuses share
   assert.equal(
     brotliDecompressSync(
       await readFile(
-        path.join(info.assetsPath, 'world/content/br/example/asset.json'),
+        path.join(info.assetsPath, plan.files.find(row=>row.path.startsWith('world/content/'))!.path),
       ),
     ).toString(),
     '{"region":"Deadlands"}',
@@ -198,7 +168,7 @@ test('a missing channel uses the bundled pin; traversal and wrong receipts canno
   assert.equal(plan.source, 'bundled');
   const original = await f.library.download(plan, f.signal);
   f.makeRelease('bad', '../escape.glb');
-  await assert.rejects(f.library.check('all', f.signal), /portable/);
+  await assert.rejects(f.library.check('all', f.signal), /portable|association/);
   f.makeRelease('corrupt');
   const corrupt = await f.library.check('all', f.signal);
   f.objects.set('/foxhole-planner/objects/corrupt.glb', {
@@ -232,7 +202,7 @@ test('rejects release URLs outside the trusted HTTPS asset root', async (t) => {
   const body = Buffer.from(
     JSON.stringify({
       schemaVersion: 1,
-      release: { ...f.pin, url: 'file:///C:/private' },
+      pin: {...f.pin,catalog:{...f.pin.catalog,url:'file:///C:/private'}},
     }),
   );
   f.objects.set('/foxhole-planner/channels/stable.json', { body });

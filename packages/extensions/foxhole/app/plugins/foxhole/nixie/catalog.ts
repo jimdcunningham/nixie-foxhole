@@ -1,3 +1,4 @@
+import {getFoxholeManifestRevision} from './manifest.ts';
 import { getNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
 import {
     getFoxholeManifest,
@@ -1294,7 +1295,17 @@ export function buildFoxholeItemCatalog(manifest: FoxholeManifest): FoxholeItemC
     };
 }
 
+let adoptedManifestRevision = -1;
+function refreshManifestCaches(): void {
+    const revision = getFoxholeManifestRevision();
+    if (revision !== adoptedManifestRevision) {
+        adoptedManifestRevision = revision;
+        structureCatalogCache.clear(); itemCatalogCache.clear();
+    }
+}
+
 export function getFoxholeStructureCatalog(baseAssetsUrl: string): FoxholeStructureCatalog {
+    refreshManifestCaches();
     const cacheKey = String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/';
     const shared = getNixieExtensionProductCatalog();
     if (shared?.extensions.value.some(entry => entry.ownerId === 'nixie.foxhole-planner')) {
@@ -1304,7 +1315,7 @@ export function getFoxholeStructureCatalog(baseAssetsUrl: string): FoxholeStruct
             const catalog = structureCatalogCache.get(cacheKey) ?? buildFoxholeStructureCatalog(getFoxholeManifest(cacheKey));
             structureCatalogCache.delete(cacheKey);
             return catalog;
-        });
+        }, getFoxholeManifestRevision());
     }
     const existing = structureCatalogCache.get(cacheKey);
     if (existing) {
@@ -1317,6 +1328,7 @@ export function getFoxholeStructureCatalog(baseAssetsUrl: string): FoxholeStruct
 }
 
 export function getFoxholeItemCatalog(baseAssetsUrl: string): FoxholeItemCatalog {
+    refreshManifestCaches();
     const cacheKey = String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/';
     const shared = getNixieExtensionProductCatalog();
     if (shared?.extensions.value.some(entry => entry.ownerId === 'nixie.foxhole-planner')) {
@@ -1326,7 +1338,7 @@ export function getFoxholeItemCatalog(baseAssetsUrl: string): FoxholeItemCatalog
             const catalog = itemCatalogCache.get(cacheKey) ?? buildFoxholeItemCatalog(getFoxholeManifest(cacheKey));
             itemCatalogCache.delete(cacheKey);
             return catalog;
-        });
+        }, getFoxholeManifestRevision());
     }
     const existing = itemCatalogCache.get(cacheKey);
     if (existing) {

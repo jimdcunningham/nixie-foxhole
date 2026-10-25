@@ -1,3 +1,6 @@
+import {fileURLToPath} from 'node:url';
+import {normalizeRenderedIconAssociations, publishedRenderedIconValidator} from '../../../../../tools/foxwatch/scripts/rendered-icon-associations.mjs';
+import {installFoxholeManifest} from '../../app/plugins/foxhole/nixie/manifest.ts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import { hostSourceUrl } from "../host-source-url.mjs";
@@ -27,7 +30,12 @@ type NativeIconRenderer = {
     syncRegionIcons: (view: { region: object; liveIcons: PIXI.Container; liveIconsVersion?: number | null; }, icons: { version: number; items: []; }) => Promise<void>;
 };
 
-test('all map icon hover names, categories and declared preview resources match the actual bundled resolver', () => {
+test('all map icon hover names, categories and declared preview resources match the selected canonical manifest', async () => {
+    const root = new URL('../../public/foxhole/assets/', import.meta.url);
+    const manifest = await normalizeRenderedIconAssociations(JSON.parse(readFileSync(new URL('manifest.v1.json', root), 'utf8')),
+        publishedRenderedIconValidator(fileURLToPath(root)));
+    installFoxholeManifest(manifest);
+    try {
     const native = Object.create(FoxholeMapRenderer.prototype) as {
         context: { getAssetsBaseUrl: () => string; };
         structureHoverAssetByName: object; itemHoverAssetByName: object;
@@ -49,6 +57,7 @@ test('all map icon hover names, categories and declared preview resources match 
             assert.equal(preview.sha256, createHash('sha256').update(source).digest('hex'), key);
         } else assert.equal(preview, undefined, key);
     }
+    } finally {installFoxholeManifest(null);}
 });
 
 test('published planning markers and synthetic icon families retain Native positions, scales, tints and victory circles', async () => {

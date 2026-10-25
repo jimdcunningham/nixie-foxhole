@@ -16,7 +16,7 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
         const id = variant === 'base' ? product.id : product.id + '.' + variant;
         return {contractVersion: 1 as const, id: 'foxhole.model.' + id, kind: 'model' as const, assetPack: declaration.id,
             path: expandNixieExperimentalCatalogPathV1(defaults.resourcePathTemplate ?? defaults.pathTemplate,
-                {id: product.id, assetGroup: product.assetGroup, variant})};
+                {id: product.id, assetGroup: product.assetGroup, variant, sha256: resource.sha256})};
     })).concat(catalog.sharedResources.filter(resource => resource.id.startsWith('shared.') && resource.mediaType === 'model/gltf-binary')
         .map(resource => ({contractVersion: 1 as const, id: 'foxhole.model.' + resource.id, kind: 'model' as const, assetPack: declaration.id, path: resource.path})));
     const paths: Record<string, string> = {

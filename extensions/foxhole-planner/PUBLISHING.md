@@ -20,7 +20,8 @@ Before enabling the workflow:
    `jimdcunningham/nixie-foxhole`, then create a scoped `nxp_` automation token.
 4. Store that token as the repository secret `NIXIE_EXTENSION_PUBLISH_TOKEN`.
    Do not provide a Supabase service-role key or a private Nixie repository token.
-5. Publish and verify the asset release referenced by `src/asset-release-pin.json`.
+5. Publish and verify the canonical catalog and completion referenced by
+   `src/catalog-release-pin.json`.
 
 ## Release Changes
 

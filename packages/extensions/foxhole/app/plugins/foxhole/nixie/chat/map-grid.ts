@@ -1,3 +1,4 @@
+import {computed} from 'vue';
 import type { Viewport } from 'pixi-viewport';
 import {
     FOXHOLE_MAP_REGIONS,
@@ -52,21 +53,21 @@ function createRegionNamePattern(value: string): string {
     return escapeRegex(value).replace(/\s+/g, '\\s+');
 }
 
-const foxholeRegionsByName = new Map(
+const foxholeRegionsByName = computed(() => new Map(
     FOXHOLE_MAP_REGIONS.map(region => [normalizeRegionName(region.name), region] as const),
-);
+));
 
-const foxholeRegionNamePattern = FOXHOLE_MAP_REGIONS
+const foxholeRegionNamePattern = computed(() => FOXHOLE_MAP_REGIONS
     .map(region => createRegionNamePattern(region.name))
     .sort((left, right) => right.length - left.length)
-    .join('|');
+    .join('|'));
 
 function createAnchoredFoxholeChatMapGridPattern(): RegExp {
-    return new RegExp(`^(${foxholeRegionNamePattern})\\s*-\\s*([A-Qa-q])(1[0-5]|[1-9])[Kk]([1-9])$`, 'i');
+    return new RegExp(`^(${foxholeRegionNamePattern.value})\\s*-\\s*([A-Qa-q])(1[0-5]|[1-9])[Kk]([1-9])$`, 'i');
 }
 
 function createFoxholeChatMapGridSearchPattern(): RegExp {
-    return new RegExp(`(${foxholeRegionNamePattern})\\s*-\\s*([A-Qa-q])(1[0-5]|[1-9])[Kk]([1-9])`, 'gi');
+    return new RegExp(`(${foxholeRegionNamePattern.value})\\s*-\\s*([A-Qa-q])(1[0-5]|[1-9])[Kk]([1-9])`, 'gi');
 }
 
 function resolveFoxholeChatMapGridReference(
@@ -76,7 +77,7 @@ function resolveFoxholeChatMapGridReference(
     quadrantValue: number,
     raw: string,
 ): FoxholeChatMapGridReference | null {
-    const region = foxholeRegionsByName.get(normalizeRegionName(regionName));
+    const region = foxholeRegionsByName.value.get(normalizeRegionName(regionName));
     if (!region) {
         return null;
     }

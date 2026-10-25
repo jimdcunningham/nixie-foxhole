@@ -641,12 +641,14 @@ function findSourceStructureColorVariant(asset: Record<string, unknown>, colorHe
 function hydrateStructureColors(asset: Record<string, unknown>): Record<string, unknown>[] {
     return getStructureColorHexesFromAsset(asset).map(colorHex => {
         const sourceVariant = findSourceStructureColorVariant(asset, colorHex);
+        const sourceIcons = sourceVariant.icons as Record<string, unknown> | undefined;
+        const assetIcons = asset.icons as Record<string, unknown> | undefined;
         return {
             ...sourceVariant,
             hex: colorHex,
             textureUrl: sourceVariant.textureUrl ?? createGeneratedColorVariantAssetUrl(asset, '.texture', colorHex),
-            previewUrl: sourceVariant.previewUrl ?? createGeneratedColorVariantAssetUrl(asset, '.preview', colorHex),
-            renderedIconUrl: sourceVariant.renderedIconUrl ?? createGeneratedColorVariantAssetUrl(asset, '.icon.rendered', colorHex),
+            previewUrl: sourceVariant.renderedIconUrl ?? sourceIcons?.rendered ?? sourceVariant.previewUrl ?? sourceIcons?.default ?? assetIcons?.default,
+            renderedIconUrl: sourceVariant.renderedIconUrl ?? sourceIcons?.rendered,
         };
     });
 }
@@ -733,16 +735,16 @@ function hydrateSharedModificationVisualInput(sharedModificationId: string, modi
         : {};
     const defaultIconUrl = typeof sourceIcons.default === 'string' && sourceIcons.default.trim().length > 0
         ? sourceIcons.default
-        : createGeneratedSharedModificationAssetUrl(sharedModificationId, '.icon.default');
+        : undefined;
 
     return {
         ...modification,
         icons: {
             ...sourceIcons,
             default: defaultIconUrl,
-            rendered: sourceIcons.rendered ?? createGeneratedSharedModificationAssetUrl(sharedModificationId, '.icon.rendered'),
+            rendered: sourceIcons.rendered,
         },
-        previewUrl: modification.previewUrl ?? createGeneratedSharedModificationAssetUrl(sharedModificationId, '.preview'),
+        previewUrl: sourceIcons.rendered ?? modification.previewUrl ?? defaultIconUrl,
         sprite: {
             ...sourceSprite,
             source: sourceSprite.source ?? createGeneratedSharedModificationAssetUrl(sharedModificationId, '.texture'),
@@ -767,7 +769,7 @@ function hydrateStructureIcons(asset: Record<string, unknown>): Record<string, u
 
     return {
         ...(defaultIconUrl ? { default: defaultIconUrl } : {}),
-        rendered: sourceIcons.rendered ?? asset.previewIconUrl ?? defaultColorVariant?.renderedIconUrl ?? createGeneratedAssetUrl(asset, '.icon.rendered'),
+        rendered: sourceIcons.rendered ?? asset.previewIconUrl ?? defaultColorVariant?.renderedIconUrl,
     };
 }
 
@@ -817,7 +819,7 @@ function hydrateDestroyedVisualInput(asset: Record<string, unknown>): unknown {
     const sourceSprite = destroyed.sprite && typeof destroyed.sprite === 'object' && !Array.isArray(destroyed.sprite)
         ? destroyed.sprite as Record<string, unknown>
         : {};
-    const renderedIconUrl = sourceIcons.rendered ?? destroyed.previewIconUrl ?? createGeneratedAssetUrl(asset, '.destroyed.icon.rendered');
+    const renderedIconUrl = sourceIcons.rendered ?? destroyed.previewIconUrl;
 
     return {
         ...destroyed,
@@ -826,7 +828,7 @@ function hydrateDestroyedVisualInput(asset: Record<string, unknown>): unknown {
             rendered: renderedIconUrl,
         },
         previewIconUrl: destroyed.previewIconUrl ?? renderedIconUrl,
-        previewUrl: destroyed.previewUrl ?? createGeneratedAssetUrl(asset, '.destroyed.preview'),
+        previewUrl: renderedIconUrl ?? destroyed.previewUrl ?? sourceIcons.default ?? destroyed.iconUrl,
         sprite: {
             ...sourceSprite,
             source: sourceSprite.source ?? destroyed.textureUrl ?? createGeneratedAssetUrl(asset, '.destroyed.texture'),
@@ -1783,20 +1785,21 @@ export const foxholeManifestSchema = z.preprocess(value => {
             );
         const hydratedColors = hydrateStructureColors(sourceAsset);
         const defaultColorVariant = hydratedColors[0];
+        const hydratedIcons = hydrateStructureIcons(sourceAsset);
         const hydratedAsset = {
             ...(hydrateStructurePayloadInput(sourceAsset) as Record<string, unknown>),
             name: hydrateLocalizedTextInput(sourceAsset.name, defaultLocaleStrings),
             description: hydrateLocalizedTextInput(sourceAsset.description, defaultLocaleStrings, { missingFallback: '' }),
             techId: compactTechId(sourceAsset.techId),
             colors: hydratedColors,
-            icons: hydrateStructureIcons(sourceAsset),
+            icons: hydratedIcons,
             ...(isBunker ? { isBunker: true } : {}),
             ...(isFacility ? { isFacility: true } : {}),
             ...(isWorldStructure ? { isWorldStructure: true } : {}),
             previewUrl: sourceAsset.previewUrl ?? (
                 sourceAsset.isItem === true
                     ? undefined
-                    : defaultColorVariant?.previewUrl ?? createGeneratedAssetUrl(sourceAsset, '.preview')
+                    : hydratedIcons.rendered ?? defaultColorVariant?.previewUrl ?? hydratedIcons.default
             ),
             previewDirection: sourceAsset.previewDirection ?? 'se',
             clipFloor: sourceAsset.clipFloor ?? (
@@ -1876,7 +1879,7 @@ export const foxholeManifestSchema = z.preprocess(value => {
                     } = sharedVariant as Record<string, unknown>;
 
                     const modificationFolderId = String(variantId ?? '').trim().toLowerCase();
-                    const hostPreviewUrl = createGeneratedHostModificationAssetUrl(structureId, modificationFolderId, '.preview');
+                    const hostPreviewUrl = sourceVariant.previewUrl;
                     const hostTextureUrl = createGeneratedHostModificationAssetUrl(structureId, modificationFolderId, '.texture');
                     const existingIcons = hydratedSourceVariant.icons && typeof hydratedSourceVariant.icons === 'object'
                         ? hydratedSourceVariant.icons as Record<string, unknown>
@@ -1903,7 +1906,7 @@ export const foxholeManifestSchema = z.preprocess(value => {
                             default: existingIcons.default
                                 ?? hydratedSourceVariant.iconUrl
                                 ?? hostPreviewUrl,
-                            rendered: existingIcons.rendered ?? hostPreviewUrl,
+                            rendered: existingIcons.rendered,
                         },
                         sprite: {
                             ...existingSprite,
@@ -2310,7 +2313,7 @@ export function rebaseFoxholeManifestAssetUrls(
         return manifest;
     }
 
-    const rebaseUrl = (value: string | null): string | null => {
+    const rebaseUrl = (value: string | null | undefined): string | null | undefined => {
         if (!value) {
             return value;
         }

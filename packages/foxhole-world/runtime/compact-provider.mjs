@@ -1,3 +1,4 @@
+import {createWorldCacheLease} from './cache-retention.mjs';
 import {restoreNativeFoliageMasks} from './native-foliage-masks.mjs';
 import {restoreNativeSmallWaterMaterials} from './native-small-water.mjs';
 import {createSourceLeasePool} from './source-leases.mjs';
@@ -5,21 +6,23 @@ import {decodeWorldImage} from './image-bitmap.mjs';
 import {retainModelMaterialNames} from './model-material-names.mjs';
 import {Texture,ImageSource,CubeTexture} from 'pixi.js';
 import {glbToGltf,normalizeMeshopt,parseGltf} from '@pixi/3d';
-import {cachedRecipe,writeCachedRoadAssembly} from './recipe-cache.mjs';
-import {fetchCompactResource} from './compact-cache.mjs';
+import {cachedRecipe,writeCachedRoadAssembly,recipeKey,roadKey} from './recipe-cache.mjs';
+import {fetchCompactResource,compactResourceCacheKey} from './compact-cache.mjs';
 export async function createCompactProvider({baseUrl,entry,signal,onProgress=()=>{},scheduleModelTask=task=>task()}){
  performance.setResourceTimingBufferSize(30000);
  const externalAssets=new Set(),workerTimings=[];const start=performance.now(),base=new URL(baseUrl,location.href),metrics={downloadBytes:0,cacheHits:0,cacheMisses:0,cacheWriteFailures:0,decodeMs:0};
- let workerRead;const read=ref=>workerRead?workerRead(ref):fetchCompactResource(base,ref,{signal,metrics});
+ const usage=createWorldCacheLease();
+ let workerRead;const read=async ref=>{await usage.use('foxhole-world-compact-v1',compactResourceCacheKey(ref));return workerRead?workerRead(ref):fetchCompactResource(base,ref,{signal,metrics});};
  const stages={};let stageStart=performance.now(),stageName='manifest';
  async function measure(name,fn){const begin=performance.now();try{return await fn();}finally{const end=performance.now();stages[name]=end-begin;performance.measure('foxhole:'+entry.id+':'+name,{start:begin,end});}}
  function stage(name){const now=performance.now();stages[stageName]=(stages[stageName]||0)+now-stageStart;performance.measure('foxhole:'+entry.id+':'+stageName,{start:stageStart,end:now});stageName=name;stageStart=now;}
 
- const manifest=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
+ let manifest;try{manifest=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
  if(manifest.version!==1||manifest.format!=='compact-recipes-v1'||manifest.region!==entry.id)throw Error('Unsupported compact region');
+ await usage.use('foxhole-world-compact-v1',(manifest.physicalResources||entry.resources||[]).map(compactResourceCacheKey));}catch(error){usage.dispose();throw error;}
  const pending=new Map(),memo=new Map(),textureUrls=new Set(),modelPromises=new Map(),texturePromises=new Map(),modelSources=new Set(),imageSources=new Set(),cubes=new Set(),modelImageUrls=new Set(),imagesByModel=new Map(),sourcesByModel=new Map();let serial=0,disposed=false,workersDisposed=true,fatal=null,readyWorkers=0,workers=[],startupTimer;
  const destroyWorkers=()=>{if(workersDisposed)return;workersDisposed=true;clearTimeout(startupTimer);for(const worker of workers)worker.terminate();for(const p of pending.values())p.reject(new DOMException('Region disposed','AbortError'));pending.clear();};
- const destroy=()=>{if(disposed)return;disposed=true;destroyWorkers();void Promise.allSettled([...modelPromises.values(),...texturePromises.values()]).then(()=>{for(const cube of cubes)cube.destroy(true);for(const source of modelSources)source.destroy();for(const source of imageSources){source.resource?.close?.();source.destroy();}});};
+ const destroy=()=>{if(disposed)return;disposed=true;usage.dispose();destroyWorkers();void Promise.allSettled([...modelPromises.values(),...texturePromises.values()]).then(()=>{for(const cube of cubes)cube.destroy(true);for(const source of modelSources)source.destroy();for(const source of imageSources){source.resource?.close?.();source.destroy();}});};
  signal?.addEventListener('abort',destroy,{once:true});
  function startWorkers(){
   if(disposed)throw new DOMException('Region disposed','AbortError');
@@ -43,7 +46,7 @@ export async function createCompactProvider({baseUrl,entry,signal,onProgress=()=
  const once=(id,fn)=>{if(!memo.has(id))memo.set(id,fn());return memo.get(id);};
  const part=(group,name,type='bytes')=>read(manifest.recipes[group].parts[name]).then(bytes=>type==='json'?JSON.parse(new TextDecoder().decode(bytes)):bytes);
  function absolute(value){if(typeof value==='string'&&value.startsWith('content/'))return new URL(value,base).href;if(Array.isArray(value))return value.map(absolute);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,absolute(v)]));return value;}
- const recipe=async(hash,build)=>await run(2,{kind:'recipe-read',baseUrl:base.href,hash})||cachedRecipe(base,hash,build,{signal,metrics});
+ const recipe=async(hash,build)=>{await usage.use('foxhole-world-recipes-v1',recipeKey(base,hash));return await run(2,{kind:'recipe-read',baseUrl:base.href,hash})||cachedRecipe(base,hash,build,{signal,metrics});};
  const binary=id=>id.endsWith('/terrain-lod1.glb')?once(id,()=>recipe(manifest.recipes.terrain.sha256,async()=>run(1,{kind:'terrain',meta:await json(entry.id+'/terrain.json'),source:await binary(entry.id+'/terrain.bin'),hash:manifest.recipes.terrain.sha256}))):once(id,()=>plain(id));
  const zipped=id=>once(id,async()=>{
   const alias=manifest.resources[id]?.recipeOf;if(alias&&alias!==id)return zipped(alias);
@@ -78,5 +81,5 @@ export async function createCompactProvider({baseUrl,entry,signal,onProgress=()=
   modelPromises.clear();for(const source of modelSources)if(!source.destroyed){source.textures.length=0;source.destroy();}modelSources.clear();
   for(const url of modelImageUrls){if(textureUrls.has(url))continue;const pending=texturePromises.get(url);texturePromises.delete(url);void pending?.then(texture=>{const source=texture.source;imageSources.delete(source);if(source&&!source.destroyed){source.resource?.close?.();texture.destroy(true);}}).catch(()=>{});}modelImageUrls.clear();
  }
- return {createModelLease,releaseModels,terrainDescriptor:(id,kind,dimensions={})=>({baseUrl:base.href,entry:resource(id),kind,...dimensions}),trackExternalAsset:url=>externalAssets.add(new URL(url,base).href),readRoadAssembly:()=>run(2,{kind:'road-assembly-read',baseUrl:base.href,hash:entry.manifest.hash}),writeRoadAssembly:bytes=>writeCachedRoadAssembly(base,entry.manifest.hash,bytes,{metrics}),json,binary,zipped,metrics,model,environment,stage,measure,url:id=>new URL(resource(id).resource.path,base).href,texture:async(id,repeat=false)=>{const url=new URL(resource(id).resource.path,base).href;textureUrls.add(url);const t=await image(url);if(repeat)t.source.style.addressMode='repeat';return t;},report:phase=>onProgress({phase,...metrics}),finish(){stage('ready');metrics.stages=stages;metrics.readyMs=performance.now()-start;metrics.preparedFetchBytes=metrics.downloadBytes;const entries=[...performance.getEntriesByType('resource').filter(e=>e.startTime>=start&&(e.name.startsWith(base.href)||externalAssets.has(e.name))),...workerTimings.filter(e=>e.name.startsWith(base.href))];const unique=[...new Map(entries.map(e=>[[e.name,e.startTime,e.duration].join('|'),e])).values()];metrics.downloadBytes=unique.filter(e=>e.transferSize>0).reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.requestedEncodedBytes=unique.reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.httpCacheResponses=unique.filter(e=>e.transferSize===0&&e.encodedBodySize>0).length;memo.clear();if(!pending.size)destroyWorkers();return metrics;},destroy,textureUrls};
+ return {createModelLease,releaseModels,terrainDescriptor:(id,kind,dimensions={})=>({baseUrl:base.href,entry:resource(id),kind,...dimensions}),trackExternalAsset:url=>externalAssets.add(new URL(url,base).href),readRoadAssembly:async()=>{await usage.use('foxhole-world-recipes-v1',roadKey(base,entry.manifest.hash));return run(2,{kind:'road-assembly-read',baseUrl:base.href,hash:entry.manifest.hash});},writeRoadAssembly:bytes=>writeCachedRoadAssembly(base,entry.manifest.hash,bytes,{metrics}),json,binary,zipped,metrics,model,environment,stage,measure,url:id=>new URL(resource(id).resource.path,base).href,texture:async(id,repeat=false)=>{const url=new URL(resource(id).resource.path,base).href;textureUrls.add(url);const t=await image(url);if(repeat)t.source.style.addressMode='repeat';return t;},report:phase=>onProgress({phase,...metrics}),finish(){stage('ready');metrics.stages=stages;metrics.readyMs=performance.now()-start;metrics.preparedFetchBytes=metrics.downloadBytes;const entries=[...performance.getEntriesByType('resource').filter(e=>e.startTime>=start&&(e.name.startsWith(base.href)||externalAssets.has(e.name))),...workerTimings.filter(e=>e.name.startsWith(base.href))];const unique=[...new Map(entries.map(e=>[[e.name,e.startTime,e.duration].join('|'),e])).values()];metrics.downloadBytes=unique.filter(e=>e.transferSize>0).reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.requestedEncodedBytes=unique.reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.httpCacheResponses=unique.filter(e=>e.transferSize===0&&e.encodedBodySize>0).length;memo.clear();if(!pending.size)destroyWorkers();return metrics;},destroy,textureUrls};
 }

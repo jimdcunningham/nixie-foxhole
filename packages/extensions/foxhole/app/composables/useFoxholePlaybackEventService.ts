@@ -82,7 +82,7 @@ interface FoxholeWarLifecycleEventData {
 }
 
 const LIVE_EVENT_WINDOW_LIMIT = 160;
-const FOXHOLE_MAP_REGION_BY_KEY = new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region]));
+const FOXHOLE_MAP_REGION_BY_KEY = computed(() => new Map(FOXHOLE_MAP_REGIONS.map(region => [region.key, region])));
 
 const sharedLiveEvents = ref<FoxholePlaybackEventRecord[]>([]);
 const knownLiveEventIds = new Set<string>();
@@ -159,7 +159,7 @@ function getFoxholeRegionLabel(mapKey: string | null | undefined): string {
         return '';
     }
 
-    return FOXHOLE_MAP_REGION_BY_KEY.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
+    return FOXHOLE_MAP_REGION_BY_KEY.value.get(normalizedMapKey)?.name ?? normalizedMapKey.toUpperCase();
 }
 
 async function ensureShardLabelsLoaded(): Promise<void> {

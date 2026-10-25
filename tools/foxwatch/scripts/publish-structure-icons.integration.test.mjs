@@ -188,9 +188,7 @@ test('integration: six regression structures publish with expected icon behavior
     assert.equal(rpgMetadata.width, 100);
     assert.equal(rpgMetadata.height, 100);
 
-    const previewPath = resolve(tempRoot, 'public/assets/types/structures/wood/wood.preview.webp');
-    assert.equal(
-        (await readFile(previewPath)).equals(await readFile(resolve(fixtureRoot, 'preview-copy.webp'))),
-        true,
-    );
+    const wood = published.assets.find(entry => entry.id === 'wood');
+    assert.equal(wood.previewUrl, wood.icons.rendered);
+    await assert.rejects(readFile(resolve(tempRoot, 'public/assets/types/structures/wood/wood.preview.webp')), {code: 'ENOENT'});
 });

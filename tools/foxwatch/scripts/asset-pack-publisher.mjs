@@ -4,7 +4,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {brotliDecompressSync} from 'node:zlib';
 import {parseArgs} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {prepareAssetPublication, readPublicationPlan, validateTarget} from './asset-pack-publication.mjs';
+import {readPublicationPlan, validateTarget} from './asset-pack-publication.mjs';
 
 const matches = (remote, row) => remote && ['sha256', 'bytes', 'mediaType', 'contentEncoding', 'cacheControl', 'decodedSha256', 'decodedBytes']
     .every(key => remote[key] === row[key]);
@@ -25,10 +25,34 @@ async function retry(task, signal) {
     }
 }
 
+/** Read-only comparison of a frozen plan with storage; never creates or overwrites objects. */
+export async function inspectAssetPublication({planPath, transport, concurrency = 8, signal = new AbortController().signal}) {
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) throw Error('Concurrency must be between 1 and 16');
+    const {plan} = await readPublicationPlan(planPath);
+    const objects = new Array(plan.objects.length); let cursor = 0;
+    const summary = {reused: 0, missing: 0, conflicting: 0, missingBytes: 0};
+    await Promise.all(Array.from({length: Math.min(concurrency, plan.objects.length)}, async () => {
+        while (cursor < plan.objects.length) {
+            const index = cursor++, row = plan.objects[index];
+            const remote = await retry(() => transport.head(row.key, signal), signal);
+            const status = !remote ? 'missing' : matches(remote, row) ? 'reused' : 'conflicting';
+            summary[status]++;
+            if (status === 'missing') summary.missingBytes += row.bytes;
+            objects[index] = {...row, status, ...(status === 'conflicting' ? {existing: remote} : {})};
+        }
+    }));
+    return {schemaVersion: 1, planSha256: plan.planSha256, target: plan.target, summary, objects};
+}
+
 /** All payloads verify before network writes. Each phase finishes before the next starts. */
 export async function publishAssetPublication({planPath, transport, concurrency = 8, signal = new AbortController().signal, onProgress = () => {}}) {
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) throw new Error('Concurrency must be between 1 and 16');
     const {directory, plan, receipts} = await readPublicationPlan(planPath);
+    const releaseObject = plan.objects.find(row => row.phase === 'release');
+    const releaseBytes = await fs.readFile(path.join(directory, releaseObject.file));
+    const releaseDocument = JSON.parse((releaseObject.contentEncoding === 'br' ? brotliDecompressSync(releaseBytes, {maxOutputLength: 8 * 1024 ** 2}) : releaseBytes).toString('utf8'));
+    if (releaseDocument.format === 'foxwatch-product-catalog-release-v1' && (!/^[a-f0-9]{64}$/.test(plan.reuseInventory?.sha256)
+        || !Number.isSafeInteger(plan.reuseInventory.objects) || plan.reuseInventory.objects < 0)) throw Error('Prepare this catalog with existing-storage inspection before publishing');
     const cancel = new AbortController(), activeSignal = AbortSignal.any([signal, cancel.signal]);
     const stats = {uploaded: 0, reused: 0, uploadedBytes: 0, completed: 0, total: plan.objects.length};
     for (const phase of ['assets', 'indexes', 'release']) {
@@ -56,15 +80,20 @@ export async function publishAssetPublication({planPath, transport, concurrency 
         if (failure) throw failure;
         const rejected = results.find(result => result.status === 'rejected'); if (rejected) throw rejected.reason;
     }
-    const releaseObject = plan.objects.find(row => row.phase === 'release');
-    const releaseBytes = await fs.readFile(path.join(directory, releaseObject.file));
-    const releaseDocument = JSON.parse((releaseObject.contentEncoding === 'br' ? brotliDecompressSync(releaseBytes, {maxOutputLength: 8 * 1024 ** 2}) : releaseBytes).toString('utf8'));
     let channelUrl;
-    if (releaseDocument.schemaVersion === 1 && releaseDocument.format === 'foxwatch-asset-release-v1') {
+    const canonical = releaseDocument.schemaVersion === 1 && releaseDocument.format === 'foxwatch-product-catalog-release-v1';
+    if (canonical || releaseDocument.schemaVersion === 1 && releaseDocument.format === 'foxwatch-asset-release-v1') {
         // Inspection clients discover the latest explicitly published release here.
         // Immutable payloads and release metadata have all verified before cutover.
         if (typeof transport.putChannel !== 'function') throw new Error('The publication transport must support the stable channel');
-        const channelBody = Buffer.from(JSON.stringify({schemaVersion: 1, release: plan.release}));
+        let channelDocument = {schemaVersion: 1, release: plan.release};
+        if (canonical) {
+            const catalog = releaseDocument.catalog;
+            const object = plan.objects.find(row => new URL(row.key, plan.target.publicBaseUrl).href === catalog?.url);
+            if (!object || object.phase !== 'indexes' || object.decodedSha256 !== catalog.sha256 || object.decodedBytes !== catalog.byteLength) throw Error('Completion catalog differs from publication plan');
+            channelDocument = {schemaVersion: 1, pin: {schemaVersion: 1, baseUrl: plan.target.publicBaseUrl, catalog, completion: plan.release}};
+        }
+        const channelBody = Buffer.from(JSON.stringify(channelDocument));
         const channelSha256 = createHash('sha256').update(channelBody).digest('hex');
         const channel = {key: plan.target.prefix + '/channels/stable.json', sha256: channelSha256, bytes: channelBody.length,
             mediaType: 'application/json', cacheControl: 'no-cache, max-age=0, must-revalidate', decodedSha256: channelSha256,
@@ -72,7 +101,7 @@ export async function publishAssetPublication({planPath, transport, concurrency 
         const channelFile = path.join(directory, '.channel-' + randomUUID() + '.json');
         try {
             await fs.writeFile(channelFile, channelBody, {flag: 'wx'});
-            await retry(() => transport.putChannel({...channel, sourceFile: channelFile}, activeSignal), activeSignal);
+            if (!matches(await retry(() => transport.head(channel.key, activeSignal), activeSignal), channel)) await retry(() => transport.putChannel({...channel, sourceFile: channelFile}, activeSignal), activeSignal);
             if (!matches(await retry(() => transport.head(channel.key, activeSignal), activeSignal), channel)) throw new Error('Published channel receipt does not match');
         } finally {await fs.unlink(channelFile).catch(error => {if (error.code !== 'ENOENT') throw error;});}
         channelUrl = new URL(channel.key, plan.target.publicBaseUrl).href;
@@ -102,8 +131,21 @@ export async function runAssetPublicationCommand(command, args, repoRoot = proce
     const onProgress = progress => console.log('asset-publication: ' + JSON.stringify(progress));
     if (command === 'assets-prepare') {
         if (values.upload || values.plan) throw new Error('Prepare does not upload or consume a prepared plan');
-        const output = path.resolve(repoRoot, values.output ?? path.join(config.outputRoot, 'release-' + randomUUID()));
-        const result = await prepareAssetPublication({assetsRoot: config.assetsRoot, output, target: config.target, concurrency: config.concurrency ?? 4, onProgress});
+        const output = path.resolve(repoRoot, values.output ?? path.join(config.outputRoot, 'catalog-' + randomUUID()));
+        const {prepareProductCatalog} = await import('../catalog/prepare-catalog.mjs');
+        if (config.credentialEnvFile) process.loadEnvFile(path.resolve(repoRoot, config.credentialEnvFile));
+        const {createAssetPublicationS3} = await import('./asset-pack-s3.mjs');
+        const {loadAssetPublicationCredentials} = await import('./asset-pack-credentials.mjs');
+        const {inspectExistingAssetObjects} = await import('./existing-objects.mjs');
+        const storage = createAssetPublicationS3(config.target, await loadAssetPublicationCredentials(config, repoRoot), {maxAttempts:3});
+        let prepared;
+        try {
+            const existingInventory = await inspectExistingAssetObjects({target:config.target,transport:storage,concurrency:config.concurrency ?? 8,onProgress});
+            prepared = await prepareProductCatalog({assetsRoot: config.assetsRoot, output, target: config.target, onProgress, existingInventory, readExistingObject:key=>storage.readEncoded(key)});
+            await fs.writeFile(path.join(prepared.directory,'existing-objects.json'),JSON.stringify(existingInventory,null,2)+'\n',{flag:'wx'});
+        } finally {storage.close();}
+        const {plan} = await readPublicationPlan(prepared.planPath);
+        const result = {...prepared, plan};
         await fs.mkdir(config.outputRoot, {recursive: true});
         await writeAtomic(path.join(config.outputRoot, 'latest-plan.json'), {planPath: path.join(result.directory, 'plan.json')});
         onProgress({phase: 'prepared', planPath: path.join(result.directory, 'plan.json'), ...result.plan.summary, release: result.plan.release}); return result;

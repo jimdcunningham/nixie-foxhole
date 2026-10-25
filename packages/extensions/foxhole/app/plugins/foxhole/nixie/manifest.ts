@@ -1,3 +1,4 @@
+import {shallowRef} from 'vue';
 import publishedFoxholeManifest from '../../../../public/foxhole/assets/manifest.v1.json' with { type: 'json' };
 import { z } from 'zod';
 
@@ -12,11 +13,23 @@ import type { FoxholeManifest } from './manifest-schema.ts';
 
 export * from './manifest-schema.ts';
 
+let selectedManifest: unknown = null;
+const manifestRevision = shallowRef(0);
 const manifestCache = new Map<string, FoxholeManifest>();
 const localizationBundleCache = new Map<string, Map<string, Record<string, string>>>();
 const localizationBundleLoadCache = new Map<string, Promise<Record<string, string>>>();
 
+/** Selected immutable generation data; compiled metadata is bootstrap-only. */
+export function installFoxholeManifest(value: unknown): void {
+    if (value !== null && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error('Invalid selected Foxhole manifest.');
+    selectedManifest = value;
+    manifestCache.clear(); localizationBundleCache.clear(); localizationBundleLoadCache.clear();
+    manifestRevision.value++;
+}
+export function getFoxholeManifestRevision(): number {return manifestRevision.value;}
+
 export function getFoxholeManifest(baseAssetsUrl: string): FoxholeManifest {
+    void manifestRevision.value;
     const cacheKey = String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/';
     const existing = manifestCache.get(cacheKey);
     if (existing) {
@@ -30,7 +43,7 @@ export function getFoxholeManifest(baseAssetsUrl: string): FoxholeManifest {
 }
 
 function createPublishedFoxholeManifest(baseAssetsUrl: string): FoxholeManifest {
-    const clonedManifest = JSON.parse(JSON.stringify(publishedFoxholeManifest)) as FoxholeManifest;
+    const clonedManifest = JSON.parse(JSON.stringify(selectedManifest ?? publishedFoxholeManifest)) as FoxholeManifest;
     return rebaseFoxholeManifestAssetUrls(
         foxholeManifestSchema.parse(clonedManifest),
         DEFAULT_PUBLISHED_FOXHOLE_ASSETS_BASE_URL,
@@ -132,7 +145,7 @@ export async function loadFoxholeManifestLocalizationMap(baseAssetsUrl: string, 
                     return bundle;
                 })
                 .finally(() => {
-                    localizationBundleLoadCache.delete(loadCacheKey);
+                    if (localizationBundleLoadCache.get(loadCacheKey) === pending) localizationBundleLoadCache.delete(loadCacheKey);
                 });
         localizationBundleLoadCache.set(loadCacheKey, pending);
 

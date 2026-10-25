@@ -1,3 +1,4 @@
+import {memoryWorldCaches} from './cache-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {packRoadAssembly,unpackRoadAssembly,snapshotRoadGroups} from '../runtime/road-assembly-pack.mjs';
@@ -21,7 +22,7 @@ test('finished road cache preserves rendered floats, indices, group order and sh
  assert.deepEqual(unpackRoadAssembly(packRoadAssembly(value)),value);assert.throws(()=>unpackRoadAssembly(new ArrayBuffer(4)));assert.throws(()=>unpackRoadAssembly(packRoadAssembly(value).slice(0,-4)));
 });
 test('road cache uses source identity, checks integrity, and shares the derived storage budget',async()=>{
- const entries=new Map(),cachesApi={open:async()=>({match:async k=>entries.get(k)?.clone(),put:async(k,r)=>entries.set(k,r),delete:async k=>entries.delete(k),keys:async()=>[...entries.keys()]})},metrics={},options={cachesApi,metrics,budget:64},base='https://test.invalid/world/',a='a'.repeat(64),b='b'.repeat(64),bytes=new Uint8Array([1,2,3]).buffer;
+ const storage=memoryWorldCaches(),entries=storage.rows('foxhole-world-recipes-v1'),cachesApi=storage.api,metrics={},options={cachesApi,metrics,budget:64},base='https://test.invalid/world/',a='a'.repeat(64),b='b'.repeat(64),bytes=new Uint8Array([1,2,3]).buffer;
  await writeCachedRoadAssembly(base,a,bytes,options);assert.deepEqual(await readCachedRoadAssembly(base,a,options),bytes);assert.equal(metrics.roadAssemblyCacheHits,1);
  assert.equal(await readCachedRoadAssembly(base,b,options),null);
  const key=[...entries.keys()][0],good=entries.get(key);entries.set(key,new Response(await good.arrayBuffer(),{headers:{'X-Foxhole-Assembly-Hash':'0'.repeat(64)}}));assert.equal(await readCachedRoadAssembly(base,a,options),null);

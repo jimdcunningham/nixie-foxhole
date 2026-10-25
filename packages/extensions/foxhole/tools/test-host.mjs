@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = resolve(fileURLToPath(new URL('../../../..', import.meta.url)));
@@ -8,8 +7,8 @@ const extension = resolve(root, 'packages/extensions/foxhole');
 process.env.NIXIE_HOST_ROOT = studio;
 // SDK host pressure tests consume the same immutable catalog as the release.
 // Cache only this small verified input; original sprite/model fixtures remain separate.
-const { prepareCatalogInput } = await import(pathToFileURL(resolve(root, 'extensions/foxhole-planner/build/prepare-catalog-input.mjs')).href);
-const pin = JSON.parse(readFileSync(resolve(root, 'extensions/foxhole-planner/src/catalog-release-pin.json'), 'utf8'));
+const { prepareCatalogInput, readCatalogPin } = await import(pathToFileURL(resolve(root, 'extensions/foxhole-planner/build/prepare-catalog-input.mjs')).href);
+const pin = await readCatalogPin();
 const catalogFile = process.env.NIXIE_FOXHOLE_CATALOG_FILE || resolve(studio, '.tmp/foxhole-host-inputs', pin.catalog.sha256, 'catalog.v1.json');
 await prepareCatalogInput({ pin, output: catalogFile });
 process.env.NIXIE_FOXHOLE_CATALOG_FILE = catalogFile;

@@ -1,3 +1,4 @@
+import {configureWorldAssetLocations} from '../runtime/asset-locations.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createCatalogModelLease} from '../runtime/catalog-model-leases.mjs';
@@ -13,4 +14,12 @@ test('reacquiring an in-flight source prevents premature disposal; rejection can
 
 test('a new owner waits for an already-started cache unload before decoding the same URL',async()=>{
  let loads=0,release;const options={load:async()=>++loads,unload:()=>new Promise(resolve=>release=resolve)};const a=createCatalogModelLease(options);await a.get('fixture-retiring');a.release();await flush();const b=createCatalogModelLease(options),pending=b.get('fixture-retiring');await flush();assert.equal(loads,1);release();assert.equal(await pending,2);b.release();await flush();release();await flush();
+});
+
+test('native catalog owners retain disk usage until their final release',async()=>{
+ const active=new Map();configureWorldAssetLocations({resolve:path=>path,fetch:fetch,retain:url=>{active.set(url,(active.get(url)||0)+1);let done=false;return()=>{if(done)return;done=true;active.set(url,active.get(url)-1);};}});
+ try{const options={load:async()=>({}),unload:async()=>{}},a=createCatalogModelLease(options),b=createCatalogModelLease(options);
+  await a.get('fixture-resident');await a.get('fixture-resident');await b.get('fixture-resident');assert.equal(active.get('fixture-resident'),2);
+  a.release();assert.equal(active.get('fixture-resident'),1);b.release();assert.equal(active.get('fixture-resident'),0);b.release();assert.equal(active.get('fixture-resident'),0);await flush();
+ }finally{configureWorldAssetLocations(null);}
 });

@@ -2096,7 +2096,7 @@ def apply_render_mode(
     preview_variant: Optional[str] = None,
     scene_variant: Optional[str] = None,
     pixels_per_meter: float = PIXELS_PER_METER,
-    preview_size: int = 512,
+    preview_size: int = 256,
     icon_size: int = 256,
     bounds: Optional[tuple[Vector, Vector]] = None,
 ):

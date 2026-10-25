@@ -70,7 +70,7 @@ async function inspectFile(root, file, encoding, maxDecodedBytes) {
 
 /** Nonmutating publication plan. Reports failures; never repairs, uploads, or deletes assets. */
 export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots = worldRuntimePublicationRoots(), concurrency = 4,
-    maxDecodedBytes = 512 * 1024 ** 2, onProgress = () => {}}) {
+    worldOnly = false, maxDecodedBytes = 512 * 1024 ** 2, onProgress = () => {}}) {
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) throw new Error('Concurrency must be between 1 and 16');
     if (!Number.isSafeInteger(maxDecodedBytes) || maxDecodedBytes <= 0) throw new Error('Decoded byte budget must be positive');
     const root = await fs.realpath(assetsRoot), files = new Map(), issues = [], warnings = [], selected = new Map(), receipts = [];
@@ -110,13 +110,13 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
         if (ref?.decodedHash && sha(data) !== ref.decodedHash) throw new Error('Metadata decoded receipt mismatch');
         return JSON.parse(data.toString());
     }
-    for (const [file] of files) if (!file.startsWith('world/') && assetExtension.test(file)) add(file, file.split('/')[0] === 'types' ? 'catalog' : 'support');
+    for (const [file] of files) if (!worldOnly && !file.startsWith('world/') && assetExtension.test(file)) add(file, file.split('/')[0] === 'types' ? 'catalog' : 'support');
     let catalog;
     if (files.has('models/manifest.v1.json')) {
         catalog = await readJSON('models/manifest.v1.json');
         for (const [id, row] of Object.entries({...catalog.assets, ...catalog.resources, ...catalog.sharedParts})) {
             if (!row?.path) continue;
-            add(row.path, 'catalog', {sha256: row.sha256, bytes: row.bytes}, {id, kind: 'model'});
+            if (!worldOnly) add(row.path, 'catalog', {sha256: row.sha256, bytes: row.bytes}, {id, kind: 'model'});
             catalogModels.set(row.resourceId || `foxhole.model.${id}`, row);
         }
     }
@@ -152,6 +152,20 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
         }
     }
     for (const r of runtimeRoots) add(r.path, 'world-runtime', r, {id: r.id, kind: 'texture'});
+    if (worldOnly) {
+        const byPath = new Map([...catalogModels.values()].map(row => [row.path, row]));
+        const visit = [...selected.values()];
+        for (let i = 0; i < visit.length; i++) {
+            const owner = visit[i], model = byPath.get(owner.path);
+            for (const part of model?.modelParts?.parts ?? []) {
+                const dependency = catalogModels.get(part.resourceId);
+                if (!dependency) {issue('model-part', owner.path, 'Unknown shared model part: ' + part.resourceId); continue;}
+                const known = selected.has(dependency.path);
+                for (const group of owner.groups) add(dependency.path, group, {sha256: dependency.sha256, bytes: dependency.bytes});
+                if (!known) visit.push(selected.get(dependency.path));
+            }
+        }
+    }
     const objects = new Map(), queue = sorted(selected.keys()); let cursor = 0, completed = 0;
     await Promise.all(Array.from({length: concurrency}, async () => {
         while (cursor < queue.length) {
@@ -180,7 +194,7 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
         if (!objects.has(dependency)) issue('undeclared-dependency', object.path, `Dependency is absent from publication inventory: ${dependency}`);
         for (const group of object.groups.filter(g => g.startsWith('region:'))) if (!groups.get(group).has(dependency)) issue('region-dependency', object.path, `Dependency is absent from ${group}: ${dependency}`, group);
     }
-    for (const row of catalogModels.values()) for (const part of row.modelParts?.parts || []) {
+    for (const row of catalogModels.values()) if (!worldOnly || objects.has(row.path)) for (const part of row.modelParts?.parts || []) {
         const dependency = catalogModels.get(part.resourceId);
         if (!dependency || !objects.has(dependency.path)) issue('model-part', row.path, `Undeclared shared model resource ${part.resourceId}`);
         else if (dependency.path === row.path) issue('model-part', row.path, 'A model cannot depend on itself');
