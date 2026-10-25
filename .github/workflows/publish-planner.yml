@@ -19,14 +19,17 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      PLANNER_ROOT: ${{ runner.temp }}/planner-consumer/extensions/foxhole-planner
-      NIXIE_FOXHOLE_ASSETS_ROOT: ${{ runner.temp }}/planner-consumer/packages/extensions/foxhole/public/foxhole/assets
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
+
+      - name: Configure independent consumer paths
+        shell: bash
+        run: |
+          echo "PLANNER_ROOT=$RUNNER_TEMP/planner-consumer/extensions/foxhole-planner" >> "$GITHUB_ENV"
+          echo "NIXIE_FOXHOLE_ASSETS_ROOT=$RUNNER_TEMP/planner-consumer/packages/extensions/foxhole/public/foxhole/assets" >> "$GITHUB_ENV"
 
       - name: Verify publication workflow boundary
         run: node --test extensions/foxhole-planner/build/publishing-workflow.test.mjs

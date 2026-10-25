@@ -8,9 +8,12 @@ test('Planner publishing builds an independent remote package with scoped author
     assert.match(text, /branches: \[main\]/);
     assert.match(text, /prepare-authoring-consumer\.mjs/);
     assert.match(text, /prepare-catalog-input\.test\.mjs/);
-    assert.match(text, /PLANNER_ROOT:.*\/planner-consumer\/extensions\/foxhole-planner/);
-    assert.match(text, /NIXIE_FOXHOLE_ASSETS_ROOT:.*\/planner-consumer\/packages\/extensions\/foxhole\/public\/foxhole\/assets/);
+    assert.match(text, /PLANNER_ROOT=\$RUNNER_TEMP\/planner-consumer\/extensions\/foxhole-planner/);
+    assert.match(text, /NIXIE_FOXHOLE_ASSETS_ROOT=\$RUNNER_TEMP\/planner-consumer\/packages\/extensions\/foxhole\/public\/foxhole\/assets/);
     assert.match(text, /cp -R extensions\/foxhole-planner/);
+    // Runner paths are available inside setup steps, not job-level env expressions.
+    assert.doesNotMatch(text.split('    steps:')[0], /\$\{\{\s*runner\./);
+    assert.match(text, />> \"\$GITHUB_ENV\"/);
     for (const step of ['typecheck', 'build', 'pack', 'publish:extension']) assert.ok(text.includes('npm run ' + step));
     assert.match(text, /npm test/);
     assert.match(text, /prepare-publication-inputs\.mjs/);
