@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export async function computeBuildProvenance(repoRoot) {
     const entries = [];
@@ -29,8 +30,25 @@ export async function computeBuildProvenance(repoRoot) {
 export async function writeJsonAtomic(filePath, value) {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-    await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-    await fs.rename(temporaryPath, filePath);
+    try {
+        await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+        const retryDelays = [50, 100, 250, 500, 1000, 2000, 4000];
+        for (let attempt = 0; ; attempt++) {
+            try {
+                await fs.rename(temporaryPath, filePath);
+                return;
+            } catch (error) {
+                // Windows readers can briefly deny replacement. Keep the previous file
+                // readable until the atomic rename succeeds; never unlink it to retry.
+                if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)
+                    || attempt >= retryDelays.length) throw error;
+                await delay(retryDelays[attempt]);
+            }
+        }
+    } catch (error) {
+        await fs.rm(temporaryPath, { force: true }).catch(() => {});
+        throw error;
+    }
 }
 
 export async function readJson(filePath) {
