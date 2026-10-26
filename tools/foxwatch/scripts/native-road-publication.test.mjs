@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import vm from 'node:vm';
 import test from 'node:test';
 import { foxholeManifestSchema } from '@nixiejs/foxhole-schema';
+import { createSyntheticManifest } from './synthetic-manifest-fixture.mjs';
 
 const source=await readFile(new URL('./publish-manifest.mjs',import.meta.url),'utf8');
 const declarations=[...source.matchAll(/^(?:async )?function (\w+)\(/gm)];
@@ -38,7 +39,7 @@ test('native body metadata survives sidecar publication and compaction without r
         const compact=JSON.parse(JSON.stringify(context.compactStructureRenderLayer(entry)));
         assert.deepEqual(compact.ns,nativeSurface);
         assert.equal('cap' in compact.ns,false);
-        const fixture=JSON.parse(await readFile(new URL('../../../tests/fixtures/foxhole/manifest.v1.fixture.json',import.meta.url),'utf8'));
+        const fixture=createSyntheticManifest();
         fixture.assets=[{...fixture.assets[0],renderLayers:[compact]}];
         const parsed=foxholeManifestSchema.parse(fixture);
         assert.deepEqual(parsed.assets[0].renderLayers[0].nativeSurface,nativeSurface);

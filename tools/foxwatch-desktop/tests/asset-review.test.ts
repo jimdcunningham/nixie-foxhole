@@ -8,6 +8,7 @@ import {
   writeFile,
   utimes,
   readdir,
+  realpath,
   symlink,
 } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,7 +18,7 @@ import { AssetDirectory } from '../electron/asset-directory.ts';
 import { AssetReview } from '../electron/asset-review.ts';
 
 async function setup(t: test.TestContext) {
-  const base = await mkdtemp(path.join(os.tmpdir(), 'foxwatch-review-'));
+  const base = await realpath(await mkdtemp(path.join(os.tmpdir(), 'foxwatch-review-')));
   t.after(() => rm(base, { recursive: true, force: true }));
   const root = path.join(base, 'assets');
   await mkdir(root);

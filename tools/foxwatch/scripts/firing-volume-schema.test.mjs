@@ -3,7 +3,7 @@ import test from 'node:test';
 import { foxholeFiringVolumeSchema, foxholeManifestSchema } from '../../../packages/foxhole-schema/src/manifest-schema.ts';
 import { publishFiringVolumes } from './publish-firing-volumes.mjs';
 import { alignFiringVolume } from './firing-volume-metadata.mjs';
-import { readFileSync } from 'node:fs';
+import { createSyntheticManifest } from './synthetic-manifest-fixture.mjs';
 const volume = { source: 'mount-dynamic-data', origin: [-0.116,0.321,1.75], orientation: [0,0,0,1], minYaw: -45, maxYaw: 45, minPitch: -15, maxPitch: 15 };
 test('source-backed aim metadata preserves heights and independent limits', () => {
     assert.deepEqual(foxholeFiringVolumeSchema.parse(volume), volume);
@@ -23,7 +23,7 @@ test('metadata migration preserves authored origins and headings and every unrel
     assert.deepEqual(raw.origin,[4,5,1.75]);assert.ok(Math.abs(raw.orientation[2]-Math.SQRT1_2)<1e-6);
 });
 test('generated fixture hydrates compact firing metadata through the shared schema', () => {
-    const fixture = JSON.parse(readFileSync(new URL('../../../tests/fixtures/foxhole/manifest.v1.fixture.json',import.meta.url),'utf8'));
+    const fixture = createSyntheticManifest([{id:'tankettec',ranges:[{t:'killboxAT',a:45,fv:volume}]}]);
     const parsed = foxholeManifestSchema.parse(fixture);
     const tankette = parsed.assets.find(asset=>asset.id==='tankettec');
     assert.equal(tankette.ranges[0].firingVolume.minPitch,-15);

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveToolsCheckout } from '../electron/checkout.ts';
 
 async function setup(t: test.TestContext) {
-  const base = await mkdtemp(path.join(os.tmpdir(), 'foxwatch-checkout-'));
+  const base = await realpath(await mkdtemp(path.join(os.tmpdir(), 'foxwatch-checkout-')));
   t.after(() => rm(base, { recursive: true, force: true }));
   const checkout = path.join(base, 'tools checkout'), profile = path.join(base, 'profile');
   await mkdir(path.join(checkout, 'tools/foxwatch'), { recursive: true });

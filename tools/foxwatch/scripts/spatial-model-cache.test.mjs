@@ -83,10 +83,10 @@ test('publisher reuses verified outputs, restores metadata, bypasses cache and r
     await put('sources/mesh.glb', raw); await put(`raw/${id}.glb`, raw);
     await put(`raw/${id}.glb.json`, { boundsCenterMeters: [0, 0, 0], sceneDimensions: { width: 32, height: 32, depth: 32 }, triangles: 1 });
     await put(`scenes/${id}/scene.json`, { render: {}, scene: { roots: [{ meshId: 'mesh', children: [] }] }, assets: { meshes: [{ sourcePath: 'mesh.glb' }] } });
-    await put('output/manifest.v1.json', { assets: [{ id, codeName: 'FacilityTransferResource', categoryId: 'facility' }] });
-    // The real policy validates every authored ID, so supply the real catalog with the fixture entry.
-    const catalog = JSON.parse(await readFile(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
-    await put('output/manifest.v1.json', catalog);
+    await put('output/manifest.v1.json', { assets: [
+        { id, codeName: 'FacilityTransferResource', categoryId: 'facility' },
+        { id: 'powerline', codeName: 'PowerLine', categoryId: 'power' },
+    ] });
     const report = resolve(root, 'timing.json');
     const cli = fileURLToPath(new URL('./publish-spatial-models.mjs', import.meta.url));
     const args = [cli, '--only', id, '--repack-existing', '--geometry-profile=lossless', '--asset-root', resolve(root, 'sources'),
