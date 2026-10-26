@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -11,9 +11,16 @@ import { PublishedLibrary } from '../electron/published-library.ts';
 const hash = (data: Uint8Array) =>
   createHash('sha256').update(data).digest('hex');
 const base = 'https://assets.example/foxhole-planner/';
-async function setup(t: test.TestContext) {
+async function setup(t: test.TestContext, aliasedRoot = false) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'foxwatch-download-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
+  let root = directory;
+  if (aliasedRoot) {
+    const target = path.join(directory, 'cache');
+    await mkdir(target);
+    root = path.join(directory, 'cache-alias');
+    await symlink(target, root, process.platform === 'win32' ? 'junction' : 'dir');
+  }
   const objects = new Map<string, { body: Buffer; encoding?: string }>(),
     requests: string[] = [];
   const metadata = (value: unknown, name: string) => {
@@ -74,7 +81,7 @@ async function setup(t: test.TestContext) {
   const fetcher: typeof fetch = (url, options) =>
     fetch('http://127.0.0.1:' + port + new URL(String(url)).pathname, options);
   const library = new PublishedLibrary({
-    root: directory,
+    root,
     pin,
     channelUrl: new URL('channels/stable.json', base).href,
     fetcher,
@@ -207,4 +214,13 @@ test('rejects release URLs outside the trusted HTTPS asset root', async (t) => {
   );
   f.objects.set('/foxhole-planner/channels/stable.json', { body });
   await assert.rejects(f.library.check('all', f.signal), /trusted HTTPS/);
+});
+
+test('reads the downloaded index when the cache root uses a filesystem alias', async (t) => {
+  const f = await setup(t, true);
+  const downloaded = await f.library.download(
+    await f.library.check('catalog', f.signal),
+    f.signal,
+  );
+  assert.equal((await f.library.current())?.assetsPath, downloaded.assetsPath);
 });

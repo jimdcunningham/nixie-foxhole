@@ -206,8 +206,9 @@ export class PublishedLibrary {
         throw new Error('The downloaded-library index is invalid.');
       const info: PublishedInfo = JSON.parse(await readFile(pointer, 'utf8'));
       receipt(info.release, 16 * 1024 ** 2);
+      const root = await realpath(this.root);
       const relative = path
-        .relative(this.root, info.assetsPath)
+        .relative(root, info.assetsPath)
         .split(path.sep)
         .join('/');
       if (
@@ -219,8 +220,7 @@ export class PublishedLibrary {
         info.files > 100000
       )
         throw new Error('The downloaded-library index is invalid.');
-      const canonical = await realpath(info.assetsPath),
-        root = await realpath(this.root);
+      const canonical = await realpath(info.assetsPath);
       if (!canonical.startsWith(root + path.sep))
         throw new Error('The downloaded library is outside its cache.');
       return { ...info, assetsPath: canonical };
