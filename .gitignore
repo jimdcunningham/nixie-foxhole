@@ -22,8 +22,6 @@ tests/fixtures/foxhole/localizations/
 tests/fixtures/foxhole/manifest.v1.fixture.json
 tools/foxwatch/bin/
 tools/foxwatch/obj/
-tools/foxwatch/monitor/bin/
-tools/foxwatch/monitor/obj/
 tools/foxwatch/tmp/
 tools/foxwatch/local/
 tools/foxwatch/blender/__pycache__/

@@ -463,7 +463,6 @@ async function launch() {
   ipcMain.handle('monitor:info', event => { authorize(event); return monitor.info(); });
   ipcMain.handle('monitor:save', async (event, value) => {
     authorize(event);
-    if ((value?.startWithWindows || value?.startWithWindows !== monitor.settings.startWithWindows) && await monitor.legacyRunning()) throw new Error('Close the deprecated WinForms monitor before changing Windows startup.');
     await monitor.save(value);
     // Reconcile the OS registration even when the saved checkbox was already enabled.
     loginSettings(value.startWithWindows);

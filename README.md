@@ -51,7 +51,4 @@ interface for Steam build polling, generation, asset inspection/comparison,
 credentials, and explicit R2 publishing. It stays available in the Windows tray
 and can start with Windows. Run `npm run dev:desktop` for development.
 
-The old [WinForms monitor](tools/foxwatch/monitor/README.md) is deprecated and
-retained for rollback. Existing installations switch Windows startup through
-Desktop Settings; pulling this repository does not change startup or polling.
 The shared FoxWatch CLI pipeline remains supported. No generated assets are bundled.

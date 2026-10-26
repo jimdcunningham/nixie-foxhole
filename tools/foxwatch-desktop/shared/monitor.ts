@@ -13,7 +13,7 @@ export interface ToolSettings {
   assetsRoot: string; outputRoot: string; endpoint: string; bucket: string; publicBaseUrl: string; prefix: string; concurrency: number;
 }
 export interface ToolInfo {
-  settings: ToolSettings; windows: boolean; legacyRunning: boolean;
+  settings: ToolSettings; windows: boolean;
   steamCredentials: boolean; notificationCredentials: boolean; assetCredentials: boolean;
   latestBuild: string; successfulBuild: string; lastError: string | null;
   prepared: { planPath: string; releaseUrl: string; files: number; bytes: number } | null;

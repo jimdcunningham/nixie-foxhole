@@ -467,8 +467,7 @@ function printCommandHelp() {
     for (const value of workflowCommands) console.log(`  ${value}`);
     console.log('\nLocal Steam monitoring:');
     for (const value of steamMonitorCommands) {
-        const legacy = ['setup-monitor', 'install-monitor-app', 'open-monitor', 'uninstall-monitor'].includes(value);
-        console.log(`  ${value}${legacy ? ' (deprecated WinForms host)' : ''}`);
+        console.log(`  ${value}`);
     }
     console.log('  Recommended UI: npm run dev:desktop (FoxWatch Desktop)');
     console.log('\nDiagnostics and export tools:');

@@ -10,7 +10,6 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:foxwatch": "npm run build --workspace @nixiejs/foxwatch",
-    "build:monitor": "dotnet build ./tools/foxwatch/monitor/FoxWatchMonitor.csproj",
     "foxwatch": "node ./tools/foxwatch/run-foxwatch.mjs",
     "test:source-media": "node ./tools/check-source-media.mjs && node --test ./tools/check-source-media.test.mjs",
     "test": "npm run test:source-media && npm run test --workspaces --if-present",

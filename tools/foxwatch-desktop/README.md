@@ -1,6 +1,5 @@
 # FoxWatch Desktop
 
-FoxWatch Desktop is the supported replacement for the deprecated WinForms monitor.
 The standalone Electron/Vue FoxWatch suite combines Steam build monitoring,
 generation, asset inspection, A/B comparison, and explicit R2 publishing. The inspector stays
 available while the existing FoxWatch CLI performs background work.
@@ -22,12 +21,9 @@ focuses the existing instance. **Start With Windows** registers the built app;
 **Start Minimized at Login** keeps its initial window hidden. The built renderer
 must exist before enabling startup; Windows login does not start a Vite server.
 
-First adoption starts paused. The deprecated WinForms executable is retained for
-rollback. Close that host before running work in Desktop. Save **Start With
-Windows** and **Start Minimized at Login** in Settings, then use **Start Polling**
-on the Dashboard when ready. Saving Settings reapplies Desktop's startup
-registration even if the saved checkbox was already enabled, repairing a stale
-entry that points to the old host. Opening the inspector does not start polling.
+First launch starts paused. Save **Start With Windows** and **Start Minimized
+at Login** in Settings, then use **Start Polling** on the Dashboard when ready.
+Opening the inspector does not start polling.
 
 **Nixie Checkpoint Notifications** reuses the existing encrypted webhook.
 Automatic polls report newly detected builds, refresh starts, successful refresh
@@ -223,4 +219,4 @@ immediate keyboard selection, image/JSON/model previews, model orbit controls,
 virtualized large folders, directory switching, image comparison modes, manifest
 field searches, linked model cameras, missing A/B sides, cancelled/confirmed
 baseline restoration, and the IPC
-boundary. It does not touch the running legacy monitor, run Steam/generation, or upload anything. Controller integration checks use a synthetic CLI and temporary DPAPI credentials.
+boundary. It does not run Steam/generation or upload anything. Controller integration checks use a synthetic CLI and temporary DPAPI credentials.

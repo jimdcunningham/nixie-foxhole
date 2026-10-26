@@ -6,7 +6,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { createInterface } from 'node:readline/promises';
 
 import {
     sendCheckpointNotification,
@@ -27,35 +26,22 @@ import {
     shouldRunFoxWatch,
     validateNixieWebhookUrl,
     validateMonitorConfig,
-    validateMonitorInterval,
     verifyInstalledAppManifest,
 } from './steam-monitor-core.mjs';
 
 const STEAMCMD_DOWNLOAD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
-const TASK_NAME = 'Nixie FoxWatch Monitor';
 const LOCK_STALE_AFTER_MS = 16 * 60 * 60 * 1_000;
 
 export const steamMonitorCommands = Object.freeze([
-    'setup-monitor',
-    'install-monitor-app',
-    'open-monitor',
     'monitor-once',
     'monitor',
     'monitor-now',
     'monitor-status',
     'monitor-logs',
-    'uninstall-monitor',
 ]);
 
 export async function runSteamMonitorCommand({ command, args, repoRoot, runnerScriptPath }) {
     const paths = createMonitorPaths(repoRoot);
-    if (['setup-monitor', 'install-monitor-app', 'open-monitor', 'uninstall-monitor'].includes(command)) {
-        console.warn('Deprecated WinForms monitor command: ' + command + '. Use FoxWatch Desktop (npm run dev:desktop) and its Settings page. These legacy host commands remain for rollback; shared polling/generation commands remain supported.');
-    }
-    if (command === 'open-monitor') {
-        await manageMonitorApp(paths, 'open');
-        return;
-    }
     if (command === 'monitor-status') {
         await printMonitorStatus({ paths });
         return;
@@ -64,30 +50,7 @@ export async function runSteamMonitorCommand({ command, args, repoRoot, runnerSc
         await printMonitorLogs(paths, args);
         return;
     }
-    if (command === 'uninstall-monitor') {
-        await manageMonitorApp(paths, 'uninstall');
-        await manageScheduledTask(paths, 'uninstall');
-        console.log('Removed the FoxWatch monitor app startup entry and legacy scheduled task. Local Steam installations, state, and logs were preserved.');
-        return;
-    }
     const logger = await createMonitorLogger(paths);
-    if (command === 'setup-monitor') {
-        await setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger });
-        return;
-    }
-    if (command === 'install-monitor-app') {
-        const config = validateMonitorConfig(await loadMonitorConfig(paths));
-        await installMonitorApp({
-            paths,
-            repoRoot,
-            runnerScriptPath,
-            config,
-            logger,
-            openWindow: true,
-            startPaused: hasFlag(args, 'paused'),
-        });
-        return;
-    }
     if (command === 'monitor-now') {
         await monitorOnce({
             paths,
@@ -140,7 +103,6 @@ function createMonitorPaths(repoRoot) {
         configPath: path.join(localRoot, 'monitor.config.v1.json'),
         secretsPath: path.join(localRoot, 'credentials', 'monitor.secrets.dpapi.v1.json'),
         statePath: path.join(localRoot, 'state', 'monitor-state.v1.json'),
-        monitorSettingsPath: path.join(localRoot, 'state', 'monitor-app-settings.v1.json'),
         receiptsRoot: path.join(localRoot, 'state', 'acquisitions'),
         lockPath: path.join(localRoot, 'locks', 'monitor.lock.json'),
         logsRoot: path.join(localRoot, 'logs'),
@@ -149,99 +111,7 @@ function createMonitorPaths(repoRoot) {
         installsRoot: path.join(localRoot, 'installs'),
         archiveScriptPath: path.join(foxwatchRoot, 'scripts', 'foxwatch-expand-archive.ps1'),
         secretsScriptPath: path.join(foxwatchRoot, 'scripts', 'foxwatch-monitor-secrets.ps1'),
-        taskScriptPath: path.join(foxwatchRoot, 'scripts', 'foxwatch-monitor-task.ps1'),
-        monitorAppScriptPath: path.join(foxwatchRoot, 'scripts', 'foxwatch-monitor-app.ps1'),
-        monitorProjectPath: path.join(foxwatchRoot, 'monitor', 'FoxWatchMonitor.csproj'),
-        monitorAppRoot: path.join(localRoot, 'monitor-app'),
-        monitorAppExecutablePath: path.join(localRoot, 'monitor-app', 'FoxWatchMonitor.exe'),
-        monitorHostConfigPath: path.join(localRoot, 'monitor-app', 'host.config.v1.json'),
     };
-}
-
-async function setupMonitor({ args, repoRoot, runnerScriptPath, paths, logger }) {
-    if (process.platform !== 'win32') {
-        throw new Error('FoxWatch monitor setup currently supports Windows only.');
-    }
-    const existingConfig = await readJson(paths.configPath);
-    const existingSecrets = await readJson(paths.secretsPath);
-    const nonInteractive = hasFlag(args, 'non-interactive');
-    const interactive = !nonInteractive;
-    const requestedInterval = getOption(args, 'interval-minutes')
-        ?? existingConfig?.intervalMinutes
-        ?? (interactive ? await promptWithDefault('Polling interval in minutes', '10') : 10);
-    const requestedUsername = getOption(args, 'steam-username')
-        ?? process.env.FOXWATCH_STEAM_USERNAME
-        ?? existingConfig?.steamUsername
-        ?? (interactive ? await promptRequired('Steam username') : null);
-    if (!requestedUsername) {
-        throw new Error('Non-interactive setup requires --steam-username or FOXWATCH_STEAM_USERNAME.');
-    }
-    const blenderPath = await resolveBlenderPath(args, existingConfig);
-
-    let encryptedSteamPassword = existingSecrets?.encryptedSteamPassword ?? null;
-    if (process.env.FOXWATCH_STEAM_PASSWORD) {
-        encryptedSteamPassword = await encryptSecret(paths, process.env.FOXWATCH_STEAM_PASSWORD);
-    } else if (!encryptedSteamPassword || hasFlag(args, 'replace-credentials')) {
-        if (nonInteractive) {
-            throw new Error('Non-interactive setup requires FOXWATCH_STEAM_PASSWORD when no encrypted password exists.');
-        }
-        encryptedSteamPassword = await promptEncryptedSecret(paths, 'Steam password');
-    }
-
-    const nixieDisabled = hasFlag(args, 'no-nixie');
-    let encryptedNixieWebhook = nixieDisabled ? null : existingSecrets?.encryptedNixieWebhook ?? null;
-    if (!nixieDisabled && process.env.FOXWATCH_NIXIE_WEBHOOK_URL) {
-        validateNixieWebhookUrl(process.env.FOXWATCH_NIXIE_WEBHOOK_URL);
-        encryptedNixieWebhook = await encryptSecret(paths, process.env.FOXWATCH_NIXIE_WEBHOOK_URL);
-    } else if (!nixieDisabled && !encryptedNixieWebhook && interactive) {
-        const useNixie = (await promptWithDefault('Configure Nixie notifications? (y/N)', 'N')).toLowerCase() === 'y';
-        if (useNixie) {
-            encryptedNixieWebhook = await promptEncryptedSecret(paths, 'Nixie webhook URL');
-            validateNixieWebhookUrl(await decryptSecret(paths, encryptedNixieWebhook));
-        }
-    }
-
-    const config = validateMonitorConfig({
-        schemaVersion: FOXWATCH_MONITOR_SCHEMA_VERSION,
-        branchMode: 'latest',
-        intervalMinutes: validateMonitorInterval(requestedInterval),
-        steamUsername: requestedUsername,
-        blenderPath,
-        nixieEnabled: Boolean(encryptedNixieWebhook),
-        minimumAvailableMemoryGiB: 12,
-        steamAppId: FOXHOLE_APP_ID,
-        createdAt: existingConfig?.createdAt ?? new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    });
-    const secrets = {
-        schemaVersion: FOXWATCH_MONITOR_SCHEMA_VERSION,
-        encryptedSteamPassword,
-        encryptedNixieWebhook,
-    };
-
-    await fs.mkdir(paths.localRoot, { recursive: true });
-    await writeJsonAtomic(paths.configPath, config);
-    await writeJsonAtomic(paths.secretsPath, secrets);
-
-    logger.info('Bootstrapping the local SteamCMD metadata client...');
-    const metadataSteamRoot = path.join(paths.steamCmdRoot, 'metadata');
-    const steamCmdPath = await ensureSteamCmd(paths, metadataSteamRoot, logger);
-    const password = await decryptSecret(paths, encryptedSteamPassword);
-    const builds = await queryRemoteSteamBuilds({
-        steamCmdPath,
-        username: config.steamUsername,
-        password,
-        logger,
-    });
-    const selected = selectLatestSteamBuild(builds);
-    logger.info(
-        `Steam authentication verified; public=${builds.public}, devbranch=${builds.devbranch}. `
-            + `Selected ${selected.branch} BuildID ${selected.buildId}.`,
-    );
-
-    await configureMonitorApp({ paths, repoRoot, runnerScriptPath, config, logger });
-    logger.info(`FoxWatch tray monitor configured to select the highest public/devbranch BuildID every ${config.intervalMinutes} minute(s).`);
-    logger.info('The tray monitor is running in the Windows notification area.');
 }
 
 async function monitorOnce({
@@ -538,7 +408,7 @@ async function verifyAcquisitionReceipt(branchState, expectedBuildId) {
 
 async function queryRemoteSteamBuilds({ steamCmdPath, username, password, logger }) {
     if (!password) {
-        throw new Error('Steam password is empty. Rerun setup-monitor with --replace-credentials.');
+        throw new Error('Steam password is empty. Save your Steam password in FoxWatch Desktop Settings.');
     }
     logger.info('Checking Steam branch metadata...');
     const output = await runSteamCommand(steamCmdPath, [
@@ -654,7 +524,7 @@ async function ensureSteamCmd(paths, destinationRoot, logger) {
 async function loadMonitorConfig(paths) {
     const config = await readJson(paths.configPath);
     if (!config) {
-        throw new Error('FoxWatch monitor is not configured. Run `npm run foxwatch -- setup-monitor` first.');
+        throw new Error('FoxWatch monitor is not configured. Configure it in FoxWatch Desktop Settings first.');
     }
     return validateMonitorConfig(config);
 }
@@ -662,38 +532,9 @@ async function loadMonitorConfig(paths) {
 async function loadMonitorSecrets(paths) {
     const secrets = await readJson(paths.secretsPath);
     if (secrets?.schemaVersion !== FOXWATCH_MONITOR_SCHEMA_VERSION || !secrets.encryptedSteamPassword) {
-        throw new Error('FoxWatch monitor encrypted credentials are missing. Rerun setup-monitor with --replace-credentials.');
+        throw new Error('FoxWatch monitor encrypted credentials are missing. Save your Steam password in FoxWatch Desktop Settings.');
     }
     return secrets;
-}
-
-async function promptEncryptedSecret(paths, prompt) {
-    return (await runCaptured('powershell.exe', [
-        '-NoLogo',
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        paths.secretsScriptPath,
-        '-Action',
-        'prompt-encrypt',
-        '-Prompt',
-        prompt,
-    ], { inheritStdin: true })).trim();
-}
-
-async function encryptSecret(paths, value) {
-    return (await runCaptured('powershell.exe', [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        paths.secretsScriptPath,
-        '-Action',
-        'encrypt-stdin',
-    ], { stdin: value })).trim();
 }
 
 async function decryptSecret(paths, encryptedValue) {
@@ -710,117 +551,9 @@ async function decryptSecret(paths, encryptedValue) {
     ], { stdin: encryptedValue });
 }
 
-async function manageScheduledTask(paths, action, options = {}) {
-    const args = [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        paths.taskScriptPath,
-        '-Action',
-        action,
-        '-TaskName',
-        TASK_NAME,
-    ];
-    if (action === 'install') {
-        args.push(
-            '-NodePath', options.nodePath,
-            '-RunnerPath', options.runnerScriptPath,
-            '-WorkingDirectory', options.repoRoot,
-            '-IntervalMinutes', String(options.intervalMinutes),
-        );
-    }
-    return (await runCaptured('powershell.exe', args)).trim();
-}
-
-async function installMonitorApp({ paths, repoRoot, runnerScriptPath, config, logger, openWindow, startPaused = false }) {
-    if (process.platform !== 'win32') {
-        throw new Error('FoxWatch monitor app currently supports Windows only.');
-    }
-    if (await pathExists(paths.monitorAppExecutablePath)) {
-        logger.info('Stopping the existing FoxWatch tray monitor before updating it...');
-        await manageMonitorApp(paths, 'uninstall');
-    }
-    logger.info('Publishing the FoxWatch tray monitor...');
-    await fs.mkdir(paths.monitorAppRoot, { recursive: true });
-    const publishOutput = await runCaptured('dotnet', [
-        'publish',
-        paths.monitorProjectPath,
-        '--configuration',
-        'Release',
-        '--runtime',
-        'win-x64',
-        '--self-contained',
-        'false',
-        '--output',
-        paths.monitorAppRoot,
-    ]);
-    if (publishOutput.trim()) logger.info(publishOutput.trim());
-    await writeMonitorHostConfig({ paths, repoRoot, runnerScriptPath, config });
-
-    await manageScheduledTask(paths, 'uninstall');
-    await manageMonitorApp(paths, 'install', { startPaused });
-    if (openWindow) await manageMonitorApp(paths, 'open');
-    logger.info('FoxWatch tray monitor installed, started, and registered for current-user Windows startup.');
-}
-
-async function configureMonitorApp({ paths, repoRoot, runnerScriptPath, config, logger }) {
-    if (!await pathExists(paths.monitorAppExecutablePath)) {
-        await installMonitorApp({ paths, repoRoot, runnerScriptPath, config, logger, openWindow: false });
-        return;
-    }
-    await writeMonitorHostConfig({ paths, repoRoot, runnerScriptPath, config });
-    await manageScheduledTask(paths, 'uninstall');
-    await manageMonitorApp(paths, 'install');
-    logger.info('Updated the existing FoxWatch tray monitor configuration without replacing the running app.');
-}
-
-async function writeMonitorHostConfig({ paths, repoRoot, runnerScriptPath, config }) {
-    await writeJsonAtomic(paths.monitorHostConfigPath, {
-        schemaVersion: 1,
-        repoRoot,
-        nodePath: process.execPath,
-        runnerScriptPath,
-        logsRoot: paths.logsRoot,
-        statePath: paths.statePath,
-        settingsPath: paths.monitorSettingsPath,
-        intervalMinutes: config.intervalMinutes,
-    });
-}
-
-async function manageMonitorApp(paths, action, options = {}) {
-    const args = [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        paths.monitorAppScriptPath,
-        '-Action',
-        action,
-        '-ExecutablePath',
-        paths.monitorAppExecutablePath,
-        '-SettingsPath',
-        paths.monitorSettingsPath,
-    ];
-    if (action === 'install' && options.startPaused) args.push('-StartPaused');
-    return (await runCaptured('powershell.exe', args)).trim();
-}
-
 async function printMonitorStatus({ paths }) {
     const config = await readJson(paths.configPath);
     const state = await readJson(paths.statePath);
-    const taskStatus = process.platform === 'win32'
-        ? await manageScheduledTask(paths, 'status')
-        : 'unsupported\tnon-Windows platform';
-    const appStatus = process.platform === 'win32'
-        ? await manageMonitorApp(paths, 'status')
-        : 'unsupported\tnon-Windows platform';
-    console.log(`App: ${appStatus}`);
-    console.log(`Legacy task: ${taskStatus}`);
     if (!config) {
         console.log('Configuration: missing');
         return;
@@ -954,54 +687,6 @@ async function runAndTee(executable, args, { cwd, logger, label, env = process.e
             else reject(new Error(`${label} exited with ${signal ? `signal ${signal}` : `code ${code}`}.`));
         });
     });
-}
-
-async function promptWithDefault(prompt, defaultValue) {
-    const reader = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-        const value = (await reader.question(`${prompt} [${defaultValue}]: `)).trim();
-        return value || defaultValue;
-    } finally {
-        reader.close();
-    }
-}
-
-async function promptRequired(prompt) {
-    const reader = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-        while (true) {
-            const value = (await reader.question(`${prompt}: `)).trim();
-            if (value) return value;
-        }
-    } finally {
-        reader.close();
-    }
-}
-
-async function resolveBlenderPath(args, existingConfig) {
-    const configured = getOption(args, 'blender-path')
-        ?? process.env.BLENDER_PATH
-        ?? existingConfig?.blenderPath;
-    if (configured) {
-        const absolutePath = path.resolve(configured);
-        if (await pathExists(absolutePath)) return absolutePath;
-        const resolvedCommand = await findCommandPath(configured);
-        if (resolvedCommand) return resolvedCommand;
-        throw new Error(`Configured Blender executable does not exist or resolve through PATH: ${configured}`);
-    }
-    const discovered = await findCommandPath('blender');
-    if (!discovered) {
-        throw new Error('Unable to locate Blender. Add it to PATH, set BLENDER_PATH, or pass --blender-path <path>.');
-    }
-    return discovered;
-}
-
-async function findCommandPath(command) {
-    const discovered = (await runCaptured('where.exe', [command]).catch(() => ''))
-        .split(/\r?\n/)
-        .map(value => value.trim())
-        .find(Boolean);
-    return discovered && await pathExists(discovered) ? path.resolve(discovered) : null;
 }
 
 async function firstExistingPath(candidates) {

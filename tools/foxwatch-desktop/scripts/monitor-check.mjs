@@ -8,7 +8,6 @@ export async function checkMonitor(app, page) {
   await page.getByLabel('Steam Username', { exact: true }).waitFor();
   assert.equal(await page.getByLabel(/Steam Password/).inputValue(), '');
   assert.equal(await page.getByLabel(/R2 Secret Access Key/).inputValue(), '');
-  assert.equal(await page.getByRole('button', { name: 'Retire Legacy Monitor', exact: true }).count(), 0);
   // Exercise the real settings IPC without changing OS startup or shared config.
   const initialSettings = await page.evaluate(async () => (await window.foxwatch.monitor.info()).settings);
   await app.evaluate(({app}) => {

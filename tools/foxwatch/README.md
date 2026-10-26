@@ -74,13 +74,11 @@ If Blender is not installed yet, start with non-render workflows such as `genera
 ## Automatic Steam Monitoring
 
 Use [FoxWatch Desktop](../foxwatch-desktop/README.md) for Steam polling,
-generation, inspection, credentials, and publishing. The WinForms tray monitor is
-**deprecated**; its source and old host commands remain only for rollback.
+generation, inspection, credentials, and publishing.
 The shared polling/generation CLI (`monitor-once`, `monitor-now`, `monitor`,
 `monitor-status`, and `monitor-logs`) remains supported and is used by Desktop.
 
-For an existing installation, close the deprecated WinForms host and let active
-work finish. In Desktop Settings enable **Start With Windows** and **Start Minimized
+In Desktop Settings enable **Start With Windows** and **Start Minimized
 at Login**, save settings, and choose **Start Polling** on the Dashboard when ready.
 Saving Settings registers Desktop even when Start With Windows was already checked.
 Credentials, Steam installations, generated assets, logs, and pipeline state are
@@ -92,160 +90,27 @@ refresh-finished, and failure checkpoints. Manual refreshes, unchanged polls,
 asset preparation, upload checks, and publishing do not send these checkpoints.
 Delivery failures are recorded in the run/monitor logs and do not fail generation.
 
-### Legacy WinForms Setup (Deprecated)
+### Configuration and Polling
 
-The following host setup and lifecycle commands describe the retained rollback
-path. They install/open the old WinForms app, not FoxWatch Desktop. New setups
-should use Desktop Settings instead.
+Configure your Steam account, Blender path, polling interval, and optional Nixie
+webhook in Desktop Settings. Credentials are encrypted with Windows DPAPI for
+the current Windows account. Machine-local credentials, Steam installations,
+state, locks, and logs remain under the ignored `tools/foxwatch/local/` folder.
 
-FoxWatch can maintain its own verified Foxhole installation without reading the
-normal Steam client installation. Setup is guided and idempotent:
+Each poll selects the highest BuildID across public and devbranch, acquires and
+verifies the inactive installation slot, then runs the refresh. A failed refresh
+retains the verified installation for a retry; success is recorded only after the
+refresh completes. Desktop owns startup registration and polling preferences.
 
-```powershell
-npm run foxwatch -- setup-monitor
-```
-
-The first setup asks for:
-
-- the Steam username and password
-- an optional Nixie workspace-chat incoming webhook URL
-
-For unattended setup, provide the Nixie URL through
-`FOXWATCH_NIXIE_WEBHOOK_URL`. Use `--no-nixie` to explicitly remove that
-destination.
-
-Passwords and webhook URLs are encrypted with Windows DPAPI for the current
-Windows account and are never written as plaintext configuration. SteamCMD
-receives the decrypted password transiently for its login command, so it can be
-visible to same-user or administrator process inspection while SteamCMD runs. Existing encrypted credentials are retained when
-setup is rerun unless `--replace-credentials` is provided.
-
-Setup downloads the official SteamCMD bootstrap, verifies authentication and
-the BuildIDs for both `public` and `devbranch`, then publishes and starts the
-lightweight FoxWatch Windows tray monitor. It polls once every ten minutes by
-default and starts with the current user's Windows session. Closing its window
-hides it back to the notification area; **Exit** stops the background monitor.
-The resolved Blender executable is stored in the non-secret local configuration
-so the scheduled task does not depend on a temporary shell environment. Use
-`--blender-path <path>` if Blender is not already available through
-`BLENDER_PATH` or `PATH`.
-
-All machine-local data stays under the ignored directory
-`tools/foxwatch/local/`:
-
-```text
-local/
-  credentials/       DPAPI-encrypted credentials
-  downloads/         SteamCMD bootstrap archive
-  installs/          isolated public or devbranch acquisition slots
-  locks/              concurrent-run protection
-  logs/               monitor and FoxWatch output
-  monitor-app/        published Windows tray monitor
-  state/              observed, acquired, and successful BuildIDs
-  steamcmd/           metadata and branch-specific SteamCMD clients
-```
-
-Every poll queries both branches and selects the numerically higher BuildID so
-FoxWatch always follows the latest available build. Equal BuildIDs select
-`public`. When Steam reports a new selected BuildID, the monitor updates that
-branch's inactive installation slot, runs SteamCMD validation,
-checks the installed app manifest, inventories the PAK/UTOC/UCAS files, and
-writes an acquisition receipt. FoxWatch cannot consume the installation until
-all checks agree on the requested BuildID.
-
-Acquisition and pipeline success are separate states. If Blender or publishing
-fails, the verified Steam installation remains reusable, but that BuildID stays
-pending and is retried on the next poll. A completed build is not marked
-successful until the deep refresh exits successfully.
-
-When Nixie notifications are configured, automatic polls post new checkpoint messages for a
-newly detected Foxhole build, the start of its FoxWatch refresh, successful
-refresh completion, and any SteamCMD, acquisition, or FoxWatch failure. These
-messages are append-only: the monitor never edits an earlier system message.
-Routine successful polls, acquisition verification, memory deferrals,
-heartbeats, and in-progress pipeline stages do not post. Manual `monitor-now`
-runs and the tray app's `Run Refresh` action also stay quiet in Nixie.
-
-Useful monitor commands:
+For diagnostics, the shared CLI remains available:
 
 ```powershell
 npm run foxwatch -- monitor-status
-npm run foxwatch -- open-monitor
-npm run foxwatch -- install-monitor-app
 npm run foxwatch -- monitor-now
 npm run foxwatch -- monitor-now -- --force-refresh
-npm run foxwatch -- monitor-logs
 npm run foxwatch -- monitor-logs -- --lines 250
-npm run foxwatch -- clear-cache
 npm run foxwatch -- monitor
-npm run foxwatch -- uninstall-monitor
 ```
-
-`open-monitor` shows the existing tray monitor window. `install-monitor-app`
-migrates an existing configured monitor from the legacy repeating scheduled
-task without asking for credentials again. Pass `-- --paused` to inspect a
-failed or pending state before allowing the first tray-hosted poll. `monitor`
-runs the same polling loop in the foreground for diagnostics.
-
-### Tray app lifecycle
-
-The tray app source is committed under `tools/foxwatch/monitor/`; its generated
-Windows binaries are not committed. First-time `setup-monitor` configures the
-Steam account and optional Nixie webhook, downloads SteamCMD, publishes the
-Release app into the ignored `tools/foxwatch/local/monitor-app/` directory,
-registers it for the current user's Windows startup, and starts it.
-
-Opening the generated executable does not perform first-time setup by itself.
-After setup, use `open-monitor` or double-click the notification-area icon to
-show the existing process. Closing its window returns it to the notification
-area. `Start with Windows` controls the startup registration, while `Start
-Minimized` controls whether that Windows-startup launch stays in the tray or
-opens the monitor window. The monitor shows the current pipeline stage, overall
-progress, aggregate Blender batch progress, and separate per-worker scene
-progress. It also records the exact elapsed poll time and estimates remaining
-Blender time from aggregate scene throughput. Full child-process output remains
-in the persistent log files opened by `Open Logs`; it is intentionally not
-rendered in the monitor window.
-
-`Stop` terminates the active FoxWatch process tree and disables automatic
-polling. The stopped state is saved under `local/state/`, so restarting the tray
-app or Windows does not silently resume work. `Start` re-enables polling and
-immediately begins a Steam metadata check. The monitor shows the exact local
-time of the next scheduled poll whenever it is idle.
-
-`Run Refresh` forces the latest verified monitor-managed build through a full
-deep refresh even when that BuildID already succeeded. `Clear Cache` requires a
-confirmation and removes decoded package/asset bundles plus transient pipeline
-caches. It preserves Steam installations, credentials, monitor state, logs,
-rendered outputs, and published assets; the next refresh rebuilds the cache.
-
-After pulling changes to the tray app source, run `install-monitor-app` to stop
-the existing host, publish the updated binaries, preserve the machine-local
-configuration and preferences, restart it, and open the updated window:
-
-```powershell
-npm run foxwatch -- install-monitor-app -- --paused
-```
-
-Omit `--paused` when the monitor should resume polling immediately. To remove
-the app, run `uninstall-monitor`. It stops the tray host and removes both its
-current-user startup entry and any legacy scheduled task, while deliberately
-preserving Steam installations, decoded caches, credentials, state, and logs:
-
-```powershell
-npm run foxwatch -- uninstall-monitor
-```
-
-For unattended setup, provide `FOXWATCH_STEAM_USERNAME` and
-`FOXWATCH_STEAM_PASSWORD`, optionally
-`FOXWATCH_NIXIE_WEBHOOK_URL`, and run:
-
-```powershell
-npm run foxwatch -- setup-monitor -- --non-interactive --interval-minutes 10
-```
-
-The environment values are consumed only during setup and persisted as
-DPAPI-encrypted values. Clear the environment variables after setup.
 
 ## Command wrapper
 

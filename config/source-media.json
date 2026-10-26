@@ -57,18 +57,6 @@
       "sha256": "ca62f86eec79461ba2daced4879c49779e3d62c9dc32bf2669b2e8f3cc76aadb",
       "provenance": "FoxWatch authored camera/light rig; headless Blender audit: four cameras/light objects, no meshes, materials or packed images."
     },
-    "tools/foxwatch/monitor/assets/FoxWatchMonitor.ico": {
-      "sha256": "7c101c31de6a35d13d2d19c0deeea57becf854898f340e5807457d17f05e9bd5",
-      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
-    },
-    "tools/foxwatch/monitor/assets/icons/clock.svg": {
-      "sha256": "2e87fe65f296cc86c177e4a15b067d3dd9c1ef2856ec16c0838cae91d57653fc",
-      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
-    },
-    "tools/foxwatch/monitor/assets/icons/hourglass.svg": {
-      "sha256": "d1a54f1f7a0fac2b2cce17dcb13464e65bd9b0fdf4147e5347f277218ff6d275",
-      "provenance": "Nixie/FoxWatch product branding, UI icon, or generated mobile application splash/icon; not Foxhole game artwork."
-    },
     "tools/foxwatch/scripts/RegionMask.png": {
       "sha256": "c814511f3153a432c57aa0fc7b480a4469e05c037ca07ce7e140474dd18c39ff",
       "provenance": "Plain geometric hexagon alpha mask; no map or game artwork."

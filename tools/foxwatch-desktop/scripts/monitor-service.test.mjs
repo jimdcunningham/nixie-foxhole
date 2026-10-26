@@ -26,7 +26,6 @@ async function fixture(t) {
     setTimeout(() => { console.log('final output'); }, 250);
   `);
   const service = new MonitorService(repo, path.join(repo, 'profile'), () => {});
-  service.legacyRunning = async () => false;
   await service.initialize(); service.settings.nodePath = process.execPath;
   t.after(() => service.dispose());
   return { repo, service, local };
@@ -78,10 +77,14 @@ test('saving settings preserves existing fields and replaces credentials with re
 test('cancel during runner startup does not start a process later', { skip: process.platform !== 'win32' }, async t => {
   const { service, repo } = await fixture(t);
   let release;
-  service.legacyRunning = async () => new Promise(resolve => release = resolve);
+  const originalModule = service.module.bind(service);
+  service.module = name => name === 'steam-monitor-core'
+    ? new Promise(resolve => { release = () => originalModule(name).then(resolve); })
+    : originalModule(name);
   const run = service.controller.run('poll');
+  await waitFor(() => !!release);
   await service.action('cancel');
-  release(false); await run;
+  release(); await run;
   assert.equal(service.controller.status.stage, 'Failed'); assert.match(service.controller.status.detail, /cancelled/);
   await assert.rejects(readFile(path.join(repo, 'calls.jsonl')), { code: 'ENOENT' });
 });

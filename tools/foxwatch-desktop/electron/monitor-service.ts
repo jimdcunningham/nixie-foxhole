@@ -44,10 +44,9 @@ export class MonitorService {
   async initialize() {
     this.config = await json(path.join(this.local, 'monitor.config.v1.json'));
     this.publication = await json(path.join(this.local, 'asset-publication.json'), await json(path.join(this.repo, 'config/asset-publication.example.json')));
-    const host = await json(path.join(this.local, 'monitor-app/host.config.v1.json'));
     const saved = await json(path.join(this.profile, 'monitor.json'));
     this.settings = {
-      nodePath: saved.nodePath ?? host.nodePath ?? 'node', intervalMinutes: this.config.intervalMinutes ?? 10,
+      nodePath: saved.nodePath ?? 'node', intervalMinutes: this.config.intervalMinutes ?? 10,
       steamUsername: this.config.steamUsername ?? '', blenderPath: this.config.blenderPath ?? '',
       minimumAvailableMemoryGiB: this.config.minimumAvailableMemoryGiB ?? 12, nixieEnabled: !!this.config.nixieEnabled,
       startMinimized: saved.startMinimized ?? false, startWithWindows: saved.startWithWindows ?? false,
@@ -75,11 +74,6 @@ export class MonitorService {
     nodePath: this.settings.nodePath, startMinimized: this.settings.startMinimized,
     startWithWindows: this.settings.startWithWindows, polling: this.controller.status.polling,
   }); }
-  async legacyRunning(): Promise<boolean> {
-    if (process.platform !== 'win32') return false;
-    const { stdout } = await exec('tasklist.exe', ['/FI', 'IMAGENAME eq FoxWatchMonitor.exe', '/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 10000 });
-    return /^"FoxWatchMonitor\.exe"/im.test(stdout);
-  }
   async info(): Promise<ToolInfo> {
     const state = await json(path.join(this.local, 'state/monitor-state.v1.json'));
     const secrets = await json(path.join(this.local, 'credentials/monitor.secrets.dpapi.v1.json'));
@@ -92,7 +86,7 @@ export class MonitorService {
         prepared = { planPath: pointer.planPath, releaseUrl: plan.release.url, files: plan.summary.sourceFiles, bytes: plan.summary.bytes };
       }
     } catch { /* Missing/incomplete plan is not ready for publication. */ }
-    return { settings: { ...this.settings }, windows: process.platform === 'win32', legacyRunning: await this.legacyRunning(),
+    return { settings: { ...this.settings }, windows: process.platform === 'win32',
       steamCredentials: !!secrets.encryptedSteamPassword, notificationCredentials: !!secrets.encryptedNixieWebhook,
       assetCredentials: !!this.publication.credentialFile && await stat(path.resolve(this.repo, this.publication.credentialFile)).then(() => true, () => false),
       latestBuild: state.selectedBuildId ? `${state.selectedBranch} · ${state.selectedBuildId}` : 'No completed poll',
@@ -172,7 +166,6 @@ export class MonitorService {
     if (process.platform !== 'win32') throw new Error('Steam polling, generation, and publishing require Windows.');
     this.actionPending = true;
     try {
-      if (await this.legacyRunning()) throw new Error('Close the deprecated WinForms monitor first so only one app polls for builds.');
       if (action === 'start') {
         const { validateMonitorConfig } = await this.module('steam-monitor-core'); validateMonitorConfig(this.config);
         this.controller.polling(true); await this.persist();
@@ -181,7 +174,6 @@ export class MonitorService {
   }
   private async run(operation: RunOperation, line: (value: string) => void): Promise<number> {
     this.cancelled = false;
-    if (await this.legacyRunning()) throw new Error('The deprecated WinForms monitor is running. Close it before starting work.');
     const commands: Record<RunOperation, string[]> = {
       poll: ['monitor-once'], refresh: ['monitor-now','--force-refresh'], 'clear-cache': ['clear-cache'],
       prepare: ['assets-prepare'], check: ['assets-publish'], publish: ['assets-publish','--upload'],

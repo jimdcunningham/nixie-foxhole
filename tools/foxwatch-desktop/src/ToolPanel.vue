@@ -38,7 +38,6 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
     <p v-if="error" class="tool-error" role="alert">{{ error }}</p>
     <p v-if="notice" class="tool-notice" role="status">{{ notice }}</p>
     <p v-if="info && !info.windows" class="tool-notice">Steam monitoring and generation require Windows. Asset inspection and published-library downloads are available on this platform.</p>
-    <p v-if="info?.legacyRunning" class="tool-notice">The deprecated WinForms monitor is running. Close it before starting work here.</p>
 
     <template v-if="view === 'dashboard'">
       <div class="tool-cards">
@@ -52,9 +51,9 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
         <progress max="100" :value="status?.percent ?? 0" aria-label="Overall Run Progress" />
         <p class="muted">{{ Math.round(status?.percent ?? 0) }}% · Stage-based estimate</p>
         <div class="tool-actions">
-          <button class="tool-button" :disabled="busy || !info?.windows || !!info?.legacyRunning" @click="action(status?.polling ? 'pause' : 'start')">{{ status?.polling ? 'Pause Polling' : 'Start Polling' }}</button>
-          <button class="tool-button" :disabled="busy || status?.running || !info?.windows || info?.legacyRunning" @click="action('poll')">Poll Now</button>
-          <button class="tool-button" :disabled="busy || status?.running || !info?.windows || info?.legacyRunning" @click="action('refresh')">Refresh Latest Build</button>
+          <button class="tool-button" :disabled="busy || !info?.windows" @click="action(status?.polling ? 'pause' : 'start')">{{ status?.polling ? 'Pause Polling' : 'Start Polling' }}</button>
+          <button class="tool-button" :disabled="busy || status?.running || !info?.windows" @click="action('poll')">Poll Now</button>
+          <button class="tool-button" :disabled="busy || status?.running || !info?.windows" @click="action('refresh')">Refresh Latest Build</button>
           <button v-if="status?.running" class="tool-button danger" :disabled="busy" @click="action('cancel')">Cancel Run</button>
           <button class="tool-button" @click="action('logs')">Open Logs</button>
         </div>
@@ -109,14 +108,14 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
           <label>R2 Secret Access Key<input v-model="credentials.secretAccessKey" type="password" autocomplete="new-password"></label>
         </div><button class="tool-button" :disabled="!Object.values(credentials).some(Boolean)" @click="saveCredentials">Save Credentials</button>
       </fieldset>
-      <fieldset :disabled="busy || !!status?.running || !info.windows || info.legacyRunning"><legend>Publish a Release</legend>
+      <fieldset :disabled="busy || !!status?.running || !info.windows"><legend>Publish a Release</legend>
         <p>Prepare snapshots local files. Inspect and approve them before publishing. Check Upload verifies the prepared snapshot without uploading. Publish explicitly uploads it and updates the public stable channel after verification.</p>
         <p v-if="info.prepared" class="prepared-release">{{ info.prepared.files.toLocaleString() }} source files · {{ bytes(info.prepared.bytes) }}<br>{{ info.prepared.releaseUrl }}</p>
         <p v-else class="muted">No prepared release.</p>
         <div class="tool-actions"><button class="tool-button" @click="action('prepare')">Prepare Assets</button><button class="tool-button" :disabled="!info.prepared" @click="action('check')">Check Upload</button><button class="tool-button" :disabled="!info.prepared" @click="action('publish')">Publish Assets…</button><button class="tool-button" @click="action('output')">Open Output</button></div>
         <p class="muted">Generation does not upload. Publishing does not approve the inspector baseline or update Nixie's checked-in asset pin.</p>
       </fieldset>
-      <fieldset :disabled="busy || !!status?.running || !info.windows || info.legacyRunning"><legend>Maintenance</legend><button class="tool-button danger" @click="action('clear-cache')">Clear Generation Cache…</button><button class="tool-button" @click="action('logs')">Open Logs</button></fieldset>
+      <fieldset :disabled="busy || !!status?.running || !info.windows"><legend>Maintenance</legend><button class="tool-button danger" @click="action('clear-cache')">Clear Generation Cache…</button><button class="tool-button" @click="action('logs')">Open Logs</button></fieldset>
     </template>
   </section>
 </template>
