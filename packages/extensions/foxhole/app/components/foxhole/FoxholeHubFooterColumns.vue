@@ -24,10 +24,7 @@ const resourceLinks = computed(() => [
         to: '/community',
     },
     ...(!runtimeConfig.public.desktop
-        ? [{
-            label: 'Download',
-            to: '/download',
-        }]
+        ? [{ label: 'Download', to: '/download' }]
         : []),
     {
         label: 'Status',
@@ -48,6 +45,7 @@ const resourceLinks = computed(() => [
                     Foxhole and related names, marks, and assets remain the intellectual property of Siege Camp.
                 </p>
             </div>
+            <slot name="about-downloads" />
         </section>
 
         <section v-if="latestUpdateLinks?.length" class="nx-hub-footer__block nx-hub-footer__latest" aria-label="Latest">
@@ -85,7 +83,9 @@ const resourceLinks = computed(() => [
                         rel="noreferrer"
                     >{{ link.label }}</a>
                 </li>
+                <slot name="resource-links" />
             </ul>
         </section>
+        <slot name="columns" />
     </div>
 </template>
