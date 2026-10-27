@@ -93,3 +93,24 @@ test('roof-mounted flags on garrisons and intelligence buildings hide with fixed
     }
     assert.equal(isFoxholeRoofRenderLayer({ id: 'flagmesh' }, 'UnrelatedStructure'), false);
 });
+
+test('roof hover resolves unqualified and generated bunker socket names across connected structures', () => {
+    const first = entity('atgunait2'), middle = entity('fortt2'), last = entity('mgait2'), foundation = entity('fortt2');
+    first.entityId = 'first';
+    middle.entityId = 'middle';
+    last.entityId = 'last';
+    foundation.entityId = 'foundation';
+    const attachments = (subject: NixieExperimentalComponentEntitySnapshotV1, links: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }>) => {
+        subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1,
+            definitionAvailable: true, data: { attachments: links } });
+    };
+    attachments(first, [{ localSocketName: 'RightFortSocket', targetEntityId: 'middle', targetSocketName: 'LeftFortSocket' }]);
+    attachments(middle, [{ localSocketName: 'FortCommon:LeftFortSocket_GEN_VARIABLE', targetEntityId: 'first', targetSocketName: 'RightFortSocket' },
+        { localSocketName: 'FrontFortSocket', targetEntityId: 'last', targetSocketName: 'BackFortSocket' },
+        { localSocketName: 'FoundationSocket', targetEntityId: 'foundation', targetSocketName: 'FoundationSocket' }]);
+    attachments(last, [{ localSocketName: 'BackFortSocket', targetEntityId: 'middle', targetSocketName: 'FrontFortSocket' }]);
+    const context = { contractVersion: 1 as const, entities: [first, middle, last, foundation], settings: { 'foxhole.structure.hideRoofsOnHover': true } };
+    assert.deepEqual(renderFoxholeSceneV2Entity(first, context).experimentalHover!.relatedEntityIds, ['middle']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(middle, context).experimentalHover!.relatedEntityIds, ['first', 'last']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(last, context).experimentalHover!.relatedEntityIds, ['middle']);
+});

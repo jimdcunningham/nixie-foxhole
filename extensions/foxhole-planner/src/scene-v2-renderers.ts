@@ -1,4 +1,5 @@
 import { foxholeConnectorGeometryHandles, foxholeConnectorGeometryWheel } from './connector-gesture-policy.ts';
+import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
@@ -464,7 +465,9 @@ export function renderFoxholeSceneV2Entity(
                     || typeof attachment.localSocketName !== 'string' || typeof attachment.targetEntityId !== 'string') {
                     return [];
                 }
-                const socket = metadata.buildSockets.find(candidate => candidate.name === attachment.localSocketName);
+                const socket = metadata.buildSockets.find(candidate => candidate.name === attachment.localSocketName)
+                    ?? metadata.buildSockets.find(candidate => normalizeFoxholeBuildSocketName(candidate.name).toLowerCase()
+                        === normalizeFoxholeBuildSocketName(attachment.localSocketName).toLowerCase());
                 if (!socket?.socketTags?.some(tag => tag.category === 4 && (BigInt(Math.trunc(tag.mask)) & ~8n) !== 0n)) {
                     return [];
                 }
