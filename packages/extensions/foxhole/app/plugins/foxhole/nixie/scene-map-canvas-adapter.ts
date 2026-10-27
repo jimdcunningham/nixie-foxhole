@@ -116,6 +116,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             // Disabling Terrain must not reveal the editor's camera-following floor.
             return selectedSpatialRegions({ ...settings, mode: context.viewMode() }).length === 0;
         },
+        groundAvailable: () => world.active,
         groundElevation: (x, y) => world.sampleGround(x, y),
         waterElevation: (x, y) => world.sampleWater(x, y),
         updateGroundCutouts: volumes => world.setGroundCutouts(volumes),

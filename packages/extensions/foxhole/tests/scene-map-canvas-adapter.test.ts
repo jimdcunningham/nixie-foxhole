@@ -77,9 +77,12 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.ok(adapter.navigationBounds());
     mode = '3d';
     assert.equal(adapter.spatialGroundVisible(), false, 'hide the editor floor before the region finishes loading');
+    assert.equal(adapter.groundAvailable(), false, 'an unattached region supplies no ground samples');
     world.active = true;
+    assert.equal(adapter.groundAvailable(), true, 'attached terrain is sampled immediately');
     assert.equal(adapter.spatialGroundVisible(), false, 'keep it hidden after the region is attached');
     world.active = false;
+    assert.equal(adapter.groundAvailable(), false, 'retired terrain no longer supplies ground samples');
     assert.equal(adapter.spatialGroundVisible(), false, 'a failed or retired region must not reveal the rectangle');
     settings.worldLayers.terrain = false;
     assert.equal(adapter.spatialGroundVisible(), false, 'terrain off must not reveal the editor floor');
