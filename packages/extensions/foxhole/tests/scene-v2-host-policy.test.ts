@@ -29,3 +29,10 @@ test('the active bundled policy translates exported lamps without host product i
     } finally { unregister(); }
     assert.equal(resolveNixieInternalModelLightHints(document).size, 0);
 });
+
+test('Foxhole model lights require explicit user opt-in', () => {
+    const read = (value: unknown) => (id: string) => id === 'foxhole.structure.modelLights' ? value : undefined;
+    assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(read(undefined)).modelLights, false);
+    assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(read(false)).modelLights, false);
+    assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(read(true)).modelLights, true);
+});

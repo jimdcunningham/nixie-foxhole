@@ -1223,6 +1223,20 @@ export default defineContribution({
         },
         {
             menu: NIXIE_OVERLAYS_STRUCTURES_MENU_ID,
+            order: 37,
+            item: {
+                type: 'checkbox',
+                label: 'Model Lights',
+                icon: 'ph:lightbulb',
+                checked: () => useNixieSettingsStore().getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modelLights, false) === true,
+                closeOnClick: false,
+                onClick: () => {
+                    useNixieSettingsStore().toggle(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modelLights);
+                },
+            },
+        },
+        {
+            menu: NIXIE_OVERLAYS_STRUCTURES_MENU_ID,
             order: 40,
             item: {
                 type: 'checkbox',

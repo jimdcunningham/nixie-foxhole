@@ -11,6 +11,7 @@ export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     spatialPresentation(readSetting) {
         const faction = normalizeFoxholeSceneFaction(readSetting(FOXHOLE_SCENE_FACTION_SETTING_ID));
         return {
+            modelLights: readSetting('foxhole.structure.modelLights') === true,
             poweredSpotlights: readSetting('foxhole.ranges.nighttime') === true
                 && readSetting('foxhole.ranges.poweredSpotlights') === true
                 && readSetting('foxhole.structure.hideRoofs') !== true,

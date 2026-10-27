@@ -11,6 +11,7 @@ const publicOverlayIds = new Set([
     'foxhole.structure.breachIndicators',
     'foxhole.structure.hideRoofs',
     'foxhole.structure.hideRoofsOnHover',
+    'foxhole.structure.modelLights',
 ]);
 
 test('public Foxhole menu overlays are accessible to regular production users', () => {
@@ -32,4 +33,11 @@ test('all Foxhole debug settings require development access', () => {
         definitions.filter(definition => definition.accessibleInDev !== true).map(definition => definition.id),
         [],
     );
+});
+
+test('Foxhole model lights are off by default', () => {
+    const lights = foxholeStructureDebugSettings.find(definition => definition.id === 'foxhole.structure.modelLights');
+    assert.ok(lights);
+    assert.equal(lights.defaultValue, false);
+    assert.equal(lights.scope, 'user');
 });

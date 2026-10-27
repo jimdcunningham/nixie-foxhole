@@ -17,6 +17,7 @@ export const FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS = {
     useStaticRender: 'foxhole.structure.useStaticRender',
     hideRoofs: 'foxhole.structure.hideRoofs',
     hideRoofsOnHover: 'foxhole.structure.hideRoofsOnHover',
+    modelLights: 'foxhole.structure.modelLights',
     hideFloors: 'foxhole.structure.hideFloors',
     hideWalls: 'foxhole.structure.hideWalls',
     hideDirt: 'foxhole.structure.hideDirt',
@@ -48,6 +49,7 @@ const publicStructureOverlaySettingIds = new Set<string>([
     FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.breachIndicators,
     FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs,
     FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofsOnHover,
+    FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modelLights,
 ]);
 
 export const FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS = [
@@ -164,6 +166,16 @@ export const foxholeStructureDebugSettings = withSettingsPageSection([
         name: 'Foxhole Structure Hide Roofs',
         description: 'Hide fort and bunker roof layers so interiors stay visible.',
         icon: 'ph:house-line',
+        group: FOXHOLE_STRUCTURE_DEBUG_SETTING_GROUP,
+        defaultValue: false,
+    },
+    {
+        id: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.modelLights,
+        scope: 'user' as const,
+        type: 'boolean' as const,
+        name: 'Foxhole Model Lights',
+        description: 'Show dynamic lights from Foxhole models in 2.5D and 3D.',
+        icon: 'ph:lightbulb',
         group: FOXHOLE_STRUCTURE_DEBUG_SETTING_GROUP,
         defaultValue: false,
     },
