@@ -22,6 +22,67 @@ function pipe(id: string, startX: number): NixieExperimentalComponentEntitySnaps
     return entity;
 }
 
+test('a connector cannot create a new snap to another member of the moving group', () => {
+    const moving = pipe('pipe', 95);
+    const target = structure('target', 100);
+    target.components[1]!.data.assetId = 'facilitypipe';
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: moving.entityId,
+        movingEntityIds: ['pipe', 'target'], interaction: 'placement',
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [moving, target] } });
+    assert.equal(result.transaction?.operations.some(operation => operation.entityId === target.entityId) ?? false, false);
+    assert.equal(result.transaction?.operations.some(operation => operation.op === 'patch' && operation.entityId === moving.entityId
+        && operation.set?.startAttachmentNodeId === target.entityId) ?? false, false);
+});
+
+test('a rigid group preserves a connector endpoint and reciprocal attachment', () => {
+    const moving = pipe('pipe', 100);
+    const target = structure('target', 100);
+    target.components[1]!.data.assetId = 'facilitypipe';
+    Object.assign(moving.components[1]!.data, { startAttachmentNodeId: target.entityId, startAttachmentSocketName: 'BackSocket' });
+    target.components[2]!.data.attachments = [{ localSocketName: 'BackSocket', targetEntityId: moving.entityId, targetSocketName: 'BackSocket' }];
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: moving.entityId,
+        movingEntityIds: ['pipe', 'target'], interaction: 'placement',
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [moving, target] } });
+    assert.equal(result.transaction?.operations.some(operation => operation.entityId === target.entityId) ?? false, false);
+    assert.equal(result.transaction?.operations.some(operation => operation.op === 'patch' && operation.entityId === moving.entityId
+        && operation.unset?.includes('startAttachmentNodeId')) ?? false, false);
+});
+
+test('connector-primary group snaps by translating the group without reshaping the pipe', () => {
+    const moving = pipe('pipe', 95), internal = structure('internal', 300), target = structure('target', 100);
+    internal.components[1]!.data.assetId = target.components[1]!.data.assetId = 'facilitypipe';
+    Object.assign(moving.components[1]!.data, { endAttachmentNodeId: 'internal', endAttachmentSocketName: 'BackSocket' });
+    internal.components[2]!.data.attachments = [{ localSocketName: 'BackSocket', targetEntityId: 'pipe', targetSocketName: 'FrontSocket' }];
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'pipe', movingEntityIds: ['pipe', 'internal'],
+        interaction: 'placement', transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        context: { contractVersion: 1, entities: [moving, internal, target] } });
+    assert.deepEqual(result.transform, { x: 5, y: 0 });
+    const pipePatch = result.transaction!.operations.find(operation => operation.entityId === 'pipe');
+    assert.ok(pipePatch?.op === 'patch');
+    assert.equal(pipePatch.set?.startAttachmentNodeId, 'target');
+    assert.equal(pipePatch.set?.startX, undefined);
+    assert.equal(pipePatch.set?.endX, undefined);
+    assert.equal(pipePatch.unset?.includes('endAttachmentNodeId') ?? false, false);
+    assert.equal(result.transaction!.operations.some(operation => operation.entityId === 'internal'), false);
+    const reciprocal = result.transaction!.operations.find(operation => operation.entityId === 'target');
+    assert.ok(reciprocal?.op === 'patch');
+    assert.deepEqual(reciprocal.set?.attachments, [{ localSocketName: 'BackSocket', targetEntityId: 'pipe', targetSocketName: 'BackSocket' }]);
+});
+
+test('an internally occupied structure socket cannot attract the group to a stationary socket', () => {
+    const moving = structure('moving', 0), linked = structure('linked', 160), stationary = structure('stationary', 165);
+    moving.components[2]!.data.attachments = [{ localSocketName: 'FortCommon:FrontFortSocket',
+        targetEntityId: linked.entityId, targetSocketName: 'FortCommon:BackFortSocket' }];
+    linked.components[2]!.data.attachments = [{ localSocketName: 'FortCommon:BackFortSocket',
+        targetEntityId: moving.entityId, targetSocketName: 'FortCommon:FrontFortSocket' }];
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: moving.entityId,
+        movingEntityIds: [moving.entityId, linked.entityId], interaction: 'placement',
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        context: { contractVersion: 1, entities: [moving, linked, stationary] } });
+    assert.deepEqual(result.transform, { x: 0, y: 0 });
+    assert.equal(result.transaction?.operations.some(operation => operation.entityId === stationary.entityId) ?? false, false);
+});
+
 test('connector geometry snapping uses typed endpoints and writes reciprocal socket occupancy', () => {
     const moving = pipe('pipe', 95);
     const target = structure('target', 100);

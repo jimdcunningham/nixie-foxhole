@@ -88,14 +88,10 @@ function isLandscapeCheckSocket(socket: FoxholeManifestBuildSocket): boolean {
     return /^LandscapeCheck(?:Socket)?\d*$/i.test(String(socket.name ?? '').trim());
 }
 
-function areNearDuplicateBuildSockets(
+function areNearDuplicateBuildSocketPositions(
     left: FoxholeManifestBuildSocket,
     right: FoxholeManifestBuildSocket,
 ): boolean {
-    if (normalizeFoxholeBuildSocketName(left.name).toLowerCase() !== normalizeFoxholeBuildSocketName(right.name).toLowerCase()) {
-        return false;
-    }
-
     const leftNearOrigin = isNearOriginBuildSocket(left);
     const rightNearOrigin = isNearOriginBuildSocket(right);
 
@@ -129,10 +125,20 @@ export function deduplicateFoxholeBuildSockets(
 ): FoxholeManifestBuildSocket[] {
     const filtered = (buildSockets ?? []).filter(socket => !isLandscapeCheckSocket(socket) && !isSpuriousConnectorSideSocket(socket));
     const collapsed: FoxholeManifestBuildSocket[] = [];
+    const indicesByName = new Map<string, number[]>();
 
     for (const socket of filtered) {
-        const duplicateIndex = collapsed.findIndex(existing => areNearDuplicateBuildSockets(existing, socket));
+        // Keep global output order and first-match semantics, but only compare
+        // positions of sockets whose normalized names can actually match.
+        const name = normalizeFoxholeBuildSocketName(socket.name).toLowerCase();
+        let indices = indicesByName.get(name);
+        if (!indices) {
+            indices = [];
+            indicesByName.set(name, indices);
+        }
+        const duplicateIndex = indices.find(index => areNearDuplicateBuildSocketPositions(collapsed[index]!, socket)) ?? -1;
         if (duplicateIndex < 0) {
+            indices.push(collapsed.length);
             collapsed.push(socket);
             continue;
         }

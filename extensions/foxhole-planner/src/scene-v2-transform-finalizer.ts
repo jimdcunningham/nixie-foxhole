@@ -397,6 +397,12 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
     const entities = request.context.entities;
     const connector = connectorComponent(moved)!;
     const gesture = request.geometryGesture;
+    // A rigid group moves together: its existing internal links are occupied,
+    // not candidates to detach or rediscover during this transform.
+    const movingIds = new Set(gesture ? [moved.entityId] : request.movingEntityIds ?? [moved.entityId]);
+    const rigidGroup = !gesture && movingIds.size > 1;
+    let rigidTranslation: [number, number, number] | undefined;
+    let finalizedTransform: { x: number; y: number; elevation?: number } = { x: request.transform.x, y: request.transform.y };
     const role = gesture?.handleId === 'start' || gesture?.handleId === 'polyline-vertex-0' ? 'start'
         : gesture?.handleId === 'end' || gesture?.handleId === 'polyline-vertex-' + (Array.isArray(connector.data.points) ? connector.data.points.length / 2 - 1 : -1) ? 'end' : null;
     const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== moved.entityId ? entity : ({ ...entity,
@@ -418,7 +424,8 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
     const endpoints = connectorEndpoints(moved);
     const dragged = endpoints.find(endpoint => endpoint.role === role);
     const nextAttachments = new Map(entities.map(entity => [entity.entityId, readAttachments(entity).filter(item =>
-        !(item.targetEntityId === moved.entityId && (!gesture || normalizedName(item.targetSocketName) === normalizedName(dragged!.socket.name)))
+        !(item.targetEntityId === moved.entityId && !movingIds.has(entity.entityId)
+            && (!gesture || normalizedName(item.targetSocketName) === normalizedName(dragged!.socket.name)))
         && !(gesture && entity.entityId === moved.entityId && normalizedName(item.localSocketName) === normalizedName(dragged!.socket.name)))]));
     const operations: NixieExperimentalComponentOperationV1[] = [];
     const set: Record<string, import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonValueV1> = {};
@@ -444,6 +451,11 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
     });
     for (const endpoint of connectorEndpoints(moved)) {
         const moving = movingSockets.find(socket => socket.socket.name === endpoint.socket.name)!;
+        const internal = !gesture && endpointAttachmentAt(moved, endpoint.socket.name);
+        if (internal && internal.targetEntityId !== moved.entityId && movingIds.has(internal.targetEntityId)) {
+            claimed.add(internal.targetEntityId + ':' + internal.targetSocketName);
+            continue;
+        }
         if (gesture && endpoint.role !== role) {
             // An endpoint gesture owns one end only. Preserve the opposite link
             // without opportunistically snapping it to a different nearby port.
@@ -459,7 +471,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
         }
         const eligible: Array<{ entityId: string; id: string; position: [number, number, number]; target: WorldSocket; }> = [];
         for (const entity of entities) {
-            if (entity.entityId === moved.entityId) continue;
+            if (movingIds.has(entity.entityId)) continue;
             for (const target of sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection)) {
                 const key = target.entityId + ':' + target.socket.name;
                 const endpointLink = endpointAttachmentAt(entity, target.socket.name);
@@ -478,8 +490,8 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
             }
         }
         const selected = !gesture || gesture.snappingEnabled ? selectNixieExperimentalConnectionTargetV1({
-            point: gesture ? [gesture.worldPoint.x, gesture.worldPoint.y, power ? 0 : gesture.worldPoint.z ?? moving.world[2]] : power ? [moving.world[0], moving.world[1], 0] : moving.world,
-            targets: eligible, maximumDistance: SNAP_DISTANCE,
+            point: gesture ? [gesture.worldPoint.x, gesture.worldPoint.y, power ? 0 : gesture.worldPoint.z ?? moving.world[2]] : [moving.world[0] + (rigidTranslation?.[0] ?? 0), moving.world[1] + (rigidTranslation?.[1] ?? 0), power ? 0 : moving.world[2] + (rigidTranslation?.[2] ?? 0)],
+            targets: eligible, maximumDistance: rigidTranslation ? 1 : SNAP_DISTANCE,
             ...(power && gesture ? { hoveredEntityIds: gesture.hoveredEntityIds } : {}),
         }) : null;
         const best = selected ? { target: selected.target } : null;
@@ -513,17 +525,33 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
             }
             continue;
         }
-        const patch = connectorEndpointPatch(moved, endpoint.role, best.target, matrix, projection);
-        if (!patch) {
-            continue;
-        }
-        if ('points' in patch && set.points) {
-            const points = set.points as number[];
-            const index = endpoint.role === 'start' ? 0 : points.length - 2;
-            points[index] = (patch.points as number[])[index]!;
-            points[index + 1] = (patch.points as number[])[index + 1]!;
+        if (rigidGroup) {
+            if (!rigidTranslation) {
+                rigidTranslation = [best.target.world[0] - moving.world[0], best.target.world[1] - moving.world[1],
+                    power ? 0 : best.target.world[2] - moving.world[2]];
+                const origin = projection.toWorld(moved, [0, 0, 0]);
+                const desired = origin.map((value, axis) => value + rigidTranslation![axis]!) as [number, number, number];
+                const parent = entities.find(entity => entity.entityId === parentId(moved));
+                const local = parent ? projection.toLocal(parent, desired) : desired;
+                if (!local.every(Number.isFinite)) {
+                    return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
+                }
+                const elevation = finite(component(moved, CORE_OWNER_ID, 'spatial-transform')?.data.elevation, 0);
+                finalizedTransform = { x: local[0], y: local[1], ...(Math.abs(local[2] - elevation) > 1e-6 ? { elevation: local[2] } : {}) };
+            }
         } else {
-            Object.assign(set, patch);
+            const patch = connectorEndpointPatch(moved, endpoint.role, best.target, matrix, projection);
+            if (!patch) {
+                continue;
+            }
+            if ('points' in patch && set.points) {
+                const points = set.points as number[];
+                const index = endpoint.role === 'start' ? 0 : points.length - 2;
+                points[index] = (patch.points as number[])[index]!;
+                points[index + 1] = (patch.points as number[])[index + 1]!;
+            } else {
+                Object.assign(set, patch);
+            }
         }
         if (connector.componentId === 'spline-connector') {
             Object.assign(set, { [nodeField]: best.target.entityId, [socketField]: best.target.socket.name });
@@ -545,6 +573,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
             ? { ...candidate, data: { ...candidate.data, attachments: nextAttachments.get(moved.entityId)!.map(link => ({ ...link })) } } : candidate) };
     const finalizedEntities = entities.map(entity => entity.entityId === moved.entityId ? finalizedMoved : entity);
     for (const [entityId, carried] of carriedConnectorPatches(finalizedMoved, finalizedEntities, matrices, sockets(finalizedMoved, matrix))) {
+        if (rigidGroup && movingIds.has(entityId)) continue;
         const entity = entities.find(candidate => candidate.entityId === entityId)!;
         const geometry = connectorComponent(entity)!;
         const delta = Object.fromEntries(Object.entries(carried).filter(([field, value]) => JSON.stringify(geometry.data[field]) !== JSON.stringify(value)));
@@ -562,7 +591,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
             ? { op: 'patch', entityId: entity.entityId, componentId: SOCKET_ATTACHMENTS_COMPONENT_ID, set: { attachments } }
             : { op: 'add', entityId: entity.entityId, componentId: SOCKET_ATTACHMENTS_COMPONENT_ID, data: { attachments } });
     }
-    return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y }, ...(operations.length ? { transaction: { contractVersion: 1, transactionId: `connector-snap-${globalThis.crypto.randomUUID()}`, operations } } : {}) };
+    return { contractVersion: 1, transform: finalizedTransform, ...(operations.length ? { transaction: { contractVersion: 1, transactionId: `connector-snap-${globalThis.crypto.randomUUID()}`, operations } } : {}) };
 }
 
 export function finalizeFoxholeSceneV2Transform(
@@ -584,6 +613,15 @@ export function finalizeFoxholeSceneV2Transform(
     const matrices = worldMatrices(entities, moved.entityId, request.transform);
     const movingSockets = movers.flatMap(entity => sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection));
     const attachmentsByEntity = new Map(entities.map(entity => [entity.entityId, readAttachments(entity)]));
+    const entitiesById = new Map(entities.map(entity => [entity.entityId, entity]));
+    const internallyOccupied = new Set(movingSockets.flatMap(socket => {
+        const attachments = attachmentsByEntity.get(socket.entityId) ?? [];
+        const entity = entitiesById.get(socket.entityId);
+        const endpoint = entity && endpointAttachmentAt(entity, socket.socket.name);
+        return attachments.some(link => normalizedName(link.localSocketName) === normalizedName(socket.socket.name)
+            && movingIds.has(link.targetEntityId)) || (endpoint && movingIds.has(endpoint.targetEntityId))
+            ? [`${socket.entityId}:${normalizedName(socket.socket.name)}`] : [];
+    }));
     let best: { moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; }> = [];
     for (const entity of entities) {
@@ -594,6 +632,9 @@ export function finalizeFoxholeSceneV2Transform(
         for (const target of sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection)) {
             const occupied = attachmentAt(targetAttachments, target.socket.name) ?? endpointAttachmentAt(entity, target.socket.name);
             for (const moving of movingSockets) {
+                if (internallyOccupied.has(`${moving.entityId}:${normalizedName(moving.socket.name)}`)) {
+                    continue;
+                }
                 if (occupied && occupied.targetEntityId !== moving.entityId) {
                     continue;
                 }
