@@ -246,7 +246,8 @@ export async function prepareLegacyBlueprintFile(file: File, source: LegacyBluep
         roots.push(snapshot);
     }
     if (!roots.length) throw new Error('This Blueprint has no insertable content.');
-    return { roots, provenance: { ...await pinLegacyBlueprintConversion(source) } };
+    return { roots, provenance: { ...await pinLegacyBlueprintConversion(source) },
+        onCommit: result.report.hasReportableFindings ? () => openLegacyPlanImportReportDialog(result.report) : undefined };
 }
 
 export async function insertLegacyBlueprintFile(file: File, source: LegacyBlueprintProvenance, context: NixieCommandContext): Promise<boolean> {

@@ -869,3 +869,119 @@ test('Explorer powerline drafts preview socket links and retain the snapped anch
     assert.equal(saved.startAttachmentNodeId, plant!.entityId);
     assert.equal(saved.endAttachmentNodeId, pole!.entityId);
 });
+
+test('connector keyboard rotation persists through confirmation and leaves the source untouched', () => {
+    for (const key of ['facilitypipe', 'powerline']) {
+        const { host, id } = fixture('foxholeSplineConnector', { foxholeKey: key,
+            start: { x: 0, y: 0, rotation: 0 }, end: { x: 200, y: 0, rotation: 0 }, minLength: 10, maxLength: 800 });
+        const entity = host.readEntity(id);
+        const before = host.exportDocument();
+        const draft = foxholeSceneV2StateAdapter.startPlacement!(entity)!;
+        const component = (updates: ReturnType<typeof draft.update>) => previewNixieSceneV2EditableHandleUpdates(entity, updates)
+            .components.find(value => value.componentId === 'spline-connector')!.data;
+        draft.update({ x: 0, y: 0 });
+        assert.ok(draft.rotateBy!(Math.PI / 2), key);
+        assert.equal(draft.confirm({ x: 0, y: 0 }).complete, false);
+        const beforeRotation = component(draft.update({ x: 200, y: 0 }));
+        const rotated = component(draft.rotateBy!(Math.PI / 2)!);
+        if (key === 'powerline') {
+            assert.ok(Math.abs(Number(rotated.endX)) < 1e-8, JSON.stringify(rotated));
+            assert.ok(Number(rotated.endY) > 190);
+            const confirmed = component(draft.confirm({ x: 200, y: 0 }).updates);
+            assert.ok(Math.abs(Number(confirmed.endX)) < 1e-8);
+            assert.ok(Number(confirmed.endY) > 190);
+        } else {
+            assert.ok(Math.abs(Number(rotated.endRotation) - Number(beforeRotation.endRotation) - Math.PI / 2) < 1e-8);
+            const confirmed = component(draft.confirm({ x: 200, y: 0 }).updates);
+            assert.ok(Math.abs(Number(confirmed.endRotation) - Number(rotated.endRotation)) < 1e-8);
+        }
+        assert.deepEqual(host.exportDocument(), before);
+    }
+});
+
+test('connector keyboard rotation rejects invalid steps and preserves socket alignment', () => {
+    const { host } = fixture();
+    host.replaceDocument(convertNixieSceneV1ToV2([
+        { id: 'source', type: 'foxholeAsset', state: { foxholeKey: 'facilitypowerdiesel', x: 0, y: 160 }, children: [] },
+        { id: 'pipe', type: 'foxholeSplineConnector', state: { foxholeKey: 'facilitypipe',
+            start: { x: 0, y: 0, rotation: 0 }, end: { x: 0, y: 0, rotation: 0 },
+            startSocketName: 'BackSocket', endSocketName: 'FrontSocket', minLength: 96, maxLength: 640 }, children: [] },
+    ], { nodeConverters: [convertFoxholeSceneV1NodeToV2] }).content);
+    const entities = host.listEntities();
+    const pipe = entities[1]!;
+    const draft = foxholeSceneV2StateAdapter.startPlacement!(pipe)!;
+    const point = { x: 114.5, y: 104 };
+    const context = { entities, worldPoint: point, hoveredEntityIds: [], isSettingEnabled: () => true,
+        worldTransforms: new Map([...resolveNixieSceneV2Transforms(entities)].map(([id, resolved]) => [id, resolved.world])) };
+    const snapped = draft.update(point, false, context);
+    assert.equal(draft.rotateBy!(Number.NaN), null);
+    assert.equal(draft.rotateBy!(Math.PI / 2), null);
+    const result = draft.confirm(point, context);
+    const before = previewNixieSceneV2EditableHandleUpdates(pipe, snapped).components.find(c => c.componentId === 'spline-connector')!.data;
+    const after = previewNixieSceneV2EditableHandleUpdates(pipe, result.updates).components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.equal(after.startAttachmentNodeId, entities[0]!.entityId);
+    assert.equal(after.startRotation, before.startRotation);
+});
+
+test('powerline rotation follows subsequent pointer movement and checks sockets at the virtual endpoint', () => {
+    const { host } = fixture();
+    host.replaceDocument(convertNixieSceneV1ToV2([
+        { id: 'plant', type: 'foxholeAsset', state: { foxholeKey: 'facilitypowerdiesel', x: 0, y: 0 }, children: [] },
+        { id: 'line', type: 'foxholeSplineConnector', state: { foxholeKey: 'powerline',
+            start: { x: 0, y: 0, rotation: 0 }, end: { x: 200, y: 0, rotation: 0 },
+            startSocketName: 'BackSocket', endSocketName: 'FrontSocket', minLength: 3.2, maxLength: 800 }, children: [] },
+    ], { nodeConverters: [convertFoxholeSceneV1NodeToV2] }).content);
+    const entities = host.listEntities();
+    const line = entities[1]!;
+    const transforms = new Map([...resolveNixieSceneV2Transforms(entities)].map(([id, resolved]) => [id, resolved.world]));
+    const queries: { x: number; y: number; }[] = [];
+    const context = (worldPoint: { x: number; y: number; }) => ({ entities, worldPoint, hoveredEntityIds: [],
+        hoveredEntityIdsAt: (world: { x: number; y: number; }) => {
+            queries.push(world);
+            return [entities[0]!.entityId];
+        },
+        isSettingEnabled: () => true, worldTransforms: transforms });
+    const draft = foxholeSceneV2StateAdapter.startPlacement!(line)!;
+    const before = host.exportDocument();
+    draft.update({ x: 0, y: 0 }, false, context({ x: 0, y: 0 }));
+    draft.confirm({ x: 0, y: 0 }, context({ x: 0, y: 0 }));
+    const cursor = { x: 45, y: 100 };
+    draft.update(cursor, false, context(cursor));
+    draft.rotateBy!(Math.PI / 2);
+    const moved = { x: 56, y: 109.5 };
+    const result = draft.update(moved, false, context(moved));
+    const value = previewNixieSceneV2EditableHandleUpdates(line, result).components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.equal(value.endAttachmentNodeId, entities[0]!.entityId);
+    assert.ok(Math.abs(queries.at(-1)!.x + 109.5) < 1e-8);
+    assert.ok(Math.abs(queries.at(-1)!.y - 56) < 1e-8);
+    assert.equal(draft.rotateBy!(Math.PI / 2), null);
+    const final = previewNixieSceneV2EditableHandleUpdates(line, draft.confirm(moved, context(moved)).updates)
+        .components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.equal(final.endAttachmentNodeId, entities[0]!.entityId);
+    assert.deepEqual(host.exportDocument(), before);
+});
+
+test('repeated keyboard steps rotate chord-driven drafts in world space under mirrored transforms', () => {
+    const { host, id } = fixture('foxholeSplineConnector', { foxholeKey: 'powerline',
+        start: { x: 0, y: 0, rotation: 0 }, end: { x: 200, y: 0, rotation: 0 }, minLength: 10, maxLength: 800 });
+    const entity = host.readEntity(id);
+    const matrix = { a: -1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+    const context = (point: { x: number; y: number; }) => ({ entities: [entity], worldPoint: { x: -point.x, y: point.y },
+        hoveredEntityIds: [], isSettingEnabled: () => false, worldTransforms: new Map([[id, matrix]]) });
+    const draft = foxholeSceneV2StateAdapter.startPlacement!(entity)!;
+    const start = { x: 0, y: 0 };
+    draft.update(start, false, context(start));
+    draft.confirm(start, context(start));
+    const point = { x: 200, y: 0 };
+    draft.update(point, false, context(point));
+    draft.rotateBy!(Math.PI / 4);
+    const step = draft.rotateBy!(Math.PI / 4)!;
+    const rotated = previewNixieSceneV2EditableHandleUpdates(entity, step).components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.ok(Math.abs(Number(rotated.endX)) < 1e-8);
+    assert.ok(Number(rotated.endY) < -190);
+    draft.rotateBy!(-Math.PI / 4);
+    const restored = draft.rotateBy!(-Math.PI / 4)!;
+    const value = previewNixieSceneV2EditableHandleUpdates(entity, restored).components.find(c => c.componentId === 'spline-connector')!.data;
+    assert.ok(Math.abs(Number(value.endX) - 200) < 1e-8);
+    assert.ok(Math.abs(Number(value.endY)) < 1e-8);
+});

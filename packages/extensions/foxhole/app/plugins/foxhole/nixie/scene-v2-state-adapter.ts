@@ -8,11 +8,11 @@ import { getPolylineEditableLocalHandles, movePolylineLocalVertex } from '#nixie
 import { getFoxholeTriangulationFit, resolveFoxholeTriangulationState } from './triangulation.ts';
 import type { FoxholeTriangulationState } from './triangulation.ts';
 import { getFoxholeTriangulationSelectionLocalBounds } from '../../nixie/board/types/foxhole-triangulation.ts';
-import { resolveFoxholeSplinePlacementPreview, resolveFoxholeSplineEndpointSocketSnap } from './spline-connector-placement.ts';
+import { resolveFoxholeSplinePlacementPreview, resolveFoxholeSplineEndpointSocketSnap, resolveMinimumLengthPreviewEnd } from './spline-connector-placement.ts';
 import type { FoxholeSplinePlacementState } from './spline-connector-placement.ts';
 import { normalizeFoxholeSplineConnectorState, resolveEffectiveConnectorPathStyle, getFoxholeSplineConnectorConstraints,
     isPowerlineConnector, worldRotationToEndpointLocal, resolveConnectorSocketSnapStemRotation, usesSplineConnectorSocketSnapping } from './spline-connector.ts';
-import { allowsConnectorRotationHandles, resolveConnectorPathStyle } from './pipe-connector-path.ts';
+import { allowsConnectorRotationHandles, resolveConnectorPathStyle, usesStraightChordPath } from './pipe-connector-path.ts';
 import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeStockpileSelectionGroups, stockpileEntriesToSelections } from './stockpile-groups.ts';
 import { reconcileFoxholeAssetCargoPatch } from './hold-profile.ts';
@@ -25,7 +25,7 @@ import { resolveHitboxHostMetrics } from '#nixie/plugins/nixie/board/utils/hitbo
 import { getFoxholeSplineLocalEditableHandles } from './spline-connector-handles.ts';
 import { clampDraggedSplineEndpoint } from '#nixie/plugins/nixie/board/utils/spline-path.ts';
 import { collectNixieSceneV2FoxholeSockets, isNixieSceneV2FoxholeSocketAvailable } from './scene-v2-socket-geometry.ts';
-import { resolveHoveredFoxholePowerSocketPoint, resolveFoxholePowerlineSelectionQuad, resolveFoxholeConnectorEndpointSockets } from './connector.ts';
+import { resolveHoveredFoxholePowerSocketPoint, resolveFoxholePowerlineSelectionQuad, resolveFoxholeConnectorEndpointSockets, shouldLockFoxholeConnectorEndpointToSocketAxis } from './connector.ts';
 import { FOXHOLE_POWERLINE_CORE_WIDTH } from './powerline-stroke.ts';
 import { FOXHOLE_SOCKET_SNAPPING_SETTING_ID, hasFoxholeSnapSocketTags } from './structure-socket-snapping.ts';
 import { resolveFoxholeSplineDeleteMutation } from './spline-connector-delete.ts';
@@ -247,24 +247,102 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
             return [{ ownerId: OWNER, componentId: 'spline-connector', set, ...(unset.length ? { unset } : {}) },
                 ...(x !== initialTransform.x || y !== initialTransform.y ? [{ ownerId: 'nixie.core', componentId: 'transform', set: { x, y } }] : [])];
         };
+        const allowsRotation = allowsConnectorRotationHandles(pathStyle, state.foxholeKey, { maxArcAngleDeg });
+        let lastPoint: { x: number; y: number; } | undefined;
+        let lastContext: NixieSceneV2PlacementContext | undefined;
+        let pointerRotation = 0;
+        let initialChordRotation = 0;
         const update = (point: { x: number; y: number; }, rotate = false, context?: NixieSceneV2PlacementContext) => {
+            lastPoint = { ...point };
+            lastContext = context;
+            if (rotate) {
+                pointerRotation = 0;
+            }
+            const matrix = context?.worldTransforms.get(entity.entityId) ?? nixieSceneV2TransformMatrix(initialTransform);
+            const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+            let effectivePoint = point;
+            if (pointerRotation !== 0 && Math.abs(determinant) >= 1e-12) {
+                const dx = point.x - state.start.x;
+                const dy = point.y - state.start.y;
+                const wx = matrix.a * dx + matrix.c * dy;
+                const wy = matrix.b * dx + matrix.d * dy;
+                const cosine = Math.cos(pointerRotation);
+                const sine = Math.sin(pointerRotation);
+                const rx = wx * cosine - wy * sine;
+                const ry = wx * sine + wy * cosine;
+                effectivePoint = { x: state.start.x + (matrix.d * rx - matrix.c * ry) / determinant,
+                    y: state.start.y + (matrix.a * ry - matrix.b * rx) / determinant };
+            }
+            // A rotated endpoint is not under the physical cursor. Query both
+            // proximity and hover hits at its actual world position.
+            const worldPoint = context && pointerRotation !== 0
+                ? {
+                    x: context.worldPoint.x + matrix.a * (effectivePoint.x - point.x) + matrix.c * (effectivePoint.y - point.y),
+                    y: context.worldPoint.y + matrix.b * (effectivePoint.x - point.x) + matrix.d * (effectivePoint.y - point.y),
+                }
+                : context?.worldPoint;
+            const effectiveContext = context && worldPoint && pointerRotation !== 0
+                ? { ...context, worldPoint,
+                    hoveredEntityIds: context.hoveredEntityIdsAt?.(worldPoint) ?? [] }
+                : context;
             const role = session.phase === 'pick-start' ? 'start' : 'end';
-            const snapped = resolveEndpointSocketSnap(entity, state, role, point, context);
-            state = { ...state, ...resolveFoxholeSplinePlacementPreview(state, session, point,
+            const snapped = resolveEndpointSocketSnap(entity, state, role, effectivePoint, effectiveContext);
+            state = { ...state, ...resolveFoxholeSplinePlacementPreview(state, session, effectivePoint,
                 { pathStyle, maxArcAngleDeg, rotateActiveEndpoint: rotate, snapped, startAttached: !!state.startAttachment }),
             ...(usesSplineConnectorSocketSnapping(state.foxholeKey)
                 ? { [`${role}Attachment`]: snapped?.attachment }
                 : {}) };
+            if (!allowsRotation && session.phase === 'pick-start' && !snapped && initialChordRotation !== 0) {
+                state.start.rotation = initialChordRotation;
+                state.end = resolveMinimumLengthPreviewEnd(state.start, getFoxholeSplineConnectorConstraints(state, pathStyle), state.foxholeKey);
+            }
             return updates();
         };
         return {
             removeOnCancel: true,
             update,
+            rotateBy(angle) {
+                if (!Number.isFinite(angle) || !lastPoint) {
+                    return null;
+                }
+                const role = session.phase === 'pick-start' ? 'start' : 'end';
+                if (state[`${role}Attachment`]) {
+                    return null;
+                }
+                const matrix = lastContext?.worldTransforms.get(entity.entityId) ?? nixieSceneV2TransformMatrix(initialTransform);
+                const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+                if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) {
+                    return null;
+                }
+                if (allowsRotation) {
+                    const delta = determinant < 0 ? -angle : angle;
+                    state[role].rotation += delta;
+                    if (role === 'start') {
+                        session.manualStartRotation = true;
+                        state.end = resolveMinimumLengthPreviewEnd(state.start, getFoxholeSplineConnectorConstraints(state, pathStyle), state.foxholeKey);
+                    } else {
+                        session.manualEndRotation = true;
+                    }
+                    return updates();
+                }
+                if (role === 'start') {
+                    initialChordRotation += determinant < 0 ? -angle : angle;
+                    return update(lastPoint, false, lastContext);
+                }
+                // Straight connectors attached at the start are locked to its axis.
+                if (shouldLockFoxholeConnectorEndpointToSocketAxis({ usesStraightChord: usesStraightChordPath(pathStyle),
+                    foxholeKey: state.foxholeKey, oppositeEndpointAttached: !!state.startAttachment, activeEndpointSnapped: false })) {
+                    return null;
+                }
+                pointerRotation += angle;
+                return update(lastPoint, false, lastContext);
+            },
             confirm(point, context) {
                 update(point, false, context);
                 const complete = session.phase === 'pick-end';
                 if (!complete) {
                     session.phase = 'pick-end';
+                    pointerRotation = 0;
                     session.lockedStartPosition = undefined;
                     session.lockedEndPosition = undefined;
                     session.manualEndRotation = false;
