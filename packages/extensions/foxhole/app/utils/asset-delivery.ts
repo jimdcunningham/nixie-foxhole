@@ -9,6 +9,7 @@ import { installFoxholeManifest, foxholeManifestSchema } from '../plugins/foxhol
 import { useRuntimeConfig } from '#app';
 import { createLocalFoxholeAssetDelivery } from './local-asset-delivery.ts';
 import { createFoxholeAssetGenerationSelector, type FoxholeAssetGeneration } from './asset-generation.ts';
+import { shouldUseFoxholeLocalAssetDelivery } from '../plugins/foxhole/nixie/map/memory-storage.mjs';
 let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = null;
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
 const revision = shallowRef(0);
@@ -22,7 +23,7 @@ async function read<T>(receipt: CatalogReceipt): Promise<T> {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await metadataCache.loadVerified(receipt.url, receipt, 16 * 1024 * 1024))) as T;
 }
 export function initializeFoxholeAssetDelivery(): void {
-    if (import.meta.dev && useRuntimeConfig().public.foxholeAssetMode === 'local') {
+    if (shouldUseFoxholeLocalAssetDelivery(import.meta.dev, useRuntimeConfig().public.foxholeAssetMode, typeof window === 'undefined' ? undefined : window)) {
         localDelivery ??= createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', globalThis.location.href).href);
         installFoxholeAssetLocations(localDelivery.resolve);
         configureWorldAssetLocations(localDelivery);

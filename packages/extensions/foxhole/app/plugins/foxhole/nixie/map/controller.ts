@@ -16,6 +16,7 @@ import {
 } from '#foxhole/plugins/foxhole/nixie/map/playback-preview.ts';
 import type { FoxholeMapPlaybackPreviewState, FoxholePlaybackPreviewReportEntry } from '#foxhole/plugins/foxhole/nixie/map/playback-preview.ts';
 import { foxholeWarApiStorage } from '#foxhole/plugins/foxhole/nixie/map/storage.ts';
+import { mergeFoxholeMapServerEntry } from './memory-storage.mjs';
 import type { FoxholeMapContext } from './context.ts';
 import { FoxholeMapRenderer } from './renderer.ts';
 import { FoxholeMapTexturePool } from './texture-leases.ts';
@@ -623,10 +624,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
         }
 
         const previous = this.cachedMaps[key] ?? {};
-        const nextValue = {
-            ...previous,
-            ...value,
-        } as FoxholeMapCacheEntry;
+        const nextValue = mergeFoxholeMapServerEntry(previous, value);
         this.cachedMaps[key] = nextValue;
         if (invalidateRenderer) {
             this.liveDataRevision += 1;
