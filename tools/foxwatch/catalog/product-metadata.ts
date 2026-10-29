@@ -115,6 +115,35 @@ export interface FoxholeSceneV2ConnectorMetadata {
     maxArcAngleDeg?: number;
 }
 
+export interface FoxholeSceneV2StructureVolume {
+    category: string;
+    label: string;
+    x: number;
+    y: number;
+    width: number;
+    length: number;
+    rotation: number;
+}
+
+/** Normalize compact FoxWatch volume records once while building the catalog. */
+export function normalizeFoxholeSceneV2StructureVolumes(value: unknown): FoxholeSceneV2StructureVolume[] {
+    if (!Array.isArray(value)) return [];
+    const categories = new Set(['footprint', 'useArea', 'killVolume', 'garageFootprint', 'parkingSpot', 'loadingArea',
+        'interiorArea', 'noBuild', 'docking', 'temperature', 'passenger', 'iceBlocker', 'other']);
+    return value.slice(0, 128).flatMap(entry => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+        const raw = entry as Record<string, unknown>;
+        const x = raw.x ?? 0, y = raw.y ?? 0, width = raw.width ?? raw.w, length = raw.length ?? raw.d;
+        const rotation = raw.rotation ?? raw.r ?? 0;
+        if ([x, y, width, length, rotation].some(value => typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1_000_000)
+            || (width as number) <= 0 || (length as number) <= 0) return [];
+        const category = typeof (raw.category ?? raw.g) === 'string' ? String(raw.category ?? raw.g) : 'other';
+        const label = typeof (raw.label ?? raw.l) === 'string' ? String(raw.label ?? raw.l).trim().slice(0, 128) : '';
+        return [{ category: categories.has(category) ? category : 'other', label: label || 'Volume',
+            x: x as number, y: y as number, width: width as number, length: length as number, rotation: rotation as number }];
+    });
+}
+
 export interface FoxholeSceneV2AssetMetadata {
     model?: import('../../../extensions/foxhole-planner/src/scene-v2-models.ts').FoxholeSceneV2ModelMetadata;
     browserAttributes?: NixieExperimentalProductAttributeV1[];
@@ -128,6 +157,7 @@ export interface FoxholeSceneV2AssetMetadata {
     overlaySockets?: FoxholeBunkerStatisticsSocket[];
     overlayRailCouplers?: FoxholeBunkerStatisticsSocket[];
     selectionPolygons?: Array<{ shape: number[]; }>;
+    structureVolumes?: FoxholeSceneV2StructureVolume[];
     /** Authored Foxhole build footprint polygons in metres from the asset origin. */
     footprintPolygons?: Array<{ shape: number[]; }>;
     /** Static facility placement requires authored foundation coverage. */
@@ -373,6 +403,7 @@ interface PublishedFoxholeModificationSlot {
 export interface PublishedFoxholeAssetForSceneV2 {
     stockpiles?: import('../../../extensions/foxhole-planner/src/stockpile-groups.ts').NativeStockpileGroup[];
     spotlights?: unknown[];
+    structureVolumes?: unknown[];
     bIsBuiltOnFoundation?: boolean;
     bIsBuiltOnLandscape?: boolean;
     vehicleSeats?: unknown[];
@@ -890,6 +921,7 @@ export function createFoxholeSceneV2AssetMetadata(
             && connector?.spline !== true;
         return [asset.id, {
             selectionPolygons: asset.selectionPolygons ?? [],
+            structureVolumes: normalizeFoxholeSceneV2StructureVolumes(asset.structureVolumes),
             footprintPolygons: asset.footprintPolygons ?? [],
             requiresFoundation,
             selectionDestroyed: relatedDestroyed?.sprite
