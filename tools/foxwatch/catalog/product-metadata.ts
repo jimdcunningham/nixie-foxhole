@@ -207,6 +207,8 @@ export interface FoxholeSceneV2AssetMetadata {
     cargo?: FoxholeSceneV2CargoMetadata;
     connector?: FoxholeSceneV2ConnectorMetadata;
     buildSockets: FoxholeSceneV2BuildSocketMetadata[];
+    /** Vehicle seat markers in Scene V2 local coordinates. */
+    vehicleSeats?: Array<{ name?: string; seatType?: string; seatDirection?: string; x: number; y: number; rotation: number; }>;
     spotlights?: FoxholeAuthoredSpotlight[];
     renderLayers: Record<string, FoxholeSceneV2VisualMetadata & { componentTags?: string[]; }>;
     modifications: Record<string, FoxholeSceneV2ModificationSlotMetadata>;
@@ -1081,6 +1083,18 @@ export function createFoxholeSceneV2AssetMetadata(
             ...(cargo ? { cargo } : {}),
             ...(connector ? { connector } : {}),
             buildSockets,
+            vehicleSeats: (asset.vehicleSeats ?? []).slice(0, 128).flatMap(value => {
+                if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+                const seat = value as Record<string, unknown>;
+                // Published FoxWatch seat coordinates use centimetres; omitted compact fields are zero.
+                const x = Number(seat.x ?? 0) * 0.32, y = Number(seat.y ?? 0) * 0.32;
+                const rotation = Number(seat.rotation ?? seat.r ?? 0) * Math.PI / 180;
+                if (![x, y, rotation].every(Number.isFinite) || Math.abs(x) > 1_000_000 || Math.abs(y) > 1_000_000) return [];
+                const field = (input: unknown) => typeof input === 'string' ? input.trim().slice(0, 128) : '';
+                const name = field(seat.name ?? seat.n), seatType = field(seat.seatType ?? seat.t), seatDirection = field(seat.seatDirection ?? seat.d);
+                return [{ ...(name ? { name } : {}), ...(seatType ? { seatType } : {}),
+                    ...(seatDirection ? { seatDirection } : {}), x, y, rotation }];
+            }),
             spotlights: (asset.spotlights ?? []).flatMap(value => {
                 const light = readFoxholeAuthoredSpotlight(value);
                 return light ? [light] : [];

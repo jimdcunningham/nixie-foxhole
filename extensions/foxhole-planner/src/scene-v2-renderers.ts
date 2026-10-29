@@ -1,3 +1,4 @@
+import { renderFoxholeVehicleSeatOverlays } from './scene-v2-vehicle-seat-overlays.ts';
 import { renderFoxholeStructureVolumeOverlays } from './scene-v2-structure-volume-overlays.ts';
 import { renderFoxholeDebugSpotlightOverlays } from './scene-v2-spotlight-overlays.ts';
 import { renderFoxholeModificationSlotOverlays } from './scene-v2-modification-overlays.ts';
@@ -762,6 +763,7 @@ function renderFoxholeSceneV2EntityPlan(
     }
     visualState.nodes.push(...renderFoxholeModificationSlotOverlays(assetMetadata, context.settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeStructureVolumeOverlays(assetMetadata, context.settings ?? {}, appearance));
+    visualState.nodes.push(...renderFoxholeVehicleSeatOverlays(assetMetadata, context.settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeDebugSpotlightOverlays(assetMetadata, context.settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance, assetId));
