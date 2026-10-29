@@ -42,9 +42,9 @@ const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async ge
     return {library, manifest, mapData};
 }, (prepared, generation) => {
     publishedLibrary = prepared?.library ?? null;
-    installFoxholeManifest(prepared?.manifest ?? null);
     const library = prepared?.library;
     installFoxholeAssetLocations(library ? path => library.resolve(path) : null);
+    installFoxholeManifest(prepared?.manifest ?? null);
     if (!library || !generation) configureWorldAssetLocations(null);
     else {
         const byUrl = new Map([...library.files.values()].map(location => [location.url, location]));

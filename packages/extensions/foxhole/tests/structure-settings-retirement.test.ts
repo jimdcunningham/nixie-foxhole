@@ -25,6 +25,7 @@ for (const [file, className, expectedUpdates] of [
         const settings = reactive(new Map(initial));
         const bindings = {
             watch,
+            getFoxholeManifestRevision: () => 0,
             FOXHOLE_STRUCTURE_DEBUG_OVERLAY_SETTING_IDS: ['debug'],
             FOXHOLE_CONNECTOR_DEBUG_OVERLAY_SETTING_IDS: ['debug'],
             FOXHOLE_SPLINE_CONNECTOR_DEBUG_OVERLAY_SETTING_IDS: ['debug'],
@@ -70,6 +71,7 @@ for (const [file, className, expectedUpdates] of [
             node.settingsWatcher?.();
             node.rangeSettingsWatcher?.();
             node.itemTileSettingsWatcher?.();
+            node.catalogRevisionWatcher?.();
             node.selectionStateWatcher?.();
         }
     });

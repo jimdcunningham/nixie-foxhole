@@ -1,3 +1,4 @@
+import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import { canFoxholeSocketConnectionOpenWalls } from '#foxhole/plugins/foxhole/nixie/socket-wall-visibility.ts';
 import { resolveFoxholeFiringPortReplacedWallLayerIds } from '#foxhole/plugins/foxhole/nixie/firing-port-wall-visibility.ts';
 import { resolveFoxholeLadderReplacedRoofLayerIds } from '#foxhole/plugins/foxhole/nixie/ladder-roof-visibility.ts';
@@ -800,6 +801,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     private settingsWatcher: WatchStopHandle | null = null;
     private rangeSettingsWatcher: WatchStopHandle | null = null;
     private itemTileSettingsWatcher: WatchStopHandle | null = null;
+    private catalogRevisionWatcher: WatchStopHandle | null = null;
     private markedCargoDevOffsetWatcher: WatchStopHandle | null = null;
     private selectionStateWatcher: (() => void) | null = null;
     private overlaySyncDisposed = false;
@@ -1319,6 +1321,8 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         this.rangeSettingsWatcher = null;
         this.itemTileSettingsWatcher?.();
         this.itemTileSettingsWatcher = null;
+        this.catalogRevisionWatcher?.();
+        this.catalogRevisionWatcher = null;
         this.markedCargoDevOffsetWatcher?.();
         this.markedCargoDevOffsetWatcher = null;
         this.selectionStateWatcher?.();
@@ -2995,6 +2999,21 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
                 this.syncRangeOverlay();
                 this.syncHitboxDebugOverlay();
             }
+        });
+
+        // Existing nodes may outlive an accepted asset generation. Refresh only
+        // their artwork and overlays, preserving any live transform gesture.
+        this.catalogRevisionWatcher = watch(getFoxholeManifestRevision, () => {
+            if (this.destroyed) {
+                return;
+            }
+            this.markedCargoOverlayCacheKey = '';
+            this.productionOutputOverlayCacheKey = '';
+            this.syncStructureRenderLayers();
+            this.syncModificationOverlay();
+            this.syncPackagedPalletOverlay();
+            this.syncMarkedCargoOverlay();
+            void this.ensureTextureLoaded();
         });
 
         this.itemTileSettingsWatcher = watch(() => [

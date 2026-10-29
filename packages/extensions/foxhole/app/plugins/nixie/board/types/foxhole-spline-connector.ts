@@ -1,3 +1,4 @@
+import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import { canFoxholeSocketConnectionOpenWalls } from '#foxhole/plugins/foxhole/nixie/socket-wall-visibility.ts';
 import { resolveFoxholeSplineConnectorSockets, populateFoxholeSplineConnectorSocketOverlay } from '#foxhole/plugins/foxhole/nixie/spline-connector-sockets.ts';
 import type { FoxholeSplineConnectorResolvedSocket } from '#foxhole/plugins/foxhole/nixie/spline-connector-sockets.ts';
@@ -465,6 +466,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
     readonly socketOverlay: PIXI.Container;
     private readonly settingsStore = useNixieSettingsStore();
     private settingsWatcher: WatchStopHandle | null = null;
+    private catalogRevisionWatcher: WatchStopHandle | null = null;
     private underlayMesh: PIXI.Mesh | null = null;
     private spanMesh: PIXI.Mesh | null = null;
     private spanMeshIsTrenchBuildSite = false;
@@ -553,6 +555,11 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
         this.bindCanvasToolColorWatcher();
         this.bindDebugOverlaySettings();
         this.bindModificationHoverPreviewWatcher();
+        this.catalogRevisionWatcher = watch(getFoxholeManifestRevision, () => {
+            if (!this.destroyed) {
+                this.syncFromState(true);
+            }
+        });
         this.overlaySyncFoxholeKey = this.boardState.foxholeKey;
         if (isTrenchConnector(this.boardState.foxholeKey)) {
             registerFoxholeRoofHoverHost(this);
@@ -2625,6 +2632,8 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
         this.canvasToolColorWatcher = null;
         this.settingsWatcher?.();
         this.settingsWatcher = null;
+        this.catalogRevisionWatcher?.();
+        this.catalogRevisionWatcher = null;
         this.modificationHoverPreviewWatcher?.();
         this.modificationHoverPreviewWatcher = null;
         resetPowerlineMotion(this.powerlineMotion);
@@ -3549,7 +3558,7 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
         });
     }
 
-    private syncFromState(): void {
+    private syncFromState(preserveTransform = false): void {
         const previewGeometry = this.resolveTransientPowerlinePreview();
         const wasAttachedStructurePreviewActive = this.attachedStructurePreviewActive;
         this.attachedStructurePreviewActive = previewGeometry !== null;
@@ -3563,8 +3572,10 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
             }
             : this.boardState;
 
-        this.applyRenderedPowerlineTransform(renderedState,
-            previewGeometry !== null || wasAttachedStructurePreviewActive);
+        if (!preserveTransform) {
+            this.applyRenderedPowerlineTransform(renderedState,
+                previewGeometry !== null || wasAttachedStructurePreviewActive);
+        }
 
         const previewAlpha = this.getResolvedUpgradeHoverPreviewAlpha();
         const alpha = Math.max(0, Math.min(1, this.boardState.alpha ?? 1)) * previewAlpha;

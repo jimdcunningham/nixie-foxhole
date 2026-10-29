@@ -1,6 +1,8 @@
+import { getFoxholeLegacyItemCatalog, getFoxholeLegacyStructureCatalog, resolveFoxholeLegacyOverlayIcon } from '#foxhole/plugins/foxhole/nixie/legacy-asset-catalog.ts';
+import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import FoxholeStructureInspectorCard from '#foxhole/components/nixie/foxhole/FoxholeStructureInspectorCard.vue';
 
-import { createFoxholeAssetsBaseUrl, getFoxholeItemCatalog, getFoxholeStructureCatalog, resolveFoxholeSharedPackagedPalletFromCatalog, resolveFoxholeTextureUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
+import { createFoxholeAssetsBaseUrl, resolveFoxholeSharedPackagedPalletFromCatalog, resolveFoxholeTextureUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 
 
 import {
@@ -44,11 +46,11 @@ import type { NixieCommandContext } from '#nixie/plugins/nixie/registry/types.ts
 import type { NixieProjectOperation } from '#nixie/plugins/nixie/project.ts';
 
 const FOXHOLE_ASSET_BASE_URL = createFoxholeAssetsBaseUrl('/');
-const FOXHOLE_CATALOG = getFoxholeStructureCatalog(FOXHOLE_ASSET_BASE_URL);
-const FOXHOLE_ITEM_CATALOG = getFoxholeItemCatalog(FOXHOLE_ASSET_BASE_URL);
+const getStructureCatalog = getFoxholeLegacyStructureCatalog;
+const getItemCatalog = getFoxholeLegacyItemCatalog;
 const FOXHOLE_PRODUCTION_INDEX = getFoxholeProductionIndex(FOXHOLE_ASSET_BASE_URL);
 const FOXHOLE_STRUCTURE_POWER_DELTA_BY_ID = Object.fromEntries(
-    Object.values(FOXHOLE_CATALOG.structureByKey).map(structure => [
+    Object.values(getStructureCatalog().structureByKey).map(structure => [
         structure.id,
         structure.powerGridInfo?.powerDelta ?? null,
     ]),
@@ -60,36 +62,29 @@ const FOXHOLE_HITBOX_CLIPBOARD_KIND = 'foxhole-hitboxes';
 const FOXHOLE_HITBOX_CLIPBOARD_VERSION = 1;
 
 registerNixieHitboxHostNodeType(FOXHOLE_ASSET_NODE_TYPE);
-function resolveFoxholeOverlayItemIconUrl(codename: string): string | null {
-    const key = String(codename ?? '').trim();
-    if (!key) {
-        return null;
-    }
-    const item = FOXHOLE_ITEM_CATALOG.assetByKey[key]
-        ?? FOXHOLE_ITEM_CATALOG.assetByKey[key.toLowerCase()];
-    if (item?.iconUrl || item?.previewIconUrl) {
-        return item.iconUrl ?? item.previewIconUrl;
-    }
-    const structure = FOXHOLE_CATALOG.assetByKey[key]
-        ?? FOXHOLE_CATALOG.assetByKey[key.toLowerCase()];
-    return structure?.iconUrl ?? structure?.previewIconUrl ?? null;
-}
+const resolveFoxholeOverlayItemIconUrl = resolveFoxholeLegacyOverlayIcon;
 
 const overlayHoverEntries = new Map<string, NixieResolvedAssetEntry>();
+let overlayHoverRevision = -1;
 function resolveFoxholeOverlayItemHoverEntry(codename: string): NixieResolvedAssetEntry | null {
     const key = String(codename ?? '').trim();
     if (!key) {
         return null;
     }
+    const revision = getFoxholeManifestRevision();
+    if (revision !== overlayHoverRevision) {
+        overlayHoverEntries.clear();
+        overlayHoverRevision = revision;
+    }
     const cached = overlayHoverEntries.get(key);
     if (cached) {
         return cached;
     }
-    const item = FOXHOLE_ITEM_CATALOG.assetByKey[key]
-        ?? FOXHOLE_ITEM_CATALOG.assetByKey[key.toLowerCase()]
+    const item = getItemCatalog().assetByKey[key]
+        ?? getItemCatalog().assetByKey[key.toLowerCase()]
         ?? null;
-    const structure = FOXHOLE_CATALOG.assetByKey[key]
-        ?? FOXHOLE_CATALOG.assetByKey[key.toLowerCase()];
+    const structure = getStructureCatalog().assetByKey[key]
+        ?? getStructureCatalog().assetByKey[key.toLowerCase()];
     const entry = createFoxholeItemHoverEntry(
         item,
         key,
@@ -138,7 +133,7 @@ function collectFoxholeSelectionTierMutationEntries(
             return [];
         }
 
-        const mutation = resolveFoxholeStructureTierMutation(FOXHOLE_CATALOG, state, direction);
+        const mutation = resolveFoxholeStructureTierMutation(getStructureCatalog(), state, direction);
         return mutation ? [{ nodeId, mutation }] : [];
     });
 }
@@ -723,12 +718,12 @@ export default defineContribution({
         {
             type: FOXHOLE_ASSET_NODE_TYPE,
             stateSchema: foxholeStructureStateSchema,
-            getSnapshotDependencies: snapshot => getFoxholeSnapshotDependencies(snapshot, FOXHOLE_CATALOG),
+            getSnapshotDependencies: snapshot => getFoxholeSnapshotDependencies(snapshot, getStructureCatalog()),
             remapCloneReferences: (snapshot, { idMap }) => remapFoxholeStructureSnapshotCloneReferences(snapshot, idMap),
             create: (snapshot, context) => {
                 const state = snapshot.state as FoxholeStructureState;
                 const foxholeKey = String(state.foxholeKey ?? '').trim();
-                const catalogAsset = foxholeKey ? FOXHOLE_CATALOG.assetByKey[foxholeKey] : null;
+                const catalogAsset = foxholeKey ? getStructureCatalog().assetByKey[foxholeKey] : null;
 
                 return new FoxholeStructureNode({
                     id: snapshot.id,
@@ -739,11 +734,11 @@ export default defineContribution({
                     historyRecorder: context.historyRecorder,
                     syncAdapter: context.syncAdapter,
                     definition: {
-                        assetResolver: foxholeKey => FOXHOLE_CATALOG.assetByKey[String(foxholeKey ?? '').trim()],
-                        structureResolver: foxholeKey => FOXHOLE_CATALOG.structureByKey[String(foxholeKey ?? '').trim()],
-                        packagedPalletResolver: shippableType => resolveFoxholeSharedPackagedPalletFromCatalog(FOXHOLE_CATALOG, shippableType),
+                        assetResolver: foxholeKey => getStructureCatalog().assetByKey[String(foxholeKey ?? '').trim()],
+                        structureResolver: foxholeKey => getStructureCatalog().structureByKey[String(foxholeKey ?? '').trim()],
+                        packagedPalletResolver: shippableType => resolveFoxholeSharedPackagedPalletFromCatalog(getStructureCatalog(), shippableType),
                         modificationVisualResolver: (foxholeKey, slotId, variantId) => {
-                            const asset = FOXHOLE_CATALOG.assetByKey[String(foxholeKey ?? '').trim()];
+                            const asset = getStructureCatalog().assetByKey[String(foxholeKey ?? '').trim()];
                             const slot = asset?.modificationSlotById[String(slotId ?? '').trim()];
                             const variant = slot?.variantById[String(variantId ?? '').trim()];
                             const isUpgrade = variant?.isUpgrade === true;

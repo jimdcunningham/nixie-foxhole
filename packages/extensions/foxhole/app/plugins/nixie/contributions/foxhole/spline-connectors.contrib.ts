@@ -1,4 +1,4 @@
-import { createFoxholeAssetsBaseUrl, getFoxholeStructureCatalog } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
+import { getFoxholeLegacyStructureCatalog } from '#foxhole/plugins/foxhole/nixie/legacy-asset-catalog.ts';
 import { FOXHOLE_SPLINE_CONNECTOR_NODE_TYPE } from '#foxhole/plugins/foxhole/nixie/spline-connector.ts';
 import { foxholeSplineConnectorStateSchema } from '#foxhole/plugins/foxhole/nixie/spline-connector-schema.ts';
 import { remapFoxholeConnectorSnapshotCloneReferences } from '#foxhole/plugins/foxhole/nixie/snapshot-clone-references.ts';
@@ -6,8 +6,7 @@ import { getFoxholeSnapshotDependencies } from '#foxhole/plugins/foxhole/nixie/s
 import { FoxholeSplineConnectorNode } from '#foxhole/plugins/nixie/board/types/foxhole-spline-connector.ts';
 import { defineContribution } from '#nixie/plugins/nixie/registry/index.ts';
 
-const FOXHOLE_ASSET_BASE_URL = createFoxholeAssetsBaseUrl('/');
-const FOXHOLE_CATALOG = getFoxholeStructureCatalog(FOXHOLE_ASSET_BASE_URL);
+const getStructureCatalog = getFoxholeLegacyStructureCatalog;
 
 export default defineContribution({
     nodes: [
@@ -28,7 +27,7 @@ export default defineContribution({
         {
             type: FOXHOLE_SPLINE_CONNECTOR_NODE_TYPE,
             stateSchema: foxholeSplineConnectorStateSchema,
-            getSnapshotDependencies: snapshot => getFoxholeSnapshotDependencies(snapshot, FOXHOLE_CATALOG),
+            getSnapshotDependencies: snapshot => getFoxholeSnapshotDependencies(snapshot, getStructureCatalog()),
             remapCloneReferences: (snapshot, { idMap }) => remapFoxholeConnectorSnapshotCloneReferences(snapshot, idMap),
             create: (snapshot, context) => new FoxholeSplineConnectorNode({
                 id: snapshot.id,
@@ -39,8 +38,8 @@ export default defineContribution({
                 historyRecorder: context.historyRecorder,
                 syncAdapter: context.syncAdapter,
                 definition: {
-                    assetResolver: foxholeKey => FOXHOLE_CATALOG.assetByKey[String(foxholeKey ?? '').trim()],
-                    structureResolver: foxholeKey => FOXHOLE_CATALOG.structureByKey[String(foxholeKey ?? '').trim()],
+                    assetResolver: foxholeKey => getStructureCatalog().assetByKey[String(foxholeKey ?? '').trim()],
+                    structureResolver: foxholeKey => getStructureCatalog().structureByKey[String(foxholeKey ?? '').trim()],
                 },
             }),
         },
