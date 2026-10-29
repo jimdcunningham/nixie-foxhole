@@ -100,3 +100,25 @@ test('nonzero pipe spans preserve native radius validation and underground exemp
         assert.ok(nodes.filter(node => node.kind === 'sprite' || node.kind === 'mesh').every(node => node.tint !== SPLINE_PATH_INVALID_TINT));
     }
 });
+
+test('crane rail renders its continuous textured track from an interval catalog', () => {
+    const asset = assets.cranerailtrackspline!;
+    assert.ok(asset.renderLayers.span);
+    assert.ok(asset.connector?.meshConfigs.some(config => config.mode.includes('spline')));
+    // Preserve compatibility with the existing published catalog classification.
+    const legacy = { ...asset, connector: { ...asset.connector!, pathStyle: 'interval' } };
+    for (const endX of [160, 640, 960]) {
+        const nodes = renderFoxholeSceneV2SplineConnector(connector('cranerailtrackspline', {
+            endX, minLength: 160, maxLength: 960, minRadius: 0, maxRadius: 0,
+        }), legacy);
+        const span = nodes.find(node => node.id === 'spline-connector-span');
+        assert.ok(span?.kind === 'mesh');
+        assert.equal(span.resourceId, asset.renderLayers.span.resourceId);
+        assert.ok(span.positions.length > 8);
+        const xs = span.positions.filter((_, index) => index % 2 === 0);
+        const ys = span.positions.filter((_, index) => index % 2 === 1);
+        assert.ok(Math.max(...xs) - Math.min(...xs) >= endX - 1);
+        assert.ok(Math.max(...ys) - Math.min(...ys) > 200);
+        assert.equal(nodes.some(node => node.id.startsWith('spline-connector-interval')), false);
+    }
+});

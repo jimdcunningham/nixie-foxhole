@@ -144,7 +144,9 @@ function buildSplineRibbon(
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
     const style = asset?.connector?.pathStyle;
     const sandbag = /^sandbag(?:half|full)spline$/iu.test(data.foxholeKey);
-    if (!visual || visual.width <= 0 || visual.height <= 0 || (style === 'interval' && !sandbag) || style === 'endpoints-only' || behavior.undergroundPipe) {
+    // Some published interval catalogs (crane rail) still declare a continuous spline mesh.
+    const hasSplineMesh = asset?.connector?.meshConfigs.some(config => config.mode.includes('spline'));
+    if (!visual || visual.width <= 0 || visual.height <= 0 || (style === 'interval' && !sandbag && !hasSplineMesh) || style === 'endpoints-only' || behavior.undergroundPipe) {
         return null;
     }
     const rawLayer = foxholeSceneV2GeometryLayer(visual);
