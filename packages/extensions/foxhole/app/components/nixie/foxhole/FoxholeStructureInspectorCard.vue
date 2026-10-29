@@ -18,7 +18,7 @@ import { FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS } from '#foxhole/plugins/foxhole/ni
 import { FOXHOLE_ASSET_SOURCE_ID } from '#foxhole/plugins/foxhole/nixie/assets-browser.ts';
 import { getFoxholeStructureAsset, getFoxholeStructureCatalog } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import { isFoxholeStructureDestroyed, resolveFoxholeStructureDestroyedMutation } from '#foxhole/plugins/foxhole/nixie/structure-destroyed-actions.ts';
-import { canDissolveHitboxPolygons } from '#foxhole/plugins/foxhole/nixie/hitbox-dissolve.ts';
+import { canDissolveHitboxPolygons, dissolveHitboxPolygons } from '#foxhole/plugins/foxhole/nixie/hitbox-dissolve.ts';
 import {
     FOXHOLE_ASSET_NODE_TYPE,
     normalizeFoxholeColorHex,
@@ -26,6 +26,11 @@ import {
 } from '#foxhole/plugins/foxhole/nixie/types.ts';
 import { buildFoxholeWikiPageUrl } from '#foxhole/plugins/foxhole/nixie/wiki.ts';
 import { traceHitboxAlphaForHost } from '#nixie/plugins/nixie/contributions/actions/shared/hitbox-commands.ts';
+import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNixieEditorDocumentSession.ts';
+import { getNixieSceneV2HitboxHost, createNixieSceneV2Hitbox, fitNixieSceneV2Hitbox, exportNixieSceneV2Hitboxes } from '#nixie/plugins/nixie/scene-v2/hitbox.ts';
+import { readNixieSceneV2Hitbox } from '#nixie/utils/nixie-scene-v2-editable-handles.ts';
+import { getFoxholeSelectedModificationSlotVariants, normalizeFoxholeModificationSelectionMap } from '#foxhole/plugins/foxhole/nixie/modification-slots.ts';
+import { isFoxholeHitboxPasteContextCurrent, parseFoxholeHitboxClipboard, serializeFoxholeHitboxClipboard } from '#foxhole/plugins/foxhole/nixie/scene-v2-hitbox-clipboard.ts';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { useNixieSidebarAssetHoverCard } from '#nixie/composables/useNixieSidebarAssetHoverCard.ts';
 import type {
@@ -33,7 +38,7 @@ import type {
     NixieInspectorContributionNode,
     NixieResolvedAssetEntry,
 } from '#nixie/plugins/nixie/registry/index.ts';
-import { writeClipboardText } from '#nixie/plugins/nixie/clipboard.ts';
+import { readClipboardText, writeClipboardText } from '#nixie/plugins/nixie/clipboard.ts';
 import { listHitboxChildren } from '#nixie/plugins/nixie/board/utils/hitbox-host.ts';
 import {
     getHitboxHostSizeScale,
@@ -145,6 +150,7 @@ const FOXHOLE_BOARD_PIXELS_PER_METER = 32;
 
 const { assetBaseUrl, t } = useFoxholeLocalization();
 const runtime = useNixieRuntime();
+const documentSession = useNixieEditorDocumentSessionOptional();
 const runtimeConfig = useRuntimeConfig();
 const user = useSupabaseUser();
 const settingsStore = useNixieSettingsStore();
@@ -300,7 +306,51 @@ const canViewHitboxes = computed(() => canAccessNixieDevFeatures(isAdminUser.val
 const canExportHitboxHandoff = computed(() => canAccessNixieDevFeatures(isAdminUser.value)
     && hitboxOverlayEnabled.value
     && hasMultiTargetSelection.value
+    && !documentSession?.isSceneV2Active.value
     && selectionEntries.value.some(entry => Boolean(entry.asset)));
+const sceneV2Active = computed(() => documentSession?.isSceneV2Active.value === true);
+const sceneV2Host = computed(() => {
+    void documentSession?.sceneV2Editor.value?.revision;
+    if (!sceneV2Active.value || !canViewHitboxes.value || !documentSession) return null;
+    const session = documentSession;
+    const controller = session.sceneV2Editor.value?.controller;
+    const viewId = session.activeViewId.value;
+    if (!controller) return null;
+    const host = getNixieSceneV2HitboxHost(controller, () => session.isSceneV2Active.value
+        && session.activeViewId.value === viewId && session.sceneV2Editor.value?.controller === controller);
+    const expected = String(props.node.targetIds[0] ?? props.node.snapshot.id ?? '');
+    return host?.entityId === expected ? host : null;
+});
+const sceneV2Hitboxes = computed(() => {
+    void documentSession?.sceneV2Editor.value?.revision;
+    const host = sceneV2Host.value;
+    if (!host) return [];
+    return host.sceneV2Controller.entities.flatMap(entity => {
+        const hierarchy = entity.components.find(component => component.ownerId === 'nixie.core'
+            && component.componentId === 'hierarchy' && component.definitionAvailable);
+        if (hierarchy?.data.parentId !== host.entityId) return [];
+        const state = readNixieSceneV2Hitbox(entity);
+        return state ? [{ entity, state }] : [];
+    });
+});
+function sceneV2DefaultPolygons(): number[][] {
+    const selected = getFoxholeSelectedModificationSlotVariants(asset.value?.modificationSlots ?? [],
+        normalizeFoxholeModificationSelectionMap(props.node.snapshot.state.modificationVariantIds));
+    const variants = selected.find(entry => entry.variant.lineOfSightPolygons.length > 0)?.variant.lineOfSightPolygons;
+    const polygons = variants ?? structureCatalog.value.structureByKey[foxholeKey.value]?.lineOfSightPolygons ?? [];
+    return polygons.flatMap(polygon => polygon.shape.length >= 6 && polygon.shape.length % 2 === 0 && polygon.shape.every(Number.isFinite)
+        ? [polygon.shape.map(value => value * FOXHOLE_BOARD_PIXELS_PER_METER)] : []);
+}
+function sceneV2Metrics() {
+    const host = sceneV2Host.value;
+    return host?.sceneV2Controller.canvas.current()?.hitboxHostMetrics?.(host.entityId) ?? null;
+}
+function createSceneV2Polygon(points: number[], name: string, role: NixieHitboxState['role'] = 'solid'): void {
+    const host = sceneV2Host.value;
+    const metrics = sceneV2Metrics();
+    if (!host || !metrics || !canEditHitboxes.value) return;
+    createNixieSceneV2Hitbox(host, points, metrics.width, metrics.height, name, role);
+}
 const selectedStructureNode = computed(() => {
     if (!canViewHitboxes.value) {
         return null;
@@ -317,6 +367,19 @@ const hitboxEntries = computed<FoxholeHitboxInspectorEntry[]>(() => {
     // Child hitboxes change without replacing the selected host node, so track
     // scene mutations directly to keep the tables and their actions current.
     void runtime.project?.scene.revision.value;
+    if (sceneV2Active.value) {
+        const metrics = sceneV2Metrics();
+        if (!metrics) return [];
+        return sceneV2Hitboxes.value.map(({ entity, state }) => {
+            const { scaleX, scaleY } = getHitboxHostSizeScale(state.basisWidth, state.basisHeight, metrics);
+            const points: Array<{ x: number; y: number }> = [];
+            for (let index = 0; index + 1 < state.points.length; index += 2) {
+                points.push({ x: state.points[index]! * scaleX / FOXHOLE_BOARD_PIXELS_PER_METER,
+                    y: state.points[index + 1]! * scaleY / FOXHOLE_BOARD_PIXELS_PER_METER });
+            }
+            return { id: entity.entityId, name: state.name || 'Hitbox', role: state.role, points };
+        });
+    }
     const structure = selectedStructureNode.value;
     if (!structure) {
         return [];
@@ -505,41 +568,119 @@ async function copyAssetId(): Promise<void> {
 }
 
 function addHitbox(): void {
+    if (sceneV2Active.value) {
+        const metrics = sceneV2Metrics();
+        if (!metrics) return;
+        const x = -metrics.width * metrics.anchorX, y = -metrics.height * metrics.anchorY;
+        const fallback = [x, y, x + metrics.width, y, x + metrics.width, y + metrics.height, x, y + metrics.height];
+        createSceneV2Polygon(sceneV2DefaultPolygons()[0] ?? fallback,
+            sceneV2Hitboxes.value.length ? `solid-${sceneV2Hitboxes.value.length + 1}` : 'solid');
+        return;
+    }
     void runtime.commands.execute('foxhole.lineOfSight.addHitbox');
 }
 
-function copyHitboxes(): void {
-    void runtime.commands.execute('foxhole.lineOfSight.copyHitboxes');
+function sceneV2Export() {
+    const host = sceneV2Host.value;
+    return host ? exportNixieSceneV2Hitboxes(host) : null;
 }
-
-function pasteHitboxes(): void {
-    void runtime.commands.execute('foxhole.lineOfSight.pasteHitboxes');
+function sceneV2Override() {
+    const document = sceneV2Export();
+    return document?.hitboxes.map(hitbox => ({ shape: hitbox.pointsFlat.map(value => Math.round(value / FOXHOLE_BOARD_PIXELS_PER_METER * 1000) / 1000) }))
+        .filter(polygon => polygon.shape.length >= 6) ?? [];
 }
-
+function downloadJson(value: unknown, filename: string): void {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+    const link = window.document.createElement('a');
+    link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
+}
+async function copyHitboxes(): Promise<void> {
+    if (!sceneV2Active.value) { void runtime.commands.execute('foxhole.lineOfSight.copyHitboxes'); return; }
+    const document = sceneV2Export();
+    if (!document || !document.hitboxes.length || document.source.width <= 0 || document.source.height <= 0) return;
+    await writeClipboardText(serializeFoxholeHitboxClipboard(document.hitboxes, { width: document.source.width, height: document.source.height,
+        anchorX: document.source.pivot[0], anchorY: document.source.pivot[1] }));
+}
+async function pasteHitboxes(): Promise<void> {
+    if (!sceneV2Active.value) { void runtime.commands.execute('foxhole.lineOfSight.pasteHitboxes'); return; }
+    const host = sceneV2Host.value, metrics = sceneV2Metrics();
+    if (!host || !metrics || !canEditHitboxes.value) return;
+    const canvas = host.sceneV2Controller.canvas.current();
+    const revision = host.sceneV2Controller.entities.find(entity => entity.entityId === host.entityId)?.revision;
+    const clipboard = await readClipboardText();
+    if (!isFoxholeHitboxPasteContextCurrent({ hostId: host.entityId, revision, canvas, metrics }, {
+        hostId: sceneV2Host.value?.entityId,
+        revision: host.sceneV2Controller.entities.find(entity => entity.entityId === host.entityId)?.revision,
+        canvas: host.sceneV2Controller.canvas.current(), metrics: sceneV2Metrics(), current: host.isCurrent(),
+    })) return;
+    let count = sceneV2Hitboxes.value.length;
+    for (const polygon of parseFoxholeHitboxClipboard(clipboard, metrics)) {
+        const name = polygon.name || `solid-${count + 1}`;
+        if (createNixieSceneV2Hitbox(host, polygon.points, metrics.width, metrics.height, name, polygon.role)) count++;
+    }
+}
 function exportHitboxes(): void {
-    void runtime.commands.execute('foxhole.lineOfSight.exportOverride');
+    if (!sceneV2Active.value) { void runtime.commands.execute('foxhole.lineOfSight.exportOverride'); return; }
+    const polygons = sceneV2Override();
+    if (polygons.length && foxholeKey.value) downloadJson({ lineOfSightPolygons: polygons }, `${foxholeKey.value.toLowerCase()}.manifest.json`);
 }
-
-function copyHitboxAgentPrompt(): void {
-    void runtime.commands.execute('foxhole.lineOfSight.copyAgentPrompt');
+async function copyHitboxAgentPrompt(): Promise<void> {
+    if (!sceneV2Active.value) { void runtime.commands.execute('foxhole.lineOfSight.copyAgentPrompt'); return; }
+    const polygons = sceneV2Override(), key = foxholeKey.value.trim().toLowerCase();
+    if (!polygons.length || !key) return;
+    await writeClipboardText([`Update the authored FoxWatch override for \`${key}\`.`, '',
+        'Repository: `https://github.com/jimdcunningham/nixie-foxhole`', '',
+        `Edit \`tools/foxwatch/asset-overrides/${key}/manifest.json\` and set \`lineOfSightPolygons\` to exactly:`,
+        '```json', JSON.stringify(polygons, null, 2), '```', '',
+        `Preserve every other existing manifest property. From the nixie-foxhole repository root, run \`node ./tools/foxwatch/run-foxwatch.mjs refresh --only ${key}\` to refresh the generated Foxhole assets. Do not edit generated public manifests directly.`].join('\n'));
 }
-
 function dissolveHitboxTriangles(): void {
-    void runtime.commands.execute('foxhole.lineOfSight.dissolveTriangles');
+    if (!sceneV2Active.value) { void runtime.commands.execute('foxhole.lineOfSight.dissolveTriangles'); return; }
+    const host = sceneV2Host.value, metrics = sceneV2Metrics(), document = sceneV2Export();
+    if (!host || !metrics || !document || !canEditHitboxes.value) return;
+    const groups = new Map<NixieHitboxState['role'], Array<{ id: string; points: number[] }>>();
+    sceneV2Hitboxes.value.forEach((entry, index) => {
+        const polygon = document.hitboxes[index];
+        if (!polygon) return;
+        const entries = groups.get(entry.state.role) ?? [];
+        entries.push({ id: entry.entity.entityId, points: polygon.pointsFlat });
+        groups.set(entry.state.role, entries);
+    });
+    for (const entries of groups.values()) {
+        const dissolved = dissolveHitboxPolygons(entries.map(entry => entry.points));
+        if (!dissolved || dissolved.length >= entries.length) continue;
+        const updates = dissolved.map((points, index) => ({ entityId: entries[index]!.id, ownerId: 'nixie.core', componentId: 'hitbox',
+            set: { points, basisWidth: metrics.width, basisHeight: metrics.height } }));
+        if (host.sceneV2Controller.updateEntityComponents(updates).ok) host.sceneV2Controller.deleteEntities(entries.slice(dissolved.length).map(entry => entry.id));
+    }
 }
-
 function exportHitboxHandoff(): void {
     void runtime.commands.execute('foxhole.lineOfSight.exportHandoff');
 }
 
 watch(
-    [canViewHitboxes, () => String(props.node.targetIds[0] ?? props.node.snapshot.id ?? '')],
-    ([canView, nodeId]) => {
-        if (canView && nodeId) {
-            // Debug Hitboxes is the authoring mode: materialize only authored
-            // source polygons, never a fallback rectangle, for direct editing.
+    [canViewHitboxes, () => String(props.node.targetIds[0] ?? props.node.snapshot.id ?? ''), sceneV2Active, () => sceneV2Host.value?.entityId ?? ''],
+    ([canView, nodeId], _previous, onCleanup) => {
+        if (!canView || !nodeId) return;
+        if (!sceneV2Active.value) {
             void runtime.commands.execute('foxhole.lineOfSight.ensureHitboxes');
+            return;
         }
+        // The canvas can attach after the Inspector. Wait briefly for its host
+        // metrics, then perform this once for the current selection only.
+        let frame = 0, attempts = 0, cancelled = false;
+        const prepare = () => {
+            if (cancelled || !canEditHitboxes.value || sceneV2Hitboxes.value.length) return;
+            const host = sceneV2Host.value, polygons = sceneV2DefaultPolygons();
+            if (!polygons.length) return;
+            if (!host || !sceneV2Metrics()) {
+                if (++attempts < 120) frame = requestAnimationFrame(prepare);
+                return;
+            }
+            polygons.forEach((points, index) => createSceneV2Polygon(points, index ? `solid-${index + 1}` : 'solid'));
+        };
+        prepare();
+        onCleanup(() => { cancelled = true; cancelAnimationFrame(frame); });
     },
     { immediate: true },
 );
@@ -553,6 +694,17 @@ async function updateHitboxPoint(hitboxId: string, pointIndex: number, axis: 'x'
         return;
     }
     const value = Number((event.target as HTMLInputElement).value);
+    if (sceneV2Active.value) {
+        const host = sceneV2Host.value, metrics = sceneV2Metrics();
+        const hitbox = sceneV2Hitboxes.value.find(entry => entry.entity.entityId === hitboxId);
+        if (!host || !metrics || !hitbox || !Number.isFinite(value)) return;
+        const { scaleX, scaleY } = getHitboxHostSizeScale(hitbox.state.basisWidth, hitbox.state.basisHeight, metrics);
+        const points = [...hitbox.state.points], offset = pointIndex * 2 + (axis === 'x' ? 0 : 1);
+        if (offset < 0 || offset >= points.length) return;
+        points[offset] = value * FOXHOLE_BOARD_PIXELS_PER_METER / (axis === 'x' ? scaleX : scaleY);
+        host.sceneV2Controller.updateEntityComponents([{ entityId: hitboxId, ownerId: 'nixie.core', componentId: 'hitbox', set: { points } }]);
+        return;
+    }
     const structure = selectedStructureNode.value;
     const hitbox = runtime.project?.scene.getNodeById(hitboxId);
     if (!structure || !hitbox || !Number.isFinite(value)) {
@@ -575,6 +727,15 @@ async function deleteHitboxPoint(hitboxId: string, pointIndex: number): Promise<
     if (!canEditHitboxes.value) {
         return;
     }
+    if (sceneV2Active.value) {
+        const host = sceneV2Host.value;
+        const hitbox = sceneV2Hitboxes.value.find(entry => entry.entity.entityId === hitboxId);
+        if (!host || !hitbox || hitbox.state.points.length <= 6 || pointIndex < 0 || pointIndex * 2 >= hitbox.state.points.length) return;
+        const points = [...hitbox.state.points];
+        points.splice(pointIndex * 2, 2);
+        host.sceneV2Controller.updateEntityComponents([{ entityId: hitboxId, ownerId: 'nixie.core', componentId: 'hitbox', set: { points } }]);
+        return;
+    }
     const hitbox = runtime.project?.scene.getNodeById(hitboxId);
     const state = hitbox?.boardState as NixieHitboxState | undefined;
     if (!state || state.points.length <= 6) {
@@ -589,11 +750,23 @@ async function deleteHitbox(hitboxId: string): Promise<void> {
     if (!canEditHitboxes.value) {
         return;
     }
+    if (sceneV2Active.value) {
+        const host = sceneV2Host.value;
+        if (host && sceneV2Hitboxes.value.some(entry => entry.entity.entityId === hitboxId)) host.sceneV2Controller.deleteEntities([hitboxId]);
+        return;
+    }
     await runtime.project?.deleteNode(hitboxId, 'inspector:foxhole-hitbox-delete');
 }
 
 async function fitHitboxToTextureAlpha(hitboxId: string): Promise<void> {
     if (!canEditHitboxes.value || fittingHitboxId.value) {
+        return;
+    }
+    if (sceneV2Active.value) {
+        const host = sceneV2Host.value;
+        if (!host || !sceneV2Hitboxes.value.some(entry => entry.entity.entityId === hitboxId)) return;
+        fittingHitboxId.value = hitboxId;
+        try { await fitNixieSceneV2Hitbox(host, hitboxId, {}); } finally { fittingHitboxId.value = null; }
         return;
     }
     const structure = selectedStructureNode.value;
