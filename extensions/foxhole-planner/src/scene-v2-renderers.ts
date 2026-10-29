@@ -570,13 +570,13 @@ function renderFoxholeSceneV2EntityPlan(
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, context.settings ?? {});
         }
         const wheel = foxholeConnectorGeometryWheel(resolved, splineAsset);
+        const content = renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered, splineAsset, destroyedAsset);
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
+            experimentalSelectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
                 ...(wheel ? { geometryWheelControl: wheel } : {}) },
             ...(spatial ? { experimentalSpatial: spatial } : {}),
-            root: { id: 'root', kind: 'group', children: [...renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered,
-                splineAsset, destroyedAsset), ...renderFoxholeConnectorGuides(resolved,
+            root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')]), ...renderFoxholeConnectorSocketOverlays(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')], attachments, context.settings ?? {})] },
         };
