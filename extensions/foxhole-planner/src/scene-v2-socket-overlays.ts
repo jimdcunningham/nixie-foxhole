@@ -12,6 +12,26 @@ export type FoxholePipeDisplayFlow = 'input' | 'output' | 'bidirectional';
 export const FOXHOLE_POWER_SOCKET_COLOR = 0xFFD800;
 export const FOXHOLE_PIPE_SOCKET_COLORS = { input: 0xFF2A2A, output: 0x3DDC4E, bidirectional: 0x3D8BFF };
 
+/** A power socket remains available until all of its connection slots are used. */
+function resolveOccupiedSockets(asset: FoxholeSceneV2AssetMetadata,
+    variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown): Set<string> {
+    const rows = Array.isArray(attachments) ? attachments : [];
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+        if (row && typeof row === 'object' && !Array.isArray(row) && typeof row.localSocketName === 'string') {
+            counts.set(row.localSocketName, (counts.get(row.localSocketName) ?? 0) + 1);
+        }
+    }
+    const occupied = new Set(counts.keys());
+    for (const socket of resolveFoxholeEffectiveStructureSocketSources(asset, variants)) {
+        if (resolveFoxholeSocketDisplayKind(socket) === 'power'
+            && (counts.get(socket.name) ?? 0) < Math.max(1, asset.powerSocketMaxConnections ?? 1)) {
+            occupied.delete(socket.name);
+        }
+    }
+    return occupied;
+}
+
 /** Use the same effective socket sources and visibility rules as the flat view, retaining authored height. */
 export function renderFoxholeSpatialSocketMarkers(asset: FoxholeSceneV2AssetMetadata,
     variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown,
@@ -19,22 +39,7 @@ export function renderFoxholeSpatialSocketMarkers(asset: FoxholeSceneV2AssetMeta
     if (appearance.destroyed || appearance.packaged) {
         return [];
     }
-    const occupied = new Set(Array.isArray(attachments)
-        ? attachments.flatMap(value => value && typeof value === 'object'
-            && !Array.isArray(value) && typeof value.localSocketName === 'string'
-            ? [value.localSocketName]
-            : [])
-        : []);
-    // Power sockets may accept multiple cables; a single occupied row does not necessarily exhaust the port.
-    if (Array.isArray(attachments)) {
-        for (const socket of resolveFoxholeEffectiveStructureSocketSources(asset, variants)) {
-            const count = attachments.filter(value => value && typeof value === 'object' && !Array.isArray(value)
-                && value.localSocketName === socket.name).length;
-            if (resolveFoxholeSocketDisplayKind(socket) === 'power' && count < Math.max(1, asset.powerSocketMaxConnections ?? 1)) {
-                occupied.delete(socket.name);
-            }
-        }
-    }
+    const occupied = resolveOccupiedSockets(asset, variants, attachments);
     const markers: NixieExperimentalSpatialMarkerV1[] = resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings).slice(0, 128).map((entry, index) => ({
         id: `socket-${index}`, point: [entry.x, entry.y, Number(entry.socket.z ?? 0) * 0.32],
         color: entry.kind === 'power' ? FOXHOLE_POWER_SOCKET_COLOR : FOXHOLE_PIPE_SOCKET_COLORS[entry.flow], label: entry.socket.name.slice(0, 128),
@@ -183,12 +188,7 @@ export function renderFoxholeStructureSocketOverlays(asset: FoxholeSceneV2AssetM
     variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown,
     settings: Readonly<Record<string, boolean>>, appearance: { destroyed: boolean; packaged: boolean; }, assetId = ''): NixieExtensionRenderNodeV1[] {
     if (appearance.destroyed || appearance.packaged) return [];
-    const occupied = new Set(Array.isArray(attachments)
-        ? attachments.flatMap(value => value && typeof value === 'object'
-            && !Array.isArray(value) && typeof value.localSocketName === 'string'
-            ? [value.localSocketName]
-            : [])
-        : []);
+    const occupied = resolveOccupiedSockets(asset, variants, attachments);
     const all = settings[FOXHOLE_ALL_SOCKETS_SETTING_ID] === true;
     const showLabels = settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true;
     const sockets = resolveFoxholeEffectiveStructureSocketSources(asset, variants).flatMap(socket => {

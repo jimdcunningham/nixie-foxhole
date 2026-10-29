@@ -33,6 +33,28 @@ test('multi-connection power sockets remain targetable until capacity is exhaust
     assert.ok(render([row, row, row]).every(marker => marker.label !== 'PowerSocket'));
 });
 
+test('2D power socket indicators respect connection capacity like spatial markers', () => {
+    const multiple = { ...asset, powerSocketMaxConnections: 3 };
+    const row = { localSocketName: 'PowerSocket' };
+    const appearance = { destroyed: false, packaged: false };
+    const render = (attachments: unknown[]) => renderFoxholeStructureSocketOverlays(multiple, [], attachments,
+        { 'foxhole.debug.structure.pipeSockets': false }, appearance)[0];
+    const visible = (attachments: unknown[]) => {
+        const group = render(attachments);
+        return group?.kind === 'group' ? group.children.length : 0;
+    };
+    assert.equal(visible([]), 1);
+    assert.equal(visible([row]), 1);
+    assert.equal(visible([row, row]), 1);
+    assert.equal(visible([row, row, row]), 0);
+    assert.equal(visible([row, row, row, row]), 0);
+    assert.equal(renderFoxholeStructureSocketOverlays(asset, [], [row],
+        { 'foxhole.debug.structure.pipeSockets': false }, appearance)[0]?.kind, 'group');
+    const single = renderFoxholeStructureSocketOverlays(asset, [], [row],
+        { 'foxhole.debug.structure.pipeSockets': false }, appearance)[0];
+    assert.equal(single?.kind === 'group' ? single.children.length : 0, 0);
+});
+
 test('socket display retains Native positions, occupancy exclusions and independent saved visibility settings', () => {
     const before = structuredClone(asset);
     const sockets = resolveFoxholeStructureDisplaySockets(asset, [], new Set(['PowerSocket']), {});
