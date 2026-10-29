@@ -1315,14 +1315,17 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     const socketAttachments = convertSocketAttachments(state.socketAttachments, resolveEntityId);
     issues.push(...socketAttachments.issues);
 
-    const unsupportedFlags = [
-        ['maintenance filters', hasEntries(state.maintenanceFilters)],
-        ['legacy base upgrades', hasEntries(state.baseUpgrades)],
-    ] as const;
-    for (const [label, present] of unsupportedFlags) {
-        if (present) {
-            issues.push(unsupportedStateIssue(`Foxhole ${label} is not represented by Scene V2 yet and remains in legacy source data.`));
-        }
+    if (hasEntries(state.maintenanceFilters)) {
+        issues.push({
+            ...unsupportedStateIssue('Foxhole maintenance filters are not represented by Scene V2 yet and remain in legacy source data.'),
+            severity: 'warning',
+        });
+    }
+    if (hasEntries(state.baseUpgrades)) {
+        issues.push({
+            ...unsupportedStateIssue('Foxhole legacy base upgrades are not represented by Scene V2 yet and remain in legacy source data.'),
+            severity: 'warning',
+        });
     }
 
     const renderable = getFoxholeSceneV2RenderableAssetIds().has(assetId);

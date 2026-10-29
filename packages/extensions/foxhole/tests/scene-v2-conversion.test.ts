@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerFoxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
+import { prepareNixieSceneV2Snapshots } from '../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
+import { registerNixieSceneV1NodeConverter } from '../../../nixie/app/utils/nixie-scene-v2-converter-registry.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 import { createFoxholeSplineConnectorSnapshot } from '../app/plugins/foxhole/nixie/spline-connector-snapshot.ts';
@@ -802,6 +804,37 @@ test('Foxhole triangulations convert to fitted renderer data without losing disp
     });
 });
 
+test('legacy maintenance filters are preserved and reported as a nonblocking warning', () => {
+    const maintenanceFilters = { categories: ['defenses'], enabled: true };
+    const source = [{ ...attachmentTarget(), state: { ...attachmentTarget().state, maintenanceFilters } }];
+    const original = structuredClone(source);
+    const result = convertNixieSceneV1ToV2(source, { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+    const issue = result.report.issues.find(entry => entry.message.includes('maintenance filters'));
+    assert.equal(result.report.preservedOnlyNodeCount, 0);
+    assert.equal(issue?.code, 'unsupported-state');
+    assert.equal(issue?.severity, 'warning');
+    const legacy = result.content.entities[0]!.components.find(component => component.componentId === 'legacy-source');
+    assert.deepEqual(JSON.parse(String(legacy?.data.snapshotJson)).state.maintenanceFilters, maintenanceFilters);
+    assert.deepEqual(source, original);
+});
+
+test('Scene V2 preparation permits preserved legacy metadata but rejects malformed topology', () => {
+    registerNixieSceneV1NodeConverter('test.foxhole-parity-warning', convertFoxholeSceneV1NodeToV2);
+    const maintenanceFilters = { categories: ['defenses'] };
+    const baseUpgrades = ['legacy-upgrade'];
+    const source = { ...attachmentTarget(), state: { ...attachmentTarget().state, maintenanceFilters, baseUpgrades } };
+    const warnings: Array<{ message: string; severity?: string; }> = [];
+    const draft = prepareNixieSceneV2Snapshots([source], undefined, { onWarnings: entries => warnings.push(...entries) });
+    assert.equal(warnings.length, 2);
+    assert.ok(warnings.some(issue => issue.severity === 'warning' && issue.message.includes('maintenance filters')));
+    assert.ok(warnings.some(issue => issue.severity === 'warning' && issue.message.includes('legacy base upgrades')));
+    const legacy = draft.entities[0]!.components.find(component => component.componentId === 'legacy-source');
+    const saved = JSON.parse(String(legacy?.data.snapshotJson));
+    assert.deepEqual(saved.state.maintenanceFilters, maintenanceFilters);
+    assert.deepEqual(saved.state.baseUpgrades, baseUpgrades);
+    assert.throws(() => prepareNixieSceneV2Snapshots([{ ...source, state: { ...source.state, socketAttachments: [] } }]), /socket attachments are malformed/i);
+});
+
 test('invalid socket topology still blocks insertion rather than claiming parity', () => {
     for (const [socketAttachments, expected] of [
         [[], /malformed/],
@@ -815,7 +848,8 @@ test('invalid socket topology still blocks insertion rather than claiming parity
         const original = structuredClone(source);
         const result = convertNixieSceneV1ToV2(source, { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
         assert.equal(result.report.visualParity, false);
-        assert.ok(result.report.issues.some(issue => issue.code === 'unsupported-state' && expected.test(issue.message)));
+        assert.ok(result.report.issues.some(issue => issue.code === 'unsupported-state' && expected.test(issue.message)
+            && issue.severity !== 'warning'));
         assert.deepEqual(source, original);
     }
 });
