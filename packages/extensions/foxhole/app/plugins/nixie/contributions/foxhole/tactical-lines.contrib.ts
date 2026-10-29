@@ -415,14 +415,7 @@ export default defineContribution({
     tools: [
         {
             metadata: TACTICAL_LINE_TOOL_METADATA,
-            sceneV2Authoring: {
-                kind: 'polyline', minimumPoints: 2,
-                getDefaults: () => ({ ...createTacticalLineToolOptionsFromPreset('frontline') }),
-                createSnapshot: ({ id, points, options }) => createFoxholeTacticalLineSnapshot({ id, points,
-                    state: createTacticalLineStatePatchFromOptions(options) }),
-                renderPreview: (snapshot, graphics, _labels, scale) => renderFoxholeTacticalLineGraphics(graphics,
-                    applyFoxholeTacticalLinePreset(snapshot.state), scale),
-            },
+            sceneV2Visibility: 'hidden',
             create: context => new FoxholeTacticalLineTool(context),
         },
     ],

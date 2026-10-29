@@ -590,14 +590,7 @@ export default defineContribution({
     tools: [
         {
             metadata: RANGE_TOOL_METADATA,
-            sceneV2Authoring: {
-                kind: 'two-point', minimumPoints: 2, minimumLength: MIN_COMMIT_RADIUS_WORLD,
-                getDefaults: () => ({ ...createRangeToolOptionsFromDefaults() }),
-                createSnapshot: ({ id, points, options }) => createFoxholeRangeSnapshot({ id, points,
-                    state: createRangeStatePatchFromOptions(options) }),
-                renderPreview: (snapshot, graphics, labels, scale) => renderFoxholeRangeVisuals(graphics, labels,
-                    normalizeFoxholeRangeState(snapshot.state), scale),
-            },
+            sceneV2Visibility: 'hidden',
             create: context => new FoxholeRangeTool(context),
         },
     ],

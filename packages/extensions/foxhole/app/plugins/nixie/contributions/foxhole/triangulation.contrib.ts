@@ -571,14 +571,7 @@ export default defineContribution({
     tools: [
         {
             metadata: TRIANGULATION_TOOL_METADATA,
-            sceneV2Authoring: {
-                kind: 'polyline', minimumPoints: 3,
-                getDefaults: () => ({ ...createTriangulationToolOptionsFromDefaults() }),
-                createSnapshot: ({ id, points, options }) => createFoxholeTriangulationSnapshot({ id, points,
-                    state: createTriangulationStatePatchFromOptions(options) }),
-                renderPreview: (snapshot, graphics, labels, scale) => renderFoxholeTriangulationVisuals(graphics, labels,
-                    normalizeFoxholeTriangulationState(snapshot.state), scale, undefined, { alwaysShowEdgeLines: true }),
-            },
+            sceneV2Visibility: 'hidden',
             create: context => new FoxholeTriangulationTool(context),
         },
     ],

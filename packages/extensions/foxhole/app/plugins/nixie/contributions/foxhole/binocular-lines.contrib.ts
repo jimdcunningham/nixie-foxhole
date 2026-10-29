@@ -449,14 +449,7 @@ export default defineContribution({
     tools: [
         {
             metadata: BINOCULAR_LINE_TOOL_METADATA,
-            sceneV2Authoring: {
-                kind: 'polyline', minimumPoints: 2,
-                getDefaults: () => ({ ...createBinocularLineToolOptionsFromDefaults() }),
-                createSnapshot: ({ id, points, options }) => createFoxholeBinocularLineSnapshot({ id, points,
-                    state: createBinocularLineStatePatchFromOptions(options) }),
-                renderPreview: (snapshot, graphics, labels, scale) => renderFoxholeBinocularLineVisuals(graphics, labels,
-                    normalizeFoxholeBinocularLineState(snapshot.state), scale),
-            },
+            sceneV2Visibility: 'hidden',
             create: context => new FoxholeBinocularLineTool(context),
         },
     ],
