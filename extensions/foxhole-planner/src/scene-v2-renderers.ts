@@ -1,3 +1,4 @@
+import { renderFoxholeModificationSlotOverlays } from './scene-v2-modification-overlays.ts';
 import { foxholeConnectorGeometryHandles, foxholeConnectorGeometryWheel } from './connector-gesture-policy.ts';
 import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
@@ -757,6 +758,7 @@ function renderFoxholeSceneV2EntityPlan(
     if (firingVolumes.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, volumes: firingVolumes };
     }
+    visualState.nodes.push(...renderFoxholeModificationSlotOverlays(assetMetadata, context.settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance, assetId));
     const rotation = entity.components.find(component => (
