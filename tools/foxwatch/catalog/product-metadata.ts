@@ -25,6 +25,7 @@ export interface FoxholeSceneV2ModificationVariantMetadata {
     browserPreview?: FoxholeSceneV2AssetMetadata['browserPreview'];
     overlaySockets?: FoxholeBunkerStatisticsSocket[];
     selectionPolygons?: Array<{ shape: number[]; }>;
+    lineOfSightPolygons?: Array<{ shape: number[]; }>;
     id?: string;
     label?: string;
     resourceId: string;
@@ -115,6 +116,19 @@ export interface FoxholeSceneV2ConnectorMetadata {
     maxArcAngleDeg?: number;
 }
 
+/** Bound source polygons before forwarding them to extension renderers. */
+export function normalizeFoxholeSceneV2LineOfSightPolygons(value: unknown): Array<{ shape: number[] }> {
+    if (!Array.isArray(value)) return [];
+    let remaining = 4096;
+    return value.slice(0, 128).flatMap(entry => {
+        const shape = entry && typeof entry === 'object' ? (entry as { shape?: unknown }).shape : undefined;
+        if (!Array.isArray(shape) || shape.length < 6 || shape.length % 2 !== 0 || shape.length > remaining
+            || !shape.every(point => typeof point === 'number' && Number.isFinite(point) && Math.abs(point) <= 1_000_000)) return [];
+        remaining -= shape.length;
+        return [{ shape: [...shape] as number[] }];
+    });
+}
+
 export interface FoxholeSceneV2StructureVolume {
     category: string;
     label: string;
@@ -157,6 +171,7 @@ export interface FoxholeSceneV2AssetMetadata {
     overlaySockets?: FoxholeBunkerStatisticsSocket[];
     overlayRailCouplers?: FoxholeBunkerStatisticsSocket[];
     selectionPolygons?: Array<{ shape: number[]; }>;
+    lineOfSightPolygons?: Array<{ shape: number[]; }>;
     structureVolumes?: FoxholeSceneV2StructureVolume[];
     /** Authored Foxhole build footprint polygons in metres from the asset origin. */
     footprintPolygons?: Array<{ shape: number[]; }>;
@@ -381,6 +396,7 @@ interface PublishedFoxholeModificationVariant {
     icons?: { default?: string; rendered?: string; };
     buildSockets?: PublishedFoxholeBuildSocket[];
     selectionPolygons?: Array<{ shape: number[]; }>;
+    lineOfSightPolygons?: Array<{ shape: number[]; }>;
     cost?: Record<string, unknown>;
     name?: string;
     upgradeName?: string;
@@ -444,6 +460,7 @@ export interface PublishedFoxholeAssetForSceneV2 {
     wheelBase?: number;
     railCouplers?: unknown[];
     selectionPolygons?: Array<{ shape: number[]; }>;
+    lineOfSightPolygons?: Array<{ shape: number[]; }>;
     footprintPolygons?: Array<{ shape: number[]; }>;
     categoryId?: string;
     isItem?: boolean;
@@ -796,6 +813,7 @@ export function createFoxholeSceneV2AssetMetadata(
                     offsetX: finiteNumber(resolvedSprite.offsetX) * FOXHOLE_BOARD_SPRITE_SCALE,
                     offsetY: finiteNumber(resolvedSprite.offsetY) * FOXHOLE_BOARD_SPRITE_SCALE,
                     selectionPolygons: resolved.selectionPolygons ?? [],
+                    lineOfSightPolygons: normalizeFoxholeSceneV2LineOfSightPolygons(resolved.lineOfSightPolygons),
                     isUpgrade: resolved.isUpgrade === true,
                     label: strings[resolved.name ?? '']?.trim() || resolved.upgradeName?.trim() || humanizeAssetId(variantId),
                 } satisfies FoxholeSceneV2ModificationVariantMetadata];
@@ -923,6 +941,7 @@ export function createFoxholeSceneV2AssetMetadata(
             && connector?.spline !== true;
         return [asset.id, {
             selectionPolygons: asset.selectionPolygons ?? [],
+            lineOfSightPolygons: normalizeFoxholeSceneV2LineOfSightPolygons(asset.lineOfSightPolygons),
             structureVolumes: normalizeFoxholeSceneV2StructureVolumes(asset.structureVolumes),
             footprintPolygons: asset.footprintPolygons ?? [],
             requiresFoundation,
