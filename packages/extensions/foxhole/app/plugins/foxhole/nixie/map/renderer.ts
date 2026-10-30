@@ -948,13 +948,15 @@ export class FoxholeMapRenderer {
                 }
             }
 
+            let borderChanged = false;
             const borderInstructions = view.border.context?.instructions ?? [];
             for (const instruction of borderInstructions) {
-                if (instruction?.data?.style) {
+                if (instruction?.data?.style && instruction.data.style.width !== borderLineThickness) {
                     instruction.data.style.width = borderLineThickness;
+                    borderChanged = true;
                 }
             }
-            view.border.context?.onUpdate?.();
+            if (borderChanged) view.border.context?.onUpdate?.();
 
             const subregionsVisible = (settings.voronoi || settings.faction || settings.hotspots) && (view.container.visible ?? true);
             view.subregions.visible = subregionsVisible;

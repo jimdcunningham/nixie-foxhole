@@ -17,11 +17,12 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     const background = { label: 'foxhole-map-background' };
     const summaries = { label: 'foxhole-map-casualty-labels' };
     const summaryGroups = [{ content: {}, anchor: { x: 10, y: 20 }, offset: 30, anchorHalfHeight: 10 }];
+    const borders = { label: 'foxhole-map-borders' };
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const world = { sync(value: any) { spatialSyncs.push(value); }, active: false, sampleGround: () => null, setGroundCutouts() {}, destroy() {} };
     let settingsReads = 0;
     const settings = reactive({ regionKeys: ['WestgateHex'], worldLayers: { terrain: true }, enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 });
-    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, summaries, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
+    const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, summaries, borders, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
     const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
         getFoxholeMapRegionBillboardGroups: (content: unknown) => {
             assert.equal(content, summaries);
@@ -64,7 +65,9 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     adapter.hoverPresentation(icons, pointer);
     assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
-    assert.equal(layers.length, 4);
+    assert.equal(layers.length, 5);
+    assert.equal(layers[4].liveGraphics, true, 'only small map borders opt into display-rate geometry');
+    assert.equal(layers[1].liveGraphics, false);
     assert.equal(layers[3].billboardGroups, summaryGroups, '2.5D must retain layout metadata before a budgeted switch to 3D');
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
@@ -94,7 +97,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(adapter.spatialGroundVisible(), true, 'no selected region leaves ordinary canvas ground available');
     settings.regionKeys = ['WestgateHex'];
     assert.equal(adapter.navigationBounds(), null);
-    assert.equal(adapter.spatialLayers().length, 3);
+    assert.equal(adapter.spatialLayers().length, 4);
     assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, summaryGroups);
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = '2d';
