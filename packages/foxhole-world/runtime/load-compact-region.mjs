@@ -151,20 +151,23 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
 
  const catalog=()=>catalogReady??=readWorldCatalog({baseUrl,signal,onAsset:provider.trackExternalAsset});
  async function models(key,taskSignal,bridgesOnly=false,category=key,cellData){
-  const ctx=taskContext(taskSignal,'World '+key),group={};modelGroups.set(key,group);
+  const ctx=taskContext(taskSignal,'World '+key),group={};modelGroups.set(key,group);let catalogTask;
+  // Layout ownership exists before native models finish. Start the independent
+  // catalog work there; settle both producers before rollback on any failure.
+  const startCatalog=manifest=>catalogTask??=loadRegionCatalog({flagSurfacePass:true,baseUrl,scheduleModelTask,catalog:manifest,layers:group.world.layers,placements:group.world.catalogPlacements,signal:taskSignal,onAsset:provider.trackExternalAsset,progressive,publishBatch,getWarState:()=>warState,actorVisible:group.world.actorVisible,lightBudget:catalogLights,frame}).then(value=>({value}),error=>({error,failed:true}));
   try{taskSignal.throwIfAborted();const manifest=bridgesOnly?undefined:await catalog();
    const visibilityData=await metadata();sharedActorVisibility??=createWorldActorVisibility({region,prototypes:visibilityData.prototypes});
    group.world=await loadWorldModels({flagSurfacePass:true,region,json:async id=>{taskSignal.throwIfAborted();const value=await modelJson(id);taskSignal.throwIfAborted();return value;},status,root:ctx.root,assetUrl:provider.url,loadModel:ctx.model,signal:taskSignal,batchLayout:'category',catalogResourceFields:true,catalog:manifest,worldData:cellData||await metadata(),visibilityData,actorVisibility:sharedActorVisibility,categories:bridgesOnly?undefined:[category],bridgesOnly,progressive,optimize:modelLod,vegetationDensity,vegetationShadows,windMaterials,priorityPosition,
     publishBatch:build=>publishBatch(()=>{taskSignal.throwIfAborted();return build();}),
-    onLayout(value){group.world=value;if(!bridgesOnly){targets[category]??=[];targets[category].push(value.layers[category]);}refresh();},teamAt:()=> 'NONE',
+    onLayout(value){group.world=value;if(!bridgesOnly){targets[category]??=[];targets[category].push(value.layers[category]);void startCatalog(manifest);}refresh();},teamAt:()=> 'NONE',
     flagTexture:team=>nativeFactionFlagTexture(baseUrl,team,{onAsset:provider.trackExternalAsset})});
    if(group.world.counts.failed.length||group.world.counts.lodFailures.length)throw Error('Region model load incomplete: '+JSON.stringify([...group.world.counts.failed,...group.world.counts.lodFailures].slice(0,3)));
    group.dispose=()=>{group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();modelGroups.delete(key);if(!bridgesOnly)targets[category]=(targets[category]||[]).filter(layer=>layer!==group.world?.layers[category]);ctx.rollback();};
    if(bridgesOnly){ctx.root.visible=false;return;}
    if(category==='structures'){const data=cellData||await metadata();const placements=craneSpawnPlacements({prototypes:data.prototypes.filter(p=>!catalogBindingFor(p,manifest))});group.cranes=await loadRegionCranes({baseUrl,scheduleModelTask,root:group.world.layers[key],placements,signal:taskSignal,publishBatch,getActorVisible:()=>group.world.actorVisible});}
-   group.catalog=await loadRegionCatalog({flagSurfacePass:true,baseUrl,scheduleModelTask,catalog:manifest,layers:group.world.layers,placements:group.world.catalogPlacements,signal:taskSignal,onAsset:provider.trackExternalAsset,progressive,publishBatch,getWarState:()=>warState,actorVisible:group.world.actorVisible,lightBudget:catalogLights,frame});
+   const catalogResult=await startCatalog(manifest);if(catalogResult.failed)throw catalogResult.error;group.catalog=catalogResult.value;
    taskSignal.throwIfAborted();group.world.counts.cranePlacements=group.cranes?.count||0;group.world.counts.catalog=group.catalog.summary;refresh();framePreparation?.prepare(ctx.root);scene.prepareFirstFrame(renderer,ctx.root);return group;
-  }catch(error){group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();modelGroups.delete(key);if(!bridgesOnly)targets[category]=(targets[category]||[]).filter(layer=>layer!==group.world?.layers[category]);ctx.rollback();throw error;}
+  }catch(error){const catalogResult=await catalogTask;if(!group.catalog)catalogResult?.value?.destroy();group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();modelGroups.delete(key);if(!bridgesOnly)targets[category]=(targets[category]||[]).filter(layer=>layer!==group.world?.layers[category]);ctx.rollback();throw error;}
  }
  async function streamModels(category,taskSignal){
   if(!adaptiveStreaming){await models(category,taskSignal,false,category);return;}

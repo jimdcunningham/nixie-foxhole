@@ -25,7 +25,8 @@ import {createRegionLayerVisibility} from '../runtime/region-layer-visibility.mj
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return{promise,resolve};};
 const source=readFileSync(new URL('../runtime/load-compact-region.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace('export async function','async function')+'\nloadCompactRegion;';
 
-function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adaptiveStreaming,terrainLod=adaptiveStreaming,adaptiveTextures=false,waterGeometry=false,previewTerrain=false,deferEnvironment=false,disposalGates=null}={}){
+function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adaptiveStreaming,terrainLod=adaptiveStreaming,adaptiveTextures=false,waterGeometry=false,previewTerrain=false,deferEnvironment=false,deferCatalog=false,failModels=false,disposalGates=null}={}){
+ const catalogGate=deferred();let catalogRequests=0,catalogDisposed=0;
  const surface=deferred(),models=deferred(),visible=deferred(),layout=deferred(),previewShown=deferred(),environmentGate=deferred(),environmentStarted=deferred(),states=[],progressEvents=[],requests=[],detailRequests=[],modelRequests=[],modelPolicies=[],terrainPolicies=[],texturePolicies=[],stageNames=[],updates={model:0,terrain:0,textures:0};let partial,root,disposed=0,finished=0;
  class Container {
   constructor(options={}){Object.assign(this,{children:[],visible:true,destroyed:false},options);}
@@ -50,12 +51,12 @@ function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adap
   packWeatherSurfaceTextures:()=>({destroy(){}}),unpackRoadAssembly:()=>({chunks:[]}),packRoadAssembly:()=>new Uint8Array(),
   buildRegionShell:()=>({positions:new Float32Array(),normals:new Float32Array(),indices:new Uint32Array()}),shellDepthBit:{name:"shell"},REGION_SHELL_COLOR:0x191919,weatherSurfaceBit:{name:"weather"},
   prepareRegionEnvironment:()=>()=>{},prepareFirstFrameMaterials:()=>()=>{},renderedModelGeometries,readWorldCatalog:async()=>({}),
-  loadWorldModels:async({root:modelsRoot,onLayout,signal,categories,optimize,progressive:publication})=>{modelPolicies.push({optimize,publication});modelRequests.push(categories||['bridges']);const world={layers:Object.fromEntries((categories||['infrastructure']).map(key=>[key,new Container()])),counts:{failed:[],lodFailures:[]},owned:[],sites:[],catalogPlacements:[],cranePlacements:[],bridgeRoadSeams:{},setWarState(state){states.push(state);return true;},actorVisible:()=>true,lod:{update(){updates.model++;}},dispose(){}};for(const layer of Object.values(world.layers))modelsRoot.addChild(layer);onLayout(world);layout.resolve();await models.promise;signal.throwIfAborted();return world;},
-  loadRegionCranes:async()=>({count:0,destroy(){}}),loadRegionCatalog:async()=>({summary:{},setWarState(){},destroy(){}}),
+  loadWorldModels:async({root:modelsRoot,onLayout,signal,categories,optimize,progressive:publication})=>{modelPolicies.push({optimize,publication});modelRequests.push(categories||['bridges']);const world={layers:Object.fromEntries((categories||['infrastructure']).map(key=>[key,new Container()])),counts:{failed:[],lodFailures:[]},owned:[],sites:[],catalogPlacements:[],cranePlacements:[],bridgeRoadSeams:{},setWarState(state){states.push(state);return true;},actorVisible:()=>true,lod:{update(){updates.model++;}},dispose(){}};for(const layer of Object.values(world.layers))modelsRoot.addChild(layer);onLayout(world);layout.resolve();await models.promise;signal.throwIfAborted();if(failModels)throw Error("native fixture failed");return world;},
+  loadRegionCranes:async()=>({count:0,destroy(){}}),loadRegionCatalog:async()=>{catalogRequests++;if(deferCatalog)await catalogGate.promise;return{summary:{},setWarState(){},destroy(){catalogDisposed++;}};},
   createRoadTransitions:async()=>({}),loadRoadDecals:async({root})=>({root}),loadWorldDetails:async({bridgeRoadSeams,effectLayer})=>{if(effectLayer)detailRequests.push(effectLayer);await bridgeRoadSeams;return{syncLayers(){},setActorVisibility(){},update(){}};},
  });
  let done=false;const pending=load({baseUrl:'https://world.test/',entry:{id:'fixture'},frame:{x:0,y:0,scale:32},progressive,adaptiveStreaming,modelLod,terrainLod,adaptiveTextures,layers,onProgress:event=>progressEvents.push(event),onSceneReady:scene=>{partial=scene;root=scene.root;visible.resolve(scene);}}).then(scene=>{done=true;root=scene.root;return scene;});
- return{surface,models,visible,layout,previewShown,environmentGate,environmentStarted,stageNames,states,progressEvents,pending,requests,detailRequests,modelRequests,modelPolicies,terrainPolicies,texturePolicies,updates,get partial(){return partial;},get root(){return root;},get done(){return done;},get disposed(){return disposed;},get finished(){return finished;}};
+ return{catalogGate,get catalogRequests(){return catalogRequests;},get catalogDisposed(){return catalogDisposed;},surface,models,visible,layout,previewShown,environmentGate,environmentStarted,stageNames,states,progressEvents,pending,requests,detailRequests,modelRequests,modelPolicies,terrainPolicies,texturePolicies,updates,get partial(){return partial;},get root(){return root;},get done(){return done;},get disposed(){return disposed;},get finished(){return finished;}};
 }
 
 test('environment and layer stage boundaries follow real asynchronous work',async()=>{
@@ -263,4 +264,22 @@ test('post-ready work drains before the scene disposal barrier resolves',async()
  assert.equal(scene.root.destroyed,false,'work retains its resources while it drains');
  await new Promise(resolve=>setImmediate(resolve));assert.equal(finished,false);f.models.resolve();await barrier;
  assert.equal(scene.root.destroyed,true);assert.equal(f.disposed,1);
+});
+
+
+test('native models and catalog models prepare together after layer layout is owned',async()=>{
+ const f=fixture(true,{...terrainWater,building:true},{adaptiveStreaming:false,deferCatalog:true});
+ await f.layout.promise;await new Promise(resolve=>setImmediate(resolve));
+ try{assert.equal(f.catalogRequests,1,'catalog loading must start before the native model gate completes');assert.equal(f.done,false);}
+ finally{f.models.resolve();f.surface.resolve();f.catalogGate.resolve();const scene=await f.pending;scene.destroy();}
+ assert.equal(f.catalogDisposed,1);
+});
+
+test('native model failure drains its parallel catalog before destroying layer ownership',async()=>{
+ const f=fixture(true,{...terrainWater,building:true},{adaptiveStreaming:false,deferCatalog:true,failModels:true}),pending=f.pending.catch(error=>error);
+ const scene=await f.visible.promise;await f.layout.promise;f.models.resolve();f.surface.resolve();
+ await new Promise(resolve=>setTimeout(resolve,10));
+ try{assert.equal(f.catalogRequests,1);assert.equal(scene.root.destroyed,false,'catalog still owns the layer while it drains');assert.equal(f.disposed,0);}
+ finally{f.catalogGate.resolve();const error=await pending;assert.match(error.message,/native fixture failed/);}
+ assert.equal(scene.root.destroyed,true);assert.equal(f.catalogDisposed,1);assert.equal(f.disposed,1);
 });
