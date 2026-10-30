@@ -28,16 +28,23 @@ async function acquireImage(bytes,keys,sampling){
  record.count++;keys.push(key);return record.promise;
 }
 async function releaseImages(keys){for(const key of keys){const r=images.get(key);if(!r||--r.count)continue;images.delete(key);try{const t=await r.promise;t.source.resource?.close?.();t.destroy(true);}catch{}}}
+// Keep downloaded buffers and image work bounded without occupying the host's
+// shared CPU slots while cache/network reads are pending.
+let preparing=0;const waiting=[];
+async function acquire(){if(preparing<4)preparing++;else await new Promise(resolve=>waiting.push(resolve));}
+function release(){const next=waiting.shift();if(next)next();else preparing--;}
 const parser='loadFoxholeCatalogGlb';
 extensions.add({extension:{type:ExtensionType.LoadParser,name:parser},name:parser,
- async load(url){
+ async load(url,asset){
+  await acquire();try{const schedule=asset?.data?.scheduleModelTask||((task)=>task());
   const response=await fetchWorldAsset(url);if(!response.ok)throw Error('Catalog model download failed ('+response.status+')');
   const bytes=await response.arrayBuffer();if(bytes.byteLength>32*1024*1024)throw Error('Catalog model exceeds 32 MiB');
   const {json,buffers}=glbToGltf(catalogGlbForLoader(bytes).buffer);while(buffers.length<(json.buffers?.length||0))buffers.push(new ArrayBuffer(0));
-  await normalizeMeshopt(json,buffers);const keys=[];
+  await schedule(()=>normalizeMeshopt(json,buffers));const keys=[];
   const pending=(json.images||[]).map(async (row,index)=>{if(row.uri)throw Error('External catalog images are unsupported');const v=json.bufferViews[row.bufferView];return acquireImage(buffers[v.buffer].slice(v.byteOffset||0,(v.byteOffset||0)+v.byteLength),keys,JSON.stringify((json.textures||[]).filter(t=>t.source===index).map(t=>json.samplers?.[t.sampler]||null)));});
   const settled=await Promise.allSettled(pending);
-  try{const failure=settled.find(r=>r.status==='rejected');if(failure)throw failure.reason;const textures=settled.map(r=>r.value),source=await parseGltf(json,buffers,textures);owners.set(source,keys);return source;}
+  try{const failure=settled.find(r=>r.status==='rejected');if(failure)throw failure.reason;const textures=settled.map(r=>r.value),source=await schedule(()=>parseGltf(json,buffers,textures));owners.set(source,keys);return source;}
   catch(error){await releaseImages(keys);throw error;}
+  }finally{release();}
  },async unload(source){const keys=owners.get(source)||[];owners.delete(source);source.textures.length=0;source.destroy();await releaseImages(keys);}});
-export const loadCatalogModel=url=>Assets.load({src:url,parser});
+export const loadCatalogModel=(url,{scheduleModelTask}={})=>Assets.load({src:url,parser,data:{scheduleModelTask}});

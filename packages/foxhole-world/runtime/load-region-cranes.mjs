@@ -6,7 +6,7 @@ import {Container3D,Model3D,Mesh3D,Matrix4} from '@pixi/3d';
 // Pixi owns the source cache. Model3D instances reuse its geometry/materials;
 // retiring a region destroys placements, while the catalog resource stays reusable.
 export async function loadRegionCranes({baseUrl,root,placements,signal,fetcher=fetch,loadModel,scheduleModelTask=task=>task(),publishBatch=build=>build(),getActorVisible=()=>()=>true}){
- const lease=loadModel?null:createCatalogModelLease({load:url=>scheduleModelTask(()=>loadCatalogModel(url))});loadModel??=url=>lease.get(url);
+ const lease=loadModel?null:createCatalogModelLease({load:url=>loadCatalogModel(url,{scheduleModelTask})});loadModel??=url=>lease.get(url);
  if(!placements.length)return {count:0,destroy(){}};
  try {
  const base=new URL('../',new URL(baseUrl,globalThis.location?.href)),response=await fetcher(new URL('models/manifest.v1.json',base),{signal,cache:'no-cache'});

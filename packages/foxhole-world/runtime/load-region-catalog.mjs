@@ -13,7 +13,7 @@ import {modelMaterialNames} from './model-material-names.mjs';
 import {Container3D,Model3D,Mesh3D,Matrix4,BatchedMesh3D,RenderPassBit,PointLight,SpotLight} from '@pixi/3d';
 export async function readWorldCatalog({baseUrl,signal,fetcher=fetchWorldAsset,onAsset=()=>{}}){const url=new URL(resolveWorldAsset(baseUrl,'models/manifest.v1.json'));onAsset(url.href);const response=await fetcher(url,{signal,cache:'no-cache'});if(!response.ok)throw Error('World catalog unavailable ('+response.status+').');return response.json();}
 export async function loadRegionCatalog({baseUrl,catalog,layers,placements,signal,loadModel,scheduleModelTask=task=>task(),onAsset=()=>{},progressive=false,publishBatch=build=>build(),getWarState=()=>null,actorVisible=()=>true,lightBudget=createCatalogLightBudget(),frame,flagMaterials:providedFlagMaterials,flagSurfacePass=false}){
- const lease=loadModel?null:createCatalogModelLease({load:url=>scheduleModelTask(()=>loadCatalogModel(url))});loadModel??=url=>lease.get(url);
+ const lease=loadModel?null:createCatalogModelLease({load:url=>loadCatalogModel(url,{scheduleModelTask})});loadModel??=url=>lease.get(url);
  let activeModel,flagLease,flagMaterials=providedFlagMaterials;const lightOwner=lightBudget.register({frame}),lightRecords=[];
  const summary={candidates:placements.length,visible:0,byAsset:{},assets:catalogAssetsFor(placements)},groups=[],records=[],winding=createMirroredGeometryCache();
  if(!placements.length){lightOwner.destroy();return {summary,setWarState(){},destroy(){}};}
