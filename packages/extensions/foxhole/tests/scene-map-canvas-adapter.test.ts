@@ -128,22 +128,28 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.deepEqual(suppression, [false]);
 });
 
-test('mounted spatial worlds retire on catalog revision, clear on disable, and reselect older content', () => {
+test('mounted spatial worlds retire on catalog revision, clear on disable, and reselect older content', async () => {
     let selected: any = {baseUrl: '/same-content-root/', revision: 1, loadIndex: async () => ({version: 'a'})};
-    const worlds: any[] = [];
+    const worlds: any[] = [], jobs = new Map<string, any>(), toasts: any[] = [], dismissed: string[] = [];
+    let jobSequence = 0;
     const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
         FoxholeRegionSceneController: class {
             constructor(options: any) {
-                const record = {options, destroyed: 0, syncs: 0, sync() {this.syncs++;}, destroy() {this.destroyed++;}};
+                const record = {options, destroyed: 0, syncs: 0, retries: 0, sync() {this.syncs++;}, retryFailed() {this.retries++; return true;}, whenDisposed() {return Promise.resolve();}, destroy() {this.destroyed++; options.onStatus({phase: 'idle'});}};
                 worlds.push(record); return record;
             }
         },
         FoxholeMapViewportPlugin: class {updatePresentation() {} getSpatialWarState() {return null;} destroy() {}},
-        selectedSpatialRegions, regionIdForKey, computed, shallowRef,
+        selectedSpatialRegions, regionIdForKey, computed, shallowRef, setTimeout: () => 1, clearTimeout: () => {},
         foxholeWorldAssetDelivery: () => selected,
         subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => true,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
-        FOXHOLE_MAP_REGIONS: [{key: 'WestgateHex'}], getFoxholeRegionPosition: () => ({x: 0, y: 0}),
+        beginShellProgressJob: (job: any) => {const id = `world-${++jobSequence}`; jobs.set(id, job); return id;},
+        updateShellProgressJob: (id: string, update: any) => {jobs.set(id, {...jobs.get(id), ...update});},
+        finishShellProgressJob: (id: string) => {jobs.delete(id);},
+        showNxToast: (toast: any) => {toasts.push(toast); return `toast-${toasts.length}`;},
+        dismissNxToast: (id: string) => {dismissed.push(id);},
+        FOXHOLE_MAP_REGIONS: [{key: 'WestgateHex', name: 'Westgate'}], getFoxholeRegionPosition: () => ({x: 0, y: 0}),
         useNixieSettingsStore: () => ({getValueOr() {}}),
         readFoxholeMapSettings: () => ({enabled: true, regionKeys: ['WestgateHex']}),
     });
@@ -153,14 +159,78 @@ test('mounted spatial worlds retire on catalog revision, clear on disable, and r
     const frame = () => adapter.updateSpatialPresentation({view: {}, mode: '3d', deltaMS: 16});
     frame(); frame();
     assert.equal(worlds.length, 1); assert.equal(worlds[0].syncs, 2);
+    worlds[0].options.onStatus({phase: 'Downloading Region', region: 'westgate'});
+    assert.equal(jobs.size, 1);
+    assert.equal(jobs.get('world-1').title, 'Loading Westgate');
+    assert.equal(jobs.get('world-1').currentFile, 'Loading region data…');
+    assert.equal(jobs.get('world-1').percent, null, 'partial download totals must not imply a percentage');
+    assert.equal(jobs.get('world-1').cancellable, false);
+    worlds[0].options.onStatus({phase: 'Preparing region cache', region: 'westgate', progress: {completed: 5, total: 10, unit: 'asset records'}});
+    assert.equal(jobs.get('world-1').title, 'Preparing Westgate Cache');
+    assert.equal(jobs.get('world-1').percent, 50);
+    assert.equal(jobs.get('world-1').currentFile, 'Preparing region cache · 5/10 asset records');
+    worlds[0].options.onStatus({phase: 'Preparing terrain', region: 'westgate', progress: {completed: 1, total: 4, unit: 'layers'}});
+    assert.equal(jobs.get('world-1').title, 'Loading Westgate Layers');
+    assert.equal(jobs.get('world-1').percent, 25);
+    assert.equal(jobs.get('world-1').currentFile, 'Preparing terrain · 1/4 layers');
+    worlds[0].options.onStatus({phase: 'Loading terrain textures', region: 'westgate', progress: {completed: 7, total: 20, unit: 'terrain textures'}});
+    assert.equal(jobs.get('world-1').title, 'Loading Westgate Terrain Textures');
+    assert.equal(jobs.get('world-1').percent, 35);
+    assert.equal(jobs.get('world-1').currentFile, 'Loading terrain textures · 7/20 terrain textures');
+    worlds[0].options.onStatus({phase: 'Preparing surface geometry', region: 'westgate', progress: {completed: 200, total: 471, unit: 'surface geometry assets'}});
+    assert.equal(jobs.get('world-1').title, 'Preparing Westgate Surface Geometry');
+    assert.equal(jobs.get('world-1').percent, 42);
+    assert.equal(jobs.get('world-1').currentFile, 'Preparing surface geometry · 200/471 surface geometry assets');
+    worlds[0].options.onStatus({phase: 'Assembling surface geometry', region: 'westgate'});
+    assert.equal(jobs.get('world-1').percent, null, 'asset completion is not overall geometry completion');
+    worlds[0].options.onStatus({phase: 'Loading native terrain material textures…', region: 'westgate'});
+    assert.equal(jobs.size, 1, 'stages update the same job');
+    assert.equal(jobs.get('world-1').currentFile, 'Loading native terrain material textures…');
+    assert.equal(jobs.get('world-1').percent, null, 'unknown stages do not retain old percentages');
+    assert.equal(jobs.get('world-1').total, 0);
+    worlds[0].options.onStatus({phase: 'Ready', region: 'westgate'});
+    assert.equal(jobs.size, 0);
+    worlds[0].options.onStatus({phase: 'Loading regions 1/2', progress: {completed: 1, total: 2, unit: 'regions'}});
+    assert.equal(jobs.get('world-2').title, 'Loading World Map Regions');
+    assert.equal(jobs.get('world-2').percent, 50);
+    worlds[0].options.onStatus({phase: 'error', region: 'westgate', error: 'resource unavailable', retryableFailed: true});
+    assert.equal(jobs.size, 0, 'failed loads do not leave stale progress');
+    assert.equal(toasts.length, 1, 'a failed map load is visible instead of silently disappearing');
+    assert.equal(toasts[0].kind, 'error');
+    assert.equal(toasts[0].persistent, true);
+    assert.match(toasts[0].message, /Westgate.*resource unavailable.*Select to retry/);
+    assert.equal(toasts[0].actionLabel, 'Retry');
+    worlds[0].options.onStatus({phase: 'error', region: 'westgate', error: 'resource unavailable', retryableFailed: true});
+    assert.equal(toasts.length, 1, 'repeated status frames do not stack duplicate errors');
+    toasts[0].onClick();
+    assert.equal(worlds[0].retries, 1, 'retry invokes the controller owning the failure');
+    worlds[0].options.onStatus({phase: 'error', region: 'westgate', error: 'resource unavailable', retryableFailed: true});
+    assert.equal(toasts.length, 2, 'a failed retry is visible again');
+    worlds[0].options.onStatus({phase: 'Ready', region: 'westgate'});
+    assert.deepEqual(dismissed, ['toast-2'], 'successful recovery removes the persistent error');
+    toasts[0].onClick();
+    assert.equal(worlds[0].retries, 1, 'an already-consumed retry callback is inert');
+    worlds[0].options.onStatus({phase: 'Downloading Region', region: 'westgate'});
+    worlds[0].options.onStatus({phase: 'error', region: 'westgate', retryableFailed: true});
+    assert.equal(toasts.length, 3, 'unknown failures still produce a visible error');
+    assert.match(toasts[2].message, /Westgate could not load.*Select to retry/);
+    const staleRetry = toasts[2].onClick;
     selected = {...selected, revision: 2, loadIndex: async () => ({version: 'b'})};
     frame();
     assert.equal(worlds[0].destroyed, 1); assert.equal(worlds.length, 2);
+    assert.deepEqual(dismissed, ['toast-2', 'toast-3'], 'retiring a world clears its error');
+    assert.equal(staleRetry(), false, 'stale toast cannot retry a retired world');
+    assert.equal(worlds[0].retries, 1); assert.equal(worlds[1].retries, 0);
+    assert.equal(jobs.size, 1, 'catalog replacement shows its retirement wait');
+    assert.equal([...jobs.values()][0].currentFile, 'Waiting for the previous map to stop…');
     assert.equal(worlds[1].options.indexLoader, selected.loadIndex);
     selected = null; frame(); frame();
     assert.equal(worlds[1].destroyed, 1);
     assert.equal(worlds[2].syncs, 0, 'disabled worlds never load a region');
     selected = {baseUrl: '/same-content-root/', revision: 3, loadIndex: worlds[0].options.indexLoader};
+    frame();
+    assert.equal(worlds[3].syncs, 0, 'replacement waits for all previous retirements');
+    await new Promise(resolve => setImmediate(resolve));
     frame();
     assert.equal(worlds[2].destroyed, 1); assert.equal(worlds[3].syncs, 1);
     assert.equal(worlds[3].options.indexLoader, worlds[0].options.indexLoader);

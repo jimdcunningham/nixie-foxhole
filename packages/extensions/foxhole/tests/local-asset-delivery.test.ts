@@ -21,3 +21,20 @@ test('missing local world data surfaces the HTTP failure', async () => {
     const delivery = createLocalFoxholeAssetDelivery('http://localhost:3000/foxhole/assets/', async () => new Response(null, { status: 404 }));
     await assert.rejects(delivery.world.loadIndex(), /Local world index is unavailable \(404\)/);
 });
+
+
+test('local world index forwards the optional abort signal', async () => {
+    const controller = new AbortController();
+    let seen: RequestInit | undefined;
+    const fetcher: typeof fetch = async (_input, options) => {
+        seen = options;
+        return await new Promise((_resolve, reject) => options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true }));
+    };
+    const delivery = createLocalFoxholeAssetDelivery('http://localhost:3000/foxhole/assets/', fetcher);
+    const pending = delivery.world.loadIndex(controller.signal);
+    const rejected = assert.rejects(pending, { name: 'AbortError' });
+    assert.equal(seen?.signal, controller.signal);
+    assert.equal(seen?.cache, 'no-store');
+    controller.abort();
+    await rejected;
+});

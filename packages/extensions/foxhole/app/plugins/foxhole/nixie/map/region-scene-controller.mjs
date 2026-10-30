@@ -20,10 +20,25 @@ export function selectedSpatialRegions({enabled,regionKeys,mode}){return enabled
 const neighbors=[[-1638,945],[0,1890],[1638,945],[1638,-945],[0,-1890],[-1638,-945]];
 export function regionShellEdges(position,others){return neighbors.map(([x,z])=>!others.some(other=>Math.abs(other.x-position.x-x*32)<1&&Math.abs(other.y-position.y+z*32)<1));}
 
+/** Union transfer observations shared across simultaneous region loads. */
+export function summarizeTerrainTransfers(records){
+ const seen=new Map();for(const record of records){const transfers=record.state?.terrainTransfers||record.scene?.metrics?.terrainTransfers;for(const event of transfers?.events||[])if(event?.id&&!seen.has(event.id))seen.set(event.id,event);}
+ const result={bytes:0,observed:0,unknown:0,cached:0};for(const event of seen.values()){if(event.kind==='observed'&&Number.isFinite(event.bytes)&&event.bytes>0){result.bytes+=event.bytes;result.observed++;}else if(event.kind==='http-cache')result.cached++;else result.unknown++;}return result;
+}
 /** Region residency follows explicit selection. Only preparation is queued. */
 export class FoxholeRegionSceneController {
- constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.cutouts=[];}
- disposeScene(scene){if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);scene.root.removeFromParent();scene.destroy();}
+ constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.retiringScenes=new Set();this.disposal=new Promise(resolve=>{this.resolveDisposal=resolve;});this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.disposed=false;this.selectionKey='';this.selectionGeneration=0;this.cutouts=[];}
+ disposeScene(scene){
+  if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);
+  // Record the barrier before aborting or destroying; both can settle work synchronously.
+  const tracked=typeof scene.whenDisposed==='function';this.retiringScenes.add(scene);
+  try{scene.root.removeFromParent();scene.destroy();}catch(error){console.error('Foxhole region disposal failed',error);return;}
+  if(tracked)Promise.resolve().then(()=>scene.whenDisposed()).then(()=>{this.retiringScenes.delete(scene);this.checkDisposed();this.pump();},error=>{console.error('Foxhole region disposal failed',error);});
+  else this.retiringScenes.delete(scene);
+ }
+ checkDisposed(){if(this.disposed&&!this.loading.size&&!this.retiringScenes.size)this.resolveDisposal();}
+ whenDisposed(){return this.disposal;}
+ canRetry(record){return !record.scene||this.loading.has(record)||typeof record.scene.whenDisposed==='function';}
  reconcile(){
   if(!this.view||this.view.destroyed)return;
   const scenes=[...this.records.values()].map(r=>r.scene).filter(Boolean),shared=new Map(),combined=new Map(),passes=[];
@@ -45,6 +60,12 @@ export class FoxholeRegionSceneController {
  restoreShadows(){if(!this.shadowView)return;const view=this.shadowView;view.shadowQuality=this.previousShadowQuality;view.shadowFilter=this.previousShadowFilter;if(this.hadShadowOverride)view[shadowQualityKey]=this.previousShadowOverride;else delete view[shadowQualityKey];if(this.previousShadowAppearance===undefined)delete view[shadowAppearanceKey];else view[shadowAppearanceKey]=this.previousShadowAppearance;view._invalidateMaterialShaders?.();this.shadowView=null;}
  applyShadows(view,quality){if(!this.shadowView){this.shadowView=view;this.previousShadowAppearance=view[shadowAppearanceKey];this.previousShadowQuality=view.shadowQuality;this.previousShadowFilter=view.shadowFilter;this.hadShadowOverride=Object.hasOwn(view,shadowQualityKey);this.previousShadowOverride=view[shadowQualityKey];}view[shadowQualityKey]=quality;view.shadowQuality=quality==='off'?'medium':quality;view.shadowFilter=quality==='low'?(this.softShadows?'pcf':'hard'):'pcf-high';const a=view[shadowAppearanceKey];if(!a||a.soft!==this.softShadows||a.strength!==this.shadowStrength){view[shadowAppearanceKey]={soft:this.softShadows,strength:this.shadowStrength};view._invalidateMaterialShaders?.();}}
  retire(){for(const record of [...this.records.values()])this.remove(record);this.selectionKey='';this.restoreCull();this.restoreShadows();this.restoreLighting();}
+ retryFailed(){if(this.disposed)return false;const failed=[...this.records.values()].filter(record=>record.state.phase==='error'&&this.canRetry(record));if(!failed.length)return false;for(const record of failed)this.remove(record);this.pump();return true;}
+ retryLoading(){
+  if(this.disposed)return false;const active=[...this.records.values()].filter(record=>this.canRetry(record)&&record.started&&!record.retired&&!['Ready','error'].includes(record.state.phase));if(!active.length)return false;
+  for(const record of active){const {controller,state,scene,retired,started,preparing,...source}=record;this.remove(record);this.records.set(record.id,{...source,controller:new AbortController(),state:{phase:'Queued',downloadBytes:0},scene:null,retired:false,started:false});}
+  this.report();this.pump();return true;
+ }
  detailLayers(record){
   if(!this.adaptiveStreaming)return this.layers;
   const camera=this.view?.camera,p=camera?.position;if(!p)return this.layers;
@@ -67,37 +88,62 @@ export class FoxholeRegionSceneController {
   if(ids.length){this.applyShadows(view,this.shadowQuality);this.applyLighting(view);}else{this.restoreShadows();this.restoreLighting();}
   if(ids.length){if(!this.cullView){this.cullView=view;this.previousCull=view.cull;this.previousSceneCull=view._sceneBatch?.cull;}view.cull=this.frustumCulling?'gpu':'off';if(view._sceneBatch)view._sceneBatch.cull=view.cull;}else this.restoreCull();
   const desired=new Map(sources.filter(r=>ids.includes(r.id)).map(r=>[r.id,r]));
-  const key=[...desired.keys()].sort().join('|'),selectionChanged=key!==this.selectionKey;if(selectionChanged){this.selectionKey=key;this.started=performance.now();}
+  const key=[...desired.keys()].sort().join('|'),selectionChanged=key!==this.selectionKey,positionChanged=[...this.records.values()].some(record=>{const source=desired.get(record.id);return !!source&&(source.position.x!==record.position.x||source.position.y!==record.position.y);});if(selectionChanged)this.selectionKey=key;if(selectionChanged||positionChanged){this.selectionGeneration++;this.started=performance.now();}
   for(const record of [...this.records.values()]){const source=desired.get(record.id);if(!source||source.position.x!==record.position.x||source.position.y!==record.position.y)this.remove(record);}
   for(const [id,source]of desired){let record=this.records.get(id);if(!record){record={...source,id,controller:new AbortController(),state:{phase:'Queued',downloadBytes:0},scene:null,retired:false,started:false};this.records.set(id,record);}record.warState=source.warState;if(record.preparing&&record.preparing!==record.scene)record.preparing.setLayers?.(this.detailLayers(record));if(record.preparing){record.preparing.setFrustumCulling?.(this.frustumCulling);record.preparing.setAmbientOcclusion?.(this.ambientOcclusion);record.preparing.setWaterReflections?.(this.waterReflections);record.preparing.setVegetationShadows?.(this.vegetationShadows);record.preparing.setVegetationWind?.(this.vegetationWind);record.preparing.setPlanningOverlays?.(this.terrainOverlays);}
    if(record.scene){record.scene.setPlanningOverlays?.(this.terrainOverlays);record.scene.setAmbientOcclusion?.(this.ambientOcclusion);record.scene.setWaterReflections?.(this.waterReflections);record.scene.setVegetationShadows?.(this.vegetationShadows);record.scene.setVegetationWind?.(this.vegetationWind);record.scene.setFrustumCulling?.(this.frustumCulling);record.scene.setWarState?.(record.warState);record.scene.setLayers?.(this.detailLayers(record));const camera=view.camera,cp=camera?.position,scale=32;if(cp)record.scene.update?.({deltaMS,wind,time:windTime,camera:{position:[(cp.x-record.position.x)/scale,cp.z/scale,(cp.y+record.position.y)/scale],height:view.height,fov:camera.fov||45,planes:camera.frustum?.planesData,orthographicHeight:camera.mode==='orthographic'?2*camera.orthographicSize*camera.zoom*view.height/view.width/scale:null}});}
   }
-  this.pump();if(selectionChanged&&desired.size)this.report();if(!desired.size)this.onStatus?.({phase:'idle'});
+  this.pump();if((selectionChanged||positionChanged)&&desired.size)this.report();if(!desired.size)this.onStatus?.({phase:'idle'});
  }
  report(){
   if(!this.onStatus)return;
   const records=[...this.records.values()];if(!records.length){this.onStatus?.({phase:'idle'});return;}
   const ready=records.filter(r=>r.state.phase==='Ready'),failed=records.filter(r=>r.state.phase==='error'),current=records.filter(r=>r.started&&!['Ready','error'].includes(r.state.phase)),done=ready.length+failed.length===records.length;
-  const metrics={downloadBytes:records.reduce((n,r)=>n+(r.state.downloadBytes||0),0),regionCount:records.length,readyRegions:ready.length,failedRegions:failed.length,loadingRegions:current.length};
+  const metrics={downloadBytes:records.reduce((n,r)=>n+(r.state.downloadBytes||0),0),terrainTransfers:summarizeTerrainTransfers(records),regionCount:records.length,readyRegions:ready.length,failedRegions:failed.length,loadingRegions:current.length,selectionGeneration:this.selectionGeneration,retryableFailed:failed.some(r=>this.canRetry(r)),retryableLoading:current.some(r=>this.canRetry(r)&&!r.retired)};
   if(records.length===1){this.onStatus?.({...records[0].state,region:records[0].id,...metrics});return;}
-  this.onStatus?.({...metrics,phase:done?(failed.length?'error':'Ready'):`Loading regions ${ready.length}/${records.length}${current.length>1?' - '+current.length+' preparing':current[0]?' - '+current[0].id+': '+current[0].state.phase:''}`,readyMs:done?performance.now()-this.started:undefined,error:failed.length?failed.map(r=>r.id+': '+r.state.error).join('; '):undefined});
+  this.onStatus?.({...metrics,...(!done?{progress:{completed:ready.length,total:records.length,unit:'regions'}}:{}),phase:done?(failed.length?'error':'Ready'):`Loading regions ${ready.length}/${records.length}${current.length>1?' - '+current.length+' preparing':current[0]?' - '+current[0].id+': '+current[0].state.phase:''}`,readyMs:done?performance.now()-this.started:undefined,error:failed.length?failed.map(r=>r.id+': '+r.state.error).join('; '):undefined});
  }
  pump(){
   // Retired jobs keep their slots until all asynchronous resources have drained.
-  if(this.disposed||[...this.loading].some(record=>record.retired))return;
-  while(this.loading.size<this.concurrency){const record=[...this.records.values()].find(r=>!r.started);if(!record)return;record.started=true;this.loading.add(record);void this.start(record).finally(()=>{this.loading.delete(record);this.pump();});}
+  if(this.disposed||this.retiringScenes.size||[...this.loading].some(record=>record.retired))return;
+  while(this.loading.size<this.concurrency){const record=[...this.records.values()].find(r=>!r.started);if(!record)return;record.started=true;this.loading.add(record);void this.start(record).finally(()=>{this.loading.delete(record);this.checkDisposed();this.pump();});}
  }
- loadIndex(){
-  if(this.index)return Promise.resolve(this.index);
-  // The metadata request belongs to the controller, not either region's lifetime.
-  return this.indexLoad??=(async()=>{if(this.indexLoader){const index=await this.indexLoader(this.indexController.signal);this.indexController.signal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');return this.index=index;}const response=await this.fetcher(this.baseUrl+'index.json',{signal:this.indexController.signal,cache:'no-cache'});if(!response.ok)throw Error('The region assets are unavailable ('+response.status+').');const index=await response.json();this.indexController.signal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');return this.index=index;})().catch(error=>{this.indexLoad=null;throw error;});
+ async loadIndex(signal){
+  signal?.throwIfAborted();if(this.index)return this.index;this.indexController.signal.throwIfAborted();
+  let record=this.indexLoad;
+  // A canceled last subscriber owns the old request until its I/O has drained.
+  // A later subscriber may wait for that generation, but cannot revive it.
+  if(record?.controller.signal.aborted){
+   if(signal)await new Promise((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});if(signal.aborted){abort();return;}record.task.then(()=>{signal.removeEventListener('abort',abort);resolve();},()=>{signal.removeEventListener('abort',abort);resolve();});});
+   else await record.task.catch(()=>{});
+   signal?.throwIfAborted();return this.loadIndex(signal);
+  }
+  if(!record){
+   record={controller:new AbortController(),waiters:0,settled:false};
+   const requestSignal=AbortSignal.any([this.indexController.signal,record.controller.signal]);
+   record.task=(async()=>{
+    let index;
+    if(this.indexLoader)index=await this.indexLoader(requestSignal);
+    else{const response=await this.fetcher(this.baseUrl+'index.json',{signal:requestSignal,cache:'no-cache'});if(requestSignal.aborted){try{await response.body?.cancel();}catch{}requestSignal.throwIfAborted();}if(!response.ok){try{await response.body?.cancel();}catch{}throw Error('The region assets are unavailable ('+response.status+').');}index=await response.json();}
+    requestSignal.throwIfAborted();if(index.version!==1)throw Error('Unsupported region bundle version.');if(this.indexLoad===record)this.index=index;return index;
+   })().finally(()=>{record.settled=true;if(this.indexLoad===record)this.indexLoad=null;});
+   this.indexLoad=record;
+  }
+  record.waiters++;let onAbort;
+  try{
+   const pending=signal?new Promise((resolve,reject)=>{onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});if(signal.aborted)onAbort();record.task.then(resolve,reject);}):record.task;
+   const index=await pending;signal?.throwIfAborted();return index;
+  }finally{
+   if(onAbort)signal.removeEventListener('abort',onAbort);record.waiters--;
+   if(!record.waiters&&!record.settled){record.controller.abort();await record.task.catch(()=>{});}
+  }
  }
  async start(record){
   const {id,position,controller}=record,signal=controller.signal;record.state={phase:'Downloading Region',downloadBytes:0};this.report();
   const valid=()=>!this.disposed&&!record.retired&&!signal.aborted&&this.records.get(id)===record;
   const adopt=scene=>{if(!valid()){this.disposeScene(scene);return false;}scene.prepareWindShadows?.(this.view);scene.prepareWaterSurfaceDepth?.(this.view);scene.setPlanningOverlays?.(this.terrainOverlays);scene.setFrustumCulling?.(this.frustumCulling);scene.setAmbientOcclusion?.(this.ambientOcclusion);scene.setWaterReflections?.(this.waterReflections);scene.setVegetationShadows?.(this.vegetationShadows);scene.setVegetationWind?.(this.vegetationWind);scene.setWarState?.(record.warState);scene.setLayers?.(this.detailLayers(record));if(this.cutouts.length)scene.setGroundCutouts?.(this.cutouts);if(record.scene!==scene){record.scene=scene;this.view.root.addChild(scene.root);this.reconcile();}return true;};
   try{
-   await this.loadIndex();
+   await this.loadIndex(signal);
    signal.throwIfAborted();const entry=this.index.regions[id];if(!entry)throw Error('This region is not available in the assets bundle yet.');
    const cp=this.view.camera?.position;
    const scene=await this.loadRegion({baseUrl:this.baseUrl,entry,frame:{...position,scale:32},signal,progressive:true,ambientOcclusion:this.ambientOcclusion,waterReflections:this.waterReflections,vegetationShadows:this.vegetationShadows,vegetationWind:this.vegetationWind,vegetationDensity:this.vegetationDensity,adaptiveStreaming:this.adaptiveStreaming,modelLod:this.modelLod,terrainLod:this.terrainLod,adaptiveTextures:this.adaptiveTextures,frustumCulling:this.frustumCulling,terrainSurface:this.terrainSurface,layers:this.detailLayers(record),onSceneCreated:scene=>{record.preparing=scene;},priorityPosition:cp?[(cp.x-position.x)/32,cp.z/32,(cp.y+position.y)/32]:undefined,onSceneReady:adopt,onProgress:state=>{if(valid()){record.state=this.onStatus?{...state,totalBytes:entry.downloadBytes}:state;this.report();}}});
@@ -110,7 +156,8 @@ export class FoxholeRegionSceneController {
  diagnostics(){
   const records=[...this.records.values()];if(!records.length)return[];
   const attached=records.filter(r=>r.scene).length,errors=records.filter(r=>r.state.phase==='error').length,bytes=records.reduce((n,r)=>n+(r.state.downloadBytes||r.scene?.metrics?.downloadBytes||0),0);
-  const lines=[`regions:${records.length}  attached:${attached}  preparing:${this.loading.size}  errors:${errors}  downloaded:${(bytes/1048576).toFixed(1)} MiB  mode:progressive ${this.adaptiveStreaming?'streaming':'resident'} / cull:${this.frustumCulling?'frustum':'off'}`];
+  const transfers=summarizeTerrainTransfers(records),terrain=transfers.observed?`pooled terrain transfer:at least ${(transfers.bytes/1048576).toFixed(1)} MiB${transfers.unknown?` (${transfers.unknown} unknown)`:''}`:transfers.unknown?`pooled terrain transfer:unknown (${transfers.unknown} requests)`:'pooled terrain transfer:no network timing observed';
+  const lines=[`regions:${records.length}  attached:${attached}  preparing:${this.loading.size}  errors:${errors}  legacy resource metric (incomplete):${(bytes/1048576).toFixed(1)} MiB  mode:progressive ${this.adaptiveStreaming?'streaming':'resident'} / cull:${this.frustumCulling?'frustum':'off'}`,terrain];
   lines.push(`models:${this.modelLod?'LOD':'source'}  terrain:${this.terrainLod?'LOD':'source'}  terrain textures:${this.adaptiveTextures&&this.terrainSurface==='native'?'adaptive':'source'}`);
   lines.push(`AO:${this.ambientOcclusion?'on':'off'}  shadows:${this.shadowQuality}  casters:${this.view?.lights?.filter(light=>light.canCastShadow).length||0}  vegetation:${this.vegetationDensity}`);
   if(records.length===1){const r=records[0],m=r.scene?.metrics||r.state;lines.push(`region:${r.id}  ${r.state.phase}${m.readyMs===undefined?'':'  prep total:'+ (m.readyMs/1000).toFixed(1)+' s'}${m.firstVisibleMs===undefined?'':'  terrain:'+ (m.firstVisibleMs/1000).toFixed(1)+' s'}`);}
@@ -125,5 +172,5 @@ export class FoxholeRegionSceneController {
  sampleGround(x,y){let highest=this.sampleWater(x,y);if(this.layers?.terrain!==false)for(const r of this.records.values()){const value=r.scene?.sampleGround?.(x,y);if(value!=null&&Number.isFinite(value))highest=highest===null?value:Math.max(highest,value);}return highest;}
  setGroundCutouts(volumes){this.cutouts=volumes;for(const r of this.records.values())r.scene?.setGroundCutouts?.(volumes);}
  get active(){return [...this.records.values()].some(r=>r.scene);}
- destroy(){if(this.disposed)return;this.disposed=true;this.indexController.abort();this.retire();this.onStatus?.({phase:'idle'});}
+ destroy(){if(this.disposed)return;this.disposed=true;this.indexController.abort();this.retire();this.onStatus?.({phase:'idle'});this.checkDisposed();}
 }

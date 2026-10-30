@@ -7,8 +7,8 @@ export function createLocalFoxholeAssetDelivery(baseUrl: string, fetcher: typeof
         fetch: fetchLocal,
         world: {
             baseUrl: resolve('world/'),
-            loadIndex: async () => {
-                const response = await fetchLocal(resolve('world/index.json'));
+            loadIndex: async (signal?: AbortSignal) => {
+                const response = await fetchLocal(resolve('world/index.json'), { signal });
                 if (!response.ok) throw new Error('Local world index is unavailable (' + response.status + ').');
                 return response.json();
             },
