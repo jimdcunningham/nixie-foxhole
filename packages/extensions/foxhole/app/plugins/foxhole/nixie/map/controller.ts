@@ -173,6 +173,7 @@ export function getFoxholeMapActiveBounds(
 export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginContext, 'session'> {
     getSceneNodeCount?: () => number;
     getZoom?: () => number;
+    resolveMapIconAsset?: (point: { x: number; y: number; }) => string | null;
     manualPresentation?: boolean;
     needsSpatialWorldData?(): boolean;
     session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
@@ -398,6 +399,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
                 getAssetsBaseUrl: () => assetsBaseUrl,
                 getWorldPointer: () => pointerTracker?.pointer.value.world ?? null,
                 getZoom: () => this.pluginContext.getZoom?.() ?? this.parent.scale.x,
+                resolveMapIconAsset: point => this.pluginContext.resolveMapIconAsset?.(point) ?? null,
                 getCanvasLabelTheme: () => resolveNxCanvasLabelTheme(
                     resolveNxTheme(this.settingsStore.getValue(NIXIE_COLOR_THEME_SETTING_ID) as 'light' | 'dark' | 'system'),
                 ),

@@ -1,3 +1,4 @@
+import { resolveFoxholeMapIconPreviewAsset } from './icon-preview.ts';
 import * as PIXI from 'pixi.js';
 import Voronoi from 'voronoi';
 import { polygon, featureCollection } from '@turf/helpers';
@@ -208,6 +209,7 @@ interface FoxholeGridStickyLabel {
 }
 
 interface FoxholeMapHoverTooltipData {
+    resolvePreview?: () => string | null;
     iconName: string;
     categoryLabel: string;
     factionLabel: string | null;
@@ -2171,6 +2173,11 @@ export class FoxholeMapRenderer {
             container.data = iconData;
             const hoverTooltipData = {
                 ...this.resolveMapIconHoverTooltipData(iconMeta),
+                resolvePreview: () => {
+                    const position = { x: getFoxholeRegionPosition(view.region).x + (iconData.x - 0.5) * FOXHOLE_REGION_WIDTH, y: getFoxholeRegionPosition(view.region).y + (iconData.y - 0.5) * FOXHOLE_REGION_HEIGHT };
+                    const key = resolveFoxholeMapIconPreviewAsset(iconData.iconType, iconMeta.assetKey, iconData.flags, this.context.resolveMapIconAsset?.(position) ?? null);
+                    return key ? this.structureHoverAssetByName[this.normalizeHoverLookupKey(key)]?.previewUrl ?? this.itemHoverAssetByName[this.normalizeHoverLookupKey(key)]?.previewUrl ?? null : null;
+                },
                 factionLabel: this.getMapIconFactionLabel(iconData.teamId),
                 factionColor: this.getMapIconFactionLabelColor(iconData.teamId),
                 isScorched: typeof iconData.flags === 'number' && (iconData.flags & FOXHOLE_MAP_FLAG_IS_SCORCHED) !== 0,
@@ -4175,6 +4182,7 @@ export class FoxholeMapRenderer {
     }
 
     private setHoveredIcon(data: FoxholeMapHoverTooltipData | null, point: { x: number; y: number; }): void {
+        if (data?.resolvePreview) data = { ...data, previewUrl: data.resolvePreview() };
         const nextName = String(data?.iconName ?? '').trim();
         if (!nextName.length || !data) {
             this.clearHoveredIcon();
@@ -4185,6 +4193,9 @@ export class FoxholeMapRenderer {
             && this.hoveredTooltipData?.categoryLabel === data.categoryLabel
             && this.hoveredTooltipData?.factionLabel === data.factionLabel
             && this.hoveredTooltipData?.isScorched === data.isScorched
+            && this.hoveredTooltipData?.previewUrl === data.previewUrl
+            && this.hoveredTooltipData?.iconUrl === data.iconUrl
+            && this.hoveredTooltipData?.factionColor === data.factionColor
         ) {
             if (canvasHoverPopover.value?.owner === this) {
                 moveCanvasHoverPopover(this, point);

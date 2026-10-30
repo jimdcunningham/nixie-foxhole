@@ -145,13 +145,13 @@
       "textureName": "MapIconTownBaseTier2",
       "name": "Town Base (Tier 2)",
       "category": "bases",
-      "key": "townbase1"
+      "key": "townbase2"
     },
     "58": {
       "textureName": "MapIconTownBaseTier3",
       "name": "Town Base (Tier 3)",
       "category": "bases",
-      "key": "townbase1"
+      "key": "townbase3"
     },
     "61": {
       "textureName": "MapIconCoal",

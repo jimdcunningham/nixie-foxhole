@@ -206,6 +206,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         projectStore: context.runtime.projectStore,
         getSceneNodeCount: context.nodeCount,
         getZoom: context.zoom,
+        resolveMapIconAsset: point => world.mapAssetAt(point.x, point.y),
         manualPresentation: true,
         needsSpatialWorldData: () => context.viewMode() !== 'flat',
         session: {

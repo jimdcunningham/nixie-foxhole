@@ -28,6 +28,7 @@ export interface FoxholeMapContext {
     getAssetsBaseUrl: () => string;
     getWorldPointer: () => PointData | null;
     getZoom: () => number;
+    resolveMapIconAsset?: (point: { x: number; y: number; }) => string | null;
     /** Shell-derived chrome for map labels and hover tooltips. */
     getCanvasLabelTheme: () => NxCanvasLabelThemeColors;
     getAssetIconTileTheme: () => NxAssetIconTileThemeColors;

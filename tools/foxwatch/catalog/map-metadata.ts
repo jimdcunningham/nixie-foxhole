@@ -1,3 +1,4 @@
+import { resolveFoxholeMapIconPreviewAsset } from '../../../packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts';
 export const FOXHOLE_MAP_REGION_WIDTH = 2183.9999 * 32;
 export const FOXHOLE_MAP_REGION_HEIGHT = 1889.9999 * 32;
 export const FOXHOLE_MAP_WORLD_SIZE = { width: 3840 * 307, height: 2160 * 307 } as const;
@@ -87,7 +88,8 @@ export function createFoxholeSceneV2MapMetadata(published: PublishedFoxholeMapDa
         const iconName = String(icon.icon ?? '').trim();
         const numericColor = Number(icon.color ?? NaN);
         const normalize = (value: string) => value.trim().toLowerCase().replace(/['']/g, '').replace(/\s+/g, ' ');
-        const lookupKeys = [String(icon.key ?? ''), String(icon.name ?? '')].map(normalize).filter(Boolean);
+        const previewKey = resolveFoxholeMapIconPreviewAsset(key, String(icon.key ?? '') || null);
+        const lookupKeys = previewKey ? [previewKey, String(icon.name ?? '')].map(normalize).filter(Boolean) : [];
         const candidates = [...tooltipAssets.filter(asset => !asset.isItem), ...tooltipAssets.filter(asset => asset.isItem)];
         const tooltipAsset = candidates.find(asset => lookupKeys.some(value => asset.keys.some(alias => normalize(alias) === value)));
         const category = tooltipAsset?.category ?? (icon.category === 'bases' ? 'Base' : icon.category === 'resources' ? 'Resource' : 'Structure');

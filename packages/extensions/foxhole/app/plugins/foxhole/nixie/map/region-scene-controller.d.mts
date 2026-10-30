@@ -10,6 +10,7 @@ export class FoxholeRegionSceneController {
     retryLoading(): boolean;
     streamingStats(): { resident: number; loading: number; total: number; };
     tourRegions(): { id: string; position: { x: number; y: number; }; scene: import('@nixiejs/foxhole-world').BakedRegion; }[];
+    mapAssetAt(x: number, y: number): string | null;
     sampleGround(x: number, y: number): number | null;
     sampleWater(x: number, y: number): number | null;
     setGroundCutouts(volumes: readonly (readonly (readonly number[])[])[]): void;

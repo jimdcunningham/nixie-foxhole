@@ -44,3 +44,11 @@ export function prepareCatalogWorld(data,catalog){
  const markers=[...byType].map(([type,rows])=>({name:type+'/$Catalog',kind:rows.some(r=>r.category==='building')?'building':'environment',category:rows[0].category,catalogBinding:rows[0].kind==='fixed'?{kind:'fixed',asset:rows[0].asset}:{kind:rows[0].kind},placements:rows.map(p=>({actor:p.actor,name:p.actor,matrix:p.matrix}))}));
  return {world:{...data,prototypes:[...remaining,...markers]},placements,assets:catalogAssetsFor(placements),replacedFiles:new Set(replaced.map(p=>p.file).filter(Boolean)),remainingFiles:new Set(remaining.map(p=>p.file).filter(Boolean))};
 }
+
+// Query only already resident layout data. A hover must not fetch a region/model.
+export function catalogMapAssetsAt(placements,state,x,z,visible=()=>true){
+ if(!Number.isFinite(x)||!Number.isFinite(z))return [];
+ const nearby=placements.filter(p=>p.kind==='fixed'&&Math.hypot(p.matrix[12]-x,p.matrix[14]-z)<=2);
+ const assets=new Set(selectCatalogWorld(nearby,state,visible).values());
+ return [...assets];
+}

@@ -23,6 +23,13 @@ export function renderFoxholePlanningMapIcons(metadata: FoxholeSceneV2MapMetadat
         const id = `map-icon-${region.textureKey.toLowerCase()}-${index}`;
         const faction = icon.teamId === 'COLONIALS' ? 'Colonials' : icon.teamId === 'WARDENS' ? 'Wardens' : '';
         const detail = [faction, ((icon.flags ?? 0) & 0x10) !== 0 ? 'Scorched' : ''].filter(Boolean).join(' · ');
+        const type = Number(icon.iconType);
+        const expectedTownBase = `${(icon.flags ?? 0) & 0x04 ? 'destroyed' : ''}townbase${type - 55}`;
+        // Older pinned catalogs contain representative previews. Do not present
+        // them as a known building identity when the marker cannot establish it.
+        const previewResourceId = type === 35 || type === 45
+            || (type >= 56 && type <= 58 && !definition.previewResourceId?.endsWith(expectedTownBase))
+            ? null : definition.previewResourceId;
         const detailColor = icon.teamId === 'COLONIALS' ? 0x9ACB76 : icon.teamId === 'WARDENS' ? 0x7BB8EC : undefined;
         const children: NixieExtensionRenderNodeV1[] = [];
         if (icon.flags && icon.teamId && (icon.flags & 0x01) !== 0) {
@@ -34,7 +41,7 @@ export function renderFoxholePlanningMapIcons(metadata: FoxholeSceneV2MapMetadat
         return [{ id, kind: 'group', x: region.x - metadata.regionWidth / 2 + icon.x * metadata.regionWidth,
             y: region.y - metadata.regionHeight / 2 + icon.y * metadata.regionHeight, scaleX: iconScale, scaleY: iconScale,
             experimentalPresentation: { contractVersion: 1, tooltip: { contractVersion: 1, title: definition.name, category: definition.tooltipCategory,
-                iconResourceId: definition.resourceId, ...(definition.previewResourceId ? { previewResourceId: definition.previewResourceId, previewOnShift: true } : {}),
+                iconResourceId: definition.resourceId, ...(previewResourceId ? { previewResourceId, previewOnShift: true } : {}),
                 ...(detail ? { detail } : {}), ...(detailColor === undefined ? {} : { detailColor }) } }, children }];
     }));
 }

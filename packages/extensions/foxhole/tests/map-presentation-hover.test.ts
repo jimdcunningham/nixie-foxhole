@@ -49,3 +49,19 @@ test('projected icons use the original custom card payload and clear foreign or 
     renderer.hoverPresentation(null, point);
     assert.equal(popover.value, null);
 });
+
+
+test('same-name map structures refresh the card when their preview changes', () => {
+    const popover = { value: null as any }, shown: any[] = [];
+    const Renderer = runInNewContext(stripTypeScriptTypes(`class Renderer { ${methods} }; Renderer;`), {
+        canvasHoverPopover: popover,
+        showCanvasHoverPopover(owner: unknown, content: unknown) { popover.value = { owner, content }; shown.push(content); },
+        moveCanvasHoverPopover() {}, hideCanvasHoverPopover() {},
+    });
+    const renderer = new Renderer();
+    const base = { iconName: 'Safe House', categoryLabel: 'Base', factionLabel: 'Wardens', factionColor: 1, isScorched: false, iconUrl: '/icon.webp' };
+    renderer.setHoveredIcon({ ...base, previewUrl: '/variant-a.webp' }, { x: 0, y: 0 });
+    renderer.setHoveredIcon({ ...base, previewUrl: '/variant-b.webp' }, { x: 1, y: 0 });
+    assert.equal(shown.length, 2);
+    assert.equal(shown[1].previewUrl, '/variant-b.webp');
+});

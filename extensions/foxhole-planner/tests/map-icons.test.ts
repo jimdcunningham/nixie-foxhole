@@ -48,3 +48,16 @@ test('faction and scorched colors retain precedence, and victory backgrounds rem
         assert.equal(node.children[0]!.alpha, 0.35);
     }
 });
+
+
+test('ambiguous markers and stale tier previews never claim an exact building',()=>{
+ const region=maps.regions[0]!;
+ const metadata={...maps,icons:{...maps.icons,'35':{...maps.icons['-2']!,name:'Safe House',previewResourceId:'foxhole.map.preview-townclargegarrisongs1'},'57':{...maps.icons['-2']!,name:'Town Base (Tier 2)',previewResourceId:'foxhole.map.preview-townbase1'}}};
+ for(const iconType of ['35','57']){
+  const [node]=renderFoxholePlanningMapIcons(metadata,[{...region,staticIcons:[{iconType,x:0.5,y:0.5}]}],{},25);
+  assert.equal(node?.experimentalPresentation?.tooltip?.previewResourceId,undefined);
+ }
+ metadata.icons['57'].previewResourceId='foxhole.map.preview-townbase2';
+ const [node]=renderFoxholePlanningMapIcons(metadata,[{...region,staticIcons:[{iconType:'57',x:0.5,y:0.5}]}],{},25);
+ assert.equal(node?.experimentalPresentation?.tooltip?.previewResourceId,'foxhole.map.preview-townbase2');
+});
