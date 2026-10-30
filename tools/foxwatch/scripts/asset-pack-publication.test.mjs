@@ -61,6 +61,24 @@ test('prepares deterministic pinned catalog and region packs while preserving sh
     await assert.rejects(f.prepare('first'), /exist/i);
 });
 
+test('publishes concatenated transport bundles as binary rather than their first image', async t => {
+    const f = await fixture(t), index = JSON.parse(await fs.readFile(path.join(f.root, 'world/index.json')));
+    const store = async (bytes, extension) => {
+        const encoded = brotliCompressSync(bytes), ref = {path: `content/br/${hash(encoded)}/asset${extension}`, hash: hash(encoded), bytes: encoded.length, encoding: 'br', decodedHash: hash(bytes), decodedBytes: bytes.length};
+        await f.write('world/' + ref.path, encoded); return ref;
+    };
+    const first = brotliDecompressSync(await fs.readFile(path.join(f.root, 'world', f.shared.path))), second = Buffer.from(first); second[second.length - 1] ^= 1;
+    const other = await store(second, '.png'), body = Buffer.concat([first, second]), resource = await store(body, '.bin');
+    const manifest = JSON.parse(brotliDecompressSync(await fs.readFile(path.join(f.root, 'world', index.regions.a.manifest.path))));
+    manifest.physicalResources.push(other, resource);
+    manifest.bundles = {version: 1, groups: [{resource, entries: [{path: f.shared.path, decodedHash: f.shared.decodedHash, offset: 0, bytes: first.length}, {path: other.path, decodedHash: other.decodedHash, offset: first.length, bytes: second.length}]}]};
+    index.regions.a.manifest = await store(Buffer.from(JSON.stringify(manifest)), '.json'); await f.write('world/index.json', JSON.stringify(index));
+    const inventory = await buildAssetPublicationInventory({assetsRoot: f.root, runtimeRoots: []}); assert.equal(inventory.valid, true);
+    const packed = inventory.objects.find(row => row.path === 'world/' + resource.path);
+    assert.equal(packed.contentType, 'application/octet-stream'); assert.equal(packed.width, undefined); assert.equal(packed.height, undefined);
+    assert.equal(inventory.objects.find(row => row.path === 'world/' + f.shared.path).contentType, 'image/webp');
+});
+
 test('rejects invalid inventories, unsafe output, changed input and corrupted prepared payloads', async t => {
     const f = await fixture(t);
     await assert.rejects(prepareAssetPublication({assetsRoot: f.root, output: path.join(f.root, 'publish'), target, inventory: f.inventory}), /separate/);

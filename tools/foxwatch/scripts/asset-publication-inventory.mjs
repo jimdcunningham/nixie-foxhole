@@ -74,7 +74,7 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
     if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) throw new Error('Concurrency must be between 1 and 16');
     if (!Number.isSafeInteger(maxDecodedBytes) || maxDecodedBytes <= 0) throw new Error('Decoded byte budget must be positive');
     const root = await fs.realpath(assetsRoot), files = new Map(), issues = [], warnings = [], selected = new Map(), receipts = [];
-    const groups = new Map(), worldRegions = new Map(), catalogModels = new Map();
+    const groups = new Map(), worldRegions = new Map(), catalogModels = new Map(), transportBundles = new Set();
     const issue = (code, file, message, group) => issues.push({code, path: file, ...(group ? {group} : {}), message});
     async function walk(directory = '') {
         for (const entry of await fs.readdir(path.join(root, directory), {withFileTypes: true})) {
@@ -137,6 +137,14 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
                     if (!match || r.hash !== match[2] || (match[1] === 'br' ? r.encoding !== 'br' : !!r.encoding)) throw new Error('Invalid content receipt or encoding');
                     const p = `world/${r.path}`; activeContent.add(p); add(p, group, r);
                 }
+                if (doc.bundles) {
+                    if (doc.bundles.version !== 1 || !Array.isArray(doc.bundles.groups)) throw new Error('Invalid transport bundle index');
+                    for (const bundle of doc.bundles.groups) {
+                        const p = `world/${publicationPath(bundle.resource?.path)}`;
+                        if (!groups.get(group).has(p)) throw new Error('Transport bundle is absent from region closure');
+                        transportBundles.add(p);
+                    }
+                }
                 for (const [logical, row] of Object.entries(doc.resources || {})) {
                     if (row.resource) {
                         const p = `world/${publicationPath(row.resource.path)}`;
@@ -174,6 +182,9 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
             if (item.encodings.size > 1 || [...item.encodings].some(e => e !== 'br')) {issue('encoding', file, 'Conflicting or unsupported content encoding'); continue;}
             try {
                 const object = await inspectFile(root, file, [...item.encodings][0], maxDecodedBytes);
+                // Concatenated bodies may begin with a WebP or GLB signature.
+                // They are transport archives, not a single renderable resource.
+                if (transportBundles.has(file)) {object.contentType = 'application/octet-stream'; delete object.width; delete object.height;}
                 object.groups = sorted(item.groups); object.uses = [...item.uses.values()].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en'));
                 objects.set(file, object);
                 const expectedImageType = {'.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.ktx2': 'image/ktx2'}[path.extname(file).toLowerCase()];
