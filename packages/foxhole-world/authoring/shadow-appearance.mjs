@@ -5,7 +5,9 @@ const variants=new WeakMap();
 export function shadowAppearanceId(view){const a=view[shadowAppearanceKey];return a?(a.soft?'soft:':'sharp:')+(['light','strong'].includes(a.strength)?a.strength:'medium'):'source';}
 export function worldShadowBit(bit,view){
  const a=view[shadowAppearanceKey];if(!a)return bit;
- const lighting=bit.name==='pbrLighting',water=bit.name==='foxholeNativeWater2',sampling=/^shadow(?:Gl)?:/.test(bit.name);
+ // Board framing renames native bits, but keeps their per-light water lobe.
+ // Adapt that lobe too, or softened shadows leave uncancelled sun highlights.
+ const lighting=bit.name==='pbrLighting',water=bit.name==='foxholeNativeWater2'||bit.name.startsWith('foxholeNativeWater2:foxhole-frame:'),sampling=/^shadow(?:Gl)?:/.test(bit.name);
  if(!lighting&&!water&&!sampling)return bit;
  const id=shadowAppearanceId(view);let cache=variants.get(bit);if(!cache)variants.set(bit,cache=new Map());if(cache.has(id))return cache.get(id);
  const strength={light:'0.45',medium:'0.7',strong:'1.0'}[a.strength]||'0.7';

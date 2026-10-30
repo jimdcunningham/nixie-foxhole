@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {Container3D,View3D,Material3D,pbrLightingBit,shadowBitsGpu,shadowBitsGl} from '@pixi/3d';
 import {worldShadowBit,shadowAppearanceKey} from '../authoring/shadow-appearance.mjs';
 import {nativeWaterBit} from '../authoring/native-water-bit.mjs';
+import {framedMaterialBits} from '../runtime/spatial-frame.mjs';
 import {prepareCameraRelativeMaterial} from '../runtime/camera-relative-material.mjs';
 import {FoxholeRegionSceneController} from '../../extensions/foxhole/app/plugins/foxhole/nixie/map/region-scene-controller.mjs';
 test('shadow contrast and kernel width change independently and leave vendor bits intact',()=>{
@@ -37,4 +38,25 @@ test('water highlight replacement follows the PBR shadow strength on both backen
   assert.ok(water.includes('mix(1.0, shadow, '+value+')'));
   assert.ok(nativeWaterBit[backend].fragment.lobePerLight.includes('*shadow;'));
  }
+});
+
+
+test('board-framed water uses the same shadow attenuation as PBR in the host descriptor',()=>{
+ const view=new View3D(),bits=framedMaterialBits([nativeWaterBit]),material=new Material3D({extraBits:bits});
+ prepareCameraRelativeMaterial(material);
+ try{
+  for(const soft of [false,true])for(const [strength,value]of [['light','0.45'],['medium','0.7'],['strong','1.0']]){
+   view[shadowAppearanceKey]={soft,strength};const descriptor=material.getPrimaryDescriptor(view);
+   for(const [backend,key]of [['gpu','bitsGpu'],['gl','bitsGl']]){
+    const pbr=descriptor[key].find(bit=>bit.name.startsWith('pbrLighting'))[backend].fragment.lighting;
+    const water=descriptor[key].find(bit=>bit.name.startsWith('foxholeNativeWater2:foxhole-frame:material'))[backend].fragment.lobePerLight;
+    const attenuation='mix(1.0, shadow, '+value+')';
+    assert.ok(pbr.includes(attenuation),'PBR follows '+strength+' shadows');
+    assert.ok(water.includes(attenuation),backend+' board-framed water must replace the same shadowed specular energy');
+    assert.doesNotMatch(water,/\*shadow;/,'no unadjusted specular correction remains');
+   }
+   assert.equal(material.getPrimaryDescriptor(view),descriptor,'the adapted descriptor is reused');
+  }
+  for(const backend of ['gl','gpu'])assert.match(bits.find(bit=>bit.name.startsWith('foxholeNativeWater2'))[backend].fragment.lobePerLight,/\*shadow;/,'source shader stays unmodified');
+ }finally{material.destroy();view.destroy();}
 });
