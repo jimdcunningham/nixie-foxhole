@@ -140,8 +140,8 @@ test('two regions prepare concurrently, share one index and release a slot out o
  const view={passes:[],root:{addChild:root=>attached.push(root.id)}};
  const controller=new FoxholeRegionSceneController({baseUrl:'https://world.test/',fetcher:async()=>{requests++;return new Response(JSON.stringify({version:1,regions:{a:{id:'a'},b:{id:'b'},c:{id:'c'}}}));},onStatus:s=>statuses.push(s),loadRegion:({entry})=>{active++;peak=Math.max(peak,active);return new Promise(resolve=>pending.set(entry.id,()=>{active--;resolve({root:{id:entry.id,removeFromParent(){}},passes:[],metrics:{},destroy(){}});}));}});
  controller.sync({view,settings:{enabled:true,regionKeys:['aHex','bHex','cHex']},mode:'3d'});await flush();
- assert.deepEqual([...pending.keys()],['a','b']);assert.equal(requests,1);assert.equal(statuses.at(-1).loadingRegions,2);
- pending.get('b')();await flush();assert.deepEqual([...pending.keys()],['a','b','c']);assert.deepEqual(attached,['b']);assert.equal(peak,2);
+ assert.deepEqual([...pending.keys()],['a','b']);assert.equal(requests,1);assert.equal(statuses.at(-1).loadingRegions,2);assert.deepEqual(statuses.at(-1).progress,{completed:0,total:3,unit:'regions'});
+ pending.get('b')();await flush();assert.deepEqual([...pending.keys()],['a','b','c']);assert.deepEqual(attached,['b']);assert.equal(peak,2);assert.deepEqual(statuses.at(-1).progress,{completed:1,total:3,unit:'regions'});
  pending.get('c')();await flush();pending.get('a')();await flush();assert.deepEqual(attached,['b','c','a']);assert.equal(statuses.at(-1).readyRegions,3);assert.equal(statuses.at(-1).phase,'Ready');controller.destroy();
 });
 
@@ -190,7 +190,7 @@ test('selected distant regions keep terrain and water while nearby model layers 
 test('region progress stays nonreactive and diagnostics are pulled without status aggregation',()=>{
  const c=new FoxholeRegionSceneController({baseUrl:'https://world.test/',loadRegion:async()=>{}});
  const state={phase:'Streaming vegetation',downloadBytes:1048576};c.records.set('fixture',{id:'fixture',state,scene:null});
- c.report();assert.equal(c.onStatus,null);assert.match(c.diagnostics()[0],/downloaded:1.0 MiB/);assert.match(c.diagnostics().join(' '),/Streaming vegetation/);
+ c.report();assert.equal(c.onStatus,null);assert.match(c.diagnostics()[0],/legacy resource metric \(incomplete\):1.0 MiB/);assert.match(c.diagnostics().join(' '),/Streaming vegetation/);
  let reads=0;c.records.values=()=>{reads++;throw Error('unused status aggregation');};c.report();assert.equal(reads,0);
 });
 

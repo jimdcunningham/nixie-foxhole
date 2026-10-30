@@ -1,5 +1,8 @@
 import type { Renderer, TextureSource } from 'pixi.js';
 import type { Container3D, Pass3D } from '@pixi/3d';
+/** Wire transfer observations for adaptive terrain; missing timing remains unknown. */
+export type TerrainTransferObservation = { id: string; kind: 'observed'; bytes: number; } | { id: string; kind: 'http-cache'; bytes: 0; } | { id: string; kind: 'unknown'; };
+export interface TerrainTransferMetrics { events: TerrainTransferObservation[]; bytes: number; observed: number; unknown: number; cached: number; }
 export interface BakedResource { path: string; hash: string; bytes: number; }
 export interface BakedRegionEntry { id: string; key?: string; manifest: BakedResource; resources?: BakedResource[]; downloadBytes: number; }
 export interface BakedRegion {
@@ -7,7 +10,7 @@ export interface BakedRegion {
     passes: Pass3D[];
     sharedPasses?: Record<string, Pass3D>;
     combinedPasses?: Record<string, Pass3D>;
-    metrics: { resident?: boolean; waterReflections?: boolean; vegetationShadows?: boolean; vegetationWind?: boolean; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; progressive?: boolean; terrainGeometry?: { step: number; triangles: number; bytes: number; pending: boolean; error: string | null; chunks?: number; visibleChunks?: number; detailChunks?: number; draws?: number; residentTriangles?: number; budget?: { limitBytes: number; baseBytes: number; detailBytes: number; pendingBytes: number; totalBytes: number; evictions: number; denied: number; coarseOverBudget: boolean; }; }; downloadBytes: number; cacheHits: number; cacheMisses: number; cacheWriteFailures: number; readyMs: number; firstVisibleMs?: number; revealedBatches?: number; layers?: { key: string; loaded: boolean; requested: boolean; loading: boolean; error?: string; }[]; };
+    metrics: { resident?: boolean; waterReflections?: boolean; vegetationShadows?: boolean; vegetationWind?: boolean; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; progressive?: boolean; terrainGeometry?: { step: number; triangles: number; bytes: number; pending: boolean; error: string | null; chunks?: number; visibleChunks?: number; detailChunks?: number; draws?: number; residentTriangles?: number; budget?: { limitBytes: number; baseBytes: number; detailBytes: number; pendingBytes: number; totalBytes: number; evictions: number; denied: number; coarseOverBudget: boolean; }; }; /** Legacy incomplete measurement. */ downloadBytes: number; terrainTransfers?: TerrainTransferMetrics; cacheHits: number; cacheMisses: number; cacheWriteFailures: number; readyMs: number; firstVisibleMs?: number; revealedBatches?: number; layers?: { key: string; loaded: boolean; requested: boolean; loading: boolean; error?: string; }[]; };
     update(options: { wind?: { directionDeg: number; strength: number; }; time?: number; deltaMS?: number; camera?: { position: number[]; height: number; fov: number; orthographicHeight?: number | null; planes?: ArrayLike<number>; }; }): void;
     whenLayersReady?(): Promise<void>;
     setShellEdges?(visible: boolean[]): void;
@@ -26,6 +29,7 @@ export interface BakedRegion {
     sampleWater?(x: number, y: number): number | null;
     setGroundCutouts?(volumes: readonly (readonly (readonly number[])[])[]): void;
     prepareFirstFrame?(renderer: Renderer): void;
+    whenDisposed?(): Promise<void>;
     destroy(): void;
 }
 export function loadBakedRegion(options: { baseUrl: string; entry: BakedRegionEntry; signal?: AbortSignal; renderer?: Renderer; prepareTerrain?: (source: TextureSource) => void | Promise<void>; frame?: { x: number; y: number; scale: number; }; onProgress?: (state: { phase: string; downloadBytes: number; }) => void; }): Promise<BakedRegion>;

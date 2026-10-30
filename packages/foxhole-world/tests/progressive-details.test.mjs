@@ -41,3 +41,59 @@ test('details consumers without native transitions retain original road blend de
  const f=await fixture({roadMaterial:'War/Content/Materials/Decals/RoadBlendDirt01.RoadBlendDirt01',category:'terrain'});
  try{f.seam.resolve(null);const result=await f.loading;assert.equal(result.summary.replacedRoadBlendChunks,0);assert.equal(f.root.children[0].items.length,2);}finally{f.cleanup();}
 });
+
+test('independent decal materials load concurrently without publishing partial batches',async()=>{
+ const gate=defer(),started=defer(),root=new Container3D(),owned=[],materials=[];let active=0,peak=0;
+ const vertex=new Float32Array([0,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0,0,1]),indices=new Uint32Array([0,1,2]);
+ const chunks=Array.from({length:12},(_,i)=>({material:'material-'+i,vertexOffset:0,vertexCount:3,indexOffset:0,indexCount:3}));
+ const source=Object.fromEntries(chunks.map(({material})=>[material,{file:material+'-color',ormFile:material+'-orm',tint:0xffffff,normalScale:1}]));
+ const json=async path=>path.endsWith('details/render.json')?{chunks,coverage:[]}:path.endsWith('details/materials.json')?source:{};
+ const bit={name:'testDetails',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
+ const loading=loadWorldDetails({region:'deadlands',root,layers:{puddles:false,effects:false},json,
+  zipped:async path=>path.endsWith('vertices.bin.gz')?vertex.buffer:indices.buffer,
+  texture:async()=>{active++;peak=Math.max(peak,active);if(active===4)started.resolve();await gate.promise;active--;return Texture.WHITE;},
+  geo:g=>(owned.push(g),g),mat:m=>(materials.push(m),m),hexBit:bit,weatherSurfaceBit:bit,weatherMaterial:m=>m});
+ try{
+  await Promise.race([started.promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('material loads were serialized')),1000))]);
+  assert.ok(peak>2&&peak<=12);assert.equal(root.children.length,0,'no partial decal batch is attached');
+  gate.resolve();const result=await loading;assert.equal(result.summary.decalChunks,12);assert.equal(materials.length,12);
+ }finally{gate.resolve();await loading.catch(()=>{});root.destroy({children:true});for(const g of owned)if(!g.destroyed)g.destroy(true);for(const m of materials)if(!m.destroyed)m.destroy();}
+});
+
+test('failed decal texture waits for other started material reads before cleanup',async()=>{
+ const gate=defer(),started=defer(),root=new Container3D(),materials=[];let active=0,settled=false;
+ const chunks=Array.from({length:3},(_,i)=>({material:'material-'+i,vertexOffset:0,vertexCount:0,indexOffset:0,indexCount:0}));
+ const source=Object.fromEntries(chunks.map(({material})=>[material,{file:material+'-color',ormFile:material+'-orm',tint:0xffffff}]));
+ const json=async path=>path.endsWith('details/render.json')?{chunks,coverage:[]}:path.endsWith('details/materials.json')?source:{};
+ const bit={name:'testDetails',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
+ const loading=loadWorldDetails({region:'deadlands',root,layers:{puddles:false,effects:false},json,zipped:async()=>new ArrayBuffer(0),
+  texture:async path=>{if(path.endsWith('material-0-color'))throw Error('texture unavailable');active++;started.resolve();try{await gate.promise;return Texture.WHITE;}finally{active--;}},
+  geo:g=>g,mat:m=>(materials.push(m),m),hexBit:bit,weatherSurfaceBit:bit,weatherMaterial:m=>m});
+ void loading.then(()=>{settled=true;},()=>{settled=true;});
+ try{await started.promise;await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.ok(active>0);
+  gate.resolve();await assert.rejects(loading,/texture unavailable/);assert.equal(active,0);assert.equal(root.children.length,0);
+ }finally{gate.resolve();await loading.catch(()=>{});root.destroy({children:true});for(const m of materials)if(!m.destroyed)m.destroy();}
+});
+test('geometry begins while surface materials are loading',async()=>{
+ const gate=defer(),started=defer(),root=new Container3D(),owned=[],materials=[];let active=0;
+ const vertex=new Float32Array([0,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,1,0,0,1]),indices=new Uint32Array([0,1,2]);
+ const json=async path=>path.endsWith('details/render.json')?{chunks:[{material:'m',vertexOffset:0,vertexCount:3,indexOffset:0,indexCount:3}],coverage:[]}:path.endsWith('details/materials.json')?{m:{file:'color',ormFile:'orm',tint:0xffffff}}:{};
+ const bit={name:'testDetails',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
+ const loading=loadWorldDetails({region:'deadlands',root,layers:{puddles:false,effects:false},json,
+  zipped:async path=>{started.resolve();return path.endsWith('vertices.bin.gz')?vertex.buffer:indices.buffer;},
+  texture:async()=>{active++;try{await gate.promise;return Texture.WHITE;}finally{active--; }},geo:g=>(owned.push(g),g),mat:m=>(materials.push(m),m),hexBit:bit,weatherSurfaceBit:bit,weatherMaterial:m=>m});
+ try{await Promise.race([started.promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('geometry waited for materials')),1000))]);
+  assert.ok(active>0);assert.equal(root.children.length,0);gate.resolve();await loading;
+ }finally{gate.resolve();await loading.catch(()=>{});root.destroy({children:true});for(const g of owned)if(!g.destroyed)g.destroy(true);for(const m of materials)if(!m.destroyed)m.destroy();}
+});
+
+test('geometry failures drain outstanding surface texture reads',async()=>{
+ const gate=defer(),started=defer(),root=new Container3D(),materials=[];let active=0,settled=false;
+ const json=async path=>path.endsWith('details/render.json')?{chunks:[{material:'m',vertexOffset:0,vertexCount:0,indexOffset:0,indexCount:0}],coverage:[]}:path.endsWith('details/materials.json')?{m:{file:'color',ormFile:'orm',tint:0xffffff}}:{};
+ const bit={name:'testDetails',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
+ const loading=loadWorldDetails({region:'deadlands',root,layers:{puddles:false,effects:false},json,zipped:async()=>{throw Error('geometry unavailable');},
+  texture:async()=>{active++;started.resolve();try{await gate.promise;return Texture.WHITE;}finally{active--;}},geo:g=>g,mat:m=>(materials.push(m),m),hexBit:bit,weatherSurfaceBit:bit,weatherMaterial:m=>m});
+ void loading.then(()=>{settled=true;},()=>{settled=true;});
+ try{await started.promise;await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.ok(active>0);gate.resolve();await assert.rejects(loading,/geometry unavailable/);assert.equal(active,0);assert.equal(root.children.length,0);
+ }finally{gate.resolve();await loading.catch(()=>{});root.destroy({children:true});for(const m of materials)if(!m.destroyed)m.destroy();}
+});

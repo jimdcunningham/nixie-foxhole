@@ -27,12 +27,15 @@ class NativeTerrainDraw extends RenderPass {
  destroy(){this.shader?.destroy();this.shader=null;this.globalGroup?.destroy();this.globalGroup=null;}
 }
 export class LiveTerrainPass extends Pass3D {
- constructor(){super();this.planning=createTerrainPlanningOverlays();this.generation=0;this.overrideSize=null;this.requestedSize=128;this.stage='afterOpaque';this.visible=true;this.current=null;this.weather={wetness:0,snow:0};this.environment='game';}
+ constructor(){super();this.work=new Set();this.qualityAbort=new AbortController();this.planning=createTerrainPlanningOverlays();this.generation=0;this.overrideSize=null;this.requestedSize=128;this.stage='afterOpaque';this.visible=true;this.current=null;this.weather={wetness:0,snow:0};this.environment='game';}
  build(graph,io){graph.addPass(new NativeTerrainDraw(io.renderer,this));}
- clear(){this.generation++;this.textureContext=null;const old=this.current;this.current=null;if(old){old.group.destroy();old.textureSet?.release();for(const source of old.ownedSources||old.sources)source.destroy();}}
+ track(task){if(!task?.then)return task;this.work.add(task);void task.then(()=>this.work.delete(task),()=>this.work.delete(task));return task;}
+ async whenDisposed(){while(this.work.size)await Promise.allSettled([...this.work]);}
+ clear(){this.qualityAbort.abort();this.qualityAbort=new AbortController();this.generation++;this.textureContext=null;const old=this.current;this.current=null;if(old){old.group.destroy();this.track(old.textureSet?.release());for(const source of old.ownedSources||old.sources)source.destroy();}}
  destroy(){this.clear();this.planning.destroy();}
  setPlanningOverlays(options,state){const changed=this.planning.set(options,state);if(changed)this.current?.uniforms.update();return changed;}
- async load(region,geometry,{json,zipped,status,prepareTerrain=()=>{},terrainDescriptor,texturePool,signal,surface='native',texture}){
+ load(region,geometry,options){return this.track(this.loadWork(region,geometry,options));}
+ async loadWork(region,geometry,{json,zipped,status,prepareTerrain=()=>{},terrainDescriptor,texturePool,signal,onTerrainObservation,surface='native',texture}){
   this.clear();const generation=this.generation;
   if(surface==='plain'||surface==='map'){
    status(surface==='map'?'Loading processed terrain map…':'Preparing plain terrain…');
@@ -51,7 +54,7 @@ export class LiveTerrainPass extends Pass3D {
   try{
   let weight;
   const descriptors=terrainDescriptor?meta.buckets.flatMap((bucket,i)=>['albedo','normal'].map(name=>terrainDescriptor(`${region}/terrain-live/${name}-${i}.bin.gz`,name==='albedo'?'color':'normal'))).concat(terrainDescriptor(`${region}/terrain-live/weights.bin.gz`,'weights',{width:meta.weights.width,height:meta.weights.height,layers:meta.layers.length})):null;
-  if(descriptors){textureSet=await texturePool.acquire(descriptors,128,{signal});if(generation!==this.generation||signal?.aborted){textureSet.release();throw signal?.reason||new DOMException('Terrain retired','AbortError');}arraySources.push(...textureSet.sources.slice(0,-1));weight=textureSet.sources.at(-1);for(const resource of textureSet.sources)await prepareTerrain(resource);}
+  if(descriptors){textureSet=await texturePool.acquire(descriptors,128,{signal,onProgress:progress=>status('Loading terrain textures',progress),onObservation:onTerrainObservation,onDrain:drain=>this.track(drain)});status('Preparing terrain material');if(generation!==this.generation||signal?.aborted){this.track(textureSet.release());throw signal?.reason||new DOMException('Terrain retired','AbortError');}arraySources.push(...textureSet.sources.slice(0,-1));weight=textureSet.sources.at(-1);for(const resource of textureSet.sources)await prepareTerrain(resource);}
   else{for(const [i,b]of meta.buckets.entries()){for(const name of ['albedo','normal']){const bytes=await zipped(`${region}/terrain-live/${name}-${i}.bin.gz`);arraySources.push(await source(bytes,b.size,b.size,b.count,name==='albedo'?'rgba8unorm-srgb':'rgba8unorm'));}}weight=await source(await zipped(`${region}/terrain-live/weights.bin.gz`),meta.weights.width,meta.weights.height,meta.layers.length,'r8unorm',false);}
 
   const noise=await source(await zipped(`${region}/terrain-live/noise.bin.gz`),meta.noise.width,meta.noise.height,1,'rgba8unorm',true,false);
@@ -60,9 +63,42 @@ export class LiveTerrainPass extends Pass3D {
   const groupFor=(arrays,weights)=>{const entries={0:uniforms};let slot=1;for(const resource of arrays)entries[slot++]=resource;for(const resource of [weights,arrays[0].style,weights.style,noise,snowMaterial,this.planning.source])entries[slot++]=resource;return new BindGroup(entries);};
   if(generation!==this.generation||signal?.aborted)throw signal?.reason||new DOMException('Terrain retired','AbortError');
   const group=groupFor(arraySources,weight);this.current={meta,geometry,sources:[...(textureSet?.sources||[]),...sources],ownedSources:sources,uniforms,group,textureSet,qualityCap:textureSet?.cap||Infinity};
-  if(descriptors)this.textureContext={pool:texturePool,descriptors,groupFor,prepareTerrain,signal};
+  if(descriptors)this.textureContext={pool:texturePool,descriptors,groupFor,prepareTerrain,signal,onTerrainObservation};
   return {...meta,layers:meta.layers.length,sourceResolution:meta.size,textureSlices:meta.slices};
-  }catch(error){textureSet?.release();for(const s of sources)s.destroy();throw error;}
+  }catch(error){this.track(textureSet?.release());for(const s of sources)s.destroy();throw error;}
+ }
+ /** Publish an exact low-resolution preview while retaining the original full-quality final path. */
+ loadProgressive(region,geometry,options,progressive){return this.track(this.loadProgressiveWork(region,geometry,options,progressive));}
+ async loadProgressiveWork(region,geometry,options,{terrainDescriptor,texturePool,onPreview=()=>{}}={}){
+  if((options.surface??'native')!=='native'||!terrainDescriptor||!texturePool)return this.load(region,geometry,options);
+  const originalGeneration=this.generation,key=`${region}/terrain-live/material.json`,meta=await options.json(key);
+  if(originalGeneration!==this.generation||options.signal?.aborted)throw options.signal?.reason||new DOMException('Terrain retired','AbortError');
+  const descriptors=meta.buckets.flatMap((_,i)=>['albedo','normal'].map(name=>terrainDescriptor(`${region}/terrain-live/${name}-${i}.bin.gz`,name==='albedo'?'color':'normal')));
+  const validTier=slice=>{const tier=slice.tiers?.[128],ref=tier?.resource;return tier?.width===128&&tier?.height===128&&/^[a-f0-9]{64}$/.test(tier.pixelHash||'')&&/^[a-f0-9]{64}$/.test(ref?.hash||'')&&/^[a-f0-9]{64}$/.test(ref?.decodedHash||'')&&typeof ref?.path==='string';};
+  const complete=descriptors.some(d=>d.entry.size>128)&&descriptors.every(d=>Array.isArray(d.entry.slices)&&d.entry.slices.length>0&&d.entry.slices.every(slice=>d.entry.size<=128||validTier(slice)));
+  const json=id=>id===key?meta:options.json(id),fullOptions={...options,json};
+  if(!complete)return this.load(region,geometry,fullOptions);
+  this.clear();const generation=this.generation;
+  // Staged passes share the active planning data but never clear the active
+  // pass. Only the active pass owns planning; candidates transfer their group.
+  const stage=()=>{const candidate=new LiveTerrainPass();candidate.planning.destroy();candidate.planning=this.planning;candidate.frame=this.frame;return candidate;};
+  const retired=()=>generation!==this.generation||options.signal?.aborted;
+  const abort=()=>options.signal?.reason||new DOMException('Terrain retired','AbortError');
+  const preview=stage();
+  try{
+   try{await preview.load(region,geometry,{...fullOptions,terrainDescriptor,texturePool});}
+   catch(error){preview.clear();if(retired())throw abort();return await this.load(region,geometry,fullOptions);}
+   if(retired())throw abort();
+   this.current=preview.current;preview.current=null;onPreview();
+   const full=stage();
+   try{
+    const result=await full.load(region,geometry,fullOptions);
+    if(retired())throw abort();
+    const old=this.current;this.current=full.current;full.current=null;
+    if(old){old.group.destroy();this.track(old.textureSet?.release());for(const source of old.ownedSources||old.sources)source.destroy();}
+    return result;
+   }finally{full.clear();this.track(full.whenDisposed());}
+  }catch(error){if(generation===this.generation)this.clear();throw error;}finally{preview.clear();this.track(preview.whenDisposed());}
  }
  get textureQuality(){return {cap:this.current?.qualityCap,requested:this.requestedSize,pending:!!this.pendingQuality,error:this.qualityError,pool:this.textureContext?.pool.stats};}
  setTextureSize(size=null){this.overrideSize=size;const wanted=size||this.automaticSize||128;this.requestedSize=wanted;return this.changeTextureSize(wanted);}
@@ -78,14 +114,14 @@ export class LiveTerrainPass extends Pass3D {
   const generation=this.generation;this.pendingWanted=wanted;
   const task=context.pool.schedule(async()=>{
    const old=this.current;if(!old||generation!==this.generation||wanted!==this.requestedSize)return;
-   const next=await context.pool.acquire(context.descriptors,wanted,{signal:context.signal});
-   if(this.current!==old||generation!==this.generation||wanted!==this.requestedSize||context.signal?.aborted){next.release();return;}
-   if(next.cap===old.qualityCap){next.release();this.retryQualityAt=performance.now()+2000;return;}
-   try{for(const source of next.sources)await context.prepareTerrain(source);if(this.current!==old||generation!==this.generation||wanted!==this.requestedSize||context.signal?.aborted){next.release();return;}const group=context.groupFor(next.sources.slice(0,-1),next.sources.at(-1));
-    this.current={...old,group,textureSet:next,qualityCap:next.cap,sources:[...next.sources,...old.ownedSources]};old.group.destroy();old.textureSet.release();this.qualityError=null;
-   }catch(error){next.release();throw error;}
-  });
-  this.pendingQuality=task;void task.finally(()=>{if(this.pendingQuality===task)this.pendingQuality=null;}).catch(()=>{});return task;
+   const next=await context.pool.acquire(context.descriptors,wanted,{signal:context.signal,onObservation:context.onTerrainObservation,onDrain:drain=>this.track(drain)});
+   if(this.current!==old||generation!==this.generation||wanted!==this.requestedSize||context.signal?.aborted){this.track(next.release());return;}
+   if(next.cap===old.qualityCap){this.track(next.release());this.retryQualityAt=performance.now()+2000;return;}
+   try{for(const source of next.sources)await context.prepareTerrain(source);if(this.current!==old||generation!==this.generation||wanted!==this.requestedSize||context.signal?.aborted){this.track(next.release());return;}const group=context.groupFor(next.sources.slice(0,-1),next.sources.at(-1));
+    this.current={...old,group,textureSet:next,qualityCap:next.cap,sources:[...next.sources,...old.ownedSources]};old.group.destroy();this.track(old.textureSet.release());this.qualityError=null;
+   }catch(error){this.track(next.release());throw error;}
+  },{signal:this.qualityAbort.signal});
+  this.track(task);this.pendingQuality=task;void task.finally(()=>{if(this.pendingQuality===task)this.pendingQuality=null;}).catch(()=>{});return task;
  }
 
 }

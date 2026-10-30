@@ -25,8 +25,8 @@ import {createRegionLayerVisibility} from '../runtime/region-layer-visibility.mj
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return{promise,resolve};};
 const source=readFileSync(new URL('../runtime/load-compact-region.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace('export async function','async function')+'\nloadCompactRegion;';
 
-function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adaptiveStreaming,terrainLod=adaptiveStreaming,adaptiveTextures=false,waterGeometry=false}={}){
- const surface=deferred(),models=deferred(),visible=deferred(),layout=deferred(),states=[],requests=[],detailRequests=[],modelRequests=[],modelPolicies=[],terrainPolicies=[],texturePolicies=[],updates={model:0,terrain:0,textures:0};let partial,root,disposed=0,finished=0;
+function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adaptiveStreaming,terrainLod=adaptiveStreaming,adaptiveTextures=false,waterGeometry=false,previewTerrain=false,deferEnvironment=false,disposalGates=null}={}){
+ const surface=deferred(),models=deferred(),visible=deferred(),layout=deferred(),previewShown=deferred(),environmentGate=deferred(),environmentStarted=deferred(),states=[],progressEvents=[],requests=[],detailRequests=[],modelRequests=[],modelPolicies=[],terrainPolicies=[],texturePolicies=[],stageNames=[],updates={model:0,terrain:0,textures:0};let partial,root,disposed=0,finished=0;
  class Container {
   constructor(options={}){Object.assign(this,{children:[],visible:true,destroyed:false},options);}
   addChild(...children){for(const child of children){child.removeFromParent?.();child.parent=this;this.children.push(child);}return children[0];}
@@ -38,10 +38,10 @@ function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adap
  class Material {constructor(options){Object.assign(this,options);this.data={};this.textures={};this.state={};this._extraBits=options.extraBits;}destroy(){this.destroyed=true;}}
  class Mesh extends Container {}
  class Pass {constructor(){this.visible=true;}destroy(){}}
- class Terrain extends Pass {constructor(){super();this.planning=createTerrainPlanningOverlays();}setPlanningOverlays(options,state){return this.planning.set(options,state);}destroy(){this.planning.destroy();}async load(_region,geometry,options){texturePolicies.push({descriptor:!!options.terrainDescriptor,pool:!!options.texturePool});options.status('Loading terrain textures');await surface.promise;this.current={geometry};}updateQuality(){updates.textures++;}}
+ class Terrain extends Pass {whenDisposed(){return disposalGates?.terrain.promise||Promise.resolve();}constructor(){super();this.planning=createTerrainPlanningOverlays();if(previewTerrain)this.loadProgressive=async(_region,geometry,options,{onPreview})=>{this.current={geometry,qualityCap:128};onPreview();previewShown.resolve();await surface.promise;options.signal.throwIfAborted();this.current={geometry,qualityCap:Infinity};};}setPlanningOverlays(options,state){return this.planning.set(options,state);}destroy(){this.planning.destroy();}async load(_region,geometry,options){texturePolicies.push({descriptor:!!options.terrainDescriptor,pool:!!options.texturePool});options.status('Loading terrain textures');await surface.promise;this.current={geometry};}updateQuality(){updates.textures++;}}
  class Shoulders extends Pass {constructor(){super();this.summary={sourceTriangles:0};}async prepare(){}finish(){}}
- const provider={terrainDescriptor:()=>({}),metrics:{},json:async path=>{requests.push(path);return path.endsWith('roads/tour-source.json')?{curves:[{id:'road',mesh:'road',points:[[0,8,0],[400,8,0]]}]}:path.endsWith('terrain.json')?{min:[0,8,0],max:[1,8,1],components:[{name:'fixture',size:2,offset:0}]}:path.endsWith('world.json')?{prototypes:[{name:'House',file:'house.gltf',kind:'building',category:'building',placements:[{actor:'house',matrix:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}]}]}:path.endsWith('flags.json')?[]:path.endsWith('roads/render.json')?{materials:{},chunks:[]}:{};},binary:async path=>{requests.push(path);return path.endsWith('terrain.bin')?new Float32Array([0,8,0,1,8,0,0,8,1,1,8,1]).buffer:path;},zipped:async()=>new ArrayBuffer(0),texture:async()=>({}),environment:async()=>({}),readRoadAssembly:async()=>({}),writeRoadAssembly:async()=>{},stage(){},report(){},url:path=>path,trackExternalAsset(){},async measure(_name,fn){return fn();},finish(){finished++;return{readyMs:100};},destroy(){disposed++;}};
- const load=runInNewContext(source,{prepareWaterSurfaceDepth,prepareVegetationWindShadows,createVegetationWind,normalizeWorldModelLayers,worldModelLayers,waterSurfaceSampler,modelCells,createModelCellStream,RoadTour,buildRoadNetwork,buildClearanceSampler,performance,AbortController,AbortSignal,DOMException,Float64Array,Float32Array,Uint32Array,ArrayBuffer,Map,Set,Math,Promise,
+ const provider={terrainDescriptor:()=>({}),metrics:{},json:async path=>{requests.push(path);return path.endsWith('roads/tour-source.json')?{curves:[{id:'road',mesh:'road',points:[[0,8,0],[400,8,0]]}]}:path.endsWith('terrain.json')?{min:[0,8,0],max:[1,8,1],components:[{name:'fixture',size:2,offset:0}]}:path.endsWith('world.json')?{prototypes:[{name:'House',file:'house.gltf',kind:'building',category:'building',placements:[{actor:'house',matrix:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}]}]}:path.endsWith('flags.json')?[]:path.endsWith('roads/render.json')?{materials:{},chunks:[]}:{};},binary:async path=>{requests.push(path);return path.endsWith('terrain.bin')?new Float32Array([0,8,0,1,8,0,0,8,1,1,8,1]).buffer:path;},zipped:async()=>new ArrayBuffer(0),texture:async()=>({}),environment:async()=>{environmentStarted.resolve();if(deferEnvironment)await environmentGate.promise;return {};},readRoadAssembly:async()=>({}),writeRoadAssembly:async()=>{},stage(name){stageNames.push(name);},report(){},url:path=>path,trackExternalAsset(){},async measure(_name,fn){return fn();},finish(){finished++;return{readyMs:100};},whenDisposed(){return disposalGates?.provider.promise||Promise.resolve();},destroy(){disposed++;}};
+ const load=runInNewContext(source,{prepareAtlasRetirement:()=>{},prepareWaterSurfaceDepth,prepareVegetationWindShadows,createVegetationWind,normalizeWorldModelLayers,worldModelLayers,waterSurfaceSampler,modelCells,createModelCellStream,RoadTour,buildRoadNetwork,buildClearanceSampler,performance,AbortController,AbortSignal,DOMException,Float64Array,Float32Array,Uint32Array,ArrayBuffer,Map,Set,Math,Promise,
   createNativeWaterMaterial:async({extraBits})=>({material:new Material({extraBits})}),createCompactProvider:async()=>provider,Container3D:Container,Geometry3D:Geometry,Material3D:Material,Mesh3D:Mesh,
   createTerrainExcavationMask:()=>({bind(){},set(){},destroy(){}}),LiveTerrainPass:Terrain,RoadShoulderPass:Shoulders,SurfaceDecalPass:Pass,SafeSsaoEffect:Pass,SceneColorFinishEffect:Pass,
   catalogLightBudgetFor,effectLayers,setRegionFrustumCulling,createWorldActorVisibility,buildTerrainPreview,terrainTexturePoolFor:()=>({}),createChunkedTerrainLod:options=>{terrainPolicies.push(options.adaptive);const chunks=createChunkedTerrainLod(options),update=chunks.update.bind(chunks);chunks.update=(...args)=>{updates.terrain++;return update(...args);};return chunks;},createRegionRevealQueue,createRegionLayerVisibility,completeLoadTasks,createLayerDemand,craneSpawnPlacements:()=>[],catalogBindingFor:()=>null,loadRailGeometry:async()=>({}),
@@ -54,10 +54,30 @@ function fixture(progressive,layers,{adaptiveStreaming=progressive,modelLod=adap
   loadRegionCranes:async()=>({count:0,destroy(){}}),loadRegionCatalog:async()=>({summary:{},setWarState(){},destroy(){}}),
   createRoadTransitions:async()=>({}),loadRoadDecals:async({root})=>({root}),loadWorldDetails:async({bridgeRoadSeams,effectLayer})=>{if(effectLayer)detailRequests.push(effectLayer);await bridgeRoadSeams;return{syncLayers(){},setActorVisibility(){},update(){}};},
  });
- let done=false;const pending=load({baseUrl:'https://world.test/',entry:{id:'fixture'},frame:{x:0,y:0,scale:32},progressive,adaptiveStreaming,modelLod,terrainLod,adaptiveTextures,layers,onSceneReady:scene=>{partial=scene;root=scene.root;visible.resolve(scene);}}).then(scene=>{done=true;root=scene.root;return scene;});
- return{surface,models,visible,layout,states,pending,requests,detailRequests,modelRequests,modelPolicies,terrainPolicies,texturePolicies,updates,get partial(){return partial;},get root(){return root;},get done(){return done;},get disposed(){return disposed;},get finished(){return finished;}};
+ let done=false;const pending=load({baseUrl:'https://world.test/',entry:{id:'fixture'},frame:{x:0,y:0,scale:32},progressive,adaptiveStreaming,modelLod,terrainLod,adaptiveTextures,layers,onProgress:event=>progressEvents.push(event),onSceneReady:scene=>{partial=scene;root=scene.root;visible.resolve(scene);}}).then(scene=>{done=true;root=scene.root;return scene;});
+ return{surface,models,visible,layout,previewShown,environmentGate,environmentStarted,stageNames,states,progressEvents,pending,requests,detailRequests,modelRequests,modelPolicies,terrainPolicies,texturePolicies,updates,get partial(){return partial;},get root(){return root;},get done(){return done;},get disposed(){return disposed;},get finished(){return finished;}};
 }
 
+test('environment and layer stage boundaries follow real asynchronous work',async()=>{
+ const f=fixture(true,terrainWater,{deferEnvironment:true});await f.environmentStarted.promise;
+ assert.deepEqual(f.stageNames,['metadata','environment']);
+ let visible=false;void f.visible.promise.then(()=>{visible=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(visible,false);
+ f.environmentGate.resolve();await f.visible.promise;
+ assert.deepEqual(f.stageNames,['metadata','environment','layers']);
+ f.surface.resolve();const scene=await f.pending;scene.destroy();
+});
+
+test('initial region loading reports real requested layer completion',async()=>{
+ const f=fixture(true,terrainWater,{adaptiveStreaming:false});await f.visible.promise;
+ await new Promise(resolve=>setImmediate(resolve));
+ const before=f.progressEvents.filter(event=>event.progress?.unit==='layers');
+ assert.ok(before.some(event=>event.progress.total>0&&event.progress.completed<event.progress.total));
+ f.surface.resolve();const scene=await f.pending;
+ const events=f.progressEvents.filter(event=>event.progress?.unit==='layers');
+ assert.ok(events.some(event=>event.progress.completed===event.progress.total));
+ assert.ok(events.every(event=>event.progress.completed<=event.progress.total));
+ scene.destroy();
+});
 test('actual loader exposes terrain geometry and ground before material/model completion',async()=>{
  const f=fixture(true),scene=await f.visible.promise;
  assert.equal(f.done,false);assert.equal(scene.sampleGround(0,0),256);const preview=scene.root.children.find(child=>child.label==='Loading Terrain');assert.ok(preview);assert.ok(preview.geometry.positions.length/3<20000,'preview must stay small instead of packing native terrain into the shared atlas');
@@ -211,4 +231,36 @@ test('water shares RDZ settings and exemptions before and after framed material 
   scene.setPlanningOverlays({rdz:true});assert.equal(material.data.terrainOverlayInfo[2],1);
   assert.equal(water.material,material);assert.equal(f.requests.length,count,'overlay changes never reload water');
  }finally{scene.destroy();}
+});
+
+
+test('full-quality preview replaces the placeholder without marking terrain ready early',async()=>{
+ const f=fixture(true,terrainWater,{adaptiveStreaming:false,previewTerrain:true}),scene=await f.visible.promise;
+ await f.previewShown.promise;
+ assert.equal(scene.root.children.some(child=>child.label==='Loading Terrain'),false,'placeholder cannot overlap the textured preview');
+ assert.equal(scene.passes[0].current.qualityCap,128);assert.equal(f.done,false);
+ const terrain=scene.metrics.layers.find(layer=>layer.key==='terrain');assert.equal(terrain.loaded,false);assert.equal(terrain.loading,true);
+ scene.setLayers({...terrainWater,terrain:false});assert.equal(scene.passes[0].visible,false);
+ scene.setLayers(terrainWater);assert.equal(scene.passes[0].visible,true);
+ f.surface.resolve();await f.pending;assert.equal(scene.passes[0].current.qualityCap,Infinity);assert.equal(scene.metrics.layers.find(layer=>layer.key==='terrain').loaded,true);scene.destroy();
+});
+
+
+test('scene disposal waits for both provider and terrain retirement',async()=>{
+ const provider=deferred(),terrain=deferred(),f=fixture(true,terrainWater,{disposalGates:{provider,terrain}});
+ await f.visible.promise;f.surface.resolve();const scene=await f.pending;let finished=false;
+ const barrier=scene.whenDisposed().then(()=>{finished=true;});scene.destroy();scene.destroy();
+ assert.equal(f.disposed,1);assert.equal(scene.root.destroyed,true,'idle scene still detaches and cleans up synchronously');
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(finished,false);provider.resolve();
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(finished,false,'terrain remains owned');terrain.resolve();await barrier;assert.equal(finished,true);
+});
+
+
+test('post-ready work drains before the scene disposal barrier resolves',async()=>{
+ const f=fixture(true,terrainWater);f.surface.resolve();const scene=await f.pending;
+ scene.setLayers({...terrainWater,building:true});await f.layout.promise;let finished=false;
+ const barrier=scene.whenDisposed().then(()=>{finished=true;});scene.destroy();
+ assert.equal(scene.root.destroyed,false,'work retains its resources while it drains');
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(finished,false);f.models.resolve();await barrier;
+ assert.equal(scene.root.destroyed,true);assert.equal(f.disposed,1);
 });

@@ -1,3 +1,4 @@
+import {completeLoadTasks} from '../runtime/load-tasks.mjs';
 import {nativeSmokeOutlet} from './native-smoke-outlet.mjs';
 import {hideViewerParticleEffect,unsupportedParticleMaterialReason} from './viewer-effects-policy.mjs';
 import {surfaceDecalMaterial} from './surface-decal-pass.mjs';
@@ -15,7 +16,19 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
  // their edges into terrain. The legacy projected RoadBlend paint duplicates
  // those transitions on a different receiver height, leaving bright strips.
  const chunks=nativeRoadTransitions?meta.chunks.filter(c=>c.category&&c.category!=='terrain'||!isRoadBlend(c.material)):meta.chunks;
- const materials=new Map();for(const key of new Set(chunks.map(c=>c.material))){const m=source[key],[t,n,orm]=await Promise.all([texture(region+'/world-fixes/details/'+m.file),m.normalFile?texture(region+'/world-fixes/details/'+m.normalFile):undefined,texture(region+'/world-fixes/details/'+m.ormFile)]);materials.set(key,surfaceDecalMaterial(orientDecalMaterial(mat(weatherMaterial(new Material3D({baseColorTexture:t,normalTexture:n,metallicRoughnessTexture:orm,baseColor:m.tint,normalScale:m.normalScale,roughness:1,metallic:1,alphaMode:'blend',doubleSided:true,extraBits:[hexBit,weatherSurfaceBit,...(groundBit?[groundBit]:[])]}))),m)));}
+ const materials=new Map(),materialKeys=[...new Set(chunks.map(c=>c.material))];let nextMaterial=0,materialFailed=false;
+ // A region can have many independent surface materials. Bound parallel reads
+ // and drain every started texture before the caller cleans up after a failure.
+ // Geometry reconstruction is independent of texture loading. Start both at
+ // once and drain all work before the caller can dispose shared resources.
+ const geometryTask=layers.decals===false?Promise.resolve([new ArrayBuffer(0),new ArrayBuffer(0)]):completeLoadTasks([Promise.resolve().then(()=>unzip('details/vertices.bin.gz')),Promise.resolve().then(()=>unzip('details/indices.bin.gz'))]);
+ const materialTask=completeLoadTasks(Array.from({length:Math.min(6,materialKeys.length)},async()=>{
+  while(!materialFailed&&nextMaterial<materialKeys.length){const key=materialKeys[nextMaterial++],m=source[key];try{
+   const [t,n,orm]=await completeLoadTasks([texture(region+'/world-fixes/details/'+m.file),m.normalFile?texture(region+'/world-fixes/details/'+m.normalFile):undefined,texture(region+'/world-fixes/details/'+m.ormFile)]);
+   materials.set(key,surfaceDecalMaterial(orientDecalMaterial(mat(weatherMaterial(new Material3D({baseColorTexture:t,normalTexture:n,metallicRoughnessTexture:orm,baseColor:m.tint,normalScale:m.normalScale,roughness:1,metallic:1,alphaMode:'blend',doubleSided:true,extraBits:[hexBit,weatherSurfaceBit,...(groundBit?[groundBit]:[])]}))),m)));
+  }catch(error){materialFailed=true;throw error;}}
+ }));
+ const [, [vb,ib]]=await completeLoadTasks([materialTask,geometryTask]);
  // Effects and utility texture reads are independent of bridge geometry too.
  const [utility,bed]=await Promise.all([layers.puddles===false?{materials:{},placements:[]}:json('utility/render.json'),layers.puddles===false?undefined:texture(region+'/water-source/terrain-height.png')]);
  const layerFor=p=>effectOwnerLayer(p,{region,worldData});
@@ -24,7 +37,7 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
  const smokeCloud=effectMaterials.has('SmokeStacks')&&smokeCloudTexture?await smokeCloudTexture():undefined;
  const sprites=new Map(await Promise.all([...effectMaterials].map(async name=>[name,await texture(region+'/world-fixes/effects/'+effects.materials[name].file)])));
  await Promise.all(Object.values(utility.materials).flatMap(m=>[m.file?texture(region+'/world-fixes/utility/'+m.file):undefined,m.normalFile?texture(region+'/world-fixes/utility/'+m.normalFile,true):undefined]));
- const [vb,ib]=await Promise.all(layers.decals===false?[new ArrayBuffer(0),new ArrayBuffer(0)]:[unzip('details/vertices.bin.gz'),unzip('details/indices.bin.gz')]);const indices=new Uint32Array(ib),batch=new BatchedMesh3D({size:chunks.length,cull:'gpu',label:'Projected Native Decals'});
+ const indices=new Uint32Array(ib),batch=new BatchedMesh3D({size:chunks.length,cull:'gpu',label:'Projected Native Decals'});
  function replaceVertices(buffer,phase='all'){const v=new Float32Array(buffer);for(let j=0;j<chunks.length;j++){const c=chunks[j],needsBridge=/\/Road(?:Blend|Streak)/i.test(c.material);if(phase==='independent'&&needsBridge||phase==='bridge'&&!needsBridge)continue;const {p,n,uv}=splitVertices(v,c.vertexOffset,c.vertexCount);const nativeIndices=indices.slice(c.indexOffset,c.indexOffset+c.indexCount),cut=bridgeRoadSeams&&/\/Road(?:Blend|Streak)/i.test(c.material)?bridgeRoadSeams.cut({p,n,uv,indices:nativeIndices,offset:0}):null;const geometry=geo(new Geometry3D({positions:cut?.p||p,normals:cut?.n||n,uvs:cut?.uv||uv,indices:cut?.indices||nativeIndices}));const oldGeometry=batch.items[j].geometry;batch.setGeometryAt(j,geometry);if(oldGeometry&&!oldGeometry.destroyed)oldGeometry.destroy(true);batch.setMaterialAt(j,materials.get(c.material));batch.setMatrixAt(j,new Matrix4());batch.items[j].receiveShadow=true;batch.setItemActive(j,materials.get(c.material)._passBit);}}
  // Most projected decals never intersect bridge ramps. Prepare those while
  // native models are loading; only road overlays depend on complete seams.

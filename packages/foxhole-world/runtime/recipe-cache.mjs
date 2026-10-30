@@ -1,4 +1,5 @@
 import {openRetainedWorldCache} from './cache-retention.mjs';
+import {boundedByteStream} from './bounded-byte-stream.mjs';
 const sharedInflight=new Map(),ownedInflight=new WeakMap();
 const digest=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
 const cacheName='foxhole-world-recipes-v1';
@@ -12,7 +13,10 @@ export async function readCachedRoadAssembly(base,hash,{metrics,cachesApi=global
 }
 export async function writeCachedRoadAssembly(base,hash,bytes,{metrics,cachesApi=globalThis.caches,budget=defaultBudget}={}){
  let cache;try{cache=await openRetainedWorldCache(cacheName,{cachesApi});}catch{}if(!cache)return;
- try{const [compressed,outputHash]=await Promise.all([new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer(),digest(bytes)]);if(compressed.byteLength>budget)return;
+ try{// Drain both readers before returning ownership if either operation fails.
+  const results=await Promise.allSettled([new Response(boundedByteStream(bytes).pipeThrough(new CompressionStream('gzip'))).arrayBuffer(),digest(bytes)]);
+  const failed=results.find(result=>result.status==='rejected');if(failed)throw failed.reason;
+  const [compressed,outputHash]=results.map(result=>result.value);if(compressed.byteLength>budget)return;
   await (await openRetainedWorldCache(cacheName,{cachesApi,budget}))?.put(roadKey(base,hash),new Response(compressed,{headers:{'X-Foxhole-Recipe-Bytes':String(compressed.byteLength),'X-Foxhole-Assembly-Hash':outputHash}}));
  }catch{if(metrics)metrics.cacheWriteFailures=(metrics.cacheWriteFailures||0)+1;}
 }
@@ -42,7 +46,7 @@ export async function cachedRecipe(base,hash,build,{signal,metrics,cachesApi=glo
   if(await digest(bytes)!==hash)throw Error('Recipe output integrity failure');
   signal?.throwIfAborted();
   if(cache){try{
-   const compressed=await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+   const compressed=await new Response(boundedByteStream(bytes).pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
    if(compressed.byteLength<=budget){
     const stored=await (await openRetainedWorldCache(cacheName,{cachesApi,budget}))?.put(key,new Response(compressed,{headers:{'X-Foxhole-Recipe-Bytes':String(compressed.byteLength)}}));
     if(stored&&metrics)metrics.recipeCacheWrittenBytes=(metrics.recipeCacheWrittenBytes||0)+compressed.byteLength;

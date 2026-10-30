@@ -42,7 +42,8 @@ async function pump(){if(working)return;working=true;try{while(jobs.length){jobs
 /** Chunked direct draws share one material, exact source heights and coarse
  * vertex buffers. Off-screen detail can be evicted without removing relief. */
 export function createChunkedTerrainLod({meta,source,create,release,createView,releaseView,apply,signal,frame,renderer,adaptive=true,frustumCulling=true,budget=terrainGeometryBudgetFor(renderer),build=buildTerrainLod,now=()=>performance.now()}){
- let chunks=[],base,baseMesh,releaseBase,disposed=false,pending,lastUpdate=-Infinity;
+ let chunks=[],base,baseMesh,releaseBase,disposed=false,pending,lastUpdate=-Infinity;const work=new Set();
+ function track(task){work.add(task);void task.then(()=>work.delete(task),()=>work.delete(task));return task;}
  const planeScratch=new Float64Array(24),drawPlaneScratch=new Float64Array(24);
  const stats={step:32,chunks:0,visibleChunks:0,detailChunks:0,draws:0,triangles:0,residentTriangles:0,bytes:0,pending:false,error:null,budget:budget.stats};
  const abort=()=>{pending?.controller.abort(signal?.reason);};signal?.addEventListener('abort',abort,{once:true});
@@ -67,9 +68,9 @@ export function createChunkedTerrainLod({meta,source,create,release,createView,r
     const geometry=create(mesh);if(!token.commit()){release(geometry);throw new DOMException('Terrain allocation retired','AbortError');}drop(chunk);chunk.fine={geometry,step,bytes:mesh.bytes,triangles:mesh.triangles,token};chunk.retryAt=step===chunk.wanted?0:now()+1000;stats.error=null;
    }catch(error){token.release();throw error;}
   };
-  void enqueue(run,chunk.priority,controller.signal).catch(error=>{if(error?.name!=='AbortError'){stats.error=String(error);chunk.retryAt=now()+10000;}}).finally(()=>{if(pending===job)pending=null;snapshot();});
+  track(enqueue(run,chunk.priority,controller.signal).catch(error=>{if(error?.name!=='AbortError'){stats.error=String(error);chunk.retryAt=now()+10000;}}).finally(()=>{if(pending===job)pending=null;snapshot();}));
  }
- return {stats,initialize,get frustumCulling(){return frustumCulling;},set frustumCulling(value){frustumCulling=value;},
+ return {stats,initialize:()=>track(initialize()),get frustumCulling(){return frustumCulling;},set frustumCulling(value){frustumCulling=value;},
   update(camera,visible=true){
    if(!adaptive||disposed||!base||!camera?.position)return;const time=now();if(time-lastUpdate<50)return;lastUpdate=time;
    const planes=nativeTerrainPlanes(camera.planes,frame,planeScratch),candidates=[];
@@ -87,6 +88,7 @@ export function createChunkedTerrainLod({meta,source,create,release,createView,r
    const draws=visible.length===chunks.length&&!visible.some(c=>c.fine)?[base]:visible.map(c=>c.fine?.geometry||c.view);
    stats.visibleChunks=visible.length;stats.draws=draws.length;stats.triangles=visible.reduce((n,c)=>n+(c.fine?.triangles||c.indexCount/3),0);return draws;
   },
+  async whenDisposed(){while(work.size)await Promise.allSettled([...work]);},
   destroy(){if(disposed)return;disposed=true;signal?.removeEventListener('abort',abort);pending?.controller.abort();for(const chunk of chunks){drop(chunk);if(chunk.view)releaseView(chunk.view);}if(base)release(base);releaseBase?.();base=null;baseMesh=null;chunks=[];snapshot();}
  };
 }

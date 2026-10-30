@@ -6,6 +6,20 @@ export function resizeTerrainPixels(bytes,width,height,layers,maxSize,{kind='col
  const scale=Math.min(1,maxSize/Math.max(width,height)),w=Math.max(1,Math.round(width*scale)),h=Math.max(1,Math.round(height*scale));
  if(w===width&&h===height)return {bytes,width,height};
  if(bytes.length!==width*height*layers*channels)throw Error('Invalid terrain pixel dimensions');
+ if(channels===1){
+  // Cache source coverage for each axis once, while retaining the original
+  // y-then-x accumulation order and exact rounding for every output pixel.
+  const xs=[],xw=[],xb=new Uint32Array(w+1),ys=[],yw=[],yb=new Uint32Array(h+1),sx=width/w,sy=height/h;
+  for(let x=0;x<w;x++){const left=x*sx,right=(x+1)*sx;xb[x]=xs.length;for(let ix=Math.floor(left);ix<Math.ceil(right)&&ix<width;ix++){xs.push(ix);xw.push(Math.min(right,ix+1)-Math.max(left,ix));}}xb[w]=xs.length;
+  for(let y=0;y<h;y++){const top=y*sy,bottom=(y+1)*sy;yb[y]=ys.length;for(let iy=Math.floor(top);iy<Math.ceil(bottom)&&iy<height;iy++){ys.push(iy);yw.push(Math.min(bottom,iy+1)-Math.max(top,iy));}}yb[h]=ys.length;
+  const out=new Uint8Array(w*h*layers);
+  for(let layer=0;layer<layers;layer++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   let value=0,weight=0;
+   for(let j=yb[y];j<yb[y+1];j++){const offset=(layer*height+ys[j])*width,wy=yw[j];for(let i=xb[x];i<xb[x+1];i++){const f=wy*xw[i];weight+=f;value+=bytes[offset+xs[i]]*f;}}
+   out[(layer*h+y)*w+x]=Math.round(value/weight);
+  }
+  return {bytes:out,width:w,height:h};
+ }
  const out=new Uint8Array(w*h*layers*channels),sx=width/w,sy=height/h;
  for(let layer=0;layer<layers;layer++)for(let y=0;y<h;y++)for(let x=0;x<w;x++){
   const left=x*sx,right=(x+1)*sx,top=y*sy,bottom=(y+1)*sy;let a=0,b=0,c=0,d=0,weight=0;
