@@ -30,9 +30,15 @@ function resolveFoxholeBuildSocketTagName(
         }
     }
 
+    // Base sockets also carry Dirt* tags before Side*. Prefer the directional
+    // wall identity rather than letting the first unrelated tag mask it.
+    const directionalTag = socket.socketTags?.map(tag => normalizeFortVisibilityTag(tag.tag)).find(Boolean);
+    if (directionalTag) {
+        return directionalTag;
+    }
+
     for (const socketTag of socket.socketTags ?? []) {
-        const normalizedTag = normalizeFortVisibilityTag(socketTag.tag)
-            ?? normalizeSocketTag(socketTag.tag);
+        const normalizedTag = normalizeSocketTag(socketTag.tag);
         if (normalizedTag) {
             return normalizedTag;
         }

@@ -46,3 +46,14 @@ test('ordinary asset light modifications use semantic visibility without requiri
  assert.deepEqual(spatialStructureProfile(prepared,{semanticGroups:{[part.group]:'lamp-group'}}),{version:1,layers:{},modifications:[{slotId:'UpgradeModificationSlot',variantId:'light',nodeNames:['lamp-group'],replacesLayers:[]}]});
  assert.equal(input.scene.roots[0].children.length,0);
 });
+
+
+test('a broad base component cannot overwrite separately authored bunker wall groups',async()=>{
+ const scene={scene:{roots:[{id:'root',name:'Root',children:[{id:'base',name:'Mesh',meshId:'base'},{id:'wall',name:'SideFront',meshId:'wall'},{id:'ramp',name:'Ramp',meshId:'ramp'}]}]},assets:{meshes:[],materials:[]}};
+ const asset={id:'fortbaset3',renderLayers:[{id:'base',componentName:'Mesh'},{id:'sidefront',componentName:'SideFront'}]};
+ const prepared=await prepareSpatialStructureModifications(asset,prepareSpatialStructureScene(asset,scene),async path=>path.endsWith('/base.scene.json')?scene:undefined);
+ const nodes=prepared.scene.roots[0].children;
+ assert.equal(nodes[0].spatialGroup,'structure-layer-base');
+ assert.equal(nodes[1].spatialGroup,'structure-layer-sidefront');
+ assert.equal(nodes[2].spatialGroup,'structure-layer-base');
+});

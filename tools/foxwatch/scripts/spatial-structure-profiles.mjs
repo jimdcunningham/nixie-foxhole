@@ -48,7 +48,12 @@ export async function prepareSpatialStructureModifications(asset,input,load,shar
         if(!component)continue;
         const group='structure-layer-'+id;let found=false;
         const bind=(node,path=[])=>{const key=[...path,node.id],target=sourcePaths.get(JSON.stringify(key));
-            if(target&&(node.meshId||node.primitive||node.light)){target.spatialGroup=group;found=true;}
+            if(target&&(node.meshId||node.primitive||node.light)){
+                // A composite base contains the whole building. Keep independently
+                // authored wall/floor/dirt groups instead of absorbing them into it.
+                if(id!=='base'||!target.spatialGroup||target.spatialGroup===group)target.spatialGroup=group;
+                found=true;
+            }
             (node.children??[]).forEach(child=>bind(child,key));};component.scene.roots.forEach(node=>bind(node));
         if(found)result.spatialLayerGroups[id]=group;
     }

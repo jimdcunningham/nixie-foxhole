@@ -1,8 +1,27 @@
 {
   "clipFloor": false,
   "renderLayers": [
-    { "id": "base", "componentName": "Mesh" },
-    { "id": "roof", "componentName": "Roof" }
+    {"id":"base","componentName":"Mesh"},
+    {"id":"floor","componentName":"Floor"},
+    {"id":"floordoor","componentName":"FloorDoor"},
+    {"id":"roof","componentName":"Roof"},
+    {"id":"cornerbackleft","componentName":"CornerBackLeft"},
+    {"id":"cornerbackright","componentName":"CornerBackRight"},
+    {"id":"cornerfrontleft","componentName":"CornerFrontLeft"},
+    {"id":"cornerfrontright","componentName":"CornerFrontRight"},
+    {"id":"sideback","componentName":"SideBack","componentTags":["Back"]},
+    {"id":"sidebackstatic","componentName":"SideBackStatic"},
+    {"id":"sidefront","componentName":"SideFront","componentTags":["Front"]},
+    {"id":"sidefrontstatic","componentName":"SideFrontStatic"},
+    {"id":"sideleft","componentName":"SideLeft","componentTags":["Left"]},
+    {"id":"sideleftstatic","componentName":"SideLeftStatic"},
+    {"id":"dirtback","componentName":"FortBaseCommonDirtT3:DirtBack","componentTags":["Back"]},
+    {"id":"dirtfront","componentName":"FortBaseCommonDirtT3:DirtFront","componentTags":["Front"]},
+    {"id":"dirtleft","componentName":"FortBaseCommonDirtT3:DirtLeft","componentTags":["Left"]},
+    {"id":"dirtcornerbackleft","componentName":"FortBaseCommonDirtT3:DirtCornerBackLeft"},
+    {"id":"dirtcornerbackright","componentName":"FortBaseCommonDirtT3:DirtCornerBackRight"},
+    {"id":"dirtcornerfrontleft","componentName":"FortBaseCommonDirtT3:DirtCornerFrontLeft"},
+    {"id":"dirtcornerfrontright","componentName":"FortBaseCommonDirtT3:DirtCornerFrontRight"}
   ],
   "lineOfSightPolygons": [
     {

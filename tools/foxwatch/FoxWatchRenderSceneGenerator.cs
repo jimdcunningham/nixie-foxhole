@@ -4318,12 +4318,13 @@ public sealed class FoxWatchRenderSceneGenerator
             var isRoof = string.Equals(normalizedNodeName, "Roof", StringComparison.OrdinalIgnoreCase)
                 || (string.Equals(structure.Id, "fortbaset2", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(normalizedNodeName, "RoofDirt", StringComparison.OrdinalIgnoreCase));
-            return layerId.ToLowerInvariant() switch
+            // Keep the composite roof (including T2 roof dirt), but let each
+            // remaining authored component use the normal exact-name filter.
+            // A catch-all base otherwise duplicates every removable wall.
+            if (string.Equals(layerId, "roof", StringComparison.OrdinalIgnoreCase))
             {
-                "base" => !isRoof && !string.IsNullOrWhiteSpace(meshId),
-                "roof" => isRoof && !string.IsNullOrWhiteSpace(meshId),
-                _ => false,
-            };
+                return isRoof && !string.IsNullOrWhiteSpace(meshId);
+            }
         }
 
         if (string.Equals(structure.Id, "facilitypipe", StringComparison.OrdinalIgnoreCase))
