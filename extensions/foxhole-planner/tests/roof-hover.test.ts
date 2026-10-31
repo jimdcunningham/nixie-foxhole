@@ -28,13 +28,13 @@ test('observation bunker flags hide together with their roofs in planar and mode
     assert.equal(isFoxholeRoofRenderLayer({ id: 'teamflagmesh' }, 'UnrelatedStructure'), false);
 });
 
-test('roof hover hides immediately and completely, includes flags, and leaves Hide Roofs authoritative', () => {
+test('roof hover fades completely, includes flags, and leaves Hide Roofs authoritative', () => {
     const subject = entity('observationbunkert3');
     const before = structuredClone(subject);
     const hover = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
         settings: { 'foxhole.structure.hideRoofsOnHover': true, 'foxhole.structure.useStaticRender': true } }));
     assert.equal(hover.experimentalHover!.opacity, 0);
-    assert.equal(hover.experimentalHover!.fadeDurationMs, 0);
+    assert.equal(hover.experimentalHover!.fadeDurationMs, 110);
     assert.ok(hover.experimentalHover!.hiddenNodeIds!.includes('structure-layer-teamflagmesh'));
     assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
     assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-observationbunkert3'));
@@ -89,7 +89,7 @@ test('roof-mounted flags on garrisons and intelligence buildings hide with fixed
             }
         }
         assert.equal(hovered.experimentalHover!.opacity, 0);
-        assert.equal(hovered.experimentalHover!.fadeDurationMs, 0);
+        assert.equal(hovered.experimentalHover!.fadeDurationMs, 110);
     }
     assert.equal(isFoxholeRoofRenderLayer({ id: 'flagmesh' }, 'UnrelatedStructure'), false);
 });

@@ -483,7 +483,7 @@ export function renderFoxholeSceneV2Entity(
                 return neighborAsset && bunker(neighborAsset) ? [attachment.targetEntityId] : [];
             }))]
             : [];
-        const hover = { contractVersion: 1 as const, opacity: 0, fadeDurationMs: 0, relatedEntityIds,
+        const hover = { contractVersion: 1 as const, opacity: 0, fadeDurationMs: 110, relatedEntityIds,
             hiddenNodeIds: ids(plan.root).filter(id => !retainedNodes.has(id)),
             hiddenModelNodes: (roofless.experimentalSpatial?.hiddenModelNodes ?? []).filter(name => !retainedModels.has(name)),
             hiddenSpatialNodeIds: (plan.experimentalSpatial?.nodes ?? []).filter(node => !retainedPaths.has(node.id)).map(node => node.id) };
