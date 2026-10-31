@@ -38,7 +38,7 @@ export default defineContribution({
             type: 'editor',
             name: 'Toggle Foxhole Map',
             description: 'Show or hide the Foxhole map overlay.',
-            icon: 'ph:hexagon',
+            icon: 'nx:hexagon-bars',
             availableInShell: true,
             defaultKeybinding: {
                 primary: { key: 'm' },
@@ -66,7 +66,7 @@ export default defineContribution({
             item: {
                 id: 'foxhole.map.menu.toggle',
                 label: 'Foxhole Map',
-                icon: 'ph:hexagon',
+                icon: 'nx:hexagon-bars',
                 type: 'checkbox',
                 visible: () => useNixieProjectStore().ready,
                 checked: () => readFoxholeMapSettings(useNixieProjectStore().settings).enabled,
