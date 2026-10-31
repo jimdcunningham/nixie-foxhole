@@ -12,19 +12,21 @@ export function terrainPlanningOverlayBit({water=false}={}){
  const glFetch=water?'sampleBaseColorDirect((vec2(p)+vec2(0.5))/vec2(options.w,planningTextureHeight(info,options)))':'texelFetch(uTerrainExemptions,p,0)';
  const gpuFetch=water?'sampleBaseColorDirect((vec2<f32>(p)+vec2<f32>(0.5))/vec2<f32>(options.w,planningTextureHeight(info,options)))':'textureLoad(uTerrainExemptions,p,0)';
  const gl=`${water?'vec4 sampleBaseColorDirect(vec2 uv);':''}
-float planningTextureHeight(vec4 info,vec4 options){return max(1.0,ceil(info.z*4.0/options.w))+(options.w>256.0?options.w:0.0);}
+float planningTextureHeight(vec4 info,vec4 options){return max(1.0,ceil(info.z*4.0/options.w))+(options.w>256.0?options.w*3.0:0.0);}
 vec4 planningTexel(ivec2 p,vec4 info,vec4 options){return ${glFetch};}
 float planningScalar(int i,vec4 info,vec4 options){int width=int(options.w);uvec4 b=uvec4(round(planningTexel(ivec2(i%width,i/width),info,options)*255.0));return uintBitsToFloat(b.x|(b.y<<8u)|(b.z<<16u)|(b.w<<24u));}
 vec4 planningMap(vec2 uv,vec4 info,vec4 options){ivec2 p=ivec2(clamp(uv,vec2(0.0),vec2(0.999999))*options.w);p.y+=int(max(1.0,ceil(info.z*4.0/options.w)));return planningTexel(p,info,options);}
 float planningDivision(vec2 uv,vec4 info,vec4 options){vec2 p=uv*options.w-vec2(0.5);vec2 cell=floor(p),f=fract(p);vec2 a=(cell+vec2(0.5))/options.w;vec4 tl=planningMap(a,info,options),tr=planningMap(a+vec2(1.0,0.0)/options.w,info,options),bl=planningMap(a+vec2(0.0,1.0)/options.w,info,options),br=planningMap(a+vec2(1.0,1.0)/options.w,info,options);vec4 d=vec4(tl.b,tr.b,bl.b,br.b)*64.0-vec4(32.0);if(tl.a==tr.a&&tl.a==bl.a&&tl.a==br.a){d=abs(d);}return abs(mix(mix(d.x,d.y,f.x),mix(d.z,d.w,f.x),f.y));}
+vec4 planningActivity(vec2 uv,float layer,vec4 info,vec4 options){vec2 p=uv*options.w-vec2(0.5);vec2 cell=floor(p),f=fract(p);ivec2 a=ivec2(clamp(cell,vec2(0.0),vec2(options.w-1.0)));ivec2 b=ivec2(clamp(cell+vec2(1.0),vec2(0.0),vec2(options.w-1.0)));int row=int(max(1.0,ceil(info.z*4.0/options.w))+options.w*layer);return mix(mix(planningTexel(ivec2(a.x,a.y+row),info,options),planningTexel(ivec2(b.x,a.y+row),info,options),f.x),mix(planningTexel(ivec2(a.x,b.y+row),info,options),planningTexel(ivec2(b.x,b.y+row),info,options),f.x),f.y);}
 float planningContour(float h,float interval,float width){float d=abs(fract(h/interval+0.5)-0.5)*interval;return (1.0-smoothstep(width*0.5,width*1.5,d))*(1.0-smoothstep(interval*0.2,interval*0.45,width));}
 `;
  const gpu=`
-fn planningTextureHeight(info:vec4<f32>,options:vec4<f32>)->f32{return max(1.0,ceil(info.z*4.0/options.w))+select(0.0,options.w,options.w>256.0);}
+fn planningTextureHeight(info:vec4<f32>,options:vec4<f32>)->f32{return max(1.0,ceil(info.z*4.0/options.w))+select(0.0,options.w*3.0,options.w>256.0);}
 fn planningTexel(p:vec2<i32>,info:vec4<f32>,options:vec4<f32>)->vec4<f32>{return ${gpuFetch};}
 fn planningScalar(i:i32,info:vec4<f32>,options:vec4<f32>)->f32{let width=i32(options.w);let b=vec4<u32>(round(planningTexel(vec2<i32>(i%width,i/width),info,options)*255.0));return bitcast<f32>(b.x|(b.y<<8u)|(b.z<<16u)|(b.w<<24u));}
 fn planningMap(uv:vec2<f32>,info:vec4<f32>,options:vec4<f32>)->vec4<f32>{var p=vec2<i32>(clamp(uv,vec2<f32>(0.0),vec2<f32>(0.999999))*options.w);p.y+=i32(max(1.0,ceil(info.z*4.0/options.w)));return planningTexel(p,info,options);}
 fn planningDivision(uv:vec2<f32>,info:vec4<f32>,options:vec4<f32>)->f32{let p=uv*options.w-vec2<f32>(0.5);let cell=floor(p);let f=fract(p);let a=(cell+vec2<f32>(0.5))/options.w;let tl=planningMap(a,info,options);let tr=planningMap(a+vec2<f32>(1.0,0.0)/options.w,info,options);let bl=planningMap(a+vec2<f32>(0.0,1.0)/options.w,info,options);let br=planningMap(a+vec2<f32>(1.0,1.0)/options.w,info,options);var d=vec4<f32>(tl.b,tr.b,bl.b,br.b)*64.0-vec4<f32>(32.0);if(tl.a==tr.a&&tl.a==bl.a&&tl.a==br.a){d=abs(d);}return abs(mix(mix(d.x,d.y,f.x),mix(d.z,d.w,f.x),f.y));}
+fn planningActivity(uv:vec2<f32>,layer:f32,info:vec4<f32>,options:vec4<f32>)->vec4<f32>{let p=uv*options.w-vec2<f32>(0.5);let cell=floor(p);let f=fract(p);let a=vec2<i32>(clamp(cell,vec2<f32>(0.0),vec2<f32>(options.w-1.0)));let b=vec2<i32>(clamp(cell+vec2<f32>(1.0),vec2<f32>(0.0),vec2<f32>(options.w-1.0)));let row=i32(max(1.0,ceil(info.z*4.0/options.w))+options.w*layer);return mix(mix(planningTexel(vec2<i32>(a.x,a.y+row),info,options),planningTexel(vec2<i32>(b.x,a.y+row),info,options),f.x),mix(planningTexel(vec2<i32>(a.x,b.y+row),info,options),planningTexel(vec2<i32>(b.x,b.y+row),info,options),f.x),f.y);}
 fn planningContour(h:f32,interval:f32,width:f32)->f32{let d=abs(fract(h/interval+0.5)-0.5)*interval;return (1.0-smoothstep(width*0.5,width*1.5,d))*(1.0-smoothstep(interval*0.2,interval*0.45,width));}
 `;
  const coordinates=`vec3 planningPoint=vPosition;
@@ -72,24 +74,36 @@ if(borderDistance>=0.0){
  if(terrainMapOverlayInfo.x>0.5){float border=1.0-smoothstep(borderAA*0.5,borderAA*1.5,borderDistance);finalColor=mix(finalColor,vec3(1.0),border*0.18);}
 }
 `;
- const fragment=(body+mapBody).replace(/planningScalar\((i\*4(?:\+[12])?)\)/g,'planningScalar($1,terrainOverlayInfo,terrainMapOverlayInfo)');
- const wgsl=fragment.replaceAll('vPosition','input.vPosition').replaceAll('terrainOverlayInfo',water?'material.terrainOverlayInfo':'terrain.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo',water?'material.terrainMapOverlayInfo':'terrain.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo',water?'material.terrainGridOverlayInfo':'terrain.terrainGridOverlayInfo')
+ const activityBody=`
+if(borderDistance>=0.0&&terrainMapOverlayInfo.w>256.0){
+ vec2 activityUv=vec2(planningPoint.x/2184.0+0.5,0.5-planningPoint.z/1890.0);
+ if(terrainActivityOverlayInfo.y>0.5){vec4 heat=planningActivity(activityUv,2.0,terrainOverlayInfo,terrainMapOverlayInfo);finalColor=mix(finalColor,heat.rgb,heat.a*terrainActivityOverlayInfo.z);}
+ if(terrainActivityOverlayInfo.x>0.5){vec4 front=planningActivity(activityUv,1.0,terrainOverlayInfo,terrainMapOverlayInfo);finalColor=mix(finalColor,front.rgb,front.a);}
+}
+`;
+ const fragment=(body+mapBody+activityBody).replace(/planningScalar\((i\*4(?:\+[12])?)\)/g,'planningScalar($1,terrainOverlayInfo,terrainMapOverlayInfo)');
+ const wgsl=fragment.replaceAll('vPosition','input.vPosition').replaceAll('terrainOverlayInfo',water?'material.terrainOverlayInfo':'terrain.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo',water?'material.terrainMapOverlayInfo':'terrain.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo',water?'material.terrainGridOverlayInfo':'terrain.terrainGridOverlayInfo').replaceAll('terrainActivityOverlayInfo',water?'material.terrainActivityOverlayInfo':'terrain.terrainActivityOverlayInfo')
   .replaceAll('vec3(','vec3<f32>(').replaceAll('vec2(','vec2<f32>(')
   .replace(/\bvec4 (\w+)=/g,'let $1=').replace(/\bfloat (\w+)=/g,'var $1=').replace(/\bvec3 (\w+)=/g,'var $1=').replace(/\bvec2 (\w+)=/g,'let $1=')
   .replace('bool exempt=false','var exempt=false').replace(`for(int i=0;i<int(${water?'material':'terrain'}.terrainOverlayInfo.z);i++)`,`for(var i=0;i<i32(${water?'material':'terrain'}.terrainOverlayInfo.z);i++)`);
- return {name:water?'waterPlanningOverlays':'terrainPlanningOverlays',bindings:{[water?'material':'terrain']:{terrainOverlayInfo:'vec4<f32>',terrainMapOverlayInfo:'vec4<f32>',terrainGridOverlayInfo:'vec4<f32>',...(water?{}:{uTerrainExemptions:'texture_2d<f32>'})}},
-  gpu:{header:gpu,fragment:{end:wgsl}},gl:{header:gl,fragment:{end:water?fragment.replaceAll('terrainOverlayInfo','material.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo','material.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo','material.terrainGridOverlayInfo'):fragment}}};
+ return {name:water?'waterPlanningOverlays':'terrainPlanningOverlays',bindings:{[water?'material':'terrain']:{terrainOverlayInfo:'vec4<f32>',terrainMapOverlayInfo:'vec4<f32>',terrainGridOverlayInfo:'vec4<f32>',terrainActivityOverlayInfo:'vec4<f32>',...(water?{}:{uTerrainExemptions:'texture_2d<f32>'})}},
+  gpu:{header:gpu,fragment:{end:wgsl}},gl:{header:gl,fragment:{end:water?fragment.replaceAll('terrainOverlayInfo','material.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo','material.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo','material.terrainGridOverlayInfo').replaceAll('terrainActivityOverlayInfo','material.terrainActivityOverlayInfo'):fragment}}};
 }
 
 export function createTerrainPlanningOverlays(){
- const info=new Float32Array([0,0,0,CONTOUR_INTERVAL]),mapInfo=new Float32Array([0,0,0,256]),gridInfo=new Float32Array(4);
+ const info=new Float32Array([0,0,0,CONTOUR_INTERVAL]),mapInfo=new Float32Array([0,0,0,256]),gridInfo=new Float32Array(4),activityInfo=new Float32Array([0,0,1,0]);
  const source=new BufferImageSource({resource:new Uint8Array(256*4),width:256,height:1,format:'rgba8unorm',autoGenerateMipmaps:false,scaleMode:'nearest',alphaMode:'no-premultiply-alpha'});
  const texture=new Texture({source});
- let lastItems,lastLabels,lastStyle,lastMinute,lastKey='',territoryKey='',circles=[],raster=null,disposed=false;
- return {info,mapInfo,gridInfo,source,bit:terrainPlanningOverlayBit(),waterBit:terrainPlanningOverlayBit({water:true}),bindWater(material){material.data.terrainOverlayInfo=info;material.data.terrainMapOverlayInfo=mapInfo;material.data.terrainGridOverlayInfo=gridInfo;material.textures.baseColor=texture;},get enabled(){return !!(info[0]||info[1]||mapInfo[0]||mapInfo[1]||mapInfo[2]||gridInfo[0]);},get key(){return Number(this.enabled);},
-  set({rdz=false,topo=false,borders=false,divisions=false,faction=false,grid=false,gridCell=null}={},state){
+ let lastItems,lastLabels,lastStyle,lastMinute,lastKey='',territoryKey='',circles=[],raster=null,frontPixels=null,heatPixels=null,disposed=false;
+ return {info,mapInfo,gridInfo,activityInfo,source,bit:terrainPlanningOverlayBit(),waterBit:terrainPlanningOverlayBit({water:true}),bindWater(material){material.data.terrainOverlayInfo=info;material.data.terrainMapOverlayInfo=mapInfo;material.data.terrainGridOverlayInfo=gridInfo;material.data.terrainActivityOverlayInfo=activityInfo;material.textures.baseColor=texture;},get enabled(){return !!(info[0]||info[1]||mapInfo[0]||mapInfo[1]||mapInfo[2]||gridInfo[0]||activityInfo[0]||activityInfo[1]);},get key(){return Number(this.enabled);},
+  set({rdz=false,topo=false,borders=false,divisions=false,faction=false,grid=false,gridCell=null,front=false,hotspots=false,frontImage=null,heatImage=null,heatAlpha=1}={},state){
    if(disposed)return false;
    let changed=info[0]!==Number(rdz)||info[1]!==Number(topo)||mapInfo[0]!==Number(borders)||mapInfo[1]!==Number(divisions)||mapInfo[2]!==Number(faction),upload=false;
+   const nextActivity=[Number(front),Number(hotspots),heatAlpha,0];
+   if(nextActivity.some((value,i)=>activityInfo[i]!==Math.fround(value))){activityInfo.set(nextActivity);changed=true;}
+   if(frontImage&&frontImage!==frontPixels){frontPixels=frontImage;upload=true;}
+   if(heatImage&&heatImage!==heatPixels){heatPixels=heatImage;upload=true;}
+   if((frontPixels||heatPixels)&&!raster){raster=new Uint8Array(MAP_OVERLAY_SIZE*MAP_OVERLAY_SIZE*4);}
    const nextGrid=[Number(grid),gridCell?.[0]??0,gridCell?.[1]??0,Number(!!gridCell)];
    if(nextGrid.some((value,i)=>gridInfo[i]!==Math.fround(value))){gridInfo.set(nextGrid);changed=true;}
    const newlyEnabled=rdz&&!info[0];info[0]=Number(rdz);info[1]=Number(topo);mapInfo[0]=Number(borders);mapInfo[1]=Number(divisions);mapInfo[2]=Number(faction);
@@ -104,12 +118,12 @@ export function createTerrainPlanningOverlays(){
     if(!raster||key!==territoryKey){raster=rasterizePlanningTerritories(sites);territoryKey=key;upload=true;}
    }
    if(upload){
-    const width=raster?MAP_OVERLAY_SIZE:256,rows=Math.max(1,Math.ceil(circles.length*4/width)),data=new Float32Array(width*(rows+(raster?width:0)));
-    circles.forEach((circle,i)=>data.set(circle,i*4));const bytes=new Uint8Array(data.buffer);if(raster)bytes.set(raster,width*rows*4);
+    const width=raster?MAP_OVERLAY_SIZE:256,rows=Math.max(1,Math.ceil(circles.length*4/width)),data=new Float32Array(width*(rows+(raster?width*3:0)));
+    circles.forEach((circle,i)=>data.set(circle,i*4));const bytes=new Uint8Array(data.buffer);if(raster)bytes.set(raster,width*rows*4);if(frontPixels)bytes.set(frontPixels,width*(rows+width)*4);if(heatPixels)bytes.set(heatPixels,width*(rows+width*2)*4);
     source.resource=bytes;source.resize(width,data.length/width);source.update();mapInfo[3]=width;changed=true;
    }
    return changed;
   },
-  destroy(){if(disposed)return;disposed=true;texture.destroy(true);lastItems=null;lastLabels=null;raster=null;}
+  destroy(){if(disposed)return;disposed=true;texture.destroy(true);lastItems=null;lastLabels=null;raster=null;frontPixels=null;heatPixels=null;}
  };
 }

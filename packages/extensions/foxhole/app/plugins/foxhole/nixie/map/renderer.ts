@@ -1,6 +1,7 @@
 import { resolveFoxholeMapIconPreviewAsset } from './icon-preview.ts';
 import * as PIXI from 'pixi.js';
 import Voronoi from 'voronoi';
+import { rasterizeSpatialMapGraphics } from './spatial-activity-raster.mjs';
 import { polygon, featureCollection } from '@turf/helpers';
 import intersect from '@turf/intersect';
 import type { FoxholeMapContext } from './context.ts';
@@ -853,6 +854,12 @@ export class FoxholeMapRenderer {
         const showGrid = settings.grid && (settings.spatialWorldData || baseZoom < FoxholeMapRenderer.GRID_MAX_BASE_ZOOM);
         const hasRevealAnimation = this.regionViews.some(view => view.container.visible && view.container.alpha < 1);
         const gridTarget = showGrid ? this.context.getWorldPointer() : null;
+        if (settings.spatialWorldData && !gridTarget) {
+            this.gridSublines.visible = false;
+            this.lastGridTargetPosition = null;
+        } else if (!settings.spatialWorldData) {
+            this.gridSublines.visible = true;
+        }
         const viewportTopLeft = this.context.viewport.toWorld(0, 0);
         const hasViewportMoved = Boolean(
             this.lastViewportTopLeft === null
@@ -1002,8 +1009,8 @@ export class FoxholeMapRenderer {
 
         if (this.frontlines.visible) {
             this.redrawFrontlinesIfNeeded(
-                settings.frontAlt
-                    ? FoxholeMapRenderer.FRONTLINE_WORLD_THICKNESS
+                settings.frontAlt || settings.spatialWorldData
+                    ? FoxholeMapRenderer.FRONTLINE_WORLD_THICKNESS * (settings.frontAlt ? 1 : 0.4)
                     : Math.min(500, 2 / safeZoom),
             );
         } else if (this.frontlineRenderSignature || this.frontlineSegments.length) {
@@ -1052,11 +1059,42 @@ export class FoxholeMapRenderer {
         }
     }
 
+    private spatialFrontImage: { key: string; pixels: Uint8ClampedArray; } | null = null;
+    private spatialHeatImage: { key: string; pixels: Uint8ClampedArray; } | null = null;
+
     getSpatialPlanningOverlays(regionKey: string) {
         const view = this.regionViews.find(region => region.region.key === regionKey);
         const matches = view && Math.abs(this.grid.x - (view.container.x - FOXHOLE_REGION_WIDTH / 2)) < 1
             && Math.abs(this.grid.y - (view.container.y - FOXHOLE_REGION_HEIGHT / 2)) < 1;
-        return { gridCell: matches && this.gridSublines.visible ? [this.gridSublines.x / 32, this.gridSublines.y / 32] : null };
+        const gridCell = matches && this.gridSublines.visible ? [this.gridSublines.x / 32, this.gridSublines.y / 32] : null;
+        if (!view || !this.context.readMapSettings().spatialWorldData) {
+            return { gridCell };
+        }
+        const settings = this.context.readMapSettings();
+        if (settings.frontline || settings.frontAlt) {
+            const key = `${regionKey}:${this.frontlineRenderSignature}`;
+            if (this.spatialFrontImage?.key !== key) {
+                this.spatialFrontImage = { key, pixels: rasterizeSpatialMapGraphics(
+                    [this.frontlineShadow, this.frontlineGlow, this.frontlineCore],
+                    { left: view.container.x - FOXHOLE_REGION_WIDTH / 2, top: view.container.y - FOXHOLE_REGION_HEIGHT / 2,
+                        width: FOXHOLE_REGION_WIDTH, height: FOXHOLE_REGION_HEIGHT, blur: settings.frontAlt ? 2 : 0 },
+                ) };
+            }
+        }
+        if (settings.hotspots) {
+            const key = `${regionKey}:${view.activityHeatSignature}`;
+            if (this.spatialHeatImage?.key !== key) {
+                this.spatialHeatImage = { key, pixels: rasterizeSpatialMapGraphics([view.subregionHeatGraphics],
+                    { width: FOXHOLE_REGION_WIDTH, height: FOXHOLE_REGION_HEIGHT }) };
+            }
+        }
+        return { gridCell,
+            frontImage: settings.frontline || settings.frontAlt ? this.spatialFrontImage?.pixels : null,
+            heatImage: settings.hotspots ? this.spatialHeatImage?.pixels : null,
+            heatAlpha: view.subregionHeatGraphics.visible
+                ? this.computeRegionHeatPulse(performance.now(), view.activityHeatIntensity, view.revealOrder)
+                : 0,
+        };
     }
 
     private updateGridFollowTarget(gridTarget: { x: number; y: number; }): void {
@@ -3126,7 +3164,9 @@ export class FoxholeMapRenderer {
             );
         }
 
-        this.refreshFrontlineTexture();
+        if (!this.context.readMapSettings().spatialWorldData) {
+            this.refreshFrontlineTexture();
+        }
     }
 
     private refreshFrontlineTexture(): void {

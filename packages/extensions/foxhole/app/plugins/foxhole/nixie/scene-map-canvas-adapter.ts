@@ -308,7 +308,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels', 'foxhole-map-grid']);
             const pixelScale = context.zoom();
             const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
-            return root.children.filter(child => child !== root.mask && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders'].includes(child.label))).map(content => ({
+            return root.children.filter(child => child !== root.mask && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders', 'foxhole-map-frontlines', 'foxhole-map-subregions'].includes(child.label))).map(content => ({
                 content, liveGraphics: content.label === 'foxhole-map-borders', billboard: billboardLabels.has(content.label), billboardElevation: context.viewMode() === '3d' && billboardLabels.has(content.label) ? (x: number, y: number) => Math.max(0, world.sampleGround(x, y) ?? 0) : undefined, screenSizedBillboards: context.viewMode() === '3d' && billboardLabels.has(content.label) && !summaries.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip,
                 // Warm 2.5D keeps the layout ready for the first 3D display frame.
                 billboardGroups: context.viewMode() !== 'flat' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,

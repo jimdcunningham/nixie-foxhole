@@ -21,7 +21,7 @@ test('camera frames and toggles retain territory storage; ownership updates rebu
  const overlay=createTerrainPlanningOverlays(),state={labels,items:[{iconType:20,x:.5,y:.05}]};
  try{
   overlay.set({rdz:true,divisions:true,faction:true},state);const bytes=overlay.source.resource;
-  assert.equal(overlay.source.width,MAP_OVERLAY_SIZE);assert.equal(overlay.source.height,MAP_OVERLAY_SIZE+1);
+  assert.equal(overlay.source.width,MAP_OVERLAY_SIZE);assert.equal(overlay.source.height,MAP_OVERLAY_SIZE*3+1);
   assert.equal(overlay.info[2],1);assert.equal(new Float32Array(bytes.buffer)[2],50);
   for(let i=0;i<60;i++)assert.equal(overlay.set({rdz:true,divisions:true,faction:true},state),false);
   overlay.set({rdz:true,divisions:false,faction:false},state);assert.equal(overlay.source.resource,bytes);
