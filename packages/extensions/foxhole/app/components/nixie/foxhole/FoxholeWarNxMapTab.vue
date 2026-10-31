@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
@@ -137,10 +138,10 @@ function resolveMapIconUrl(iconName: string | null | undefined): string | null {
     }
 
     if (source.startsWith('http://') || source.startsWith('https://') || source.startsWith('/')) {
-        return source;
+        return resolveFoxholeAssetUrl(source, assetsBaseUrl);
     }
 
-    return `${assetsBaseUrl}maps/MapIcons/${source}.webp`;
+    return resolveFoxholeAssetUrl(`${assetsBaseUrl}maps/MapIcons/${source}.webp`, assetsBaseUrl);
 }
 
 const mapIconCategories = computed<Record<FoxholeMapIconCategoryKey, FoxholeMapIconEntry[]>>(() => {
