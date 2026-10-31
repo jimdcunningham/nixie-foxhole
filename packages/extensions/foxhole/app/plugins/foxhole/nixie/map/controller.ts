@@ -1,3 +1,4 @@
+import { loadImageWithCorsCacheRecovery } from '#nixie/plugins/nixie/board/utils/cors-image-cache-recovery.ts';
 import { resolveFoxholeAssetUrl } from '../asset-locations.ts';
 import * as PIXI from 'pixi.js';
 import { useRuntimeConfig } from '#imports';
@@ -50,7 +51,7 @@ const FOXHOLE_MAP_FONT_LOADS = [
 ] as const;
 
 const mapTexturePool = new FoxholeMapTexturePool<PIXI.Texture>(
-    url => PIXI.Assets.load(url.startsWith('blob:') ? { src: url, parser: 'texture' } : url),
+    url => loadImageWithCorsCacheRecovery(url, () => PIXI.Assets.load(url.startsWith('blob:') ? { src: url, parser: 'texture' } : url)),
     url => PIXI.Assets.unload(url),
 );
 
