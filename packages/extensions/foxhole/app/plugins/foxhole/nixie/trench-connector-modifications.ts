@@ -1,7 +1,7 @@
 import type { FoxholeStructureAsset } from './catalog.ts';
 import type { TrenchEndpoint } from './trench-connector.ts';
 import { getFoxholeSelectedModificationSlotVariants, normalizeFoxholeModificationSelectionMap } from './modification-slots.ts';
-import { resolveModificationHoverPreviewSelections } from './structure-modification-hover-preview.ts';
+import { resolveModificationHoverPreviewSelections, isStructureModificationHoverPreviewTarget } from './structure-modification-hover-preview.ts';
 import type { FoxholeModificationHoverPreviewState } from './structure-modification-hover-preview.ts';
 import { clipPiece, intervalPieces, nativePiece, offsetEndpoint, pieceFrame, stripPieces, trenchRoofPolygon } from './trench-connector-pieces.ts';
 import type { TrenchPiece, TrenchPieceFrame } from './trench-connector-pieces.ts';
@@ -20,7 +20,7 @@ export function resolveTrenchConnectorModifications(options: {
     const { asset, start, end } = options;
     if (!asset) return [];
     const saved = normalizeFoxholeModificationSelectionMap(options.selections);
-    const hoverState = options.hover?.nodeId === options.nodeId ? options.hover : null;
+    const hoverState = isStructureModificationHoverPreviewTarget(options.hover, options.nodeId) ? options.hover : null;
     const hoverSlot = hoverState ? asset.modificationSlotById[hoverState.slotId] : undefined;
     const hoverVariant = hoverSlot?.variantById[hoverState?.variantId ?? ''];
     const hover = hoverSlot && hoverVariant && !hoverVariant.isUpgrade ? { slot: hoverSlot, variant: hoverVariant } : null;

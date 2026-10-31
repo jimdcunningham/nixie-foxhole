@@ -79,24 +79,33 @@ export interface FoxholeModificationHoverPreviewVariant {
 
 export interface FoxholeModificationHoverPreviewState {
     nodeId: string;
+    nodeIds?: readonly string[];
     slotId: string;
     variantId: string;
     mode?: FoxholeModificationHoverPreviewMode;
     targetAssetKey?: string;
 }
 
+/** Inspector target IDs are the same eligible subset used by its bulk patch. */
+export function isStructureModificationHoverPreviewTarget(
+    preview: FoxholeModificationHoverPreviewState | null | undefined,
+    nodeId: string,
+): boolean {
+    return Boolean(preview && (preview.nodeIds ? preview.nodeIds.includes(String(nodeId)) : preview.nodeId === String(nodeId)));
+}
+
 export function shouldHideCargoForStructureHoverPreview(
     preview: FoxholeModificationHoverPreviewState | null | undefined,
     nodeId: string,
 ): boolean {
-    return Boolean(preview && preview.nodeId === String(nodeId));
+    return isStructureModificationHoverPreviewTarget(preview, nodeId);
 }
 
 export function resolveStructureAssetHoverTargetKey(
     preview: FoxholeModificationHoverPreviewState | null | undefined,
     nodeId: string,
 ): string | null {
-    if (preview?.nodeId !== String(nodeId) || preview.mode !== 'replacement') return null;
+    if (!isStructureModificationHoverPreviewTarget(preview, nodeId) || preview?.mode !== 'replacement') return null;
     return String(preview.targetAssetKey ?? '').trim() || null;
 }
 
@@ -122,7 +131,7 @@ export function isReplacementBaseHoverPreview(
     preview: FoxholeModificationHoverPreviewState | null | undefined,
     nodeId: string,
 ): boolean {
-    if (!preview || preview.nodeId !== String(nodeId)) {
+    if (!preview || !isStructureModificationHoverPreviewTarget(preview, nodeId)) {
         return false;
     }
 
@@ -181,7 +190,7 @@ export function buildModificationHoverPreviewSignature(
     preview: FoxholeModificationHoverPreviewState | null | undefined,
     boardRevision: string | number,
 ): string {
-    if (!preview || preview.nodeId !== String(nodeId)) {
+    if (!preview || !isStructureModificationHoverPreviewTarget(preview, nodeId)) {
         return `${String(nodeId)}::${boardRevision}`;
     }
 

@@ -12,22 +12,25 @@ const declarations = names.map(name => source.statements.find(node => ts.isFunct
 const code = ts.transpile(`const { canEdit, foxholeKey, activeExperimentalModificationGroupKey, pendingSelectionKey,
     props, asset, getTierSelectionKey, setActiveNixieStructureModificationHoverPreview,
     isSelectedRelationshipTarget, showHoverEntry, createTierHoverEntry, showTierAssetHoverCard,
-    isSelectedUpgradeVariant, createUpgradeHoverEntry } = context;
+    isSelectedUpgradeVariant, createUpgradeHoverEntry, catalog, state, selectionMap, reconcileFoxholeAssetCargoPatch, reconcileFoxholeTierModificationSelections } = context;
     ${declarations.join('\n')}
     return { ${names.join(',')} };`, { target: ts.ScriptTarget.ES2022 });
 
-function harness() {
+function harness(selectedUpgrade = true) {
     const previews: unknown[] = [];
     const context = {
+        catalog: {value:{}}, state: {value:{}}, selectionMap: {value:{}},
+        reconcileFoxholeAssetCargoPatch: (_catalog:unknown, _state:unknown, patch:unknown) => patch,
+        reconcileFoxholeTierModificationSelections: () => ({}),
         canEdit: { value: true }, foxholeKey: { value: 'fortt3' }, asset: { value: {} },
         activeExperimentalModificationGroupKey: { value: null }, pendingSelectionKey: { value: null },
-        props: { node: { id: 'bunker' }, patchNode: async (_patch: unknown, _reason: string) => {} },
+        props: { node: { id: 'bunker', targetIds: ['bunker', 'second-bunker'] }, patchNode: async (_patch: unknown, _reason: string) => {} },
         getTierSelectionKey: (asset: { foxholeKey: string }) => asset.foxholeKey,
         setActiveNixieStructureModificationHoverPreview: (preview: unknown) => previews.push(preview),
         isSelectedRelationshipTarget: (_target: unknown) => true,
         showHoverEntry: (_entry: unknown) => {}, createTierHoverEntry: (asset: unknown) => asset,
         showTierAssetHoverCard: (asset: unknown) => previews.push(asset),
-        isSelectedUpgradeVariant: (_slot: unknown, _variant: unknown) => true,
+        isSelectedUpgradeVariant: (_slot: unknown, _variant: unknown) => selectedUpgrade,
         createUpgradeHoverEntry: (_slot: unknown, variant: unknown) => variant,
     };
     return { context, previews, handlers: new Function('context', code)(context) };
@@ -54,4 +57,11 @@ test('failed conversions also clear previews and release pending selection', asy
     await assert.rejects(handlers.selectTierAsset({ foxholeKey: 'atgunait3' }), /test failure/);
     assert.deepEqual(previews, [null, null]);
     assert.equal(context.pendingSelectionKey.value, null);
+});
+
+
+test('bulk upgrade hover targets exactly the same inspector IDs as the bulk patch', () => {
+    const { context, handlers, previews } = harness(false);
+    handlers.showUpgradeHoverCard({id:'upgrade'}, {id:'rifle'});
+    assert.deepEqual(previews, [{nodeId:'bunker', nodeIds:['bunker','second-bunker'], slotId:'upgrade', variantId:'rifle', mode:'replacement'}]);
 });

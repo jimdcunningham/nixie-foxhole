@@ -168,7 +168,7 @@ import { materializeFoxholeAppearancePatchDefaults } from '#foxhole/plugins/foxh
 import { FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, resolveFoxholeConnectorRenderLane } from '#foxhole/plugins/foxhole/nixie/render-lanes.ts';
 import type { FoxholeStructureAsset, FoxholeStructureRenderLayerAsset } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import { resolveFoxholeSplineConnectorRenderLayers, resolveFoxholeSplineConnectorUpgradeHoverPreviewAlpha } from '#foxhole/plugins/foxhole/nixie/spline-connector-upgrade-layers.ts';
-import { resolveStructureAssetHoverTargetKey } from '#foxhole/plugins/foxhole/nixie/structure-modification-hover-preview.ts';
+import { resolveStructureAssetHoverTargetKey, isStructureModificationHoverPreviewTarget } from '#foxhole/plugins/foxhole/nixie/structure-modification-hover-preview.ts';
 
 import type { FoxholeSplineConnectorEndpoint, FoxholeSplineConnectorState } from '#foxhole/plugins/foxhole/nixie/spline-connector.ts';
 
@@ -2729,10 +2729,10 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
 
                 const neighborTarget = resolveStructureAssetHoverTargetKey(preview, preview.nodeId);
                 const affectsNeighbor = neighborTarget && Object.values(this.getEndpointOccupancyAttachments())
-                    .some(attachment => String(attachment.nodeId) === preview.nodeId);
-                if (preview.nodeId !== String(this.boardId) && !affectsNeighbor) return null;
+                    .some(attachment => isStructureModificationHoverPreviewTarget(preview, String(attachment.nodeId)));
+                if (!isStructureModificationHoverPreviewTarget(preview, String(this.boardId)) && !affectsNeighbor) return null;
 
-                return `${preview.nodeId}:${preview.slotId}:${preview.variantId}:${preview.mode ?? ''}:${preview.targetAssetKey ?? ''}`;
+                return `${preview.nodeIds?.join('|') ?? preview.nodeId}:${preview.slotId}:${preview.variantId}:${preview.mode ?? ''}:${preview.targetAssetKey ?? ''}`;
             },
             () => {
                 if (!this.destroyed) {

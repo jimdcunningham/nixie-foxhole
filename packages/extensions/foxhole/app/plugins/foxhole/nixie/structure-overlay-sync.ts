@@ -18,6 +18,7 @@ import type { FoxholeSocketNetworkIndex } from './structure-socket-networks.ts';
 
 export interface FoxholeStructureOverlaySyncContext {
     hoveredNodeId: string | null;
+    hoveredNodeIds?: readonly string[];
     showAllSockets: boolean;
 }
 
@@ -204,6 +205,7 @@ function resolveOverlaySyncContext(): FoxholeStructureOverlaySyncContext {
 
     return {
         hoveredNodeId: preview?.nodeId ? String(preview.nodeId) : null,
+        hoveredNodeIds: preview?.nodeIds,
         showAllSockets: settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.allSockets, false) === true,
     };
 }
@@ -235,11 +237,8 @@ function ensureOverlaySyncWatchers(): void {
             });
         }, { immediate: true }),
         watch(activeNixieStructureModificationHoverPreview, (next, prev) => {
-            if (prev?.nodeId) {
-                markDirtyById(String(prev.nodeId));
-            }
-            if (next?.nodeId) {
-                markDirtyById(String(next.nodeId));
+            for (const preview of [prev, next]) {
+                for (const id of preview?.nodeIds ?? (preview?.nodeId ? [preview.nodeId] : [])) markDirtyById(String(id));
             }
         }),
         watch(activeNixiePlacementPreviewTransforms, (next, prev) => {

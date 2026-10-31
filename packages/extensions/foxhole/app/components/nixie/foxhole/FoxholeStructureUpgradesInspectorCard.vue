@@ -289,6 +289,7 @@ function previewPlacementMenuItem(item: ResolvedMenuItem | null): void {
 }
 
 watch(() => props.node.id, closePlacementMenu);
+watch(() => JSON.stringify(props.node.targetIds), closePlacementMenu);
 watch(foxholeKey, closePlacementMenu);
 
 const conversionSourceAsset = computed(() => {
@@ -780,7 +781,7 @@ function scheduleHideHoverEntry(reason = 'unknown'): void {
 
 function showTierAssetHoverCard(nextAsset: FoxholeStructureAsset): void {
     setActiveNixieStructureModificationHoverPreview({
-        nodeId: props.node.id, slotId: 'asset-preview', variantId: nextAsset.foxholeKey,
+        nodeId: props.node.id, nodeIds: props.node.targetIds, slotId: 'asset-preview', variantId: nextAsset.foxholeKey,
         targetAssetKey: nextAsset.foxholeKey, mode: 'replacement',
     });
     showHoverEntry(createTierHoverEntry(nextAsset));
@@ -799,7 +800,7 @@ function showUpgradeHoverCard(
         setActiveNixieStructureModificationHoverPreview(null);
     } else {
         setActiveNixieStructureModificationHoverPreview({
-            nodeId: props.node.id,
+            nodeId: props.node.id, nodeIds: props.node.targetIds,
             slotId: slot.id,
             variantId: variant?.id ?? '',
             mode: 'replacement',
@@ -821,7 +822,7 @@ function showExperimentalSingleSlotHover(
     variant: FoxholeStructureModificationSlotVariantAsset,
 ): void {
     setActiveNixieStructureModificationHoverPreview({
-        nodeId: props.node.id,
+        nodeId: props.node.id, nodeIds: props.node.targetIds,
         slotId: slot.id,
         variantId: variant.id,
     });
@@ -833,7 +834,7 @@ function showExperimentalSlotPreview(
     variant: FoxholeStructureModificationSlotVariantAsset,
 ): void {
     setActiveNixieStructureModificationHoverPreview({
-        nodeId: props.node.id,
+        nodeId: props.node.id, nodeIds: props.node.targetIds,
         slotId: slot.id,
         variantId: variant.id,
     });

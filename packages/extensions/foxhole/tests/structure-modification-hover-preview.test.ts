@@ -7,6 +7,7 @@ import {
 import { getFoxholeManifest } from '../app/plugins/foxhole/nixie/manifest.ts';
 import {
     buildModificationHoverPreviewSignature,
+    resolveStructureAssetHoverTargetKey,
     createStructureAssetReplacementPreview,
     isReplacementBaseHoverPreview,
     isStructureReplacementModificationVariant,
@@ -212,4 +213,18 @@ test('resolveReplacementHoverPreviewAlpha previews swaps and base restore', () =
         variantId: '',
         mode: 'replacement',
     }, 'node-1'), true);
+});
+
+
+test('bulk preview membership controls replacement, cargo and invalidation for every eligible target', () => {
+    const preview = {nodeId:'first',nodeIds:['first','second'],slotId:'upgrade',variantId:'rifle',mode:'replacement' as const,targetAssetKey:'riflegarrison'};
+    for (const id of ['first','second']) {
+        assert.equal(resolveStructureAssetHoverTargetKey(preview,id),'riflegarrison');
+        assert.equal(shouldHideCargoForStructureHoverPreview(preview,id),true);
+        assert.notEqual(buildModificationHoverPreviewSignature(id,preview,1),buildModificationHoverPreviewSignature(id,null,1));
+    }
+    assert.equal(resolveStructureAssetHoverTargetKey(preview,'ineligible'),null);
+    assert.equal(shouldHideCargoForStructureHoverPreview(preview,'ineligible'),false);
+    assert.equal(buildModificationHoverPreviewSignature('ineligible',preview,1),buildModificationHoverPreviewSignature('ineligible',null,1));
+    assert.equal(resolveStructureAssetHoverTargetKey({...preview,nodeIds:[]},'first'),null,'an explicit empty target set does not fall back to the primary node');
 });

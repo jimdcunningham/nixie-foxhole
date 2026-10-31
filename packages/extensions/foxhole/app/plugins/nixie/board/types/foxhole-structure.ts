@@ -73,6 +73,7 @@ import type { FoxholeStructureOverlaySyncContext } from '#foxhole/plugins/foxhol
 import type { FoxholeSocketNetworkSceneNode } from '#foxhole/plugins/foxhole/nixie/structure-socket-networks.ts';
 import {
     buildModificationHoverPreviewSignature,
+    isStructureModificationHoverPreviewTarget,
     createStructureAssetReplacementPreview,
     FOXHOLE_MODIFICATION_HOVER_PREVIEW_TEXTURE_ALPHA,
     isReplacementBaseHoverPreview,
@@ -835,7 +836,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         this.syncLineOfSightMask();
 
         const nodeId = String(this.boardId);
-        const isHovered = context.hoveredNodeId === nodeId;
+        const isHovered = context.hoveredNodeIds?.includes(nodeId) ?? context.hoveredNodeId === nodeId;
         const usesRenderLayers = this.isUsingStructureRenderLayers();
 
         const nextModificationPreviewSignature = this.getModificationHoverPreviewSignature();
@@ -1622,7 +1623,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
     private isUsingStructureRenderLayers(): boolean {
         return this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.useStaticRender, undefined) !== true
             && (!this.getEffectiveStructureReplacementSelection()
-                || Boolean(activeNixieStructureModificationHoverPreview.value?.nodeId === String(this.boardId)
+                || Boolean(isStructureModificationHoverPreviewTarget(activeNixieStructureModificationHoverPreview.value, String(this.boardId))
                     && activeNixieStructureModificationHoverPreview.value?.targetAssetKey))
             && !this.getResolvedPackagedVisual()
             && !this.getResolvedDestroyedVisual()
@@ -1723,7 +1724,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         mode: 'replacement' | 'overlay';
     } | null {
         const preview = activeNixieStructureModificationHoverPreview.value;
-        if (!preview || preview.nodeId !== String(this.boardId)) {
+        if (!preview || !isStructureModificationHoverPreviewTarget(preview, String(this.boardId))) {
             return null;
         }
 
@@ -2636,7 +2637,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
         const bounds = this.getResolvedModificationBounds();
         // Conversion clicks clear the old structure's modifications as well.
-        if (activeNixieStructureModificationHoverPreview.value?.nodeId === String(this.boardId)
+        if (isStructureModificationHoverPreviewTarget(activeNixieStructureModificationHoverPreview.value, String(this.boardId))
             && activeNixieStructureModificationHoverPreview.value?.targetAssetKey) return;
         const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
