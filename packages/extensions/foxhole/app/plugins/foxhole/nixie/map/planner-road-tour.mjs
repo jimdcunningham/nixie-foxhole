@@ -4,20 +4,21 @@ export const plannerTourPose=(pose,position)=>{const convert=p=>({x:p[0]*32+posi
 
 /** Camera automation publishes control availability only. Frame/route telemetry
  * belongs to canvas diagnostics and never invalidates the sidebar during a tour. */
-export function createPlannerRoadTour({canvas,getRegions,getOptions,readPose,writePose,setCameraShake,walkingCamera,setWalkingCamera,setWalkingBob,viewMode,onStatus,hidden=()=>document.hidden,now=()=>performance.now()}){
+export function createPlannerRoadTour({canvas,getRegions,getOptions,readPose,writePose,setCameraShake,walkingCamera,setWalkingCamera,setWalkingBob,requestWalkingPointer,releaseWalkingPointer,viewMode,onStatus,hidden=()=>document.hidden,now=()=>performance.now()}){
  let tour=null,record=null,saved=null,generation=0,loading=false,error=null,lastUi=-Infinity,disposed=false,published=null,shaking=false,lastShakeStrength=null;
  const liveRecord=()=>record&&getRegions().some(r=>r.id===record.id&&r.scene===record.scene);
  function publish(force=false){const time=now();if(!force&&time-lastUi<500)return;lastUi=time;
-  const walkingState=walkingCamera?.()||{active:false,available:false,bobbing:true},walking=walkingState.active,canWalk=walkingState.available&&typeof setWalkingCamera==='function',walkingBob=walkingState.bobbing;
+  const walkingState=walkingCamera?.()||{active:false,available:false,bobbing:true},walking=walkingState.active,canWalk=walkingState.available&&typeof setWalkingCamera==='function',walkingBob=walkingState.bobbing,mouseCaptured=walkingState.captured===true;
   const regions=getRegions(),canRun=viewMode()==='3d'&&readPose()?.projection==='perspective'&&regions.length>0,state=loading?'loading':tour?.state||'idle',region=record?.id||'',canRestore=!!saved,canShake=viewMode()==='3d'&&typeof setCameraShake==='function';
-  const same=published&&published.walking===walking&&published.canWalk===canWalk&&published.walkingBob===walkingBob&&published.canRun===canRun&&published.canShake===canShake&&published.shaking===shaking&&published.state===state&&published.region===region&&published.error===error&&published.canRestore===canRestore&&published.regions.length===regions.length&&regions.every((r,i)=>published.regions[i].id===r.id&&published.regions[i].label===(r.label||r.id));
+  const same=published&&published.mouseCaptured===mouseCaptured&&published.walking===walking&&published.canWalk===canWalk&&published.walkingBob===walkingBob&&published.canRun===canRun&&published.canShake===canShake&&published.shaking===shaking&&published.state===state&&published.region===region&&published.error===error&&published.canRestore===canRestore&&published.regions.length===regions.length&&regions.every((r,i)=>published.regions[i].id===r.id&&published.regions[i].label===(r.label||r.id));
   if(same)return;
-  published={walking,canWalk,walkingBob,attached:true,canRun,canShake,shaking,regions:regions.map(r=>({id:r.id,label:r.label||r.id})),state,region,error,canRestore};onStatus(published);
+  published={walking,canWalk,walkingBob,mouseCaptured,attached:true,canRun,canShake,shaking,regions:regions.map(r=>({id:r.id,label:r.label||r.id})),state,region,error,canRestore};onStatus(published);
  }
  function syncShake(){const strength=shaking?1:0;if(strength!==lastShakeStrength){lastShakeStrength=strength;setCameraShake?.(strength);}}
  function stopShake(){if(!shaking)return;shaking=false;syncShake();publish(true);}
  function toggleCameraShake(){if(disposed||viewMode()!=='3d'||!setCameraShake)return;shaking=!shaking;syncShake();publish(true);}
  function toggleWalkingCamera(){if(disposed||!setWalkingCamera)return;if(walkingCamera?.().active)setWalkingCamera(false);else{stop();if(!setWalkingCamera(true))error='Switch to 3D perspective and wait for terrain beneath the camera target.';}publish(true);}
+ function toggleMouseLook(){if(disposed||!walkingCamera?.().active)return;if(walkingCamera().captured)releaseWalkingPointer?.();else requestWalkingPointer?.();publish(true);}
  function toggleWalkingBob(){if(disposed||!setWalkingBob)return;setWalkingBob(!walkingCamera?.().bobbing);publish(true);}
  function pause(){if(loading){stop();return;}if(tour?.state==='running'){tour.pause();writePose(null);publish(true);}}
  function stop(restore=false){generation++;loading=false;tour?.stop();tour=null;record=null;writePose(null);if(restore&&saved){writePose(saved);writePose(null);saved=null;}publish(true);}
@@ -40,7 +41,7 @@ export function createPlannerRoadTour({canvas,getRegions,getOptions,readPose,wri
  const escape=e=>{if(e.key==='Escape'&&(shaking||loading||tour?.state==='running'||tour?.state==='paused')){stopShake();stop();}};
  canvas.addEventListener('nixie-camera-navigation',pause);canvas.addEventListener('pointerdown',pause,{capture:true});canvas.addEventListener('wheel',pause,{capture:true,passive:true});const keyboard=canvas.ownerDocument||canvas;keyboard.addEventListener('keydown',escape);
  publish(true);
- return {start,pause,next,toggleCameraShake,toggleWalkingCamera,toggleWalkingBob,stop:()=>stop(),restore:()=>stop(true),
+ return {start,pause,next,toggleCameraShake,toggleWalkingCamera,toggleWalkingBob,toggleMouseLook,stop:()=>stop(),restore:()=>stop(true),
   diagnostics(){const s=tour?.snapshot?.(),shake=shaking?['camera: handheld motion']:[];return [...shake,...(loading?['tour: preparing native roads']:s?[`tour:${tour.state}  route:${s.routeNumber}  ${Math.round(s.routeProgressMetres||0)}/${Math.round(s.routeMetres||0)} m  ${s.phase}`]:[])];},
   update(deltaMS){if(disposed)return;if(shaking&&viewMode()!=='3d')stopShake();syncShake();if((loading||tour)&&(!liveRecord()||viewMode()!=='3d'||readPose()?.projection!=='perspective')){stop();return;}if(hidden()){publish();return;}if(tour?.state==='running'){
     const options=getOptions();tour.speed=options.speed;tour.view=options.view;if(options.view!=='variety')tour.viewStyle=options.view;

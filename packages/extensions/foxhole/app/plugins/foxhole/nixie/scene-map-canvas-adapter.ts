@@ -191,7 +191,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         getRegions: () => world.tourRegions().map(record => ({ ...record,
             label: FOXHOLE_MAP_REGIONS.find(region => regionIdForKey(region.key) === record.id)?.name ?? record.id })),
         getOptions: () => plannerRoadTourOptions.value,
-        readPose: context.cameraPose, writePose: context.setCameraPose, setCameraShake: context.setCameraShake, walkingCamera: context.walkingCamera, setWalkingCamera: context.setWalkingCamera, setWalkingBob: context.setWalkingBob, viewMode: context.viewMode,
+        readPose: context.cameraPose, writePose: context.setCameraPose, setCameraShake: context.setCameraShake, walkingCamera: context.walkingCamera, setWalkingCamera: context.setWalkingCamera, setWalkingBob: context.setWalkingBob, requestWalkingPointer: context.requestWalkingPointer, releaseWalkingPointer: context.releaseWalkingPointer, viewMode: context.viewMode,
         onStatus: status => { plannerRoadTourStatus.value = status; },
     }) : null;
     if (roadTour) plannerRoadTourActions.value = roadTour;
@@ -336,7 +336,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             roadTour?.destroy();
             if (plannerRoadTourActions.value === roadTour) {
                 plannerRoadTourActions.value = null;
-                plannerRoadTourStatus.value = { ...plannerRoadTourStatus.value, attached: false, canRun: false, canShake: false, shaking: false, walking: false, canWalk: false };
+                plannerRoadTourStatus.value = { ...plannerRoadTourStatus.value, attached: false, canRun: false, canShake: false, shaking: false, walking: false, mouseCaptured: false, canWalk: false };
             }
             destroyed = true;
             world.destroy();

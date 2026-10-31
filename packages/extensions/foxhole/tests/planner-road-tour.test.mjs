@@ -7,7 +7,7 @@ function fixture() {
     const canvas = new EventTarget();
     canvas.ownerDocument = new EventTarget();
     const initial = { position: { x: 160, y: -320, z: 3200 }, target: { x: 160, y: -320, z: 0 }, projection: 'perspective' };
-    let walking=false, walkingBob=true;
+    let walking=false, walkingBob=true, captured=false, captures=0;
     let pose = structuredClone(initial), status, time = 0, hidden = false, mode = '3d', requests = 0;
     const writes = [], publications = [], shakeWrites = [];
     const scene = { async createRoadTour() {
@@ -18,9 +18,9 @@ function fixture() {
     const options = { region: '', speed: 12, view: 'close' };
     const control = createPlannerRoadTour({ canvas, getRegions: () => regions, getOptions: () => options,
         readPose: () => pose, writePose: value => { writes.push(value); if (value) pose = { ...structuredClone(value), projection: 'perspective' }; return true; },
-        walkingCamera: () => ({active:walking,available:mode==='3d'&&regions.length>0,bobbing:walkingBob}), setWalkingCamera: value => { walking=value; return true; }, setWalkingBob: value => { walkingBob=value; },
+        walkingCamera: () => ({active:walking,available:mode==='3d'&&regions.length>0,bobbing:walkingBob,captured}), requestWalkingPointer: () => { captures++; captured=true; return true; }, releaseWalkingPointer: () => { captured=false; }, setWalkingCamera: value => { walking=value; return true; }, setWalkingBob: value => { walkingBob=value; },
         setCameraShake: value => shakeWrites.push(value), viewMode: () => mode, onStatus: value => { status = value; publications.push(value); }, hidden: () => hidden, now: () => time });
-    return { canvas, initial, scene, control, options, writes, publications, shakeWrites, rename(label) { regions[0].label = label; }, get status() { return status; }, get requests() { return requests; },
+    return { canvas, initial, scene, control, options, writes, publications, shakeWrites, rename(label) { regions[0].label = label; }, get status() { return status; }, get requests() { return requests; }, get captures() { return captures; }, releaseMouse() { captured=false; },
         step(ms) { time += ms; control.update(16); }, setHidden(value) { hidden = value; }, setMode(value) { mode = value; }, retire() { regions = []; } };
 }
 
@@ -139,4 +139,23 @@ test('dev walking controls stop tours, toggle bob, and clean up on destroy', asy
  assert.equal(f.status.walking,true);
  f.control.destroy();
  assert.equal(f.status.walking,false);
+});
+
+test('mouse look requires an explicit action and follows native release state', () => {
+    const f = fixture();
+    f.control.toggleMouseLook();
+    assert.equal(f.captures, 0);
+    f.control.toggleWalkingCamera();
+    assert.equal(f.captures, 0, 'entering walking does not capture');
+    f.control.toggleMouseLook();
+    assert.equal(f.captures, 1);
+    assert.equal(f.status.mouseCaptured, true);
+    f.releaseMouse();
+    f.step(500);
+    assert.equal(f.status.mouseCaptured, false, 'Escape returns the button to Capture Mouse');
+    f.control.toggleMouseLook();
+    assert.equal(f.captures, 2);
+    f.control.toggleMouseLook();
+    assert.equal(f.status.mouseCaptured, false);
+    f.control.destroy();
 });

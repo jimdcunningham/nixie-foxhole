@@ -14,11 +14,13 @@ export function createPlannerRoadTour(options: {
     readPose(): (Pose & { projection: string; }) | null;
     writePose(pose: Pose | null): boolean;
     setCameraShake?(strength: number): void;
-    walkingCamera?(): { active: boolean; available: boolean; bobbing: boolean; };
+    walkingCamera?(): { active: boolean; available: boolean; bobbing: boolean; captured?: boolean; };
     setWalkingCamera?(enabled: boolean): boolean;
     setWalkingBob?(enabled: boolean): void;
+    requestWalkingPointer?(): boolean;
+    releaseWalkingPointer?(): void;
     viewMode(): 'flat' | '2d' | '3d';
     onStatus(status: PlannerRoadTourStatus): void;
     hidden?(): boolean;
     now?(): number;
-}): { toggleWalkingCamera(): void; toggleWalkingBob(): void; toggleCameraShake(): void; start(): Promise<void>; pause(): void; next(): void; stop(): void; restore(): void; update(deltaMS: number): void; destroy(): void; };
+}): { toggleMouseLook(): void; toggleWalkingCamera(): void; toggleWalkingBob(): void; toggleCameraShake(): void; start(): Promise<void>; pause(): void; next(): void; stop(): void; restore(): void; update(deltaMS: number): void; destroy(): void; };
