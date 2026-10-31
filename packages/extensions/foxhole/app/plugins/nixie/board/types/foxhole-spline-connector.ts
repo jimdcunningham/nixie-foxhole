@@ -2657,7 +2657,9 @@ export class FoxholeSplineConnectorNode extends BoardNodeBase<FoxholeSplineConne
 
         this.selectionStateWatcher = subscribeToNixieSelectionState(String(this.boardId), selected => {
             this.isSelected = selected;
-            this.syncFromState();
+            // Selection can arrive after Palette placement has moved the live node.
+            // Refresh guides and sockets without restoring the saved transform.
+            this.syncFromState(true);
         });
     }
 
