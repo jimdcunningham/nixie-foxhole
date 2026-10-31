@@ -865,7 +865,7 @@ const mapModVisibilityDisabled = computed(() => (
             :title="formatCategoryLabel(categoryKey)"
             :sectionKey="`foxhole-war-nx.map.icons.${categoryKey}`"
             collapsible
-            :defaultOpen="false"
+            :defaultOpen="true"
         >
             <template #actions>
                 <NxIconButton
