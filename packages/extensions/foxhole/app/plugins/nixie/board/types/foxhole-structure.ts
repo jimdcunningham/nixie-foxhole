@@ -2220,6 +2220,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
             this.getResolvedBuildSockets(structure),
             this.getLocalAttachmentOccupancyKeys(true),
             String(this.boardId),
+            structure.codeName,
         );
         const hideRoofs = this.settingsStore.getValueOr(FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.hideRoofs, undefined) === true
             || this.shouldHideRoofForModificationPreview();
@@ -2263,6 +2264,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
                 this.getResolvedBuildSockets(structure),
                 this.getLocalAttachmentOccupancyKeys(true),
                 String(this.boardId),
+                structure.codeName,
             )
             : new Set<string>();
 

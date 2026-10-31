@@ -119,12 +119,22 @@ export function resolveFoxholeOccupiedSocketTags(
     buildSockets: readonly Pick<FoxholeManifestBuildSocket, 'name' | 'socketTags'>[],
     occupiedSocketKeys: ReadonlySet<string>,
     nodeId: string,
+    structureCodeName?: string | null,
 ): ReadonlySet<string> {
     const occupiedTags = new Set<string>();
     const normalizedNodeId = String(nodeId ?? '').trim();
     if (!normalizedNodeId) {
         return occupiedTags;
     }
+
+    // T1 base walls use *FortSocket; T2/T3 use *Socket for the same
+    // physical joins. Retained connections must survive a tier change.
+    const lookupName = (name: unknown): string => {
+        const normalized = normalizeFoxholeBuildSocketName(name).toLowerCase();
+        return /^fortbaset[123]$/i.test(String(structureCodeName ?? '').trim())
+            ? normalized.replace(/^(front|back|left)fortsocket$/, '$1socket')
+            : normalized;
+    };
 
     const occupiedSocketNames = new Set(
         [...occupiedSocketKeys].flatMap(key => {
@@ -133,14 +143,14 @@ export function resolveFoxholeOccupiedSocketTags(
                 return [];
             }
 
-            const socketName = normalizeFoxholeBuildSocketName(key.slice(prefix.length)).toLowerCase();
+            const socketName = lookupName(key.slice(prefix.length));
             return socketName ? [socketName] : [];
         }),
     );
 
     for (const socket of buildSockets) {
         const socketName = String(socket.name ?? '').trim();
-        const socketLookupName = normalizeFoxholeBuildSocketName(socketName).toLowerCase();
+        const socketLookupName = lookupName(socketName);
         if (!socketLookupName || !occupiedSocketNames.has(socketLookupName)) {
             continue;
         }

@@ -844,5 +844,5 @@ function resolveStructureOccupiedTags(entity: NixieExperimentalComponentEntitySn
             }
         }
     }
-    return resolveFoxholeOccupiedSocketTags(assetMetadata.buildSockets, occupiedKeys, entity.entityId);
+    return resolveFoxholeOccupiedSocketTags(assetMetadata.buildSockets, occupiedKeys, entity.entityId, assetMetadata.codeName);
 }

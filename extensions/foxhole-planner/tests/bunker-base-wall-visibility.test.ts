@@ -21,3 +21,18 @@ for (const tier of [1, 2, 3]) {
         assert.ok(authored.renderLayers.some(layer => layer.id === 'base' && !layer.componentTags?.length));
     });
 }
+
+test('base tier changes preserve connected walls across the T1 FortSocket naming difference', () => {
+    for (const side of ['Front', 'Back', 'Left']) {
+        for (const savedName of [`${side}Socket`, `${side}FortSocket`]) {
+            for (const tier of [3, 2, 1, 2, 3]) {
+                const socket = { name: side + (tier === 1 ? 'FortSocket' : 'Socket'), socketTags: [{ tag: `Side${side}` }] };
+                const occupied = resolveFoxholeOccupiedSocketTags([socket], new Set([`base:${savedName}`]), 'base', `FortBaseT${tier}`);
+                assert.deepEqual([...occupied], [side.toLowerCase()], `${savedName}:tier${tier}`);
+            }
+        }
+    }
+    const unrelated = resolveFoxholeOccupiedSocketTags([{ name: 'FrontFortSocket', socketTags: [{ tag: 'Front' }] }],
+        new Set(['fort:FrontSocket']), 'fort', 'FortT1');
+    assert.equal(unrelated.size, 0, 'aliases remain limited to the three bunker-base tiers');
+});
