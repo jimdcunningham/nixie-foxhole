@@ -1,3 +1,6 @@
+import { activeNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
+import { readFoxholePreviewAssetsVersion } from '../../../utils/scene-v2-preview-assets.ts';
+import { resolveFoxholeSceneV2RenderPreview } from './scene-v2-inspector-preview.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2StateAdapter, NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { convertFoxholeSceneV1NodeToV2 } from './scene-v2-conversion.ts';
@@ -207,6 +210,12 @@ function resolveEndpointSocketSnap(entity: NixieExperimentalComponentEntitySnaps
 }
 
 export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
+    renderPreviewState() {
+        return [activeNixieStructureModificationHoverPreview.value, readFoxholePreviewAssetsVersion()];
+    },
+    renderPreview(entity, settings) {
+        return resolveFoxholeSceneV2RenderPreview(entity, settings, foxholeSceneV2StateAdapter);
+    },
     hitboxHostMetrics(entity) {
         const geometry = structureGeometry(entity);
         if (!geometry) {

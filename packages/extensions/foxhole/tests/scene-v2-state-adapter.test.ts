@@ -1,3 +1,7 @@
+import { prepareFoxholePreviewAssets } from '../app/utils/scene-v2-preview-assets.ts';
+import { setActiveNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
+import { buildFoxholeSceneV2RenderPreview } from '../app/plugins/foxhole/nixie/scene-v2-inspector-preview.ts';
+import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { NixieSceneV2TransformFinalizerAdapter } from '../../../nixie/app/utils/nixie-scene-v2-transform-finalizer-adapter.ts';
 import { finalizeFoxholeSceneV2Transform } from '../../../../extensions/foxhole-planner/src/scene-v2-transform-finalizer.ts';
 import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
@@ -1032,4 +1036,47 @@ test('maintenance preview edits remain detached and create the typed component f
     assert.deepEqual(runtime.exportDocument(), before);
     assert.deepEqual(runtime.selection.ids, [id]);
     assert.deepEqual(foxholeSceneV2StateAdapter.project(host.readEntity(id))!.state.maintenanceFilters, { range: 100, exclusions: [] });
+});
+
+
+test('Inspector bunkbed hover previews reveal the interior without saving', () => {
+ const {host,id,project}=fixture('foxholeAsset',{foxholeKey:'fortt3',modificationVariantIds:{FrontInfraModSlot:'desk'}});
+ const original=host.readEntity(id),before=host.exportDocument(),selected=project().state.modificationVariantIds;
+ const hover={nodeId:id,slotId:'BackInfraModSlot',variantId:'bunkbed'};
+ const preview=buildFoxholeSceneV2RenderPreview(original,hover,{},assets.fortt3,foxholeSceneV2StateAdapter)!;
+ assert.ok(preview);assert.equal(preview.settings?.['foxhole.structure.hideRoofs'],true);
+ assert.equal((foxholeSceneV2StateAdapter.project(preview.entity)!.state.modificationVariantIds as Record<string,string>).BackInfraModSlot,'bunkbed');
+ assert.ok(Object.values(preview.resourceOpacity!).includes(.52));assert.ok(Object.values(preview.modelNodeOpacity!).includes(.52));
+ const plan=renderFoxholeSceneV2Entity(preview.entity,{contractVersion:1,entities:[preview.entity],settings:preview.settings});
+ assert.ok(plan.experimentalSpatial?.hiddenModelNodes?.includes('structure-layer-roof'));
+ assert.deepEqual(host.exportDocument(),before);assert.deepEqual(project().state.modificationVariantIds,selected);
+ assert.equal(buildFoxholeSceneV2RenderPreview(original,null,{},assets.fortt3,foxholeSceneV2StateAdapter),null);
+ assert.equal(buildFoxholeSceneV2RenderPreview(original,{...hover,nodeIds:['other']},{},assets.fortt3,foxholeSceneV2StateAdapter),null);
+ const exterior=buildFoxholeSceneV2RenderPreview(original,{...hover,slotId:'BackDefenseModSlot',variantId:'sandbags'},{},assets.fortt3,foxholeSceneV2StateAdapter)!;
+ assert.equal(exterior.settings?.['foxhole.structure.hideRoofs'],undefined);
+});
+
+test('Inspector upgrade and default hovers use V1 opacity without saving',()=>{
+ const {host,id}=fixture('foxholeAsset',{foxholeKey:'facilityrefinery2'});const original=host.readEntity(id),before=host.exportDocument();
+ const upgrade=buildFoxholeSceneV2RenderPreview(original,{nodeId:id,slotId:'UpgradeSlotComponent',variantId:'engineeringstation',mode:'replacement'},{},assets.facilityrefinery2,foxholeSceneV2StateAdapter)!;
+ assert.equal(upgrade.opacity,.52);
+ const base=buildFoxholeSceneV2RenderPreview(upgrade.entity,{nodeId:id,slotId:'UpgradeSlotComponent',variantId:'',mode:'replacement'},{},assets.facilityrefinery2,foxholeSceneV2StateAdapter)!;
+ assert.equal(base.opacity,.52);assert.deepEqual(host.exportDocument(),before);
+});
+
+
+test('Inspector preview projection follows hover lifecycle and never changes the placement or saved source',async()=>{
+ const activate=await prepareFoxholePreviewAssets({generationHash:'test',readProductCatalog:async()=>({baseUrl:'https://example.com/',sha256:'test',text:JSON.stringify({products:[{id:'fortt3',data:assets.fortt3}]})})});activate();
+ const {host,id}=fixture('foxholeAsset',{foxholeKey:'fortt3'});const original=host.readEntity(id),before=host.exportDocument(),settings={};
+ try{
+  setActiveNixieStructureModificationHoverPreview({nodeId:id,nodeIds:[id,'other'],slotId:'BackInfraModSlot',variantId:'bunkbed'});
+  const first=foxholeSceneV2StateAdapter.renderPreview!(original,settings)!;
+  assert.ok(first);assert.equal(foxholeSceneV2StateAdapter.renderPreview!(original,settings),first);
+  assert.equal(foxholeSceneV2StateAdapter.renderPreview!(first.entity,settings),first,'a render snapshot must not apply twice');
+  setActiveNixieStructureModificationHoverPreview({nodeId:id,slotId:'FrontInfraModSlot',variantId:'bunkbed'});
+  const next=foxholeSceneV2StateAdapter.renderPreview!(original,settings)!;
+  assert.notDeepEqual(next.modelNodeOpacity,first.modelNodeOpacity,'orientation uses the newly hovered slot');
+  assert.deepEqual(host.exportDocument(),before);
+  setActiveNixieStructureModificationHoverPreview(null);assert.equal(foxholeSceneV2StateAdapter.renderPreview!(original,settings),null);
+ }finally{setActiveNixieStructureModificationHoverPreview(null);(await prepareFoxholePreviewAssets(null))();}
 });

@@ -1,3 +1,4 @@
+import { prepareFoxholePreviewAssets } from '#foxhole/utils/scene-v2-preview-assets.ts';
 import { parseLegacySettings } from '#foxhole/utils/nixie-legacy-settings.ts';
 import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration, resolveSelectedFoxholeAsset } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
@@ -32,8 +33,10 @@ export default defineNuxtPlugin({
             aliases: ['foxhole'],
             prepareGeneration: async generation => {
                 const activate = await prepareFoxholeAssetGeneration(generation);
+                const activatePreviews = await prepareFoxholePreviewAssets(generation);
                 return () => {
                     activate();
+                    activatePreviews();
                     stopPreview();
                     const url = generation ? resolveSelectedFoxholeAsset('types/structures/facilitytransferresource/facilitytransferresource.glb') : undefined;
                     stopPreview = url ? registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', url) : () => {};
