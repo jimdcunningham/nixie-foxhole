@@ -110,8 +110,15 @@ function patchSettings(patch: Record<string, boolean | number | string>, reason:
 }
 
 function onRegionKeysChange(nextRegionKeys: string[]): void {
+    const currentRegionKeys = mapSettings.value.regionKeys;
+    if (nextRegionKeys.length === currentRegionKeys.length
+        && nextRegionKeys.every(key => currentRegionKeys.includes(key))) {
+        return;
+    }
+
     patchSettings({
         [FOXHOLE_MAP_SETTING_KEYS.regionKeys]: serializeFoxholeMapStringList(nextRegionKeys),
+        [FOXHOLE_MAP_SETTING_KEYS.enabled]: true,
     }, 'foxhole-war-nx:region-keys');
 }
 
@@ -334,7 +341,6 @@ watch(() => mapSettings.value.enabled, enabled => {
                             commitOnClose
                             searchPlaceholder="Search Regions…"
                             search-aria-label="Search Regions"
-                            :disabled="!mapSettings.enabled"
                             @update:model-value="onRegionKeysChange"
                         />
                     </div>
