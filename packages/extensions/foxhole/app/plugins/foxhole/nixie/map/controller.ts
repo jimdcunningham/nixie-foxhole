@@ -1,3 +1,4 @@
+import { getFoxholeMapModStore } from './mod-store.ts';
 import { loadImageWithCorsCacheRecovery } from '#nixie/plugins/nixie/board/utils/cors-image-cache-recovery.ts';
 import { resolveFoxholeAssetUrl } from '../asset-locations.ts';
 import * as PIXI from 'pixi.js';
@@ -571,6 +572,17 @@ export class FoxholeMapViewportPlugin extends Plugin {
             scale: camera.scale,
             time: 0,
         });
+    }
+
+    getSpatialMapImage(regionKey: string): { key: string; load: () => Promise<PIXI.Texture>; release: () => Promise<void>; } | null {
+        if (!this.readMapSettings().modded) return null;
+        const region = FOXHOLE_MAP_REGIONS.find(region => region.key === regionKey);
+        const store = getFoxholeMapModStore();
+        const url = region ? store.getTextureUrl(region.textureKey) : null;
+        if (!url) return null;
+        // Separate leases keep a 2D refresh from unloading the spatial surface.
+        let owner: ReturnType<typeof mapTexturePool.createOwner> | undefined;
+        return { key: `${store.revision}:${url}`, load: () => (owner ??= mapTexturePool.createOwner()).load(url), release: () => owner?.releaseAll() ?? Promise.resolve() };
     }
 
     private readMapSettings() {

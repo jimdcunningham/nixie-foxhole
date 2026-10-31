@@ -33,13 +33,14 @@ export class LiveTerrainPass extends Pass3D {
  async whenDisposed(){while(this.work.size)await Promise.allSettled([...this.work]);}
  clear(){this.qualityAbort.abort();this.qualityAbort=new AbortController();this.generation++;this.textureContext=null;const old=this.current;this.current=null;if(old){old.group.destroy();this.track(old.textureSet?.release());for(const source of old.ownedSources||old.sources)source.destroy();}}
  destroy(){this.clear();this.planning.destroy();}
+ updateMapTexture(load){const current=this.current,generation=this.generation,revision=this.mapTextureRevision=(this.mapTextureRevision||0)+1;if(current?.surface!=='map')return Promise.resolve(false);return this.track((async()=>{const paint=await load();if(this.current!==current||this.generation!==generation||revision!==this.mapTextureRevision)return false;const group=new BindGroup({0:current.uniforms,1:paint.source,2:paint.source.style,3:this.planning.source});current.group.destroy();current.group=group;current.sources=[paint.source];return true;})());}
  setPlanningOverlays(options,state){const changed=this.planning.set(options,state);if(changed)this.current?.uniforms.update();return changed;}
  load(region,geometry,options){return this.track(this.loadWork(region,geometry,options));}
- async loadWork(region,geometry,{json,zipped,status,prepareTerrain=()=>{},terrainDescriptor,texturePool,signal,onTerrainObservation,surface='native',texture}){
+ async loadWork(region,geometry,{json,zipped,status,prepareTerrain=()=>{},terrainDescriptor,texturePool,signal,onTerrainObservation,surface='native',texture,mapTexture}){
   this.clear();const generation=this.generation;
   if(surface==='plain'||surface==='map'){
    status(surface==='map'?'Loading processed terrain map…':'Preparing plain terrain…');
-   const paint=surface==='map'?await texture(region+'/map/terrain.webp'):null;
+   const paint=surface==='map'?(await mapTexture?.()??await texture(region+'/map/terrain.webp')):null;
    if(generation!==this.generation||signal?.aborted)throw signal?.reason||new DOMException('Terrain retired','AbortError');
    const uniforms=new UniformGroup({...(this.frame?{foxholeFrame:{value:this.frame,type:'vec4<f32>'}}:{}),surfaceColor:{value:new Float32Array([.195,.216,.119,1]),type:'vec4<f32>'},terrainOverlayInfo:{value:this.planning.info,type:'vec4<f32>'}});
    const group=new BindGroup({0:uniforms,...(paint?{1:paint.source,2:paint.source.style}:{}),[paint?3:1]:this.planning.source});

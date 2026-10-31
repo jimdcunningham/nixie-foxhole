@@ -122,8 +122,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     settings.worldLayers.terrain = false;
     assert.equal(adapter.spatialGroundVisible(),false,'hidden regional terrain must not reveal the editor floor');
     assert.deepEqual(JSON.parse(JSON.stringify(spatialSyncs.at(-1).regions)),[
-        {id:'westgate',position:{x:10,y:0},warState:{items:['WestgateHex']}},
-        {id:'origin',position:{x:20,y:0},warState:{items:['OriginHex']}},
+        {id:'westgate',position:{x:10,y:0},terrainMapImage:null,warState:{items:['WestgateHex']}},
+        {id:'origin',position:{x:20,y:0},terrainMapImage:null,warState:{items:['OriginHex']}},
     ]);
     adapter.destroy();
     assert.equal(context.session.sceneViewActive.value, false);

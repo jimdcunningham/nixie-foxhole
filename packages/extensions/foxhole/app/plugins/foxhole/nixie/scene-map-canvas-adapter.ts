@@ -281,7 +281,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             }
             worldRetirementStatus = null;
             world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings, regions: regions.map(region => ({
-                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), warState: plugin.getSpatialWarState(region.key),
+                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key),
             })) });
             roadTour?.update(deltaMS);
         },

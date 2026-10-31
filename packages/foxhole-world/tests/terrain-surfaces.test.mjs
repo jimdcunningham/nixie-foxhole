@@ -50,3 +50,26 @@ test('direct terrain pass draws only the chunk geometries accepted by the curren
  let draw;pass.build({addPass:value=>draw=value},{renderer});const session={renderer,view3d:{shadowFilter:'pcf',camera:{_cameraData:{bindGroup:{},frustum:{planesData:planes}}}},globalBindGroup:{}};
  draw.render(session);assert.deepEqual(drawn.map(args=>args[0]),[a,b]);visible=[];draw.render(session);assert.equal(drawn.length,2);draw.destroy();pass.destroy();
 });
+
+
+test('map terrain uses the active custom map image without fetching the processed default',async()=>{
+ const pass=new LiveTerrainPass(),geometry={},source=new BufferImageSource({resource:new Uint8Array(4),width:1,height:1}),paint=new Texture({source});
+ await pass.load('test',geometry,{...options,surface:'map',texture:forbidden,mapTexture:async()=>paint});
+ assert.equal(pass.current.sources[0],source);assert.equal(pass.current.geometry,geometry);pass.destroy();assert.equal(source.destroyed,false);paint.destroy(true);
+});
+
+
+test('changing mod images rebinds only the texture and ignores late superseded work',async()=>{
+ const pass=new LiveTerrainPass(),geometry={},make=()=>new Texture({source:new BufferImageSource({resource:new Uint8Array(4),width:1,height:1})}),base=make(),first=make(),second=make();
+ await pass.load('test',geometry,{...options,surface:'map',texture:async()=>base});
+ let resolve;const delayed=pass.updateMapTexture(()=>new Promise(r=>resolve=r));
+ assert.equal(await pass.updateMapTexture(async()=>second),true);resolve(first);assert.equal(await delayed,false);
+ assert.equal(pass.current.geometry,geometry);assert.equal(pass.current.sources[0],second.source);
+ assert.equal(await pass.updateMapTexture(async()=>base),true);assert.equal(pass.current.sources[0],base.source);
+ pass.destroy();for(const paint of [base,first,second]){assert.equal(paint.source.destroyed,false);paint.destroy(true);}
+});
+
+test('a map image finishing after terrain retirement cannot attach',async()=>{
+ const pass=new LiveTerrainPass(),paint=new Texture({source:new BufferImageSource({resource:new Uint8Array(4),width:1,height:1})});
+ await pass.load('test',{}, {...options,surface:'map',texture:async()=>paint});let resolve;const pending=pass.updateMapTexture(()=>new Promise(r=>resolve=r));pass.destroy();resolve(paint);assert.equal(await pending,false);assert.equal(pass.current,null);paint.destroy(true);
+});
