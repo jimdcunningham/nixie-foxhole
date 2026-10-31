@@ -209,6 +209,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private lastConstraintSignature = '';
     private constraintsApplied = false;
     private fitMapOnNextSync = false;
+    private minimumMapScale = 0;
     private rendererCreation: Promise<void> | null = null;
     private isDestroyed = false;
     private mapGeneration = 0;
@@ -559,6 +560,10 @@ export class FoxholeMapViewportPlugin extends Plugin {
             width: this.parent.screenWidth,
             height: this.parent.screenHeight,
         });
+        // Fit at a scale the map's viewport constraints can actually retain.
+        // ClampZoom corrects undersized scales around the current origin, which
+        // otherwise shifts the freshly centered map on its first update.
+        camera.scale = Math.max(camera.scale, this.minimumMapScale);
         this.fitMapOnNextSync = false;
         this.pluginContext.session.cameraTo({
             position: camera.position,
@@ -938,6 +943,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
             : noBackgroundMinScale;
         const maxScale = Math.max(FoxholeMapViewportPlugin.DEFAULT_MAX_SCALE, minScale);
 
+        this.minimumMapScale = minScale;
         this.parent.clampZoom({
             minScale,
             maxScale,
@@ -958,6 +964,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     private resetViewportConstraints(): void {
+        this.minimumMapScale = 0;
         if (!this.constraintsApplied) {
             return;
         }

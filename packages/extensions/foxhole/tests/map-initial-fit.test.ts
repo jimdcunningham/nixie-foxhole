@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { stripTypeScriptTypes } from 'node:module';
+import { runInNewContext } from 'node:vm';
 import {
     resolveFoxholeMapFitCamera,
     shouldFitFoxholeMapOnEnable,
@@ -42,4 +44,23 @@ test('map viewport applies the empty-scene fit before renderer initialization', 
         mapController,
         /this\.pluginContext\.session\.cameraTo\(\{[\s\S]*?position: camera\.position,[\s\S]*?scale: camera\.scale,[\s\S]*?time: 0/,
     );
+});
+
+
+test('initial fit respects the installed map zoom floor before positioning the camera', () => {
+    const method = mapController.match(/    private fitMapToBoundsIfPending\([\s\S]*?\n    \}/)![0];
+    const fit = runInNewContext(stripTypeScriptTypes(method.replace('private fitMapToBoundsIfPending', 'function fitMapToBoundsIfPending') + '\nfitMapToBoundsIfPending;'), { resolveFoxholeMapFitCamera });
+    const moves: any[] = [];
+    const state = { fitMapOnNextSync: true, minimumMapScale: 0.001168,
+        parent: { screenWidth: 890, screenHeight: 734 },
+        pluginContext: {project: {}, getSceneNodeCount: () => 0, session: {cameraTo: (camera: any) => moves.push(camera)}},
+        getActiveBounds: () => ({left:-600000,right:600000,top:-330000,bottom:330000,width:1200000,height:660000}),
+    };
+    fit.call(state, {});
+    assert.equal(moves.length, 1);
+    assert.equal(moves[0].position.x, 0);
+    assert.equal(moves[0].position.y, 0);
+    assert.equal(moves[0].scale, state.minimumMapScale, 'do not ask the viewport to correct an incompatible initial zoom');
+    fit.call(state, {});
+    assert.equal(moves.length, 1, 'later data readiness must not repeat the fit');
 });
