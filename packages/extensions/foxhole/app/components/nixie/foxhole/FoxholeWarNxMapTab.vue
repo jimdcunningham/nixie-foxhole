@@ -789,7 +789,7 @@ const mapModVisibilityDisabled = computed(() => (
                 <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.shaking ? 'Stop Handheld Camera' : 'Handheld Camera'" :aria-pressed="plannerRoadTourStatus.shaking" :disabled="!plannerRoadTourStatus.canShake" @click="plannerRoadTourActions?.toggleCameraShake()" />
                 <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.walking ? 'Stop Walking' : 'Walking Camera'" :aria-pressed="plannerRoadTourStatus.walking" :disabled="!plannerRoadTourStatus.canWalk && !plannerRoadTourStatus.walking" @click="plannerRoadTourActions?.toggleWalkingCamera()" />
                 <NxSwitch label="Walking Bob" :modelValue="plannerRoadTourStatus.walkingBob" @update:modelValue="plannerRoadTourActions?.toggleWalkingBob()" />
-                <p class="text-xs opacity-70">WASD to walk · Shift to move faster · right-drag to look · Esc to return. Follows terrain and water; buildings do not block movement.</p>
+                <p class="text-xs opacity-70">WASD to walk · Shift to move faster · click the canvas to look · Esc to release the cursor. Follows terrain and water; buildings do not block movement.</p>
                 <p v-if="plannerRoadTourStatus.error" role="alert" class="text-xs opacity-70">{{ plannerRoadTourStatus.error }}</p>
             </div>
         </NixieSidebarFormSection>
