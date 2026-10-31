@@ -159,6 +159,8 @@ export function normalizeFoxholeSceneV2StructureVolumes(value: unknown): Foxhole
 }
 
 export interface FoxholeSceneV2AssetMetadata {
+    contactShadows?: Record<string, Omit<import('../../../extensions/foxhole-planner/src/contact-shadow.ts').FoxholeContactShadowProjection, 'textureUrl'> & { resourceId: string; }>;
+
     model?: import('../../../extensions/foxhole-planner/src/scene-v2-models.ts').FoxholeSceneV2ModelMetadata;
     browserAttributes?: NixieExperimentalProductAttributeV1[];
     description?: string;

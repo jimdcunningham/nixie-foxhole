@@ -1,3 +1,4 @@
+import {bindFoxholeContactShadows} from './contact-shadows.ts';
 import {omitUnavailableSeatIcons} from './optional-seat-icons.mjs';
 import {buildAssetPublicationInventory} from '../scripts/asset-publication-inventory.mjs';
 import fs from 'node:fs/promises';
@@ -35,7 +36,11 @@ export async function readCatalogSources(assetsRoot) {
         if (!icon.endsWith('/' + asset.id + '.icon.default.webp') || !icon.startsWith('types/')) throw Error('Unexpected icon convention: ' + asset.id);
         return {id: asset.id, assetGroup: icon.split('/')[1], icon, texture: icon.replace(/\.icon\.default\.webp$/, '.texture.webp')};
     });
-    const privateSources = new Set(models.map(model => model.path));
+    const shadowFiles = await bindFoxholeContactShadows(generated, assets.map(asset => ({id: asset.id, sourceUrl: '/foxhole/assets/' + asset.texture})), async url => {
+        try { return JSON.parse(await fs.readFile(path.join(assetsRoot, source(url)), 'utf8')); }
+        catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    }, async url => fs.stat(path.join(assetsRoot, source(url))).then(row => row.isFile()).catch(error => {if (error.code === 'ENOENT') return false; throw error;}));
+    const privateSources = new Set([...models.map(model => model.path), ...shadowFiles.map(source)]);
     function collect(value) {
         if (typeof value === 'string' && value.startsWith('/foxhole/assets/')) privateSources.add(source(value));
         else if (Array.isArray(value)) value.forEach(collect);

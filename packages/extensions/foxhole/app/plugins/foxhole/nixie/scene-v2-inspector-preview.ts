@@ -55,7 +55,9 @@ export function buildFoxholeSceneV2RenderPreview(entity: NixieExperimentalCompon
         } else {
             const mod = metadata.modifications[slot.name]?.variants[variant.id];
             if (mod) {
-                preview.resourceOpacity = { [mod.resourceId]: variant.textureUrl ? FOXHOLE_MODIFICATION_HOVER_PREVIEW_TEXTURE_ALPHA : 0.62 };
+                const opacity = variant.textureUrl ? FOXHOLE_MODIFICATION_HOVER_PREVIEW_TEXTURE_ALPHA : 0.62;
+                const shadow = metadata.contactShadows?.[mod.resourceId];
+                preview.resourceOpacity = { [mod.resourceId]: opacity, ...(shadow ? { [shadow.resourceId]: opacity } : {}) };
             }
             preview.modelNodeOpacity = Object.fromEntries((metadata.model?.structuralProfile?.modifications ?? [])
                 .filter(part => part.slotId === slot.name && part.variantId === variant.id)

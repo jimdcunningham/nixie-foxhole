@@ -1043,10 +1043,14 @@ test('Inspector bunkbed hover previews reveal the interior without saving', () =
  const {host,id,project}=fixture('foxholeAsset',{foxholeKey:'fortt3',modificationVariantIds:{FrontInfraModSlot:'desk'}});
  const original=host.readEntity(id),before=host.exportDocument(),selected=project().state.modificationVariantIds;
  const hover={nodeId:id,slotId:'BackInfraModSlot',variantId:'bunkbed'};
- const preview=buildFoxholeSceneV2RenderPreview(original,hover,{},assets.fortt3,foxholeSceneV2StateAdapter)!;
+ const bunkbed=assets.fortt3.modifications.BackInfraModSlot!.variants.bunkbed!;
+ const shadow={resourceId:'foxhole.visual.bunkbed-shadow',width:12,height:12,offsetX:0,offsetY:0,surfaceWidth:10,surfaceHeight:10,surfaceOffsetX:0,surfaceOffsetY:0};
+ const metadata={...assets.fortt3,contactShadows:{[bunkbed.resourceId]:shadow}};
+ const preview=buildFoxholeSceneV2RenderPreview(original,hover,{},metadata,foxholeSceneV2StateAdapter)!;
  assert.ok(preview);assert.equal(preview.settings?.['foxhole.structure.hideRoofs'],true);
  assert.equal((foxholeSceneV2StateAdapter.project(preview.entity)!.state.modificationVariantIds as Record<string,string>).BackInfraModSlot,'bunkbed');
  assert.ok(Object.values(preview.resourceOpacity!).includes(.52));assert.ok(Object.values(preview.modelNodeOpacity!).includes(.52));
+ assert.equal(preview.resourceOpacity![shadow.resourceId],.52);
  const plan=renderFoxholeSceneV2Entity(preview.entity,{contractVersion:1,entities:[preview.entity],settings:preview.settings});
  assert.ok(plan.experimentalSpatial?.hiddenModelNodes?.includes('structure-layer-roof'));
  assert.deepEqual(host.exportDocument(),before);assert.deepEqual(project().state.modificationVariantIds,selected);

@@ -198,7 +198,7 @@ test('ladder renders in the roof lane and disappears with Hide Roofs', () => {
             definitionAvailable: true, data: { selections: [{ slotId: 'FortRoofModSlot', variantId: 'ladder' }] } },
     ] };
     const shown = renderFoxholeSceneV2Entity(subject);
-    assert.equal(shown.root.children.find(node => node.id.startsWith('modification-'))?.laneId, 'foxhole:structure:roof');
+    assert.equal(shown.root.children.find(node => node.id.startsWith('modification-') && !node.id.endsWith('-contact-shadow'))?.laneId, 'foxhole:structure:roof');
     const hidden = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], settings: { 'foxhole.structure.hideRoofs': true } });
     assert.equal(hidden.root.children.some(node => node.id.startsWith('modification-')), false);
 });
@@ -222,7 +222,7 @@ test('trench berms and barbed wire render above other trench visuals in Scene V2
         assert.ok(defense.laneOrder! > FOXHOLE_STRUCTURE_RENDER_LANES.upperModification.laneOrder);
         const staticPlan = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
             settings: { 'foxhole.structure.useStaticRender': true } });
-        assert.equal(staticPlan.root.children.find(node => node.id.startsWith('modification-'))?.laneId,
+        assert.equal(staticPlan.root.children.find(node => node.id.startsWith('modification-') && !node.id.endsWith('-contact-shadow'))?.laneId,
             'foxhole:structure:trench-defense');
     }
 });

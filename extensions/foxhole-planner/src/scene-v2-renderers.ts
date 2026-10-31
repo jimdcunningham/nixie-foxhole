@@ -1,3 +1,4 @@
+import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
 import { renderFoxholeHitboxOverlays } from './scene-v2-hitbox-overlays.ts';
 import { renderFoxholeVehicleSeatOverlays } from './scene-v2-vehicle-seat-overlays.ts';
 import { renderFoxholeStructureVolumeOverlays } from './scene-v2-structure-volume-overlays.ts';
@@ -366,7 +367,7 @@ function renderFoxholeSceneV2Asset(
             ?? { laneId: node.laneId ?? 'default', laneOrder: node.laneOrder ?? 0, label: '' };
         return { ...node, ...foxholeRenderLane(resolveFoxholeAssetComponentLane(assetId, componentLane)) };
     });
-    return [...poleLamp, ...(useLayers && !shouldCompositeFoxholeStructureBaseTexture(layers) ? [] : [base]), ...pallet, ...bodyLayers, ...overlays, ...glow];
+    return renderFoxholeContactShadows([...poleLamp, ...(useLayers && !shouldCompositeFoxholeStructureBaseTexture(layers) ? [] : [base]), ...pallet, ...bodyLayers, ...overlays, ...glow], assetMetadata.contactShadows);
 }
 
 function renderBreachIndicators(entity: NixieExperimentalComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,

@@ -36,3 +36,22 @@ test('faction, color and destroyed textures retain their own shadow projections'
     assert.equal(resolveFoxholeTextureSidecarUrl('/assets/tank.destroyed.texture.webp'), '/assets/tank.destroyed.texture.json');
     assert.equal(resolveFoxholeTextureSidecarUrl('/assets/icon.webp'), null);
 });
+test('selected generations resolve shadow metadata and images through pinned file associations', async () => {
+    const { installFoxholeAssetLocations } = await import('../app/plugins/foxhole/nixie/asset-locations.ts');
+    const { loadFoxholeContactShadowProjection } = await import('../app/plugins/foxhole/nixie/contact-shadow.ts');
+    const fetcher = globalThis.fetch;
+    const requests: string[] = [];
+    installFoxholeAssetLocations(path => `https://assets.test/objects/${path.endsWith('.json') ? 'metadata.json' : 'shadow.webp'}`);
+    globalThis.fetch = (async input => {
+        requests.push(String(input));
+        return new Response(JSON.stringify(metadata), { headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+        const result = await loadFoxholeContactShadowProjection('/foxhole/assets/test-generation/backwall.texture.webp');
+        assert.equal(result?.textureUrl, 'https://assets.test/objects/shadow.webp');
+        assert.deepEqual(requests, ['https://assets.test/objects/metadata.json']);
+    } finally {
+        globalThis.fetch = fetcher;
+        installFoxholeAssetLocations(null);
+    }
+});
