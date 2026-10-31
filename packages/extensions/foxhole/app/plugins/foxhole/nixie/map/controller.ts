@@ -178,6 +178,7 @@ export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginConte
     resolveMapIconAsset?: (point: { x: number; y: number; }) => string | null;
     manualPresentation?: boolean;
     needsSpatialWorldData?(): boolean;
+    isSpatialView?(): boolean;
     session: Pick<NixieViewportPluginContext['session'], 'appRef' | 'sceneLayerRef' | 'sceneViewActive' | 'federatedHitTestingPaused' | 'cameraTo' | 'setGridOverlayRenderingSuppressed'> & {
         pointerTrackerRef: { readonly value: { pointer: { readonly value: { world: PIXI.PointData | null; }; }; } | null; };
     };
@@ -221,10 +222,14 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private readonly playbackPreviewRef = getFoxholeMapPlaybackPreviewRef();
     private readonly assistantHighlightsRef = getFoxholeMapAssistantHighlightsRef();
     private readonly settingsStore = useNixieSettingsStore();
-    private readonly mapSettings = computed(() => readFoxholeMapSettings(
-        this.pluginContext.projectStore.settings,
-        settingId => this.settingsStore.getValueOr(settingId, undefined),
-    ));
+    private readonly mapSettings = computed(() => {
+        const settings = readFoxholeMapSettings(
+            this.pluginContext.projectStore.settings,
+            settingId => this.settingsStore.getValueOr(settingId, undefined),
+        );
+        // Do not request the 2D world backdrop while a spatial view is active.
+        return this.pluginContext.isSpatialView?.() ? { ...settings, background: false } : settings;
+    });
 
     readonly updatePresentation = (): void => {
         if (!this.readMapSettings().enabled || !this.pluginContext.session.sceneViewActive.value) {
@@ -806,9 +811,27 @@ export class FoxholeMapViewportPlugin extends Plugin {
         return settings.voronoi || settings.faction || settings.frontline || settings.frontAlt || settings.majorLabels || settings.minorLabels;
     }
 
+    private spatialWarStates = new Map<string, { inputs: unknown[]; state: { items: unknown[]; labels: unknown[]; warStart?: number; referenceTimestamp?: number; suppressFaction: boolean; }; }>();
+
     getSpatialWarState(regionKey: string) {
         const preview = this.getActivePlaybackPreview();
-        return preview ? preview.icons?.[regionKey] ?? null : this.cachedMaps[regionKey]?.icons ?? null;
+        const icons = preview ? preview.icons?.[regionKey] : this.cachedMaps[regionKey]?.icons;
+        const labels = preview ? preview.labels?.[regionKey] : this.cachedMaps[regionKey]?.labels;
+        const war = this.playbackPreviewWarData ?? this.warData;
+        const inputs = [icons?.items, labels?.items, war?.warStart, war?.resistanceStart, preview?.capturedAt];
+        const cached = this.spatialWarStates.get(regionKey);
+        if (cached && inputs.every((value, i) => value === cached.inputs[i])) {
+            return cached.state;
+        }
+        const referenceTimestamp = preview?.capturedAt ? Date.parse(preview.capturedAt) : undefined;
+        const resistance = Number.isFinite(Number(war?.resistanceStart)) && Number(war?.resistanceStart) >= Number(war?.warStart ?? -Infinity);
+        const state = {
+            items: icons?.items ?? [], labels: labels?.items ?? [], warStart: war?.warStart,
+            referenceTimestamp: Number.isFinite(referenceTimestamp) ? referenceTimestamp : undefined,
+            suppressFaction: resistance && !FOXHOLE_MAP_REGIONS.find(region => region.key === regionKey)?.showForResistance,
+        };
+        this.spatialWarStates.set(regionKey, { inputs, state });
+        return state;
     }
 
     private needsLiveIcons(settings: ReturnType<typeof readFoxholeMapSettings>): boolean {

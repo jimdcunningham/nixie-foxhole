@@ -65,10 +65,10 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     adapter.hoverPresentation(icons, pointer);
     assert.deepEqual(hovers, [[icons, pointer]]);
     const layers = adapter.spatialLayers();
-    assert.equal(layers.length, 5);
-    assert.equal(layers[4].liveGraphics, true, 'only small map borders opt into display-rate geometry');
+    assert.equal(layers.length, 4);
+    assert.equal(layers[3].liveGraphics, true, 'only small map borders opt into display-rate geometry');
     assert.equal(layers[1].liveGraphics, false);
-    assert.equal(layers[3].billboardGroups, summaryGroups, '2.5D must retain layout metadata before a budgeted switch to 3D');
+    assert.equal(layers[2].billboardGroups, summaryGroups, '2.5D must retain layout metadata before a budgeted switch to 3D');
     assert.equal(layers[0].content, terrain);
     assert.equal(layers[0].billboard, false);
     assert.equal(layers[0].pixelScale, 0.025);
@@ -101,7 +101,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, summaryGroups);
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = '2d';
-    assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), true);
+    assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = 'flat';
     assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, undefined);
     settings.lockCameraToMap = false;
@@ -118,13 +118,16 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(JSON.stringify(adapter.documentRendererIds), JSON.stringify(['planning-map', 'planning-grid']));
     settings.regionKeys = ['WestgateHex','OriginHex']; mode = '3d';
     adapter.updateSpatialPresentation({view:{},mode:'3d',deltaMS:16});
-    assert.equal(adapter.spatialGroundVisible(),false,'multiple selected regions own the spatial ground');
+    assert.equal(adapter.spatialGroundVisible(),true,'multiple selected regions do not load a spatial world');
     settings.worldLayers.terrain = false;
-    assert.equal(adapter.spatialGroundVisible(),false,'hidden regional terrain must not reveal the editor floor');
-    assert.deepEqual(JSON.parse(JSON.stringify(spatialSyncs.at(-1).regions)),[
-        {id:'westgate',position:{x:10,y:0},terrainMapImage:null,warState:{items:['WestgateHex']}},
-        {id:'origin',position:{x:20,y:0},terrainMapImage:null,warState:{items:['OriginHex']}},
-    ]);
+    assert.equal(adapter.spatialGroundVisible(),true,'multiple selection retains the ordinary editor floor');
+    assert.deepEqual(JSON.parse(JSON.stringify(spatialSyncs.at(-1).regions)), []);
+    assert.deepEqual(JSON.parse(JSON.stringify(spatialSyncs.at(-1).settings.regionKeys)), []);
+    assert.equal(context.needsSpatialWorldData(), false);
+    settings.regionKeys = ['WestgateHex'];
+    adapter.updateSpatialPresentation({view:{},mode:'3d',deltaMS:16});
+    assert.equal(spatialSyncs.at(-1).regions.length, 1);
+    assert.equal(context.needsSpatialWorldData(), true);
     adapter.destroy();
     assert.equal(context.session.sceneViewActive.value, false);
     assert.equal(destroyed, 1);

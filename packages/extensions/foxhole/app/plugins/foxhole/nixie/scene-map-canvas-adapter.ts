@@ -208,7 +208,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         getZoom: context.zoom,
         resolveMapIconAsset: point => world.mapAssetAt(point.x, point.y),
         manualPresentation: true,
-        needsSpatialWorldData: () => context.viewMode() !== 'flat',
+        isSpatialView: () => context.viewMode() !== 'flat',
+        needsSpatialWorldData: () => context.viewMode() !== 'flat' && mapSettings.value.regionKeys.length === 1,
         session: {
             appRef: shallowRef(context.app),
             sceneLayerRef: shallowRef(context.before),
@@ -244,7 +245,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             // Fit once before either can be displayed; catalog readiness must not
             // replace a camera the user already moved while the map was loading.
             const settings = mapSettings.value;
-            const regions = FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key));
+            // A spatial world is intentionally limited to one explicit region.
+            const regions = settings.regionKeys.length === 1 ? FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key)) : [];
             const selection = regions.map(region => region.key).sort().join('|');
             const viewpointCamera = consumeViewpointRegionCamera(context.runtime, selection);
             if (settings.enabled && regions.length && mode !== 'flat' && selection !== lastSpatialRegion) {
@@ -280,7 +282,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 return;
             }
             worldRetirementStatus = null;
-            world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings, regions: regions.map(region => ({
+            world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings: { ...settings, regionKeys: regions.map(region => region.key) }, regions: regions.map(region => ({
                 id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key),
             })) });
             roadTour?.update(deltaMS);
@@ -289,7 +291,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const settings = mapSettings.value;
             // Selected regions own the ground even while loading or hidden.
             // Disabling Terrain must not reveal the editor's camera-following floor.
-            return selectedSpatialRegions({ ...settings, mode: context.viewMode() }).length === 0;
+            return settings.regionKeys.length !== 1 || selectedSpatialRegions({ ...settings, mode: context.viewMode() }).length === 0;
         },
         groundAvailable: () => world.active,
         groundElevation: (x, y) => world.sampleGround(x, y),
@@ -306,7 +308,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
             const pixelScale = context.zoom();
             const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
-            return root.children.filter(child => child !== root.mask && (context.viewMode() !== '3d' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background'].includes(child.label))).map(content => ({
+            return root.children.filter(child => child !== root.mask && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders'].includes(child.label))).map(content => ({
                 content, liveGraphics: content.label === 'foxhole-map-borders', billboard: billboardLabels.has(content.label), billboardElevation: context.viewMode() === '3d' && billboardLabels.has(content.label) ? (x: number, y: number) => Math.max(0, world.sampleGround(x, y) ?? 0) : undefined, screenSizedBillboards: context.viewMode() === '3d' && billboardLabels.has(content.label) && !summaries.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip,
                 // Warm 2.5D keeps the layout ready for the first 3D display frame.
                 billboardGroups: context.viewMode() !== 'flat' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,

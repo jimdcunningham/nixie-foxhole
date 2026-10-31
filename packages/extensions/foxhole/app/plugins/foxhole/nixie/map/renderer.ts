@@ -958,6 +958,8 @@ export class FoxholeMapRenderer {
             }
             if (borderChanged) view.border.context?.onUpdate?.();
 
+            view.subregionFillGraphics.visible = !settings.spatialWorldData;
+            view.subregionLineGraphics.visible = !settings.spatialWorldData;
             const subregionsVisible = (settings.voronoi || settings.faction || settings.hotspots) && (view.container.visible ?? true);
             view.subregions.visible = subregionsVisible;
             view.subregionHeatGraphics.visible = settings.hotspots && subregionsVisible && canDisplayResistanceRegionData && view.activityHeatIntensity > 0;

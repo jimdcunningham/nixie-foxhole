@@ -11,7 +11,7 @@ export interface FoxholeMapContext {
     world: PIXI.Container;
     getProjectSettings: () => NixieProjectSettings;
     patchProjectSettings: (patch: Partial<NixieProjectSettings>, reason?: string) => NixieProjectSettings;
-    readMapSettings: () => FoxholeMapSettings;
+    readMapSettings: () => FoxholeMapSettings & { spatialWorldData?: boolean; };
     getWarData: () => {
         shardId?: string;
         warId?: string;

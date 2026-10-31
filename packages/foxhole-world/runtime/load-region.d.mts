@@ -16,7 +16,7 @@ export interface BakedRegion {
     setShellEdges?(visible: boolean[]): void;
     setWarState?(state?: { items?: readonly unknown[]; } | null): void;
     setTerrainMapImage?(loader?: () => Promise<Texture | null>): Promise<boolean>;
-    setPlanningOverlays?(options: { rdz?: boolean; topo?: boolean; }): void;
+    setPlanningOverlays?(options: { rdz?: boolean; topo?: boolean; borders?: boolean; divisions?: boolean; faction?: boolean; }): void;
     setWaterReflections?(enabled: boolean): void;
     prepareWaterSurfaceDepth?(view: import('@pixi/3d').View3D): void;
     prepareWindShadows?(view: import('@pixi/3d').View3D): void;

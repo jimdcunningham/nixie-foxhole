@@ -288,11 +288,12 @@ function getLayerGroupOptions(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): N
     return group.layers.map(layerKey => ({
         id: layerKey,
         label: getLayerLabel(layerKey),
+        disabled: layerKey === 'background' && isSpatialView.value,
     }));
 }
 
 function getLayerGroupActiveIds(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): string[] {
-    return group.layers.filter(layerKey => isLayerEnabled(layerKey));
+    return group.layers.filter(layerKey => !(layerKey === 'background' && isSpatialView.value) && isLayerEnabled(layerKey));
 }
 
 function onLayerGroupChange(
@@ -342,6 +343,9 @@ function toggleModdedLayer(): void {
 }
 
 function toggleLayer(layerKey: FoxholeMapLayerKey, enabled: boolean): void {
+    if (layerKey === 'background' && isSpatialView.value) {
+        return;
+    }
     const patch: Record<string, boolean> = {
         [layerKeyToSettingKey(layerKey)]: enabled,
     };
@@ -723,6 +727,7 @@ const mapModVisibilityDisabled = computed(() => (
                 collapsible
                 :defaultOpen="true"
             >
+                <p v-if="isSpatialView && mapSettings.regionKeys.length !== 1" class="text-muted text-sm">Select one region to show the 3D map.</p>
                 <div class="foxhole-war-nx-map-tab__layer-controls">
                     <NxToggleGrid
                         class="foxhole-war-nx-map-tab__world-layers"
