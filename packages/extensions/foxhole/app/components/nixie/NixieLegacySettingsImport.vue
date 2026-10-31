@@ -3,10 +3,13 @@ import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useNixieLegacySettingsImport } from '#foxhole/composables/useNixieLegacySettingsImport.ts';
 import type { LegacySettingsChange } from '#foxhole/utils/nixie-legacy-settings.ts';
 
-const props = defineProps<{ open: boolean; }>();
-const emit = defineEmits<{ close: []; pending: [value: boolean]; }>();
+const props = defineProps<{ open: boolean; file: File | null; }>();
+const emit = defineEmits<{ close: []; pending: [value: boolean]; 'choose-file': []; }>();
 const importer = useNixieLegacySettingsImport();
 watch(importer.pending, value => emit('pending', value));
+watch(() => props.file, file => {
+    if (file) void importer.readFile(file);
+}, { immediate: true });
 let previousFocus: HTMLElement | null = null;
 
 function dialog(): HTMLElement | null {
@@ -17,7 +20,7 @@ watch(() => props.open, async open => {
     if (open) {
         previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         await nextTick();
-        dialog()?.querySelector<HTMLInputElement>('input[type="file"]')?.focus();
+        dialog()?.querySelector<HTMLElement>('[data-legacy-review], button')?.focus();
     } else {
         await nextTick();
         if (previousFocus?.isConnected) {
@@ -31,7 +34,7 @@ watch(importer.report, async report => {
         return;
     }
     await nextTick();
-    dialog()?.querySelector<HTMLElement>(report ? '[data-legacy-review]' : 'input[type="file"]')?.focus();
+    dialog()?.querySelector<HTMLElement>(report ? '[data-legacy-review]' : 'button')?.focus();
 });
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -77,17 +80,9 @@ function close(): void {
     emit('close');
 }
 
-async function chooseFile(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) {
-        return;
-    }
-    try {
-        await importer.readFile(file);
-    } finally {
-        input.value = '';
-    }
+function chooseAnotherFile(): void {
+    importer.cancelReview();
+    emit('choose-file');
 }
 
 function displayValue(value: unknown, change?: LegacySettingsChange): string {
@@ -116,17 +111,6 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
             <p v-if="importer.error.value" role="alert" class="nx-legacy-settings__error">{{ importer.error.value }}</p>
             <p v-if="importer.message.value" role="status">{{ importer.message.value }}</p>
             <template v-if="!importer.report.value">
-                <p>In the legacy planner, open Hub → Settings → Settings Management → Export Settings. Choose the downloaded settings JSON here to review what can be imported.</p>
-                <p class="nx-text-muted">Use the browser and device where you saved your old preferences. Settings are stored there, separately from your account. Files stay on your device while you review them. Maximum file size: 5 MB.</p>
-                <label class="nx-legacy-settings__file">
-                    <span>Legacy Settings File</span>
-                    <input
-                        type="file"
-                        accept=".json,application/json"
-                        :disabled="importer.pending.value"
-                        @change="chooseFile"
-                    >
-                </label>
                 <p v-if="importer.pending.value" role="status">Reading settings and loading the Foxhole asset catalog…</p>
                 <p class="nx-text-muted">Imports update only supported editor preferences and resolved toolbelt slots. Empty and skipped slots keep their current Nixie bindings. Account, security, project, and keyboard shortcut settings stay unchanged.</p>
             </template>
@@ -171,6 +155,7 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
             </template>
         </div>
         <template #footer>
+            <NxButton variant="secondary" :disabled="importer.pending.value" @click="chooseAnotherFile">Choose Another File</NxButton>
             <NxButton
                 v-if="importer.recovery.value"
                 variant="secondary"

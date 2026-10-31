@@ -1,3 +1,4 @@
+import { parseLegacySettings } from '#foxhole/utils/nixie-legacy-settings.ts';
 import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration, resolveSelectedFoxholeAsset } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
 import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
@@ -18,7 +19,10 @@ export default defineNuxtPlugin({
     async setup(nuxtApp) {
         initializeFoxholeAssetDelivery();
         let stopPreview = () => {};
-        registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport);
+        registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport, text => {
+            parseLegacySettings(text, []);
+            return true;
+        });
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
         const stopPolicy = registerFoxholeSceneV2HostPolicy();
         // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
