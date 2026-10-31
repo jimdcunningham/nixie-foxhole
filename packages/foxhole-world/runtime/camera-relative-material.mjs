@@ -1,3 +1,4 @@
+import {withOrthographicPlanningReflections} from './orthographic-reflections.mjs';
 import {worldShadowBit,shadowAppearanceId} from '../authoring/shadow-appearance.mjs';
 import {ShaderDescriptor} from '@pixi/3d';
 import {cameraRelativeClipPosition} from './camera-relative-position.mjs';
@@ -13,8 +14,8 @@ export function prepareCameraRelativeMaterial(material){
   const source=original.call(this,view);
   const id=shadowAppearanceId(view);let cache=variants.get(source);if(!cache)variants.set(source,cache=new Map());let descriptor=cache.get(id);if(descriptor)return descriptor;
   const projected=source.template||source.bitsGpu.some(bit=>bit.name==='foxholeNativeFrameEnd:material'||bit===projectionBit)||source.bitsGl.some(bit=>bit.name==='foxholeNativeFrameEnd:material'||bit===projectionBit);
-  if(projected&&[...source.bitsGpu,...source.bitsGl].every(bit=>worldShadowBit(bit,view)===bit)){cache.set(id,source);return source;}
-  const adapt=bits=>[...(projected?[]:[projectionBit]),...bits.map(bit=>worldShadowBit(bit,view))];
+  if(projected&&!source.bitsGpu.some(bit=>bit.name==='pbrMaterial')&&[...source.bitsGpu,...source.bitsGl].every(bit=>worldShadowBit(bit,view)===bit)){cache.set(id,source);return source;}
+  const adapt=bits=>[...(projected?[]:[projectionBit]),...withOrthographicPlanningReflections(bits).map(bit=>worldShadowBit(bit,view))];
   descriptor=new ShaderDescriptor({bitsGpu:adapt(source.bitsGpu),bitsGl:adapt(source.bitsGl),template:source.template,overrides:source.overrides,includeCamera:source.includeCamera,includeGlobal:source.includeGlobal});cache.set(id,descriptor);
   return descriptor;
  };

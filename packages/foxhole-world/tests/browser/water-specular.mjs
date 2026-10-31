@@ -41,10 +41,16 @@ try{
  }
  const waves=new Texture({source:new BufferImageSource({resource:waveBytes,width:64,height:64,format:'rgba8unorm',autoGenerateMipmaps:true})});waves.source.style.addressMode='repeat';
  material.textures.waveLarge=waves;material.data.hasPonds=0;water.position.y=-.015;aim('orthographic',20);
+ // Nixie's shared planning policy intentionally removes reflected ripples at
+ // vertical orthographic angles. Water must regain them when tilted; the native
+ // standalone viewer retains its original subtle top-down treatment.
+ let topDownPlanning;
+ if(framed){topDownPlanning=stats(await pixels());if(topDownPlanning.whiteFraction>.01)throw Error('Planning water washes out');aim('orthographic',20,1.5);sun.lookAt({x:0,y:1.5,z:-1},{x:0,y:1,z:0});}
+
  material.data.waterTime=0;const waveStart=await pixels();material.data.waterTime=8;const waveEnd=await pixels();
  function detail(bytes){const values=[];for(let y=200;y<400;y++)for(let x=300;x<500;x++)values.push(bytes[(y*width+x)*4+1]);values.sort((a,b)=>a-b);return values[Math.floor(values.length*.9)]-values[Math.floor(values.length*.1)];}
  const waveContrast=detail(waveStart);let waveMotion=0;for(let y=200;y<400;y++)for(let x=300;x<500;x++){const i=(y*width+x)*4+1;waveMotion+=Math.abs(waveStart[i]-waveEnd[i]);}waveMotion/=40000;
- if(waveContrast<3||waveContrast>12||waveMotion<1)throw Error('Top-down orthographic water must retain subtle animated ripples: '+JSON.stringify({waveContrast,waveMotion}));
+ if(waveContrast<3||(!framed&&waveContrast>12)||waveMotion<1)throw Error('Water must retain animated ripples outside the vertical planning view: '+JSON.stringify({waveContrast,waveMotion}));
  const tinted=stats(waveStart),sourceBits=material._extraBits;
  // Compare with the unenhanced palette under identical light and wave normals.
  const neutralBody='bodyColor = mix(material.waterBody.rgb,material.waterShallow.rgb,shallows);albedo = mix(bodyColor*(1.0-transmitWater)*1.2,material.waterFoamColor.rgb,foam);';
@@ -57,8 +63,8 @@ try{
  material._extraBits=sourceBits;material._invalidateDescriptor();water.invalidate();
  // Other projections keep the full wave relief; tilt changes it smoothly in
  // orthographic views. Inspect rendered normals independently of sun alignment.
- aim('perspective',20);const perspectiveContrast=detail(await pixels());
- if(perspectiveContrast<12||waveContrast>perspectiveContrast*.4)throw Error('Perspective waves must remain fuller than top-down orthographic ripples: '+JSON.stringify({waveContrast,perspectiveContrast}));
+ if(framed)sun.lookAt({x:0,y:0,z:-1},{x:0,y:1,z:0});aim('perspective',20);const perspectiveContrast=detail(await pixels());
+ if(perspectiveContrast<12||(!framed&&waveContrast>perspectiveContrast*.4))throw Error('Perspective waves must remain fuller than top-down orthographic ripples: '+JSON.stringify({waveContrast,perspectiveContrast}));
  const normalGL='finalColor = vec3(normal.x*0.5+0.5);',normalGpu='finalColor = vec3<f32>(normal.x*0.5+0.5);';
  material._extraBits=[...sourceBits,{name:'waterNormalDetailProbe',gl:{fragment:{end:normalGL}},gpu:{fragment:{end:normalGpu}}}];material._invalidateDescriptor();water.invalidate();
  const normalRelief=[];
@@ -66,5 +72,5 @@ try{
  const [overhead,angled,lowAngle,perspective]=normalRelief;
  if(overhead<1||angled<overhead*1.5||lowAngle<angled*1.2||perspective<overhead*3||Math.abs(lowAngle-perspective)>perspective*.4)throw Error('Wave relief must follow orthographic tilt in native water coordinates: '+JSON.stringify(normalRelief));
  material._extraBits=sourceBits;material._invalidateDescriptor();water.invalidate();
- if(webgpu)await webgpu.gpu.device.queue.onSubmittedWorkDone();if(errors.length)throw Error(errors.join('\n'));aim('orthographic',80);await pixels();status.textContent=JSON.stringify({verified:true,backend,framed,projections:['orthographic','perspective'],surfaces:['river','pond'],widthsMetres:sizes,cases:results.length,worstWhiteFraction:Math.max(...results.map(r=>r.whiteFraction)),brightestMean:Math.max(...results.flatMap(r=>r.mean)),minimumSunlight:Math.min(...results.map(r=>r.sunlight)),waveContrast,waveMotion,blurredContrast,colorGain,brightnessChange,perspectiveContrast,normalRelief,errors},null,2);document.title='Water Specular Verified '+backend;
+ if(webgpu)await webgpu.gpu.device.queue.onSubmittedWorkDone();if(errors.length)throw Error(errors.join('\n'));aim('orthographic',80);await pixels();status.textContent=JSON.stringify({verified:true,backend,framed,projections:['orthographic','perspective'],surfaces:['river','pond'],widthsMetres:sizes,cases:results.length,worstWhiteFraction:Math.max(...results.map(r=>r.whiteFraction)),brightestMean:Math.max(...results.flatMap(r=>r.mean)),minimumSunlight:Math.min(...results.map(r=>r.sunlight)),topDownPlanning,waveContrast,waveMotion,blurredContrast,colorGain,brightnessChange,perspectiveContrast,normalRelief,errors},null,2);document.title='Water Specular Verified '+backend;
 }catch(e){status.textContent=e.stack+'\n'+errors.join('\n');document.title='Water Specular Failed';}
