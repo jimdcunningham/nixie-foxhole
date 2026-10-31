@@ -80,14 +80,6 @@ onMounted(() => {
             </NxButton>
             <p v-if="copyEnabled" class="nx-discovery-detail__hint">Creates an independent project with source credits, saved locally or in a cloud workspace. Later Blueprint edits won’t change your copy.</p>
             <p v-if="actionError" class="nx-discovery-detail__error" role="alert">{{ actionError }}</p>
-            <a
-                class="nx-discovery-detail__link"
-                :href="blueprint.sourceUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                View in Foxhole Planner<NxIcon name="ph:arrow-up-right" />
-            </a>
             <NxLegacyBlueprintSubscription :listingId="listingId" />
         </template>
         <section class="nx-discovery-detail__section">
