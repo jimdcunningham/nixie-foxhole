@@ -729,7 +729,8 @@ function renderFoxholeSceneV2EntityPlan(
     let placementSpatial = placement ? renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement) : undefined;
     if (placement) visualState.nodes.push(...renderFoxholeStructurePlacementOverlay(assetMetadata, placement));
     visualState.nodes.push(...renderBreachIndicators(entity, assetMetadata, context));
-    visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, context.settings ?? {}, appearance));
+    visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, context.settings ?? {}, appearance, entity.components.find(component =>
+        component.ownerId === 'nixie.foxhole-planner' && component.componentId === 'maintenance-supply' && component.definitionAvailable)?.data));
     const socketAttachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
     const markers = renderFoxholeSpatialSocketMarkers(assetMetadata,

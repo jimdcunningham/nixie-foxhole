@@ -985,3 +985,51 @@ test('repeated keyboard steps rotate chord-driven drafts in world space under mi
     assert.ok(Math.abs(Number(value.endX) - 200) < 1e-8);
     assert.ok(Math.abs(Number(value.endY)) < 1e-8);
 });
+
+test('maintenance filters convert, edit, and survive a document reload', () => {
+    const { host, id, apply, project, manifest } = fixture('foxholeAsset', {
+        foxholeKey: 'maintenancetunnel', maintenanceFilters: { range: 65, exclusions: ['defenses', 'factories'] },
+    });
+    assert.deepEqual(project().state.maintenanceFilters, { range: 65, exclusions: ['defense', 'facility'] });
+    apply({ maintenanceFilters: { range: 20, exclusions: ['power'] } });
+    assert.deepEqual(project().state.maintenanceFilters, { range: 20, exclusions: ['power'] });
+    const reloaded = new NixieSceneV2ComponentHost();
+    reloaded.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
+    reloaded.registerExtension('nixie.foxhole-planner', manifest.contributes.experimentalComponents);
+    reloaded.replaceDocument(host.exportDocument());
+    assert.deepEqual(foxholeSceneV2StateAdapter.project(reloaded.readEntity(id))!.state.maintenanceFilters, { range: 20, exclusions: ['power'] });
+});
+
+test('older tunnel products acquire maintenance filters on their first Inspector edit', () => {
+    const { host, id } = fixture('foxholeAsset', { foxholeKey: 'maintenancetunnel' });
+    const entity = host.readEntity(id);
+    const older = { ...entity, components: entity.components.filter(component => component.componentId !== 'maintenance-supply') };
+    assert.deepEqual(foxholeSceneV2StateAdapter.project(older)!.state.maintenanceFilters, { range: 100, exclusions: [] });
+    const patch = foxholeSceneV2StateAdapter.patch(older, { maintenanceFilters: { range: 0, exclusions: [] } });
+    assert.deepEqual(patch.handledKeys, ['maintenanceFilters']);
+    assert.equal(patch.updates[0]!.componentId, 'maintenance-supply');
+    assert.equal(patch.updates[0]!.createIfMissing, true);
+    assert.deepEqual(patch.updates[0]!.set, { range: 0, exclusions: [] });
+});
+
+test('maintenance preview edits remain detached and create the typed component for older stencils', () => {
+    const { host, id, manifest } = fixture('foxholeAsset', { foxholeKey: 'maintenancetunnel' });
+    const runtime = new NixieSceneV2EditorRuntimeController();
+    runtime.setEditable(true);
+    runtime.load(host.exportDocument(), [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole', contribution: manifest.contributes.experimentalComponents }]);
+    runtime.selection.set([id]);
+    const draftEntity = { ...host.readEntity(id), entityId: 'maintenance-draft', components: host.readEntity(id).components.filter(component => component.componentId !== 'maintenance-supply') };
+    const draft = { entities: [draftEntity], rootIds: ['maintenance-draft'], label: 'Maintenance Tunnel', x: 0, y: 0, rotation: 0,
+        followingPointer: true, ready: true, canMove: true, canRotate: true };
+    runtime.canvas.attach({ placementInspector: () => draft,
+        patchPlacementInspectorComponents: (_updates: unknown, entities: typeof draft.entities) => {
+            draft.entities = entities.filter(entity => entity.entityId === 'maintenance-draft');
+            return true;
+        } } as never);
+    const before = runtime.exportDocument();
+    assert.equal(runtime.patchPlacementInspectorNodes(['maintenance-draft'], { maintenanceFilters: { range: 30, exclusions: ['facility'] } }), true, runtime.actionError);
+    assert.deepEqual(foxholeSceneV2StateAdapter.project(draft.entities[0]!)!.state.maintenanceFilters, { range: 30, exclusions: ['facility'] });
+    assert.deepEqual(runtime.exportDocument(), before);
+    assert.deepEqual(runtime.selection.ids, [id]);
+    assert.deepEqual(foxholeSceneV2StateAdapter.project(host.readEntity(id))!.state.maintenanceFilters, { range: 100, exclusions: [] });
+});

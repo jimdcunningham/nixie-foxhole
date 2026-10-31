@@ -1,3 +1,4 @@
+import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, supportsFoxholeMaintenanceFilters } from './maintenance-supply.ts';
 import modelBundle from '../../../../public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
 import { getFoxholeSceneV2ModelComponentData, isFoxholeSceneV2ModelAllowed } from '../../../../../../../extensions/foxhole-planner/src/scene-v2-models.ts';
 import { createFoxholeAssetIdentityResolver } from '../../../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
@@ -1315,9 +1316,9 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     const socketAttachments = convertSocketAttachments(state.socketAttachments, resolveEntityId);
     issues.push(...socketAttachments.issues);
 
-    if (hasEntries(state.maintenanceFilters)) {
+    if (hasEntries(state.maintenanceFilters) && (!isFoxholeMaintenanceTunnel(assetId) || !supportsFoxholeMaintenanceFilters(state.maintenanceFilters))) {
         issues.push({
-            ...unsupportedStateIssue('Foxhole maintenance filters are not represented by Scene V2 yet and remain in legacy source data.'),
+            ...unsupportedStateIssue('Unsupported Foxhole maintenance filters remain in legacy source data.'),
             severity: 'warning',
         });
     }
@@ -1344,7 +1345,10 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             componentId: 'asset',
             version: 1,
             data: { catalogId: 'foxhole.structures', assetId },
-        }, ...(modelData ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'model', version: 1, data: modelData }] : []), ...(Object.keys(appearance).length > 0
+        }, ...(isFoxholeMaintenanceTunnel(assetId) ? [{
+            ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'maintenance-supply', version: 1,
+            data: { ...normalizeFoxholeMaintenanceFilters(state.maintenanceFilters) },
+        }] : []), ...(modelData ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'model', version: 1, data: modelData }] : []), ...(Object.keys(appearance).length > 0
             ? [{
                 ownerId: FOXHOLE_SCENE_V2_OWNER_ID,
                 componentId: 'appearance',

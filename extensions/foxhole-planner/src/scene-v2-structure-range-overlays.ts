@@ -1,3 +1,4 @@
+import { resolveFoxholeMaintenanceRanges } from './maintenance-supply.ts';
 import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialVolumeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2StructureRange } from './scene-v2-asset-metadata.ts';
 import { isFoxholeStructureRangeVisible, foxholeStructureRangeColor } from './structure-range-settings.ts';
@@ -111,13 +112,13 @@ export function renderFoxholeStructureRange(range: FoxholeSceneV2StructureRange,
 }
 
 export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
-    appearance: { destroyed: boolean; packaged: boolean; }): NixieExtensionRenderNodeV1[] {
+    appearance: { destroyed: boolean; packaged: boolean; }, maintenanceFilters?: unknown): NixieExtensionRenderNodeV1[] {
     if (appearance.destroyed || appearance.packaged) {
         return [];
     }
     const always: NixieExtensionRenderNodeV1[] = [], selected: NixieExtensionRenderNodeV1[] = [];
     const projected = new Set(renderFoxholeStructureFiringVolumes(asset, settings, appearance).map(volume => Number(volume.id.match(/^firing-volume-(\d+)/)?.[1])));
-    for (const [index, range] of (asset.ranges ?? []).entries()) {
+    for (const [index, range] of resolveFoxholeMaintenanceRanges(asset.codeName, asset.ranges ?? [], maintenanceFilters).entries()) {
         if (!isFoxholeStructureRangeVisible(range, settings, true, asset.isVehicle === true)) {
             continue;
         }

@@ -31,6 +31,8 @@ import { FOXHOLE_SOCKET_SNAPPING_SETTING_ID, hasFoxholeSnapSocketTags } from './
 import { resolveFoxholeSplineDeleteMutation } from './spline-connector-delete.ts';
 import { invertNixieSceneV2Point, nixieSceneV2TransformMatrix, readNixieSceneV2LocalTransform } from '#nixie/../desktop-extensions/scene-v2-transforms.ts';
 
+import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters } from './maintenance-supply.ts';
+
 const OWNER = 'nixie.foxhole-planner';
 const NODE_COMPONENTS = {
     'tactical-line': 'foxholeTacticalLine',
@@ -127,6 +129,9 @@ function project(entity: NixieExperimentalComponentEntitySnapshotV1) {
             : []);
     }
     if (asset?.catalogId === 'foxhole.structures') {
+        if (isFoxholeMaintenanceTunnel(asset.assetId)) {
+            state.maintenanceFilters = normalizeFoxholeMaintenanceFilters(data(entity, 'maintenance-supply'));
+        }
         state.markedItemCodenames = data(entity, 'cargo')?.items ?? [];
         if (Array.isArray(data(entity, 'cargo')?.stockpileItems)) {
             state.markedStockpileItems = stockpileEntriesToSelections(
@@ -501,7 +506,7 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         const baselineIssues = new Set(convert(projected.state)?.issues?.map(issue => issue.message));
         const converted = convertFoxholeSceneV1NodeToV2({ entityId: entity.entityId,
             node: { id: entity.entityId, type: projected.type, state: merged, children: [] }, nodePath: 'inspector', resolveEntityId: id => id });
-        const handledKeys = Object.keys(patch).filter(key => !['maintenanceFilters', 'baseUpgrades'].includes(key) && converted?.handledStateKeys?.includes(key));
+        const handledKeys = Object.keys(patch).filter(key => key !== 'baseUpgrades' && (key !== 'maintenanceFilters' || isFoxholeMaintenanceTunnel(merged.foxholeKey)) && converted?.handledStateKeys?.includes(key));
         if (!handledKeys.length) {
             return { handledKeys: [], updates: [] };
         }
@@ -511,7 +516,9 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         }
         const components = new Set<string>();
         for (const key of handledKeys) {
-            if (key === 'modificationVariantIds') {
+            if (key === 'maintenanceFilters' && isFoxholeMaintenanceTunnel(merged.foxholeKey)) {
+                components.add('maintenance-supply');
+            } else if (key === 'modificationVariantIds') {
                 components.add('modification');
             } else if (key === 'socketAttachments') {
                 components.add('socket-attachments');

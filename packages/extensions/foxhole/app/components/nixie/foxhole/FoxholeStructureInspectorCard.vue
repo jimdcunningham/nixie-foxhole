@@ -9,6 +9,8 @@ import { useNixieInspectorFormSectionTab } from '#nixie/composables/useNixieInsp
 import { FOXHOLE_SPLINE_CONNECTOR_NODE_TYPE } from '#foxhole/plugins/foxhole/nixie/spline-connector.ts';
 import NxSegmentedTabs from '#nixie/components/NxSegmentedTabs.vue';
 import FoxholeStructureUpgradesInspectorCard from './FoxholeStructureUpgradesInspectorCard.vue';
+import FoxholeStructureSupplyInspectorCard from './FoxholeStructureSupplyInspectorCard.vue';
+import { isFoxholeMaintenanceTunnel } from '#foxhole/plugins/foxhole/nixie/maintenance-supply.ts';
 import FoxholeStructureCargoInspectorCard from './FoxholeStructureCargoInspectorCard.vue';
 import FoxholeStructureProductionInspectorCard from './FoxholeStructureProductionInspectorCard.vue';
 import { hasFoxholeHoldProfileItemSelection, resolveFoxholeAssetHoldProfile } from '#foxhole/plugins/foxhole/nixie/hold-profile.ts';
@@ -78,6 +80,10 @@ const detailTabs = computed(() => {
         const structure = structureCatalog.value.structureByKey[foxholeKey.value];
         if (props.node.targetIds.length === 1 && (structure?.conversionEntries.length || structure?.parentStructureId)) {
             tabs.push({ id: 'production', label: 'Production' });
+        }
+        if (props.node.snapshots.every(snapshot => isFoxholeMaintenanceTunnel(snapshot.state.foxholeKey))
+            && isFoxholeMaintenanceTunnel(foxholeKey.value)) {
+            tabs.push({ id: 'supply', label: 'Supply' });
         }
         if (hasFoxholeHoldProfileItemSelection(resolveFoxholeAssetHoldProfile(structureCatalog.value, foxholeKey.value))) {
             tabs.push({ id: 'storage', label: 'Storage' });
@@ -1269,6 +1275,14 @@ watch(() => props.node.snapshot.id, () => {
                 aria-label="Production"
             >
                 <FoxholeStructureProductionInspectorCard v-bind="props" bare />
+            </div>
+            <div
+                v-if="detailTabs.some(tab => tab.id === 'supply')"
+                v-show="activeTab === 'supply'"
+                role="region"
+                aria-label="Supply"
+            >
+                <FoxholeStructureSupplyInspectorCard v-bind="props" bare />
             </div>
             <div
                 v-if="detailTabs.some(tab => tab.id === 'storage')"

@@ -1,3 +1,4 @@
+import { normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceRanges } from '#foxhole/plugins/foxhole/nixie/maintenance-supply.ts';
 import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import { canFoxholeSocketConnectionOpenWalls } from '#foxhole/plugins/foxhole/nixie/socket-wall-visibility.ts';
 import { resolveFoxholeFiringPortReplacedWallLayerIds } from '#foxhole/plugins/foxhole/nixie/firing-port-wall-visibility.ts';
@@ -7426,7 +7427,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
     private getRangeOverlayCacheKey(structure: FoxholeManifestStructure): string {
         const nightSettings = FOXHOLE_NIGHT_RANGE_SETTING_IDS.map(id => this.settingsStore.getValueOr(id, undefined));
-        return `${this.boardState.foxholeKey}|${this.isLineOfSightEnabled()}|${JSON.stringify(nightSettings)}|${JSON.stringify(structure.ranges)}`;
+        return `${this.boardState.foxholeKey}|${this.isLineOfSightEnabled()}|${JSON.stringify(nightSettings)}|${JSON.stringify(structure.ranges)}|${normalizeFoxholeMaintenanceFilters(this.boardState.maintenanceFilters).range}`;
     }
 
     private ensureRangeOverlayGraphics(structure: FoxholeManifestStructure): void {
@@ -7438,7 +7439,7 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
         this.clearRangeOverlayGraphics();
         this.rangeOverlayCacheKey = nextCacheKey;
 
-        for (const range of structure.ranges) {
+        for (const range of resolveFoxholeMaintenanceRanges(this.boardState.foxholeKey, structure.ranges, this.boardState.maintenanceFilters)) {
             const entry = createFoxholeStructureRangeVisual(range, this.isLineOfSightEnabled(),
                 resolveFoxholeNightVisionRadius(structure, range, id => this.settingsStore.getValueOr(id, undefined)));
             if (!entry) {

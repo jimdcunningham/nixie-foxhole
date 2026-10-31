@@ -21,6 +21,8 @@ export interface FoxholeCostBreakdownEntry {
     id: string;
     name: string;
     quantity: number;
+    /** Optional formatted quantity for rates and estimates. */
+    quantityLabel?: string;
     iconUrl?: string | null;
     item?: FoxholeItemAsset | null;
     structure?: FoxholeStructureAsset | null;
@@ -174,7 +176,7 @@ function scheduleHideResourceHover(): void {
                 class="foxhole-cost-breakdown__quantity"
                 :class="`foxhole-cost-breakdown__quantity--${props.quantityTone}`"
             >
-                {{ formatQuantity(resource.quantity) }}
+                {{ resource.quantityLabel ?? formatQuantity(resource.quantity) }}
             </span>
         </li>
     </ul>
