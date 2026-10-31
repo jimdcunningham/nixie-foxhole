@@ -283,7 +283,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             }
             worldRetirementStatus = null;
             world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings: { ...settings, regionKeys: regions.map(region => region.key) }, regions: regions.map(region => ({
-                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key),
+                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key), planningOverlays: plugin.getSpatialPlanningOverlays?.(region.key),
             })) });
             roadTour?.update(deltaMS);
         },
@@ -305,7 +305,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 ? { minX: settings.cropX, minY: settings.cropY, maxX: settings.cropX + settings.cropWidth, maxY: settings.cropY + settings.cropHeight }
                 : undefined;
             const billboardLabels = new Set(['foxhole-map-labels', 'foxhole-map-major-labels', 'foxhole-map-minor-labels',
-                'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
+                'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels', 'foxhole-map-grid']);
             const pixelScale = context.zoom();
             const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
             return root.children.filter(child => child !== root.mask && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders'].includes(child.label))).map(content => ({

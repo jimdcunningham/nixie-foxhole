@@ -674,7 +674,9 @@ export class FoxholeMapRenderer {
         }
         this.background.visible = settings.background;
         this.grid.visible = showGrid;
-        this.gridBackground.visible = showGrid;
+        this.gridBackground.visible = showGrid && !settings.spatialWorldData;
+        this.gridLines.visible = !settings.spatialWorldData;
+        this.gridSublineLines.visible = !settings.spatialWorldData;
         this.subregions.visible = settings.voronoi || settings.faction || settings.hotspots;
         this.frontlines.visible = showFrontlines;
         this.labels.visible = settings.names;
@@ -848,7 +850,7 @@ export class FoxholeMapRenderer {
         const showIconsAndLabels = baseZoom < 350;
         const settings = this.context.readMapSettings();
         const showFrontlines = settings.frontline || settings.frontAlt;
-        const showGrid = settings.grid && baseZoom < FoxholeMapRenderer.GRID_MAX_BASE_ZOOM;
+        const showGrid = settings.grid && (settings.spatialWorldData || baseZoom < FoxholeMapRenderer.GRID_MAX_BASE_ZOOM);
         const hasRevealAnimation = this.regionViews.some(view => view.container.visible && view.container.alpha < 1);
         const gridTarget = showGrid ? this.context.getWorldPointer() : null;
         const viewportTopLeft = this.context.viewport.toWorld(0, 0);
@@ -908,7 +910,9 @@ export class FoxholeMapRenderer {
         this.subregions.visible = settings.voronoi || settings.faction || settings.hotspots;
         this.frontlines.visible = showFrontlines;
         this.grid.visible = showGrid;
-        this.gridBackground.visible = showGrid;
+        this.gridBackground.visible = showGrid && !settings.spatialWorldData;
+        this.gridLines.visible = !settings.spatialWorldData;
+        this.gridSublineLines.visible = !settings.spatialWorldData;
         if (!this.liveIcons.visible) {
             this.clearHoveredIcon();
         }
@@ -1048,6 +1052,13 @@ export class FoxholeMapRenderer {
         }
     }
 
+    getSpatialPlanningOverlays(regionKey: string) {
+        const view = this.regionViews.find(region => region.region.key === regionKey);
+        const matches = view && Math.abs(this.grid.x - (view.container.x - FOXHOLE_REGION_WIDTH / 2)) < 1
+            && Math.abs(this.grid.y - (view.container.y - FOXHOLE_REGION_HEIGHT / 2)) < 1;
+        return { gridCell: matches && this.gridSublines.visible ? [this.gridSublines.x / 32, this.gridSublines.y / 32] : null };
+    }
+
     private updateGridFollowTarget(gridTarget: { x: number; y: number; }): void {
         this.lastGridTargetPosition = { x: gridTarget.x, y: gridTarget.y };
         const closestRegionView = this.getClosestVisibleRegionView(gridTarget);
@@ -1064,6 +1075,10 @@ export class FoxholeMapRenderer {
             x: gridTarget.x - regionLeft,
             y: gridTarget.y - regionTop,
         };
+        const nativeX = relativeMousePosition.x / 32 - 1092;
+        const nativeZ = 945 - relativeMousePosition.y / 32;
+        this.gridSublines.visible = !this.context.readMapSettings().spatialWorldData
+            || (Math.abs(nativeZ) <= 945 && Math.abs(nativeX) + Math.abs(nativeZ) * (546 / 945) <= 1092);
         const cellPosition = {
             x: Math.floor(relativeMousePosition.x / FOXHOLE_GRID_CELL_SIZE) * FOXHOLE_GRID_CELL_SIZE,
             y: Math.floor(relativeMousePosition.y / FOXHOLE_GRID_CELL_SIZE) * FOXHOLE_GRID_CELL_SIZE,
@@ -1072,8 +1087,9 @@ export class FoxholeMapRenderer {
     }
 
     private updateGridStickyLabels(): void {
-        const stickyTop = this.context.viewport.toWorld(0, FOXHOLE_GRID_LABEL_SCREEN_PADDING).y - this.grid.y;
-        const stickyLeft = this.context.viewport.toWorld(FOXHOLE_GRID_LABEL_SCREEN_PADDING, 0).x - this.grid.x;
+        const spatial = this.context.readMapSettings().spatialWorldData;
+        const stickyTop = spatial ? -500 : this.context.viewport.toWorld(0, FOXHOLE_GRID_LABEL_SCREEN_PADDING).y - this.grid.y;
+        const stickyLeft = spatial ? -700 : this.context.viewport.toWorld(FOXHOLE_GRID_LABEL_SCREEN_PADDING, 0).x - this.grid.x;
         const maxLabelY = FOXHOLE_REGION_HEIGHT - (FOXHOLE_GRID_CELL_SIZE / 2);
         const maxLabelX = FOXHOLE_REGION_WIDTH - (FOXHOLE_GRID_CELL_SIZE / 2);
 

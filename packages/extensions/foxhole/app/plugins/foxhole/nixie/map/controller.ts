@@ -811,6 +811,10 @@ export class FoxholeMapViewportPlugin extends Plugin {
         return settings.voronoi || settings.faction || settings.frontline || settings.frontAlt || settings.majorLabels || settings.minorLabels;
     }
 
+    getSpatialPlanningOverlays(regionKey: string) {
+        return this.renderer?.getSpatialPlanningOverlays(regionKey);
+    }
+
     private spatialWarStates = new Map<string, { inputs: unknown[]; state: { items: unknown[]; labels: unknown[]; warStart?: number; referenceTimestamp?: number; suppressFaction: boolean; }; }>();
 
     getSpatialWarState(regionKey: string) {

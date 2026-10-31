@@ -42,7 +42,7 @@ export class LiveTerrainPass extends Pass3D {
    status(surface==='map'?'Loading processed terrain map…':'Preparing plain terrain…');
    const paint=surface==='map'?(await mapTexture?.()??await texture(region+'/map/terrain.webp')):null;
    if(generation!==this.generation||signal?.aborted)throw signal?.reason||new DOMException('Terrain retired','AbortError');
-   const uniforms=new UniformGroup({...(this.frame?{foxholeFrame:{value:this.frame,type:'vec4<f32>'}}:{}),surfaceColor:{value:new Float32Array([.195,.216,.119,1]),type:'vec4<f32>'},terrainOverlayInfo:{value:this.planning.info,type:'vec4<f32>'},terrainMapOverlayInfo:{value:this.planning.mapInfo,type:'vec4<f32>'}});
+   const uniforms=new UniformGroup({...(this.frame?{foxholeFrame:{value:this.frame,type:'vec4<f32>'}}:{}),surfaceColor:{value:new Float32Array([.195,.216,.119,1]),type:'vec4<f32>'},terrainOverlayInfo:{value:this.planning.info,type:'vec4<f32>'},terrainMapOverlayInfo:{value:this.planning.mapInfo,type:'vec4<f32>'},terrainGridOverlayInfo:{value:this.planning.gridInfo,type:'vec4<f32>'}});
    const group=new BindGroup({0:uniforms,...(paint?{1:paint.source,2:paint.source.style}:{}),[paint?3:1]:this.planning.source});
    // The provider owns the map bitmap. No native arrays, masks or weather textures
    // are requested or retained by these two lightweight surface modes.
@@ -60,7 +60,7 @@ export class LiveTerrainPass extends Pass3D {
 
   const noise=await source(await zipped(`${region}/terrain-live/noise.bin.gz`),meta.noise.width,meta.noise.height,1,'rgba8unorm',true,false);
   const snowMaterial=await source(await zipped(`${region}/terrain-live/snowMaterial.bin.gz`),meta.snowMaterial.width,meta.snowMaterial.height,1,'rgba8unorm',true,false);
-  const uniforms=new UniformGroup({...(this.frame?{foxholeFrame:{value:this.frame,type:'vec4<f32>'}}:{}),weightTransform:{value:new Float32Array([meta.weights.minX,meta.weights.maxZ,meta.weights.width,meta.weights.height]),type:'vec4<f32>'},weather:{value:new Float32Array(4),type:'vec4<f32>'},terrainOverlayInfo:{value:this.planning.info,type:'vec4<f32>'},terrainMapOverlayInfo:{value:this.planning.mapInfo,type:'vec4<f32>'}});
+  const uniforms=new UniformGroup({...(this.frame?{foxholeFrame:{value:this.frame,type:'vec4<f32>'}}:{}),weightTransform:{value:new Float32Array([meta.weights.minX,meta.weights.maxZ,meta.weights.width,meta.weights.height]),type:'vec4<f32>'},weather:{value:new Float32Array(4),type:'vec4<f32>'},terrainOverlayInfo:{value:this.planning.info,type:'vec4<f32>'},terrainMapOverlayInfo:{value:this.planning.mapInfo,type:'vec4<f32>'},terrainGridOverlayInfo:{value:this.planning.gridInfo,type:'vec4<f32>'}});
   const groupFor=(arrays,weights)=>{const entries={0:uniforms};let slot=1;for(const resource of arrays)entries[slot++]=resource;for(const resource of [weights,arrays[0].style,weights.style,noise,snowMaterial,this.planning.source])entries[slot++]=resource;return new BindGroup(entries);};
   if(generation!==this.generation||signal?.aborted)throw signal?.reason||new DOMException('Terrain retired','AbortError');
   const group=groupFor(arraySources,weight);this.current={meta,geometry,sources:[...(textureSet?.sources||[]),...sources],ownedSources:sources,uniforms,group,textureSet,qualityCap:textureSet?.cap||Infinity};
