@@ -17,11 +17,11 @@ export const FOXHOLE_RANGE_OVERLAY_DEFINITIONS = {
     crane: { label: 'Crane', description: 'Show crane operating ranges.', icon: 'ph:crane', type: 'crane', color: 0x70D6FF },
     rifle: { label: 'Rifle', description: 'Show rifle garrison ranges.', icon: 'ph:crosshair', type: 'killbox', color: 0xE16931 },
     machineGun: { label: 'MG', description: 'Show machine gun garrison ranges.', icon: 'ph:crosshair-simple', type: 'killboxMG', color: 0x3A86FF },
-    antiTank: { label: 'Anti-Tank', description: 'Show anti-tank engagement ranges.', icon: 'ph:tank', type: 'killboxAT', color: 0xF45B69 },
+    antiTank: { label: 'Anti-Tank', description: 'Show anti-tank engagement ranges.', icon: 'ph:target', type: 'killboxAT', color: 0xF45B69 },
     artillery: { label: 'Artillery', description: 'Show artillery engagement ranges.', icon: 'ph:target', type: 'killboxArty', color: 0xF6D55C },
     rpg: { label: 'RPG', description: 'Show rocket engagement ranges.', icon: 'ph:rocket-launch', type: 'killboxRocket', color: 0xE16931 },
     antiAir: { label: 'Anti-Air', description: 'Show anti-air engagement ranges.', icon: 'ph:airplane-tilt', type: 'killboxAA', color: 0xFF6B35 },
-    intel: { label: 'Intel', description: 'Show intelligence coverage ranges.', icon: 'ph:radar', type: 'intel', color: 0x9D7CFF },
+    intel: { label: 'Intel', description: 'Show intelligence coverage ranges.', icon: 'ph:broadcast', type: 'intel', color: 0x9D7CFF },
     overlap: { label: 'Overlap', description: 'Show crane overlap exclusion ranges.', icon: 'ph:circles-three', type: 'overlap', color: 0xFF6B6B },
 } as const;
 
@@ -110,7 +110,7 @@ function createBooleanUserSetting(
 
 const foxholeLegacyRangeUserSettings: readonly UserSettingDefinition[] = [
     createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.defenseSmallArms, 'Foxhole Range Small Arms', 'Legacy fallback for rifle and machine gun ranges.', 'ph:crosshair', 0, false),
-    createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.defenseAntiTank, 'Foxhole Range Anti-Tank', 'Legacy fallback for anti-tank ranges.', 'ph:tank', 0, false),
+    createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.defenseAntiTank, 'Foxhole Range Anti-Tank', 'Legacy fallback for anti-tank ranges.', 'ph:target', 0, false),
     createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.defenseArtillery, 'Foxhole Range Artillery', 'Legacy fallback for artillery, RPG, and anti-air ranges.', 'ph:target', 0, false),
     createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.coverageSupport, 'Foxhole Range Support', 'Legacy fallback for garrison and intel ranges.', 'ph:wifi-high', 0, false),
     createBooleanUserSetting(FOXHOLE_RANGE_SETTING_KEYS.logisticsUtility, 'Foxhole Range Utility', 'Legacy fallback for supply, harvest, crane, and overlap ranges.', 'ph:wrench', 0, false),
