@@ -917,9 +917,6 @@ const mapModVisibilityDisabled = computed(() => (
 .foxhole-war-nx-map-tab__road-tour {
     display: grid;
     gap: var(--nx-space-2);
-    margin-top: var(--nx-space-2);
-    padding-top: var(--nx-space-2);
-    border-top: 1px solid var(--nx-border);
     min-width: 0;
 }
 
