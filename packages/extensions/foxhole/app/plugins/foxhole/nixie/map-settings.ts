@@ -685,7 +685,7 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
         'Show active combat hotspot highlights on the Foxhole world map.',
         'ph:fire',
         209.5,
-        true,
+        false,
     ),
     createBooleanUserSetting(
         FOXHOLE_MAP_SETTING_KEYS.icons,
@@ -995,7 +995,7 @@ export function readFoxholeMapSettings(
         faction: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.faction, true),
         frontline,
         frontAlt,
-        hotspots: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.hotspots, true),
+        hotspots: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.hotspots, false),
         icons: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.icons, true),
         colors: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.colors, false),
         baseMap: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.baseMap, false),
