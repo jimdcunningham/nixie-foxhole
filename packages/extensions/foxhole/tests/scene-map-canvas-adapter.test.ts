@@ -239,3 +239,29 @@ test('mounted spatial worlds retire on catalog revision, clear on disable, and r
     assert.equal(worlds[3].options.indexLoader, worlds[0].options.indexLoader);
     adapter.destroy(); assert.equal(worlds[3].destroyed, 1);
 });
+
+
+test('initial region framing does not wait for catalog delivery or refit after delayed delivery',async()=>{
+ let delivery:any=null;const moves:any[]=[],screen={width:1000,height:700};
+ const settings=reactive({enabled:true,regionKeys:['WestgateHex']});
+ const factory=runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev','false').replace(/^import .*;\r?\n/gm,'').replace('export function','function')+'\ncreateFoxholeSceneMapCanvas;'),{
+  FoxholeRegionSceneController:class{sync(){}destroy(){}whenDisposed(){return Promise.resolve();}},
+  FoxholeMapViewportPlugin:class{destroy(){}getSpatialWarState(){return null;}},
+  selectedSpatialRegions,regionIdForKey,computed,shallowRef,
+  beginShellProgressJob:()=>'job',updateShellProgressJob(){},finishShellProgressJob(){},setTimeout:()=>1,clearTimeout(){},
+  foxholeWorldAssetDelivery:()=>delivery,
+  subscribeSceneViewpointRestore:()=>()=>{},consumeViewpointRegionCamera:()=>false,
+  plannerRoadTourActions:shallowRef(null),plannerRoadTourStatus:shallowRef({}),
+  FOXHOLE_MAP_REGIONS:[{key:'WestgateHex'}],getFoxholeRegionPosition:()=>({x:10000,y:20000}),
+  getFoxholeMapActiveBounds:()=>({left:9000,right:11000,top:19000,bottom:21000,width:2000,height:2000}),
+  resolveFoxholeMapFitCamera:(_bounds:any,viewport:any)=>{assert.equal(viewport,screen);return{position:{x:10000,y:20000},scale:0.25};},
+  useNixieSettingsStore:()=>({getValueOr(){}}),readFoxholeMapSettings:()=>({...settings}),
+ });
+ const adapter=factory({app:{screen},viewport:{},before:{},runtime:{projectStore:{settings:{}}},viewMode:()=>'2d',nodeCount:()=>0,zoom:()=>1,pointer:()=>null,interacting:()=>false,suppressGrid(){},cameraTo:(...args:any[])=>moves.push(args)});
+ const frame=()=>adapter.updateSpatialPresentation({view:{},mode:'2d',deltaMS:16});
+ screen.width=1;screen.height=1;frame();assert.equal(moves.length,0,'a placeholder canvas must not consume the one-time fit');
+ screen.width=1000;screen.height=700;frame();assert.equal(moves.length,1,'known region bounds must frame the first spatial frame even without catalog delivery');
+ delivery={revision:'ready',baseUrl:'https://assets.test/world/',loadIndex:async()=>({})};frame();await Promise.resolve();frame();
+ assert.equal(moves.length,1,'catalog readiness must not undo a user pan made while waiting');
+ adapter.destroy();
+});

@@ -240,6 +240,24 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         },
         updateSpatialPresentation({ view, mode, deltaMS }) {
             if (destroyed) return;
+            // Planning artwork and region bounds exist before remote world delivery.
+            // Fit once before either can be displayed; catalog readiness must not
+            // replace a camera the user already moved while the map was loading.
+            const settings = mapSettings.value;
+            const regions = FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key));
+            const selection = regions.map(region => region.key).sort().join('|');
+            const viewpointCamera = consumeViewpointRegionCamera(context.runtime, selection);
+            if (settings.enabled && regions.length && mode !== 'flat' && selection !== lastSpatialRegion) {
+                const viewport = context.app.screen;
+                if (viewpointCamera) {
+                    lastSpatialRegion = selection;
+                } else if (viewport?.width >= 2 && viewport.height >= 2) {
+                    const camera = resolveFoxholeMapFitCamera(getFoxholeMapActiveBounds({ ...settings, background: false }), context.app.screen);
+                    context.cameraTo(camera.position, camera.scale);
+                    lastSpatialRegion = selection;
+                }
+            }
+            if (!settings.enabled || !regions.length || mode === 'flat') lastSpatialRegion = null;
             const selected = foxholeWorldAssetDelivery();
             if (!selected) {
                 if (delivery) {retireWorld(); delivery = null; world = createWorld(); roadTour?.stop();}
@@ -249,21 +267,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 retireWorld();
                 delivery = selected;
                 world = createWorld();
-                lastSpatialRegion = null;
                 roadTour?.stop();
             }
-            const settings = mapSettings.value;
-            const regions = FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key));
-            const selection = regions.map(region => region.key).sort().join('|');
-            const viewpointCamera = consumeViewpointRegionCamera(context.runtime, selection);
-            if (settings.enabled && regions.length && mode !== 'flat' && selection !== lastSpatialRegion) {
-                lastSpatialRegion = selection;
-                if (!viewpointCamera) {
-                    const camera = resolveFoxholeMapFitCamera(getFoxholeMapActiveBounds({ ...settings, background: false }), context.app.screen);
-                    context.cameraTo(camera.position, camera.scale);
-                }
-            }
-            if (!settings.enabled || !regions.length || mode === 'flat') lastSpatialRegion = null;
             // Keep the replacement dormant until old scene resources and
             // shared-work reservations are fully retired.
             if (worldRetirementPending) {
