@@ -9,8 +9,9 @@ viewDir = waterViewDirection(vPosition);
 // Map-like orthographic views need faint ripples rather than full wave relief.
 float waterTopDown = 0.0;
 if(abs(uProjectionMatrix[3][3])>.5){waterTopDown=smoothstep(.65,.98,abs(viewDir.y));}
-vec2 waterXZ = vPosition.xz;
-float pond = step(.5,material.hasPonds)*step(0.0,vPosition.y);
+float contained = step(.5,material.waterSurface.x);
+vec2 waterXZ = vPosition.xz / mix(1.0,.12,contained);
+float pond = max(step(.5,material.hasPonds)*step(0.0,vPosition.y),contained);
 float waterTime = material.waterTime*mix(1.0,.2,pond);
 vec2 largeUV = waterXZ / 16.0;
 vec2 smallUV = waterXZ / 2.4;
@@ -30,6 +31,9 @@ float bedHeight = dot(bed,vec2(65280.0,255.0))/65535.0*256.0-128.0;
 float waterDepth = max(0.0,vPosition.y-bedHeight);
 float waterViewDepth = -(uViewMatrix*vec4(vPosition,1.0)).z;
 float sceneGap = max(0.0,waterSceneDepth(vPosition)-waterViewDepth);
+// Contained surfaces have no relationship to the region's terrain heightmap.
+// Use the opaque barrel interior for contact depth, with bounded absorption.
+waterDepth = mix(waterDepth,min(.6,sceneGap*max(.1,abs(viewDir.y))),contained);
 float contactDepth = min(waterDepth,sceneGap*max(.08,abs(viewDir.y)));
 float shallows = exp(-waterDepth*mix(.65,.18,pond));
 float waveFoam = sampleWaterFoam(waterXZ/7.0+vec2(.018,.007)*waterTime).r;
@@ -47,17 +51,18 @@ vec3 behind = waterDecodeScene(sampleScreenCopy(uOpaqueColorTexture,refractedPoi
 vec3 absorption = exp(-vec3(.50,.28,.36)*opticalDepth/max(.5,abs(refractedRay.y)));
 float fresnelWater = .02037+.97963*pow(1.0-max(dot(normal,viewDir),0.0),5.0);
 float transmitWater = exp(-opticalDepth*.27)*(1.0-fresnelWater)*(1.0-foam);
+transmitWater *= mix(1.0,1.0-material.waterSurface.y,contained);
 vec3 bodyColor = mix(material.waterBody.rgb,material.waterShallow.rgb,shallows);
 // The source body palette is almost neutral. Bring its green-blue tint through
 // the neutral reflected light without increasing brightness or colouring foam.
 float bodyLuminance = dot(bodyColor,vec3(.2126,.7152,.0722));
-bodyColor = max(vec3(0.0),vec3(bodyLuminance)+(bodyColor-vec3(bodyLuminance))*3.0);
+bodyColor = max(vec3(0.0),vec3(bodyLuminance)+(bodyColor-vec3(bodyLuminance))*mix(3.0,1.0,contained));
 // Only transmitted scene light is emissive. Body colour must darken with the sun.
 emissive = behind*absorption*transmitWater;
 albedo = mix(bodyColor*(1.0-transmitWater)*1.2,material.waterFoamColor.rgb,foam);
 // Preserve the source wave/reflection gloss. Direct sun glare is exposed
 // separately in the lighting lobe below, without blurring normals or SSR.
-roughness = mix(mix(.18,.24,pond),.78,foam);
+roughness = mix(mix(mix(.18,.24,pond),.78,foam),material.waterSurface.z,contained);
 metallic = 0.0;
 occlusion = 1.0;
 fresnelF0 = vec3(.02037);
@@ -91,6 +96,6 @@ function wgsl(gl){return gl.replaceAll('vPosition','input.vPosition').replaceAll
 export const nativeWaterBit={
  name:'foxholeNativeWater2',
  textures:['waveLarge','waveSmall','waterFoam','waterBed'],
- bindings:{material:{waterTime:'f32',waveStrength:'f32',hasPonds:'f32',waterBody:'vec4<f32>',waterShallow:'vec4<f32>',waterFoamColor:'vec4<f32>',waterScatter:'vec4<f32>'}},
+ bindings:{material:{waterTime:'f32',waveStrength:'f32',hasPonds:'f32',waterBody:'vec4<f32>',waterShallow:'vec4<f32>',waterFoamColor:'vec4<f32>',waterSurface:'vec4<f32>'}},
  gl:{header:waterOpticsHeader(false),fragment:{material:materialGL,lobePerLight:sunGlintGL}},gpu:{header:waterOpticsHeader(true),fragment:{material:wgsl(materialGL),lobePerLight:wgsl(sunGlintGL).replace('light.type','light.kind')}}
 };
