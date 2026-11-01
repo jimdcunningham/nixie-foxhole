@@ -259,7 +259,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                     lastSpatialRegion = selection;
                 }
             }
-            if (!settings.enabled || !regions.length || mode === 'flat') lastSpatialRegion = null;
+            if (!settings.enabled || !regions.length) lastSpatialRegion = null;
+            // Flat and fixed top-down views share the host's planar camera.
+            // Remember the region already being viewed so entering a spatial
+            // mode does not replace a user's pan/zoom with another region fit.
+            else if (mode === 'flat') lastSpatialRegion = selection;
             const selected = foxholeWorldAssetDelivery();
             if (!selected) {
                 if (delivery) {retireWorld(); delivery = null; world = createWorld(); roadTour?.stop();}

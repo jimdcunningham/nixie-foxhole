@@ -268,3 +268,56 @@ test('initial region framing does not wait for catalog delivery or refit after d
  assert.equal(moves.length,1,'catalog readiness must not undo a user pan made while waiting');
  adapter.destroy();
 });
+
+test('switching a positioned region from 2D to spatial views preserves the camera', async () => {
+    let mode = 'flat', delivery: any = null;
+    let camera = { x: 12345, y: 23456, scale: 2 };
+    const moves: unknown[] = [];
+    const settings = reactive({ enabled: true, regionKeys: ['WestgateHex'] });
+    const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
+        FoxholeRegionSceneController: class { sync() {} destroy() {} whenDisposed() { return Promise.resolve(); } },
+        FoxholeMapViewportPlugin: class { destroy() {} getSpatialWarState() { return null; } },
+        selectedSpatialRegions, regionIdForKey, computed, shallowRef,
+        beginShellProgressJob: () => 'job', updateShellProgressJob() {}, finishShellProgressJob() {}, setTimeout: () => 1, clearTimeout() {},
+        foxholeWorldAssetDelivery: () => delivery,
+        subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => false,
+        plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
+        FOXHOLE_MAP_REGIONS: [{ key: 'WestgateHex' }, { key: 'OriginHex' }], getFoxholeRegionPosition: () => ({ x: 10000, y: 20000 }),
+        getFoxholeMapActiveBounds: () => ({ left: 9000, right: 11000, top: 19000, bottom: 21000, width: 2000, height: 2000 }),
+        resolveFoxholeMapFitCamera: () => ({ position: { x: 10000, y: 20000 }, scale: 0.25 }),
+        useNixieSettingsStore: () => ({ getValueOr() {} }), readFoxholeMapSettings: () => ({ ...settings }),
+    });
+    const adapter = factory({ app: { screen: { width: 1000, height: 700 } }, viewport: {}, before: {},
+        runtime: { projectStore: { settings: {} } }, viewMode: () => mode, nodeCount: () => 17,
+        zoom: () => camera.scale, pointer: () => null, interacting: () => false, suppressGrid() {},
+        cameraTo: (position: { x: number; y: number }, scale: number) => {
+            moves.push({ position, scale });
+            camera = { ...position, scale };
+        } });
+    const frame = () => adapter.updateSpatialPresentation({ view: {}, mode, deltaMS: 16 });
+    try {
+        frame();
+        const positioned = { ...camera };
+        mode = '2d';
+        frame();
+        assert.deepEqual(camera, positioned, 'entering 2.5D must not replace a positioned camera with a region fit');
+        mode = '3d';
+        frame();
+        mode = 'flat';
+        frame();
+        camera = { x: 13000, y: 24000, scale: 3 };
+        mode = '2d';
+        frame();
+        assert.deepEqual(camera, { x: 13000, y: 24000, scale: 3 }, 'returning from 2D must retain subsequent pans and zooms');
+        delivery = { revision: 'ready', baseUrl: 'https://assets.test/world/', loadIndex: async () => ({}) };
+        frame();
+        await Promise.resolve();
+        frame();
+        assert.equal(moves.length, 0, 'late world delivery must not reframe a retained region');
+        settings.regionKeys = ['OriginHex'];
+        frame();
+        assert.equal(moves.length, 1, 'selecting a different region in a spatial view still frames that region');
+    } finally {
+        adapter.destroy();
+    }
+});
