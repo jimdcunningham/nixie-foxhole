@@ -10,6 +10,10 @@ import { renderFoxholeSceneV2BinocularLine } from '../src/scene-v2-binocular-lin
 import { renderFoxholeSceneV2Triangulation } from '../src/scene-v2-triangulations.ts';
 import { createFoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 
+// Existing surface assertions exclude the separate contact-shadow pass.
+const surfaceNodes = (plan: ReturnType<typeof renderFoxholeSceneV2Entity>) => plan.root.children
+    .filter(node => node.laneId !== FOXHOLE_STRUCTURE_RENDER_LANES.contactShadow.laneId);
+
 test('stale cargo overlays only render items supported by the current asset', () => {
     for (const items of [['Concrete'], ['Concrete', 'Diesel', 'Petrol']]) {
         const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
@@ -63,7 +67,7 @@ test('intersection socket sides render approach pieces and retain concrete corne
                         targetEntityId: 'neighbor', targetSocketName: 'BackSocket' }] } },
             ] };
             const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject));
-            const layers = plan.root.children.filter(node => node.id.startsWith('structure-layer-'));
+            const layers = surfaceNodes(plan).filter(node => node.id.startsWith('structure-layer-'));
             assert.ok(layers.some(node => node.id === 'structure-layer-floor'));
             assert.equal(layers.some(node => node.id === `structure-layer-${side.toLowerCase()}wall`), false);
             for (const corner of layers.filter(node => node.id.includes('corner'))) {
@@ -178,7 +182,7 @@ test('Foxhole renderer respects layer settings and V1 breach classification', ()
     const hidden = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], settings: { 'foxhole.structure.hideRoofs': true } });
     assert.equal(hidden.root.children.some(node => node.laneId === 'foxhole:structure:roof'), false);
     const staticPlan = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], settings: { 'foxhole.structure.useStaticRender': true } });
-    assert.equal(staticPlan.root.children.filter(node => node.kind === 'sprite').length, 1);
+    assert.equal(surfaceNodes(staticPlan).filter(node => node.kind === 'sprite').length, 1);
     const breach = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
         settings: { 'foxhole.structure.breachIndicators': true } }));
     const faces = breach.root.children.filter(node => node.id.startsWith('breach-'));
@@ -212,7 +216,7 @@ test('trench berms and barbed wire render above other trench visuals in Scene V2
                 definitionAvailable: true, data: { selections: [{ slotId: 'BackDefenseModSlot', variantId }] } },
         ] };
         const plan = renderFoxholeSceneV2Entity(subject);
-        const defense = plan.root.children.find(node => node.id.startsWith('modification-'));
+        const defense = surfaceNodes(plan).find(node => node.id.startsWith('modification-'));
         const walls = plan.root.children.find(node => node.laneId === 'foxhole:structure:base');
         assert.ok(defense && walls, variantId);
         assert.equal(defense.laneId, 'foxhole:structure:trench-defense');
@@ -243,10 +247,11 @@ test('derives the Ammo Factory render plan from extension-owned ECS data', () =>
         }],
     }));
 
-    assert.equal(plan.root.children[0]?.kind, 'sprite');
-    assert.equal(plan.root.children[0]?.kind === 'sprite' && plan.root.children[0].resourceId, 'foxhole.asset.facilityfactoryammo');
-    assert.equal(plan.root.children[0]?.kind === 'sprite' && plan.root.children[0].x, 17.102);
-    assert.equal(plan.root.children[0]?.kind === 'sprite' && plan.root.children[0].y, -16.1925);
+    const texture = surfaceNodes(plan)[0];
+    assert.equal(texture?.kind, 'sprite');
+    assert.equal(texture?.kind === 'sprite' && texture.resourceId, 'foxhole.asset.facilityfactoryammo');
+    assert.equal(texture?.kind === 'sprite' && texture.x, 17.102);
+    assert.equal(texture?.kind === 'sprite' && texture.y, -16.1925);
 });
 
 test('derives an Ammo Factory icon texture from extension data and Nixie-owned presentation', () => {
@@ -333,7 +338,7 @@ test('renders persisted Foxhole modification selections as manifest-owned overla
     }));
 
     const overlay = plan.root.children.find(node => node.id === 'modification-1');
-    assert.equal(plan.root.children.filter(node => node.id.startsWith('structure-layer-')).length, 12);
+    assert.equal(surfaceNodes(plan).filter(node => node.id.startsWith('structure-layer-')).length, 12);
     assert.equal(overlay?.kind, 'sprite');
     assert.equal(overlay?.kind === 'sprite' && overlay.resourceId, 'foxhole.mod.shared-bunkbed-47e016ce52d5');
     assert.ok(overlay?.kind === 'sprite' && Math.abs(overlay.x! - (-55.2065)) < 1e-9);
@@ -366,8 +371,8 @@ test('uses persisted Foxhole upgrade selections as replacement textures', () => 
         }],
     }));
 
-    const replacement = plan.root.children[0];
-    assert.equal(plan.root.children.filter(node => node.kind === 'sprite').length, 1);
+    const replacement = surfaceNodes(plan)[0];
+    assert.equal(surfaceNodes(plan).filter(node => node.kind === 'sprite').length, 1);
     assert.equal(replacement?.kind, 'sprite');
     assert.equal(replacement?.kind === 'sprite' && replacement.resourceId, 'foxhole.mod.facilityrefinery1-0-0');
     assert.equal(replacement?.kind === 'sprite' && replacement.width, 242);
@@ -412,10 +417,11 @@ test('selects manifest-owned faction and color variants from persisted appearanc
         }],
     }));
 
-    assert.equal(factionPlan.root.children[0]?.kind === 'sprite'
-        && factionPlan.root.children[0].resourceId, 'foxhole.visual.engineeringcenter-faction-w');
-    assert.equal(colorPlan.root.children[0]?.kind === 'sprite'
-        && colorPlan.root.children[0].resourceId, 'foxhole.visual.liquidcontainer-color-fd9d06');
+    const factionTexture = surfaceNodes(factionPlan)[0], colorTexture = surfaceNodes(colorPlan)[0];
+    assert.equal(factionTexture?.kind === 'sprite'
+        && factionTexture.resourceId, 'foxhole.visual.engineeringcenter-faction-w');
+    assert.equal(colorTexture?.kind === 'sprite'
+        && colorTexture.resourceId, 'foxhole.visual.liquidcontainer-color-fd9d06');
 });
 
 test('renders destroyed and packaged Foxhole appearances from published resources', () => {
@@ -454,11 +460,12 @@ test('renders destroyed and packaged Foxhole appearances from published resource
         }],
     }));
 
-    assert.equal(destroyedPlan.root.children[0]?.kind === 'sprite'
-        && destroyedPlan.root.children[0].resourceId, 'foxhole.asset.observationbunkert1destroyed');
-    assert.equal(packagedPlan.root.children.length, 2);
-    assert.equal(packagedPlan.root.children[1]?.kind === 'sprite'
-        && packagedPlan.root.children[1].resourceId, 'foxhole.visual.packaging-normal');
+    const destroyedTexture = surfaceNodes(destroyedPlan)[0], packagedNodes = surfaceNodes(packagedPlan);
+    assert.equal(destroyedTexture?.kind === 'sprite'
+        && destroyedTexture.resourceId, 'foxhole.asset.observationbunkert1destroyed');
+    assert.equal(packagedNodes.length, 2);
+    assert.equal(packagedNodes[1]?.kind === 'sprite'
+        && packagedNodes[1].resourceId, 'foxhole.visual.packaging-normal');
 });
 
 test('fixed and unoccupied corner floors render their baked textures without clipping walls', () => {
@@ -537,7 +544,7 @@ test('applies blueprint and custom appearance through bounded static render tran
     assert.equal(customBase?.kind === 'sprite' && customBase.anchorX, 0.25);
     assert.equal(customBase?.kind === 'sprite' && customBase.anchorY, 0.75);
     for (const plan of [blueprintPlan, customPlan]) {
-        const layers = plan.root.children.filter(node => node.id.startsWith('structure-layer-'));
+        const layers = surfaceNodes(plan).filter(node => node.id.startsWith('structure-layer-'));
         assert.equal(layers.length, 0);
     }
 });
@@ -615,7 +622,7 @@ test('clamps marked cargo to the manifest hold limit and hides destroyed cargo',
             data: { destroyed: true },
         }],
     }));
-    assert.equal(destroyed.root.children.length, 1);
+    assert.equal(surfaceNodes(destroyed).length, 1);
 });
 
 test('renders persisted production orders as upright green output tiles', () => {
