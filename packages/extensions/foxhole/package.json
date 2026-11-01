@@ -34,7 +34,7 @@
     "nuxt": "4.5.2"
   },
   "dependencies": {
-    "@nixiejs/platform": "0.9.4",
+    "@nixiejs/platform": "0.9.4 || ^1.0.0",
     "@supabase/supabase-js": "2.112.3",
     "@turf/helpers": "7.4.0",
     "@turf/intersect": "7.4.0",
