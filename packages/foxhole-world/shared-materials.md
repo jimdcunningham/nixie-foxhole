@@ -26,7 +26,9 @@ Tree's `Use Alpha Channel?` branch selects packed blue. Albedo RGB, geometry,
 instance transforms and UV bindings are preserved. Solid materials sharing an
 image do not acquire another material's cutout.
 
-Tinted, tiled and albedo-alpha branches are intentionally left unchanged until
+Simple ColorShift tints are supported only when the existing glTF RGB factor
+matches the native multiplier; the factor is preserved rather than baked again.
+Selective tint, tiled and albedo-alpha branches remain unchanged until
 their graphs have equivalent translations. Unknown families and qualified
 identity mismatches are also preserved. This is not a universal Unreal material
 interpreter, and it does not replace custom weather, water, glass or emissive

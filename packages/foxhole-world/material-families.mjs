@@ -14,7 +14,8 @@ export function sharedMaterialProfile(row){
  const uv=row.colors?.UVTiling;
  if((scalars.Tiling??1)!==1||(uv&&((uv.R??1)!==1||(uv.G??1)!==1))||switches['UseColorMask?'])return null;
  const color=row.colors?.ColorShift;
- if(color&&[color.R,color.G,color.B].some(v=>v!==1))return null;
+ const tint=color?[color.R,color.G,color.B]:[1,1,1];
+ if(!tint.every(v=>Number.isFinite(v)&&v>=0))return null;
  if(['MetallicStrength','MetallicLevels','RoughStrength','RoughLevels','RoughAdjust','Opacity Mask Tiling','OverlapOpacity'].some(name=>(scalars[name]??1)!==1))return null;
  if(['Prototype Vehicle?','Top Mat Switch','UseVBlend','Damaged?','DamagedRoughness?'].some(name=>switches[name]===true))return null;
  const masked=row.blend==='BLEND_Masked';
@@ -23,7 +24,7 @@ export function sharedMaterialProfile(row){
  // Legacy RGB albedos need their original alpha recovered separately. Leave
  // that uncommon branch intact rather than pretending an RGB image has holes.
  if(alpha==='albedo')return null;
- return {source:row.path,family,albedo,packed,alpha,
+ return {source:row.path,family,albedo,packed,alpha,tint,
   cutoff:row.properties?.BasePropertyOverrides?.OpacityMaskClipValue??.3333,
   metalChannel:family==='tree'||switches['Use Red Channel for Metalness?']!==false?0:null,
   metal:scalars.Metalness??0,roughChannel:family==='tree'||switches['Use Roughness Texture']===true?1:null,
@@ -31,5 +32,8 @@ export function sharedMaterialProfile(row){
 }
 export function matchingMaterialProfile(material,profiles){
  const source=key(material.extras?.foxholeMaterialSource),albedo=key(material.extras?.foxholeAlbedoSource);
- return profiles.find(p=>key(p.source)===source&&key(p.albedo)===albedo)||null;
+ const factor=material.pbrMetallicRoughness?.baseColorFactor||[1,1,1,1];
+ // Adopted glTF already contains ColorShift. Verify it, preserve it, and add
+ // only the missing surface maps; never multiply the colour a second time.
+ return profiles.find(p=>key(p.source)===source&&key(p.albedo)===albedo&&p.tint.every((v,i)=>Math.abs(v-factor[i])<1e-5))||null;
 }
