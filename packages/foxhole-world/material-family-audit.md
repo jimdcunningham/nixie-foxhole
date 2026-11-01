@@ -125,3 +125,16 @@ Keep game images and native inspection/expression JSON in ignored scratch storag
 The local audit evidence is under `C:/Code/nixie/tmp/culling-material-audit/`;
 the inventory and comparisons are derived from current files, not source names
 or texture suffix guesses.
+
+## Implemented Follow-up
+
+The FireStatic slice restores four independent native mask channels, palette,
+instance controls and animated emissive coverage. Its bounded composition and
+missing native depth fade/panner parity are documented in `fire-static.md`.
+
+The Glass slice corrects the proven diffuse texture-or-color branch (previously
+multiplied), opacity, disabled normal binding and scalar surface fallback. It
+preserves night emission. `glass-materials.md` records the remaining stripped
+NPower lerp, packed-channel and refraction questions rather than inferring those
+operations from parameter names. Selective masks and authored tiling remain the
+next separate material-family investigations.

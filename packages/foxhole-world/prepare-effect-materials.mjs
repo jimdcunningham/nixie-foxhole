@@ -1,3 +1,4 @@
+import {translateGlass} from './glass-materials.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -49,5 +50,5 @@ export async function translateFireStatic({material,row,image,nativeImage}){
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===path.join(import.meta.dirname,'prepare-effect-materials.mjs')){
  const args=process.argv.slice(2),arg=name=>args[args.indexOf(name)+1];if(!args.includes('--input')||!args.includes('--native'))throw Error('Pass --input and --native; optionally --regions deadlands');
- console.log(JSON.stringify(await prepareEffectMaterials({input:arg('--input'),native:arg('--native'),regions:args.includes('--regions')?arg('--regions').split(','):undefined,translate:translateFireStatic})));
+ console.log(JSON.stringify(await prepareEffectMaterials({input:arg('--input'),native:arg('--native'),regions:args.includes('--regions')?arg('--regions').split(','):undefined,translate:args.includes('--glass')?translateGlass:translateFireStatic})));
 }
