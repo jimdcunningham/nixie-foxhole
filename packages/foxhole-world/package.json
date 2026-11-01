@@ -19,6 +19,7 @@
     "build:viewer": "node build-client.mjs",
     "build:authoring": "node build-authoring.mjs",
     "export": "node export-world.mjs",
+    "prepare:materials": "node prepare-shared-materials.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
