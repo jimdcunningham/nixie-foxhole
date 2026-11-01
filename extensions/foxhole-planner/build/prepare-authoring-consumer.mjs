@@ -14,6 +14,13 @@ export async function prepareAuthoringConsumer({extensionSource, fixtureRoot}) {
         await fs.writeFile(path.join(destination, name), code);
     }
     await fs.copyFile(path.resolve(extensionSource, '../../packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'), path.join(destination, 'map-icon-preview.ts'));
+    for (const tier of [1, 2, 3]) {
+        const override = path.join(destination, 'asset-overrides', `fortbaset${tier}`);
+        await fs.mkdir(override, {recursive: true});
+        await fs.copyFile(path.resolve(extensionSource, `../../tools/foxwatch/asset-overrides/fortbaset${tier}/manifest.json`), path.join(override, 'manifest.json'));
+    }
+    const wallTest = path.join(fixtureRoot, 'tests/bunker-base-wall-visibility.test.ts');
+    await fs.writeFile(wallTest, (await fs.readFile(wallTest, 'utf8')).replaceAll('../../../tools/foxwatch/asset-overrides/', '../build/.nixie-authoring/asset-overrides/'));
     const shadowTest = path.join(fixtureRoot, 'tests/contact-shadows.test.ts');
     await fs.writeFile(shadowTest, (await fs.readFile(shadowTest, 'utf8')).replaceAll('../../../tools/foxwatch/catalog/', '../build/.nixie-authoring/'));
     for (const [file, target] of [
