@@ -41,16 +41,16 @@ test('the real world loader applies density before loading small foliage and ret
  }}finally{source.destroy();}
 });
 
-test('AO and shadows change live without region reload, vegetation reloads, and view ownership restores',async()=>{
- const key=Symbol.for('nixie.spatial.shadow-quality'),camera={position:{x:0,y:0,z:100}},view={camera,passes:[],root:{addChild(){}},shadowQuality:'ultra',shadowFilter:'pcf',[key]:'prior'},seen=[],changes=[];
+test('map appearance changes live while shadow maps and filters remain host-owned',async()=>{
+ const key=Symbol.for('nixie.spatial.shadow-quality'),appearance=Symbol.for('foxhole.world.shadow-appearance');
+ const camera={position:{x:0,y:0,z:100}},view={camera,cull:'cpu',_sceneBatch:{cull:'cpu'},passes:[],root:{addChild(){}},shadowQuality:'ultra',shadowFilter:'pcf',[key]:'prior'},seen=[],changes=[];
  const c=new FoxholeRegionSceneController({baseUrl:'https://test/',fetcher:async()=>new Response(JSON.stringify({version:1,regions:{fixture:{id:'fixture'}}})),loadRegion:async options=>{seen.push(options);return{root:{removeFromParent(){}},passes:[],metrics:{},setAmbientOcclusion(value){changes.push(value);},destroy(){}};}});
- const settings={enabled:true,regionKeys:['fixtureHex'],ambientOcclusion:true,shadowQuality:'medium',vegetationDensity:'full'},sync=()=>c.sync({view,settings,mode:'3d'}),flush=()=>new Promise(r=>setTimeout(r,0));
+ const settings={enabled:true,regionKeys:['fixtureHex'],ambientOcclusion:true,vegetationDensity:'full'},sync=()=>c.sync({view,settings,mode:'3d'}),flush=()=>new Promise(r=>setTimeout(r,0));
  try{
   sync();await flush();assert.equal(seen[0].ambientOcclusion,true);assert.equal(seen[0].vegetationDensity,'full');
-  for(const [quality,filter]of [['off','pcf-high'],['low','pcf'],['high','pcf-high'],['medium','pcf-high']]){settings.shadowQuality=quality;settings.ambientOcclusion=!settings.ambientOcclusion;sync();await flush();assert.equal(view[key],quality);assert.equal(view.shadowQuality,quality==='off'?'medium':quality);assert.equal(view.shadowFilter,filter);assert.equal(changes.at(-1),settings.ambientOcclusion);assert.equal(seen.length,1);assert.equal(seen[0].signal.aborted,false);}
-  settings.shadowQuality='low';settings.softShadows=false;sync();await flush();assert.equal(view.shadowFilter,'hard');assert.equal(seen.length,1);
-  settings.softShadows=true;sync();await flush();assert.equal(view.shadowFilter,'pcf');assert.equal(seen.length,1);
+  for(const soft of [false,true]){settings.softShadows=soft;settings.ambientOcclusion=!settings.ambientOcclusion;sync();await flush();assert.equal(view[appearance].soft,soft);assert.equal(view.shadowQuality,'ultra');assert.equal(view.shadowFilter,'pcf');assert.equal(view[key],'prior');assert.equal(view.cull,'cpu');assert.equal(view._sceneBatch.cull,'cpu');assert.equal(changes.at(-1),settings.ambientOcclusion);assert.equal(seen.length,1);}
+  view.shadowQuality='low';view.shadowFilter='hard';
   settings.vegetationDensity='minimal';sync();await flush();assert.equal(seen.length,2);assert.equal(seen[0].signal.aborted,true);assert.equal(seen[1].vegetationDensity,'minimal');assert.equal(view.camera,camera);
-  settings.enabled=false;sync();assert.equal(view.shadowQuality,'ultra');assert.equal(view.shadowFilter,'pcf');assert.equal(view[key],'prior');
+  settings.enabled=false;sync();assert.equal(view.shadowQuality,'low');assert.equal(view.shadowFilter,'hard');assert.equal(view[key],'prior');assert.equal(view[appearance],undefined);
  }finally{c.destroy();}
 });

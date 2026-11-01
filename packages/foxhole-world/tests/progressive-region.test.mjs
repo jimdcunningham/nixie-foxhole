@@ -173,7 +173,7 @@ test('streaming, model LOD, terrain LOD and terrain textures operate independent
   const policy={adaptiveStreaming:!!(mask&1),modelLod:!!(mask&2),terrainLod:!!(mask&4),adaptiveTextures:!!(mask&8)};
   const f=fixture(true,{...terrainWater,building:true},policy);f.models.resolve();f.surface.resolve();const scene=await f.pending;
   try{
-   assert.equal(scene.root[Symbol.for('nixie.spatial.full-detail-root')],policy.modelLod?undefined:true,JSON.stringify(policy));
+   assert.equal(scene.root[Symbol.for('nixie.spatial.full-detail-root')],true,JSON.stringify(policy));
    assert.equal(scene.metrics.resident,!policy.adaptiveStreaming);assert.equal(scene.metrics.progressive,true);
    for(const [key,value]of Object.entries(policy))assert.equal(scene.metrics[key],value);
    assert.equal(scene.metrics.terrainGeometry.step,policy.terrainLod?32:1);

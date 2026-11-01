@@ -51,7 +51,8 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  prepareAtlasRetirement(renderer);
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  const provider=await createCompactProvider({baseUrl,entry,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const shellWalls=[];let shellEdgeFlags=[];
- if(!modelLod)Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
+ // Map assets own their authored LOD; host placed-object simplification must not replace it.
+ Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
  let roads,roadTransitions,waterMat,weatherTextures={},packedWeather,disposed=false,cleaned=false,loading=true,terrainLoaded=false,terrainPreview,terrainChunks,sourceMaxHeight=256,environment,warState=null,sharedActorVisibility,layerFlags=layers,revealedBatches=0;
  const terrainMapImage=createTerrainMapImageSource({loadDefault:()=>texture(region+'/map/terrain.webp'),initial:terrainMapTexture,signal});
  const windMaterials=createVegetationWind({frame,enabled:vegetationWind});

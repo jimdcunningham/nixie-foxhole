@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { createGraphicsSettingsMenuItems } from '#nixie/utils/nixie-graphics-menu.ts';
 import NixieSidebarHeadingOverflow from '#nixie/components/nixie/NixieSidebarHeadingOverflow.vue';
 import type { ResolvedMenuItem } from '#nixie/plugins/nixie/registry/menu-resolver.ts';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
@@ -49,7 +50,7 @@ const items = computed<ResolvedMenuItem[]>(() => [
     },
     {
         type: 'checkbox',
-        label: 'Model LOD',
+        label: 'Map Model LOD',
         icon: 'ph:cube',
         checked: mapSettings.value.modelLod,
         closeOnClick: false,
@@ -92,7 +93,7 @@ const items = computed<ResolvedMenuItem[]>(() => [
     },
     {
         type: 'checkbox',
-        label: 'Frustum Culling',
+        label: 'Map Culling',
         icon: 'ph:bounding-box',
         checked: mapSettings.value.frustumCulling,
         closeOnClick: false,
@@ -126,13 +127,7 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.vegetationShadows, !mapSettings.value.vegetationShadows, { reason: 'foxhole-war-nx:vegetation-shadows' }),
     },
     {
-        type: 'checkbox', label: 'Soft Shadows', icon: 'ph:sun-dim',
-        checked: mapSettings.value.softShadows, closeOnClick: false,
-        adminOnly: false, disabled: false, visible: true,
-        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.softShadows, !mapSettings.value.softShadows, { reason: 'foxhole-war-nx:soft-shadows' }),
-    },
-    {
-        type: 'submenu', label: 'Shadow Strength', icon: 'ph:circle-half-tilt',
+        type: 'submenu', label: 'Map Shadow Strength', icon: 'ph:circle-half-tilt',
         badge: { light: 'Light', medium: 'Medium', strong: 'Strong' }[mapSettings.value.shadowStrength],
         adminOnly: false, disabled: false, visible: true,
         children: ([['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']] as const).map(([value, label]) => ({
@@ -152,14 +147,9 @@ const items = computed<ResolvedMenuItem[]>(() => [
         })),
     },
     {
-        type: 'submenu', label: 'Shadow Quality', icon: 'ph:sun-dim',
-        badge: { off: 'Off', low: 'Low', medium: 'Medium', high: 'High' }[mapSettings.value.shadowQuality],
+        type: 'submenu', label: 'Graphics', icon: 'ph:monitor',
         adminOnly: false, disabled: false, visible: true,
-        children: ([['off', 'Off', 'ph:prohibit', 'Keep lighting; skip cast shadows.'], ['low', 'Low', 'ph:sun-dim', '512 px maps and simple filtering.'], ['medium', 'Medium', 'ph:sun', '1024 px shadow maps.'], ['high', 'High', 'ph:sun-horizon', '2048 px shadow maps.']] as const).map(([value, label, icon, description]) => ({
-            type: 'checkbox', label, icon, description, checked: mapSettings.value.shadowQuality === value,
-            closeOnClick: false, adminOnly: false, disabled: false, visible: true,
-            onClick: () => { if (mapSettings.value.shadowQuality !== value) settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.shadowQuality, value, { reason: 'foxhole-war-nx:shadow-quality' }); },
-        })),
+        children: createGraphicsSettingsMenuItems(settingsStore),
     },
     {
         type: 'checkbox',

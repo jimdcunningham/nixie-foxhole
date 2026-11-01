@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { transformSync } from 'esbuild';
 import { computed, ref } from 'vue';
+import { createGraphicsSettingsMenuItems } from '#nixie/utils/nixie-graphics-menu.ts';
 import { foxholeSceneMapRendererSetting } from '../../app/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
 
 const read = (path: string) => readFileSync(new URL(`../../app/${path}`, import.meta.url), 'utf8');
@@ -29,9 +30,9 @@ for (const development of [false, true]) {
         const itemsScript = menuSource.slice(menuSource.indexOf('const items = computed'), menuSource.indexOf('\nonMounted('));
         const sceneV2 = ref(true);
         const items = evaluate(`${itemsScript}\nitems;`, development, {
-            computed, documentSession: { isSceneV2Active: sceneV2 },
+            computed, createGraphicsSettingsMenuItems, documentSession: { isSceneV2Active: sceneV2 },
             mapSettings: ref({ coloredIcons: true, adaptiveStreaming: true, modelLod: true }),
-            settingsStore: { getValueOr: () => true }, FOXHOLE_USE_SDK_MAP_SETTING_ID: settingId,
+            settingsStore: { getDefinitions: () => [], getValueOr: () => true }, FOXHOLE_USE_SDK_MAP_SETTING_ID: settingId,
             notificationsEnabled: ref(true), shards: ref([]),
         });
         assert.equal(items.value.find((item: { label: string; }) => item.label === 'Use SDK Map').visible, development);
