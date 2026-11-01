@@ -1,12 +1,13 @@
 import { resolveFoxholeContactShadowProjection, resolveFoxholeTextureSidecarUrl } from '../../../../../../../extensions/foxhole-planner/src/contact-shadow.ts';
 import type { FoxholeContactShadowProjection } from '../../../../../../../extensions/foxhole-planner/src/contact-shadow.ts';
-import { resolveFoxholeAssetUrl } from './asset-locations.ts';
+import { resolveFoxholeAssetUrl, resolveFoxholeAssetSourceUrl } from './asset-locations.ts';
 
 export { resolveFoxholeContactShadowProjection, resolveFoxholeTextureSidecarUrl, resolveFoxholeContactShadowCenter } from '../../../../../../../extensions/foxhole-planner/src/contact-shadow.ts';
 export type { FoxholeContactShadowProjection } from '../../../../../../../extensions/foxhole-planner/src/contact-shadow.ts';
 const metadataLoads = new Map<string, Promise<FoxholeContactShadowProjection | null>>();
 export function loadFoxholeContactShadowProjection(textureUrl: string): Promise<FoxholeContactShadowProjection | null> {
-    const sidecar = resolveFoxholeTextureSidecarUrl(textureUrl);
+    const source = resolveFoxholeAssetSourceUrl(textureUrl);
+    const sidecar = resolveFoxholeTextureSidecarUrl(source);
     if (!sidecar) {
         return Promise.resolve(null);
     }
@@ -24,7 +25,7 @@ export function loadFoxholeContactShadowProjection(textureUrl: string): Promise<
         if (!response.ok) {
             return null;
         }
-        const projection = resolveFoxholeContactShadowProjection(textureUrl, await response.json());
+        const projection = resolveFoxholeContactShadowProjection(source, await response.json());
         if (!projection) {
             return null;
         }

@@ -55,3 +55,24 @@ test('selected generations resolve shadow metadata and images through pinned fil
         installFoxholeAssetLocations(null);
     }
 });
+
+test('a rebased manifest texture keeps its canonical identity for shadow lookup', async () => {
+    const { installFoxholeAssetLocations, resolveFoxholeAssetUrl } = await import('../app/plugins/foxhole/nixie/asset-locations.ts');
+    const { loadFoxholeContactShadowProjection } = await import('../app/plugins/foxhole/nixie/contact-shadow.ts');
+    const fetcher = globalThis.fetch;
+    const requests: string[] = [];
+    installFoxholeAssetLocations(path => `https://assets.test/objects/${path.endsWith('.texture.webp') ? 'surface-hash.webp' : path.endsWith('.json') ? 'sidecar-hash.json' : 'shadow-hash.webp'}`);
+    globalThis.fetch = (async input => {
+        requests.push(String(input));
+        return new Response(JSON.stringify(metadata), { headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+        const texture = resolveFoxholeAssetUrl('/foxhole/assets/rebased/backwall.texture.webp');
+        const projection = await loadFoxholeContactShadowProjection(texture);
+        assert.equal(projection?.textureUrl, 'https://assets.test/objects/shadow-hash.webp');
+        assert.deepEqual(requests, ['https://assets.test/objects/sidecar-hash.json']);
+    } finally {
+        globalThis.fetch = fetcher;
+        installFoxholeAssetLocations(null);
+    }
+});
