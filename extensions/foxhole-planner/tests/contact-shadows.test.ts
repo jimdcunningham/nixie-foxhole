@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
 import { bindFoxholeContactShadows } from '../../../tools/foxwatch/catalog/contact-shadows.ts';
 import { resolveFoxholeContactShadowProjection, resolveFoxholeContactShadowCenter } from '../src/contact-shadow.ts';
 import { renderFoxholeContactShadows } from '../src/scene-v2-contact-shadows.ts';
@@ -11,7 +10,11 @@ import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
 const source = '/foxhole/assets/types/structures/facilityrefinery2/facilityrefinery2.texture.webp';
-const sidecar = JSON.parse(await readFile(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/types/structures/facilityrefinery2/facilityrefinery2.texture.json', import.meta.url), 'utf8'));
+// Synthetic padded geometry keeps these contract tests independent of game sidecar files.
+const sidecar = {
+    width: 658, height: 775, offsetX: 64, offsetY: 24,
+    contactShadow: { profile: 'topdown-contact-v2', file: 'facilityrefinery2.shadow.webp', width: 786, height: 903, offsetX: 68, offsetY: 28 },
+};
 test('catalog compilation retains authored shadow geometry and publication dependencies', async () => {
     const generated = { assets: { facilityrefinery2: { renderLayers: { roof: { resourceId: 'foxhole.visual.roof' } } } as unknown as FoxholeSceneV2AssetMetadata }, visualResources: [{ id: 'roof', sourceUrl: source }], modificationResources: [] };
     const files = await bindFoxholeContactShadows(generated, [{ id: 'facilityrefinery2', sourceUrl: source }], async () => sidecar, async () => true);

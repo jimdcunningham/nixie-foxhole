@@ -32,7 +32,7 @@ jobs:
           echo "NIXIE_FOXHOLE_ASSETS_ROOT=$RUNNER_TEMP/planner-consumer/packages/extensions/foxhole/public/foxhole/assets" >> "$GITHUB_ENV"
 
       - name: Verify publication workflow boundary
-        run: node --test extensions/foxhole-planner/build/publishing-workflow.test.mjs
+        run: node --test extensions/foxhole-planner/build/publishing-workflow.test.mjs extensions/foxhole-planner/build/prepare-authoring-consumer.test.mjs
 
       # A standalone consumer must never need access to the private Nixie repo.
       - name: Prepare independent extension consumer

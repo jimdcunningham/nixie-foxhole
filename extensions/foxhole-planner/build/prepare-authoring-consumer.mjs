@@ -8,10 +8,14 @@ export async function prepareAuthoringConsumer({extensionSource, fixtureRoot}) {
     const generators = path.resolve(extensionSource, '../../tools/foxwatch/catalog');
     const destination = path.join(fixtureRoot, 'build/.nixie-authoring');
     await fs.mkdir(destination, {recursive: true});
-    for (const name of ['product-metadata.ts','map-metadata.ts','model-layer-nodes.ts','browser-atlas-images.ts']) {
-        const code = (await fs.readFile(path.join(generators, name), 'utf8')).replaceAll('../../../extensions/foxhole-planner/src/', '../../src/');
+    for (const name of ['product-metadata.ts','map-metadata.ts','model-layer-nodes.ts','browser-atlas-images.ts','contact-shadows.ts']) {
+        const code = (await fs.readFile(path.join(generators, name), 'utf8')).replaceAll('../../../extensions/foxhole-planner/src/', '../../src/')
+            .replaceAll('../../../packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts', './map-icon-preview.ts');
         await fs.writeFile(path.join(destination, name), code);
     }
+    await fs.copyFile(path.resolve(extensionSource, '../../packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'), path.join(destination, 'map-icon-preview.ts'));
+    const shadowTest = path.join(fixtureRoot, 'tests/contact-shadows.test.ts');
+    await fs.writeFile(shadowTest, (await fs.readFile(shadowTest, 'utf8')).replaceAll('../../../tools/foxwatch/catalog/', '../build/.nixie-authoring/'));
     for (const [file, target] of [
         ['src/scene-v2-asset-metadata.ts', '../build/.nixie-authoring/product-metadata.ts'],
         ['src/scene-v2-map-metadata.ts', '../build/.nixie-authoring/map-metadata.ts'],
