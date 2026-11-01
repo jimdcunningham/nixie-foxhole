@@ -1,3 +1,4 @@
+import {createFireStaticResolver,createFireStaticMaterial} from './fire-static.mjs';
 import {createContainedWaterResolver} from './contained-water.mjs';
 import {createTerrainMapImageSource} from './terrain-map-image.mjs';
 import {prepareAtlasRetirement} from './atlas-retirement.mjs';
@@ -51,7 +52,7 @@ function properties(value){const keys=new Set();for(let p=value;p&&p!==Object.pr
 export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask}){
  prepareAtlasRetirement(renderer);
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
- const provider=await createCompactProvider({baseUrl,entry,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set();const shellWalls=[];let shellEdgeFlags=[];
+ const provider=await createCompactProvider({baseUrl,entry,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
  // Map assets own their authored LOD; host placed-object simplification must not replace it.
  Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
  let roads,roadTransitions,waterMat,weatherTextures={},packedWeather,disposed=false,cleaned=false,loading=true,terrainLoaded=false,terrainPreview,terrainChunks,sourceMaxHeight=256,environment,warState=null,sharedActorVisibility,layerFlags=layers,revealedBatches=0;
@@ -82,7 +83,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const loadFlags=()=>adaptiveStreaming?layerFlags:progressive?residentFlags:{};
  function prepareNode(node=root){setRegionFrustumCulling(node,frustumCulling);framePreparation?.prepare(node);}
  const streamingBusy=()=>[...modelStreams.values()].some(stream=>stream.busy);
- function cleanup(){if(cleaned)return;cleaned=true;signal.removeEventListener('abort',destroy);reveal?.dispose();demand?.dispose();releasePreparation?.();releaseEnvironmentPreparation?.();provider.destroy();terrainChunks?.destroy();for(const pass of passes)pass.destroy();for(const group of modelGroups.values()){group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();}windMaterials.destroy();root.removeFromParent();root.destroy({children:true});for(const g of ownedGeometry)if(!g.destroyed)g.destroy(true);for(const m of ownedMaterial)if(!m.destroyed)m.destroy();containedWater.clear();excavationMask.destroy();packedWeather?.destroy(true);}
+ function cleanup(){if(cleaned)return;cleaned=true;signal.removeEventListener('abort',destroy);reveal?.dispose();demand?.dispose();releasePreparation?.();releaseEnvironmentPreparation?.();provider.destroy();terrainChunks?.destroy();for(const pass of passes)pass.destroy();for(const group of modelGroups.values()){group.catalog?.destroy();group.cranes?.destroy();group.world?.dispose();}windMaterials.destroy();root.removeFromParent();root.destroy({children:true});for(const g of ownedGeometry)if(!g.destroyed)g.destroy(true);for(const m of ownedMaterial)if(!m.destroyed)m.destroy();containedWater.clear();fireMaterials.clear();excavationMask.destroy();packedWeather?.destroy(true);}
  function retire(){
   if(retirement)return retirement;
   retirement=(async()=>{
@@ -131,7 +132,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   mapAssetsAt(x,y){if(disposed)return [];const nx=frame?(x-frame.x)/frame.scale:x,nz=frame?-(y-frame.y)/frame.scale:y;return [...new Set([...modelGroups.values()].flatMap(group=>group.world?catalogMapAssetsAt(group.world.catalogPlacements||[],warState,nx,nz,group.world.actorVisible):[]))];},
   sampleGround(x,y){if(disposed||!terrainLoaded)return null;const nx=frame?(x-frame.x)/frame.scale:x,nz=frame?-(y-frame.y)/frame.scale:y;if(Math.abs(nz)>945||Math.abs(nx)+Math.abs(nz)*.577777778>1092)return null;const height=sample(nx,nz);return height===null?null:height*(frame?.scale||1);},
   prepareFirstFrame(renderer,node=root){releasePreparation=prepareFirstFrameMaterials(renderer,renderedModelGeometries(node),root);},
-  update({camera,wind,time:windTime,deltaMS=16.67}={}){time+=deltaMS/1000;windMaterials.update(Number.isFinite(windTime)?windTime:time,wind);if(waterMat){waterMat.data.waterTime=time;waterMat.data.waterReflectionStrength=waterReflections?1:0;}for(const material of containedWater){material.data.waterTime=time;material.data.waterReflectionStrength=waterReflections?1:0;}for(const detail of detailGroups.values())detail.update(time,wind,camera);if(camera){detailCamera=camera;const p=camera.position,s=frame?.scale||1;lightCamera[0]=frame?p[0]*s+frame.x:p[0];lightCamera[1]=frame?p[2]*s-frame.y:p[1];lightCamera[2]=frame?p[1]*s:p[2];catalogLights.update(lightCamera,camera.planes);if(adaptiveStreaming)for(const stream of modelStreams.values())stream.update(camera);if(terrainLod)terrainChunks?.update(camera,liveTerrainPass.visible);if(adaptiveTextures)liveTerrainPass.updateQuality?.(camera);if(modelLod)for(const group of modelGroups.values())group.world?.lod?.update(camera);}},destroy};let time=0;
+  update({camera,wind,time:windTime,deltaMS=16.67}={}){time+=deltaMS/1000;for(const material of fireMaterials)material.data.fireTime=time;windMaterials.update(Number.isFinite(windTime)?windTime:time,wind);if(waterMat){waterMat.data.waterTime=time;waterMat.data.waterReflectionStrength=waterReflections?1:0;}for(const material of containedWater){material.data.waterTime=time;material.data.waterReflectionStrength=waterReflections?1:0;}for(const detail of detailGroups.values())detail.update(time,wind,camera);if(camera){detailCamera=camera;const p=camera.position,s=frame?.scale||1;lightCamera[0]=frame?p[0]*s+frame.x:p[0];lightCamera[1]=frame?p[2]*s-frame.y:p[1];lightCamera[2]=frame?p[1]*s:p[2];catalogLights.update(lightCamera,camera.planes);if(adaptiveStreaming)for(const stream of modelStreams.values())stream.update(camera);if(terrainLod)terrainChunks?.update(camera,liveTerrainPass.visible);if(adaptiveTextures)liveTerrainPass.updateQuality?.(camera);if(modelLod)for(const group of modelGroups.values())group.world?.lod?.update(camera);}},destroy};let time=0;
  scene.metrics.catalogLights=catalogLights.metrics;
  onSceneCreated(scene);
  // Every task checks its own lifetime before asking the shared provider for more
@@ -142,7 +143,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   return {root:taskRoot,signal:taskSignal,json:checked(id=>json(id,{signal:taskSignal})),zipped:checked(zipped),binary:checked(id=>binary(id,{signal:taskSignal})),texture:checked(texture),model:checked(modelLease?modelLease.get:provider.model),
    geo:g=>{if(taskSignal.aborted){g.destroy(true);taskSignal.throwIfAborted();}geometry.add(g);return geo(g);},
    mat:m=>{if(taskSignal.aborted){m.destroy();taskSignal.throwIfAborted();}const value=mat(m);materials.add(value);return value;},
-   rollback(){modelLease?.release();taskRoot.removeFromParent();taskRoot.destroy({children:true});for(const g of geometry){ownedGeometry.delete(g);if(!g.destroyed)g.destroy(true);}for(const m of materials){ownedMaterial.delete(m);containedWater.delete(m);if(!m.destroyed)m.destroy();}}
+   rollback(){modelLease?.release();taskRoot.removeFromParent();taskRoot.destroy({children:true});for(const g of geometry){ownedGeometry.delete(g);if(!g.destroyed)g.destroy(true);}for(const m of materials){ownedMaterial.delete(m);containedWater.delete(m);fireMaterials.delete(m);if(!m.destroyed)m.destroy();}}
   };
  }
  let catalogReady,worldData,effectMetadataReady,retireRoads,retireDecals;const modelMetadata=new Map();
@@ -161,10 +162,12 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   // Layout ownership exists before native models finish. Start the independent
   // catalog work there; settle both producers before rollback on any failure.
   const startCatalog=manifest=>catalogTask??=loadRegionCatalog({flagSurfacePass:true,baseUrl,scheduleModelTask,catalog:manifest,layers:group.world.layers,placements:group.world.catalogPlacements,signal:taskSignal,onAsset:provider.trackExternalAsset,progressive,publishBatch,getWarState:()=>warState,actorVisible:group.world.actorVisible,lightBudget:catalogLights,frame}).then(value=>({value}),error=>({error,failed:true}));
-  const prepareMaterials=createContainedWaterResolver(async profile=>{
+  const prepareWater=createContainedWaterResolver(async profile=>{
    const prepared=await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit,contained:profile});
    const material=ctx.mat(prepared.material);material.data.waterTime=time;material.data.waterReflectionStrength=waterReflections?1:0;containedWater.add(material);return material;
   });
+  const prepareFire=createFireStaticResolver((original,profile)=>{taskSignal.throwIfAborted();const material=ctx.mat(createFireStaticMaterial(original,profile));material.data.fireTime=time;fireMaterials.add(material);return material;});
+  const prepareMaterials=async source=>new Map([...(await prepareWater(source)),...(await prepareFire(source))]);
   try{taskSignal.throwIfAborted();const manifest=bridgesOnly?undefined:await catalog();
    const visibilityData=await metadata();sharedActorVisibility??=createWorldActorVisibility({region,prototypes:visibilityData.prototypes});
    group.world=await loadWorldModels({flagSurfacePass:true,region,json:async id=>{taskSignal.throwIfAborted();const value=await modelJson(id);taskSignal.throwIfAborted();return value;},status,root:ctx.root,assetUrl:provider.url,loadModel:ctx.model,signal:taskSignal,batchLayout:'category',catalogResourceFields:true,catalog:manifest,worldData:cellData||await metadata(),visibilityData,actorVisibility:sharedActorVisibility,categories:bridgesOnly?undefined:[category],bridgesOnly,progressive,optimize:modelLod,vegetationDensity,vegetationShadows,windMaterials,prepareMaterials,priorityPosition,
