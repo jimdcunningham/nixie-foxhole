@@ -1,0 +1,53 @@
+name: Planner Contributions
+
+on:
+  pull_request:
+    paths:
+      - 'extensions/foxhole-planner/**'
+      - 'tools/foxwatch/catalog/**'
+      - 'tools/foxwatch/asset-overrides/**'
+      - 'tools/planner-contributor.mjs'
+      - 'packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'
+      - 'package*.json'
+      - '.github/workflows/planner-contributions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/foxhole-planner/**'
+      - 'tools/foxwatch/catalog/**'
+      - 'tools/foxwatch/asset-overrides/**'
+      - 'tools/planner-contributor.mjs'
+      - 'packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'
+      - 'package*.json'
+      - '.github/workflows/planner-contributions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  planner:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            extensions/foxhole-planner/package-lock.json
+      - name: Set up public contributor checkout
+        run: npm run setup:planner
+      - name: Verify Planner contribution
+        run: npm run check:planner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: planner-extension-${{ matrix.os }}
+          path: extensions/foxhole-planner/artifacts/extension.nxext
+          if-no-files-found: error

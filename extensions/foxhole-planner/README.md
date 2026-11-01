@@ -65,7 +65,7 @@ The pure legacy socket ID/name map lives in `src/legacy-plan-socket-id-map.ts`. 
 
 ## Development
 
-Run `npm run dev --workspace @nixiejs/foxhole-planner-sdk`, choose the containing extensions folder in an offline project’s Manage Extensions dialog, approve its local migration capability, and enable it for that project.
+For a public contributor checkout, follow [CONTRIBUTING.md](../../CONTRIBUTING.md): run `npm run setup:planner` and `npm run dev:planner` from the repository root, choose the clone’s `extensions` folder in Studio Editor Settings, then approve and enable Planner in an offline project’s Manage Extensions dialog. Run `npm run check:planner` before opening a pull request. The private Nixie workspace retains its separate `npm run dev --workspace @nixiejs/foxhole-planner-sdk` integration workflow.
 
 The Explorer uses the SDK `assets` provider in both Scene V1 and Scene V2. Language, default/rendered icons, search aliases, categories, filters and upgrade entries come from that provider. The bundled layer no longer contributes an Explorer catalog.
 

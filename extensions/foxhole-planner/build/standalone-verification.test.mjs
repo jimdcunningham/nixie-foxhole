@@ -20,6 +20,10 @@ async function fixture(t) {
     const write = async (name, bytes) => {await fs.mkdir(path.dirname(name), {recursive: true}); await fs.writeFile(name, bytes);};
     await fs.mkdir(path.join(fixtureRoot, 'src'), {recursive: true});
     await write(path.join(fixtureRoot, 'tests/catalog.test.ts'), "const source = '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json';");
+    // The authoring preparation also rewrites these existing consumer tests.
+    for (const name of ['bunker-base-wall-visibility.test.ts', 'contact-shadows.test.ts']) {
+        await fs.copyFile(new URL('../tests/' + name, import.meta.url), path.join(fixtureRoot, 'tests', name));
+    }
     const modelManifest = {schemaVersion: 1, assets: {hospital: {path: 'types/structures/hospital/hospital.glb'}},
         resources: {variant: {path: 'types/structures/hospital/hospital.destroyed.glb'}}, sharedParts: {part: {path: 'shared/models/part.glb'}}};
     for (const name of ['manifest.v1.json', 'maps/map-data.v1.json', ...['de', 'fr', 'pt', 'ru', 'zh'].map(locale => 'localizations/' + locale + '.json')]) await write(path.join(assets, name), '{}');

@@ -2,7 +2,9 @@
 
 Issues and pull requests are welcome. Keep changes focused, include tests for behavior changes, and do not commit generated Foxhole assets, game files, credentials, webhooks, or machine-local output.
 
-Before opening a pull request, run:
+For Planner SDK contributions, follow [the Planner contributor guide](docs/planner-contributing.md). It covers setup, live reload in installed Studio, and the checks required for a Planner pull request.
+
+For FoxWatch contributions, run:
 
 ```powershell
 npm install

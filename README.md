@@ -13,7 +13,14 @@ Studio consumes a pinned revision of these sources before dependency installatio
 
 For integration development, connect this checkout once by running `npm run setup:foxhole -- --source ../nixie-foxhole --local` from Nixie, then `npm install`. Nixie's ignored `.vendor/nixie-foxhole` link points here; Nuxt and the SDK watcher consume this checkout directly. There is no source copy or synchronization step. Set `NIXIE_HOST_ROOT` for a nonstandard Nixie location. Run the host tests with `npm run test:host --workspace @nixiejs/extension-foxhole` from Nixie. The SDK-only packed-consumer gate remains `npm run verify:extension-standalone:planner`. Source code is public; generated game assets remain separate inputs inside this checkout.
 
-The root npm workspace and CI remain FoxWatch/schema-only. Planner source packages are deliberately excluded from that install: the internal layer needs private Nixie host files, and the SDK's preview dependency is supplied and verified by the consuming Nixie workspace. Moving their source here must not make the FoxWatch build depend on a sibling Nixie checkout or generated game assets.
+The root npm workspace and default build/test commands remain FoxWatch/schema-only; Planner has a separate contributor CI job. Planner source packages are deliberately excluded from that install: the internal layer needs private Nixie host files, while the SDK runtime has its own package and lockfile. Contributor setup installs that runtime's published SDK dependencies separately. Moving their source here must not make the FoxWatch build depend on a sibling Nixie checkout or generated game assets.
+
+## Contribute to Planner
+
+See [the Planner contributor guide](docs/planner-contributing.md) for the installed-Studio workflow:
+`npm run setup:planner`, `npm run dev:planner`, and `npm run check:planner`.
+Only Node.js, npm, Git, and a compatible Studio desktop build are required.
+The .NET, Blender, game-installation and submodule requirements below apply to FoxWatch.
 
 ## Get started
 
