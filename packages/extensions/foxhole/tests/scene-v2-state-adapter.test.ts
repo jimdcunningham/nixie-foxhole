@@ -1084,3 +1084,56 @@ test('Inspector preview projection follows hover lifecycle and never changes the
   setActiveNixieStructureModificationHoverPreview(null);assert.equal(foxholeSceneV2StateAdapter.renderPreview!(original,settings),null);
  }finally{setActiveNixieStructureModificationHoverPreview(null);(await prepareFoxholePreviewAssets(null))();}
 });
+
+test('Scene V2 bracket tier edits use typed finalized updates and one persistence batch', async () => {
+    const { buildFoxholeSceneV2SelectionTierUpdates } = await import('../app/plugins/foxhole/nixie/scene-v2-tier-commands.ts');
+    const { host, id, manifest } = fixture('foxholeAsset', { foxholeKey: 'trencht1', x: 123, y: -47, rotation: 0.75 });
+    const runtime = new NixieSceneV2EditorRuntimeController();
+    let writes = 0;
+    runtime.setEditable(true);
+    runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
+        applyEntityMutations: () => { writes++; return true; } });
+    assert.equal(runtime.load(host.exportDocument(), [{ ownerId: manifest.id, name: manifest.name,
+        contribution: manifest.contributes.experimentalComponents }]).ok, true);
+    runtime.selection.set([id]);
+    for (const [direction, target] of [['up', 'trencht2'], ['up', 'trencht3'], ['down', 'trencht2'], ['down', 'trencht1']] as const) {
+        const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, direction);
+        assert.ok(updates.length);
+        assert.equal((await runtime.updateEntityComponentsFinalized(updates)).ok, true);
+        const entity = runtime.entities.find(entity => entity.entityId === id)!;
+        assert.equal(foxholeSceneV2StateAdapter.project(entity)!.state.foxholeKey, target);
+        assert.equal(entity.components.find(component => component.componentId === 'model')!.data.resourceId, 'foxhole.model.' + target);
+        assert.deepEqual(runtime.selection.ids, [id]);
+        if (target === 'trencht3') assert.deepEqual(buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up'), []);
+    }
+    assert.equal(writes, 4);
+
+    runtime.setEditable(false);
+    const before = runtime.exportDocument();
+    assert.equal((await runtime.updateEntityComponentsFinalized(buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up'))).ok, false);
+    assert.deepEqual(runtime.exportDocument(), before);
+});
+
+test('Scene V2 tier commands batch mixed selections and reject locked tier targets', async () => {
+    const { buildFoxholeSceneV2SelectionTierUpdates } = await import('../app/plugins/foxhole/nixie/scene-v2-tier-commands.ts');
+    const { manifest } = fixture();
+    for (const locked of [false, true]) {
+        const content = convertNixieSceneV1ToV2([
+            { id: 'a', type: 'foxholeAsset', state: { foxholeKey: 'trencht1' }, children: [] },
+            { id: 'b', type: 'foxholeAsset', state: { foxholeKey: 'trencht2', locked }, children: [] },
+            { id: 'c', type: 'foxholeAsset', state: { foxholeKey: 'fortt3', packaged: true }, children: [] },
+        ], { nodeConverters: [convertFoxholeSceneV1NodeToV2] }).content;
+        const runtime = new NixieSceneV2EditorRuntimeController();let writes = 0;
+        runtime.setEditable(true);
+        runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
+            applyEntityMutations: () => { writes++; return true; } });
+        assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name, contribution: manifest.contributes.experimentalComponents }]).ok, true);
+        runtime.selection.set(runtime.entities.map(entity => entity.entityId));
+        const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up');
+        if (locked) { assert.deepEqual(updates, []);continue; }
+        assert.equal(new Set(updates.map(update => update.entityId)).size, 2);
+        assert.equal((await runtime.updateEntityComponentsFinalized(updates)).ok, true);
+        assert.equal(writes, 1);
+        assert.deepEqual(runtime.entities.map(entity => foxholeSceneV2StateAdapter.project(entity)!.state.foxholeKey), ['trencht2', 'trencht3', 'fortt3']);
+    }
+});

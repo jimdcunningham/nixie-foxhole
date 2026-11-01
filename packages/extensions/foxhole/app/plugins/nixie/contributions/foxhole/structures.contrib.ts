@@ -1,3 +1,5 @@
+import { getNixieEditorDocumentSessionBridge } from '#nixie/utils/nixie-editor-document-session-bridge.ts';
+import { buildFoxholeSceneV2SelectionTierUpdates } from '#foxhole/plugins/foxhole/nixie/scene-v2-tier-commands.ts';
 import { getFoxholeLegacyItemCatalog, getFoxholeLegacyStructureCatalog, resolveFoxholeLegacyOverlayIcon } from '#foxhole/plugins/foxhole/nixie/legacy-asset-catalog.ts';
 import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import FoxholeStructureInspectorCard from '#foxhole/components/nixie/foxhole/FoxholeStructureInspectorCard.vue';
@@ -146,6 +148,10 @@ function canRunFoxholeSelectionTierCommand(
         return false;
     }
 
+    if (context.activeSurface === 'scene-v2') {
+        const controller = getNixieEditorDocumentSessionBridge()?.sceneV2Editor.value?.controller;
+        return !!controller?.persistenceAvailable && buildFoxholeSceneV2SelectionTierUpdates(controller, direction).length > 0;
+    }
     const entries = collectFoxholeSelectionTierMutationEntries(context, direction);
     return entries.length > 0 && context.project.canMutateNodeIds(entries.map(entry => entry.nodeId));
 }
@@ -176,6 +182,17 @@ async function runFoxholeSelectionTierCommand(
     direction: FoxholeStructureTierDirection,
     reason: string,
 ): Promise<void> {
+    if (context.activeSurface === 'scene-v2') {
+        const controller = getNixieEditorDocumentSessionBridge()?.sceneV2Editor.value?.controller;
+        if (!context.capabilities.canEdit || !controller?.persistenceAvailable) {
+            return;
+        }
+        const updates = buildFoxholeSceneV2SelectionTierUpdates(controller, direction);
+        if (updates.length) {
+            await controller.updateEntityComponentsFinalized(updates);
+        }
+        return;
+    }
     const entries = collectFoxholeSelectionTierMutationEntries(context, direction);
     const eligibleNodeIds = entries.map(entry => entry.nodeId);
     if (!eligibleNodeIds.length || !context.project.canMutateNodeIds(eligibleNodeIds)) {
