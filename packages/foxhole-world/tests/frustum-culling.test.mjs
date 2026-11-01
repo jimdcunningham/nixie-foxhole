@@ -22,10 +22,14 @@ test('full-detail terrain frustum rejection changes draws without rebuilding or 
  manager.frustumCulling=false;assert.deepEqual(manager.getDraws(outside),[geometry]);manager.frustumCulling=true;assert.deepEqual(manager.getDraws(),[geometry]);assert.equal(builds,1);assert.equal(releases,0);assert.equal(geometry.step,1);manager.destroy();assert.equal(releases,1);
 });
 
-test('live frustum toggles retain a resident scene, all layer demand and original view ownership',async()=>{
+test('live frustum toggles affect regions while preserving host culling and resident ownership',async()=>{
  const view={cull:'auto',_sceneBatch:{cull:'cpu'},passes:[],height:800,width:1200,camera:{position:{x:0,y:0,z:100000}},root:{addChild(){}}},updates=[],options=[];let destroyed=0;
  const scene={root:{removeFromParent(){}},passes:[],metrics:{},setFrustumCulling(value){updates.push(value);},destroy(){destroyed++;}};
  const controller=new FoxholeRegionSceneController({baseUrl:'https://test/',fetcher:async()=>new Response(JSON.stringify({version:1,regions:{fixture:{id:'fixture'}}})),loadRegion:async value=>{options.push(value);return scene;}}),layers={terrain:true,building:true},sync=frustumCulling=>controller.sync({view,mode:'3d',settings:{enabled:true,regionKeys:['fixtureHex'],progressiveLoading:false,frustumCulling,worldLayers:layers}});
- sync(true);await new Promise(r=>setTimeout(r,0));assert.equal(options.length,1);assert.equal(options[0].frustumCulling,true);assert.equal(options[0].layers,layers);assert.equal(view._sceneBatch.cull,'gpu');
- sync(false);assert.equal(view._sceneBatch.cull,'off');assert.equal(updates.at(-1),false);sync(true);assert.equal(updates.at(-1),true);assert.equal(view.cull,'gpu');assert.equal(options.length,1);assert.equal(destroyed,0);assert.equal(controller.records.get('fixture').scene,scene);controller.destroy();assert.equal(view.cull,'auto');assert.equal(view._sceneBatch.cull,'cpu');assert.equal(destroyed,1);
+ sync(true);await new Promise(r=>setTimeout(r,0));assert.equal(options.length,1);assert.equal(options[0].frustumCulling,true);assert.equal(options[0].layers,layers);assert.equal(view.cull,'auto');assert.equal(view._sceneBatch.cull,'cpu');
+ sync(false);assert.equal(view.cull,'auto');assert.equal(view._sceneBatch.cull,'cpu');assert.equal(updates.at(-1),false);
+ // Host graphics changes made while Foxhole is active must also survive its
+ // next sync and disposal, rather than being reset to an arrival snapshot.
+ view.cull='cpu';view._sceneBatch.cull='off';
+ sync(true);assert.equal(updates.at(-1),true);assert.equal(view.cull,'cpu');assert.equal(view._sceneBatch.cull,'off');assert.equal(options.length,1);assert.equal(destroyed,0);assert.equal(controller.records.get('fixture').scene,scene);controller.destroy();assert.equal(view.cull,'cpu');assert.equal(view._sceneBatch.cull,'off');assert.equal(destroyed,1);
 });

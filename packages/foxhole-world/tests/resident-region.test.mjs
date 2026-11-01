@@ -25,11 +25,11 @@ test('resident model loading never requests LOD metadata or reduced models',asyn
  }finally{world?.dispose();root.destroy({children:true});source.destroy();}
 });
 
-test('resident controller retains distant layer demand, turns culling off and restores view ownership on switches',async()=>{
+test('resident policy retains distant layer demand without changing host culling on switches',async()=>{
  const view={cull:'gpu',_sceneBatch:{cull:'auto'},passes:[],height:800,width:1200,camera:{mode:'perspective',position:{x:0,y:0,z:30000*32}},root:{addChild(){}}},seen=[],destroyed=[];
  const controller=new FoxholeRegionSceneController({baseUrl:'https://test/',fetcher:async()=>new Response(JSON.stringify({version:1,regions:{fixture:{id:'fixture'}}})),loadRegion:async options=>{seen.push(options);return{root:{removeFromParent(){}},passes:[],metrics:{},destroy(){destroyed.push(options.adaptiveStreaming);}};}});
  const flags={terrain:true,water:true,building:true,vegetation:true},sync=progressive=>controller.sync({view,mode:'3d',settings:{enabled:true,regionKeys:['fixtureHex'],progressiveLoading:progressive,adaptiveStreaming:progressive,frustumCulling:false,worldLayers:flags}}),flush=()=>new Promise(r=>setTimeout(r,0));
- sync(false);await flush();assert.equal(view.cull,'off');assert.equal(view._sceneBatch.cull,'off');assert.equal(seen[0].layers,flags);assert.equal(controller.detailLayers({position:{x:0,y:0}}),flags);
- sync(true);await flush();assert.equal(view.cull,'off');assert.equal(view._sceneBatch.cull,'off');assert.equal(seen[1].layers.building,false);assert.deepEqual(destroyed,[false]);
- sync(false);await flush();assert.equal(view.cull,'off');controller.destroy();assert.equal(view.cull,'gpu');assert.equal(view._sceneBatch.cull,'auto');assert.deepEqual(destroyed,[false,true,false]);
+ sync(false);await flush();assert.equal(view.cull,'gpu');assert.equal(view._sceneBatch.cull,'auto');assert.equal(seen[0].frustumCulling,false);assert.equal(seen[0].layers,flags);assert.equal(controller.detailLayers({position:{x:0,y:0}}),flags);
+ sync(true);await flush();assert.equal(view.cull,'gpu');assert.equal(view._sceneBatch.cull,'auto');assert.equal(seen[1].frustumCulling,false);assert.equal(seen[1].layers.building,false);assert.deepEqual(destroyed,[false]);
+ sync(false);await flush();assert.equal(view.cull,'gpu');assert.equal(view._sceneBatch.cull,'auto');assert.equal(seen[2].frustumCulling,false);controller.destroy();assert.equal(view.cull,'gpu');assert.equal(view._sceneBatch.cull,'auto');assert.deepEqual(destroyed,[false,true,false]);
 });
