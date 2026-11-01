@@ -34,11 +34,14 @@ const props = withDefaults(defineProps<{
     flush?: boolean;
     /** Denser rows for compact recipe / list chrome. */
     compact?: boolean;
+    /** Enable row highlights and asset hover previews. */
+    hoverable?: boolean;
     /** `cost` (red) for spend, `gain` (green) for produce, `neutral` for plain counts. */
     quantityTone?: 'cost' | 'gain' | 'neutral';
 }>(), {
     flush: false,
     compact: false,
+    hoverable: true,
     quantityTone: 'cost',
 });
 
@@ -160,8 +163,9 @@ function scheduleHideResourceHover(): void {
             v-for="resource in props.entries"
             :key="resource.id"
             class="foxhole-cost-breakdown__row"
-            @mouseenter="showResourceHover(resource)"
-            @mouseleave="scheduleHideResourceHover"
+            :class="{ 'is-hoverable': props.hoverable }"
+            @mouseenter="props.hoverable && showResourceHover(resource)"
+            @mouseleave="props.hoverable && scheduleHideResourceHover()"
         >
             <div class="foxhole-cost-breakdown__icon">
                 <NxEntityIcon
@@ -227,7 +231,7 @@ function scheduleHideResourceHover(): void {
     border-top-color: transparent;
 }
 
-.foxhole-cost-breakdown__row:hover {
+.foxhole-cost-breakdown__row.is-hoverable:hover {
     background: var(--nx-surface-raised);
 }
 

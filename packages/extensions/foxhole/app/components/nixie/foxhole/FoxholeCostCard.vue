@@ -9,14 +9,15 @@ withDefaults(defineProps<{
     context?: string;
     variant?: 'accent' | 'neutral';
     showHeading?: boolean;
+    hoverable?: boolean;
     quantityTone?: 'cost' | 'gain' | 'neutral';
-}>(), { title: 'Construction Cost', icon: 'ph:hammer', context: '', variant: 'accent', showHeading: true, quantityTone: 'cost' });
+}>(), { title: 'Construction Cost', icon: 'ph:hammer', context: '', variant: 'accent', showHeading: true, hoverable: true, quantityTone: 'cost' });
 </script>
 
 <template>
     <section class="foxhole-cost-card" :class="`foxhole-cost-card--${variant}`" :aria-label="title">
         <h5 v-if="showHeading" class="foxhole-cost-card__heading">
-            <NxIcon :name="icon" size="sm" />
+            <NxIcon v-if="icon" :name="icon" size="sm" />
             {{ title }}
         </h5>
         <p v-if="context" class="foxhole-cost-card__context" :title="context">{{ context }}</p>
@@ -25,6 +26,7 @@ withDefaults(defineProps<{
             :entries="entries"
             :compact="variant === 'neutral'"
             :quantityTone="quantityTone"
+            :hoverable="hoverable"
         />
         <p v-else class="foxhole-cost-card__empty">No materials required.</p>
     </section>

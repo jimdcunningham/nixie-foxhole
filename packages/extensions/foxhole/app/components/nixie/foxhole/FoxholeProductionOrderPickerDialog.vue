@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, provide, ref, watch } from 'vue';
 import NxButton from '#nixie/components/NxButton.vue';
 import NxIconButton from '#nixie/components/NxIconButton.vue';
 import NxInput from '#nixie/components/NxInput.vue';
@@ -7,8 +7,8 @@ import NxMenuButton from '#nixie/components/NxMenuButton.vue';
 import NxModal from '#nixie/components/NxModal.vue';
 import NxNumberInput from '#nixie/components/NxNumberInput.vue';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
+import { nixieSidebarAssetHoverCardKey, useNixieSidebarAssetHoverCard } from '#nixie/composables/useNixieSidebarAssetHoverCard.ts';
 import FoxholeCostCard from '#foxhole/components/nixie/foxhole/FoxholeCostCard.vue';
-import FoxholeCostBreakdownList from '#foxhole/components/nixie/foxhole/FoxholeCostBreakdownList.vue';
 import FoxholeStructureRecipesPanel from '#foxhole/components/nixie/foxhole/FoxholeStructureRecipesPanel.vue';
 import { createFoxholeAssetsBaseUrl, getFoxholeStructureCatalog } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import { getFoxholeProductionIndex } from '#foxhole/plugins/foxhole/nixie/production/index.ts';
@@ -42,6 +42,16 @@ const emit = defineEmits<{
         label: string | null;
     }];
 }>();
+
+// Modal descendants must not activate the sidebar's background asset preview.
+const sidebarAssetHoverCard = useNixieSidebarAssetHoverCard();
+provide(nixieSidebarAssetHoverCardKey, {
+    side: sidebarAssetHoverCard?.side ?? 'right',
+    showAsset: () => {},
+    hideAsset: () => {},
+    scheduleHideAsset: () => {},
+    clearHideAssetTimer: () => {},
+});
 
 const runtimeConfig = useRuntimeConfig();
 const settingsStore = useNixieSettingsStore();
@@ -291,9 +301,10 @@ function submit(): void {
 
 watch(() => props.open, open => {
     if (open) {
+        sidebarAssetHoverCard?.hideAsset();
         reset();
     }
-});
+}, { immediate: true });
 
 watch([availableOrders, orders], () => {
     orders.value = Math.max(1, Math.min(availableOrders.value || 1, Math.floor(Number(orders.value) || 1)));
@@ -304,7 +315,7 @@ watch([availableOrders, orders], () => {
     <NxModal
         :open="open"
         title="Add Production Orders"
-        width="min(960px, calc(100vw - 32px))"
+        :width="isRecipeSelected ? 'min(560px, calc(100vw - 32px))' : 'min(960px, calc(100vw - 32px))'"
         showClose
         @close="emit('close')"
     >
@@ -321,8 +332,17 @@ watch([availableOrders, orders], () => {
             <div class="nx-modal__header-main production-picker__header-main">
                 <h2 class="nx-modal__title">{{ isRecipeSelected ? 'Recipe Breakdown' : 'Add Production Orders' }}</h2>
             </div>
+            <NxSearchInput
+                v-if="!isRecipeSelected"
+                v-model="searchQuery"
+                class="production-picker__search"
+                ariaLabel="Search Recipes"
+                placeholder="Search recipes..."
+                size="sm"
+            />
             <NxMenuButton
                 v-if="!isRecipeSelected"
+                class="production-picker__display-options"
                 icon="ph:gear"
                 ariaLabel="Production Order Display Options"
                 :items="displayOptions"
@@ -332,13 +352,6 @@ watch([availableOrders, orders], () => {
             />
         </template>
         <div class="production-picker">
-            <p v-if="!isRecipeSelected" class="nx-form-hint">
-                <template v-if="editing">Update this queued order’s recipe, label, or cycle limit.</template>
-                <template v-else>Choose a recipe, then set the order details. Choosing an upgrade recipe applies that upgrade to this facility.</template>
-            </p>
-            <div v-if="!isRecipeSelected" class="production-picker__filters">
-                <NxInput v-model="searchQuery" label="Search Recipes" type="search" placeholder="Product or resource" />
-            </div>
             <div v-if="!isRecipeSelected && visibleRecipeSources.length" class="production-picker__sources">
                 <section
                     v-for="source in visibleRecipeSources"
@@ -361,13 +374,17 @@ watch([availableOrders, orders], () => {
             </div>
             <p v-else-if="!isRecipeSelected" class="nx-form-hint">No recipes match the current search and upgrade filters.</p>
             <div v-else-if="selectedRecipeTotals" class="production-picker__breakdown">
-                <FoxholeCostCard v-if="selectedInputEntries.length" title="Production Input" :entries="selectedInputEntries" />
-                <section v-if="selectedOutputEntries.length" class="production-picker__resource-section">
-                    <h3>Production Output</h3>
-                    <FoxholeCostBreakdownList :entries="selectedOutputEntries" quantityTone="gain" />
-                </section>
+                <FoxholeCostCard v-if="selectedInputEntries.length" title="Production Input" icon="" :entries="selectedInputEntries" :hoverable="false" />
+                <FoxholeCostCard
+                    v-if="selectedOutputEntries.length"
+                    title="Production Output"
+                    icon=""
+                    :entries="selectedOutputEntries"
+                    quantityTone="gain"
+                    :hoverable="false"
+                />
                 <div class="production-picker__timing">
-                    <span>Single cycle: {{ formatDuration(selectedRecipeModel?.durationSeconds ?? null) }}</span>
+                    <span>Cycle Time: {{ formatDuration(selectedRecipeModel?.durationSeconds ?? null) }}</span>
                     <span v-if="cycles != null">Total: {{ formatDuration(selectedRecipeTotals.durationSeconds) }}</span>
                 </div>
             </div>
@@ -392,7 +409,19 @@ watch([availableOrders, orders], () => {
 
 <style scoped>
 .production-picker { display: grid; gap: var(--nx-space-3); }
-.production-picker__filters { display: grid; grid-template-columns: minmax(180px, 1fr); gap: var(--nx-space-2); align-items: end; }
+/* Keep the picker header controls aligned with the modal close button. */
+:global(.nx-modal__header:has(> .production-picker__header-main)) { align-items: center; gap: var(--nx-space-2); }
+:global(.nx-modal__header:has(> .production-picker__header-main) > .nx-modal__close) { margin: 0; }
+.production-picker__search { flex: 0 1 280px; min-width: 140px; }
+.production-picker__display-options { display: flex; flex: none; }
+.production-picker__sources :deep(.foxhole-recipe-card) { padding: var(--nx-space-3); gap: var(--nx-space-3); }
+.production-picker__sources :deep(.foxhole-recipe-card__title) { font-size: var(--nx-text-sm); }
+.production-picker__sources :deep(.foxhole-recipe-card__chip) { font-size: var(--nx-text-xs); }
+.production-picker__sources :deep(.foxhole-recipe-card__chip-icon),
+.production-picker__sources :deep(.foxhole-recipe-card__title-arrow) { width: 14px; height: 14px; }
+.production-picker__sources :deep(.foxhole-recipe-card__io) { --foxhole-recipe-icon-size: 48px; }
+.production-picker__sources :deep(.foxhole-recipe-card__resource-qty) { padding: 2px 5px; font-size: var(--nx-text-xs); }
+.production-picker__sources :deep(.foxhole-recipe-card__resource-qty-unit) { font-size: 10px; }
 .production-picker__sources { display: grid; gap: var(--nx-space-4); max-height: min(58vh, 640px); overflow: auto; padding-inline-end: var(--nx-space-1); }
 .production-picker__source { display: grid; gap: var(--nx-space-2); }
 .production-picker__source.is-muted { opacity: 0.45; transition: opacity var(--nx-duration-fast) var(--nx-ease-out); }
@@ -400,9 +429,14 @@ watch([availableOrders, orders], () => {
 .production-picker__source > h3 { margin: 0; color: var(--nx-text); font-size: var(--nx-text-sm); }
 .production-picker__header-main { flex: 1 1 auto; }
 .production-picker__breakdown { display: grid; gap: var(--nx-space-3); }
-.production-picker__resource-section { display: grid; gap: var(--nx-space-1); }
-.production-picker__resource-section > h3 { margin: 0; color: var(--nx-text-muted); font-size: var(--nx-text-xs); text-transform: uppercase; letter-spacing: 0.04em; }
-.production-picker__timing { display: flex; flex-wrap: wrap; gap: var(--nx-space-3); color: var(--nx-text-muted); font-size: var(--nx-text-xs); }
+.production-picker__breakdown :deep(.foxhole-cost-card .foxhole-cost-breakdown__icon .nx-entity-icon) { width: 28px; height: 28px; }
+.production-picker__breakdown :deep(.foxhole-cost-breakdown__row) { column-gap: var(--nx-space-3); }
+.production-picker__timing { display: flex; flex-wrap: wrap; gap: var(--nx-space-3); color: var(--nx-text-muted); font-size: var(--nx-text-sm); }
 .production-picker__details { display: grid; grid-template-columns: minmax(0, 1fr) 120px 120px; gap: var(--nx-space-2); align-items: center; }
-@media (max-width: 640px) { .production-picker__filters, .production-picker__details { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+    :global(.nx-modal__header:has(> .production-picker__header-main)) { flex-wrap: wrap; }
+    .production-picker__header-main { flex-basis: calc(100% - 80px); }
+    .production-picker__search { order: 1; flex-basis: 100%; }
+    .production-picker__details { grid-template-columns: 1fr; }
+}
 </style>
