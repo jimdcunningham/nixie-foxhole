@@ -53,6 +53,7 @@ const IMM_BASE_LAYER_KEYS = ['colors', 'base_map', 'base_map_full'] as const sat
 
 const runtime = useNixieRuntime();
 const documentSession = useNixieEditorDocumentSessionOptional();
+const isSceneV2Active = computed(() => documentSession?.isSceneV2Active.value === true);
 const isSpatialView = computed(() => {
     const controls = documentSession?.isSceneV2Active.value
         ? documentSession.sceneV2Editor.value?.controller.canvas.getViewControls()
@@ -721,7 +722,7 @@ const mapModVisibilityDisabled = computed(() => (
     <div class="nixie-sidebar-form">
         <template v-for="group in layerGroups" :key="group.heading">
             <NixieSidebarFormSection
-                v-if="group.heading === 'Improved Map Mod'"
+                v-if="isSceneV2Active && group.heading === 'Improved Map Mod'"
                 title="2.5D / 3D Layers"
                 sectionKey="foxhole-war-nx.map.world-layers"
                 collapsible
