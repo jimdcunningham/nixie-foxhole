@@ -18,6 +18,7 @@ if(args.Length>3&&args[1]=="mesh-check"){MeshCheck.Run(provider,args[2],args[3])
 if(args.Length>2&&args[1]=="profile"){ImportProfile.Run(provider,args[0],args[2]);return;}
 if(args.Length>2&&args[1]=="fresh"){DesktopImport.Run(provider,args[0],args[2]);return;}
 if(args.Length>2&&args[1]=="lods"){LodProbe.Run(provider,args[2]);return;}
+if(args.Length>2&&args[1]=="blueprint-materials"){BlueprintMaterialProbe.Run(provider,args[0],args[2]);return;}
 if(args.Length>2&&args[1]=="material-graphs"){MaterialGraphProbe.Run(provider,args[2]);return;}
 if(args.Length>2&&args[1]=="map-images"){MapImageProbe.Run(provider,args[2]);return;}
 if(args.Length>2&&args[1]=="deferred-textures"){FastTextureImport.Run(provider,args[2],true);return;}
@@ -84,5 +85,3 @@ foreach(var c in components) {
 var report=new {map=args[1],components=rows,vertices=offset,min,max,errors,elapsedSeconds=clock.Elapsed.TotalSeconds,workingSetMB=Environment.WorkingSet/1048576.0};
 File.WriteAllText(Path.Combine(output,"terrain.json"),JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}));
 Console.WriteLine(JsonSerializer.Serialize(new {components=rows.Count,vertices=offset,min,max,errors,elapsedSeconds=clock.Elapsed.TotalSeconds,workingSetMB=Environment.WorkingSet/1048576.0}));
-
-

@@ -20,6 +20,7 @@
     "build:authoring": "node build-authoring.mjs",
     "export": "node export-world.mjs",
     "prepare:materials": "node prepare-shared-materials.mjs",
+    "prepare:blueprint-materials": "node prepare-blueprint-materials.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

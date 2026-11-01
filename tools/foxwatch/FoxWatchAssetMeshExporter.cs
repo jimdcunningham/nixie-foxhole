@@ -2095,11 +2095,26 @@ public sealed partial class FoxWatchAssetMeshExporter
         targetReference.Light = FoxWatchBlueprintLights.Extract(export);
         ApplyBuildSocketMetadata(targetReference, export);
         ApplyComponentTagsMetadata(targetReference, export);
+        ApplyMaterialOverrideMetadata(targetReference, export);
         ApplyAuthoredFlagMaterialOverrideMetadata(targetReference, export);
         ApplyAuthoredLightBeamMaterialOverrideMetadata(targetReference, export);
         ApplyFactionMaterialOverrideMetadata(targetReference, export);
         ApplySplineConnectorMetadata(targetReference, export);
         ApplyStaticMeshOverrideMetadata(targetReference, export);
+    }
+
+    private static void ApplyMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
+    {
+        // Preserve native slot indices: a null override falls back to the mesh.
+        targetReference.MaterialOverrides = export.GetOrDefault<ResolvedObject?[]>("OverrideMaterials", [])
+            .Select((material, index) => new FoxWatchMaterialOverrideReference
+            {
+                Index = index,
+                MaterialPath = ConvertObjectPathToPackagePath(material?.GetPathName()) ?? string.Empty,
+                MaterialSidecarName = material?.Name.Text ?? string.Empty,
+            })
+            .Where(material => !string.IsNullOrWhiteSpace(material.MaterialPath))
+            .ToList();
     }
 
     private static void ApplyAuthoredFlagMaterialOverrideMetadata(FoxWatchBlueprintComponentReference targetReference, UObject export)
@@ -3972,6 +3987,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public List<FoxWatchSplineConnectorComponentConfigReference> SplineComponentConfigs { get; set; } = [];
     public string MaterialSidecarNameOverride { get; set; } = string.Empty;
     public string DefaultMaterialPackagePath { get; set; } = string.Empty;
+    public List<FoxWatchMaterialOverrideReference> MaterialOverrides { get; set; } = [];
     public Dictionary<string, List<FoxWatchMaterialOverrideReference>> MaterialOverridesByVariant { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string MaterialOverrideTargetMeshPath { get; set; } = string.Empty;
     public bool IsVisible { get; set; } = true;

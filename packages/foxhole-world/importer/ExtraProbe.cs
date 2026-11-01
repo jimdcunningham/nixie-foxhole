@@ -16,6 +16,11 @@ using Microsoft.Extensions.Options;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 public static class ExtraProbe{
+ public static List<UMaterialInterface?> ResolveMaterials(DefaultFileProvider provider,FoxWatchBlueprintComponentReference component,IEnumerable<UMaterialInterface?> defaults){
+  var materials=defaults.ToList();
+  foreach(var assignment in component.MaterialOverrides){if(assignment.Index<0||assignment.Index>=materials.Count)throw new Exception("Native component material slot outside mesh");materials[assignment.Index]=provider.LoadPackage(assignment.MaterialPath).GetExports().OfType<UMaterialInterface>().First();}
+  return materials;
+ }
  static FVector Vector(string s,FVector fallback){var v=Regex.Matches(s??"",@"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?").Select(m=>float.Parse(m.Value,System.Globalization.CultureInfo.InvariantCulture)).ToArray();return v.Length>=3?new FVector(v[0],v[1],v[2]):fallback;}
  static FTransform Local(FoxWatchBlueprintComponentReference c){var r=Vector(c.RelativeRotation,FVector.ZeroVector);return new FTransform(new FRotator(r.X,r.Y,r.Z).Quaternion(),Vector(c.RelativeLocation,FVector.ZeroVector),Vector(c.RelativeScale,new FVector(1,1,1)));}
  public static void Run(UObject[] objects,string output,string paks,DefaultFileProvider provider,bool bridges=false){
@@ -29,8 +34,8 @@ public static class ExtraProbe{
    if(placements.Count==0)continue;
    foreach(var c in components.Where(c=>(bridges?c.MeshType=="skeletal":c.MeshType=="static"||(c.MeshType=="skeletal"&&!group.Key.Contains("Bridge",StringComparison.OrdinalIgnoreCase)))&&!string.IsNullOrEmpty(c.MeshPath)&&c.IsVisible&&!c.IsHiddenInGame&&!Regex.IsMatch(c.MeshPath,"/Measurement/|Engine/|collision|lightbeam",RegexOptions.IgnoreCase)))try{
     var pack=provider.LoadPackage(c.MeshPath);var mesh=pack.GetExports().OfType<UStaticMesh>().FirstOrDefault();var skeletal=pack.GetExports().OfType<USkeletalMesh>().FirstOrDefault();var options=new ExporterOptions{MeshFormat=EMeshFormat.Gltf2,ExportMaterials=false,LodFormat=ELodFormat.FirstLod};var export=skeletal!=null?FastAssets.Exporter(skeletal,options):mesh!=null?FastAssets.Exporter(mesh,options):null;if(export==null)continue;if(!export.TryWriteToDir(new DirectoryInfo(Path.Combine(output,bridges?"bridges":"extra")),out _,out var file))continue;
-    var references=skeletal!=null?skeletal.Materials.Select(m=>m?.Load<UMaterialInterface>()):mesh!.Materials.Select(m=>m?.Load<UMaterialInterface>());
-    var materials=new List<object>();foreach(var material in references){if(material==null)continue;var pars=new CMaterialParams();material.GetParams(pars);string? texFile=null;if(pars.Diffuse is UTexture texture){texFile="model-textures/"+texture.Name+".png";FastAssets.Defer(texture,texFile);}materials.Add(new{name=material.Name,diffuse=texFile,masked=false});}
+    var references=ResolveMaterials(provider,c,skeletal!=null?skeletal.Materials.Select(m=>m?.Load<UMaterialInterface>()):mesh!.Materials.Select(m=>m?.Load<UMaterialInterface>()));
+    var materials=new List<object>();foreach(var material in references){if(material==null){materials.Add(new{name="material_"+materials.Count,diffuse=(string?)null,masked=false});continue;}var pars=new CMaterialParams();material.GetParams(pars);var nativeParams=new CMaterialParams2();material.GetParams(nativeParams,EMaterialFormat.AllLayers);string? texFile=null;if(pars.Diffuse is UTexture texture){texFile="model-textures/"+texture.Name+".png";FastAssets.Defer(texture,texFile);}materials.Add(new{name=material.Name,source=material.GetPathName().Split((char)46)[0]+".uasset",diffuse=texFile,masked=nativeParams.BlendMode.ToString()=="BLEND_Masked"});}
     prototypes.Add(new{name=group.Key+"/"+c.ComponentName,path=c.MeshPath,category=bridges?"infrastructure":"structures",kind="environment",file=Path.GetRelativePath(output,file).Replace('\\','/'),materials,placements,localMatrix=SceneProbe.Matrix(Absolute(c,[]))});Console.WriteLine($"Extra {group.Key}/{c.ComponentName}: {placements.Count}");id++;
    }catch(Exception e){errors.Add(group.Key+"/"+c.ComponentName+": "+e.Message);}
   }catch(Exception e){errors.Add(group.Key+": "+e.Message);}
