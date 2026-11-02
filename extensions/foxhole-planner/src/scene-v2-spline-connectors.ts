@@ -6,7 +6,7 @@ import type {
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderSpriteV1,
 } from '@nixiejs/extension-sdk/experimental/scene-v2';
-import { resolveSplineControlPoints, isSplinePathViable, SPLINE_PATH_INVALID_TINT } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES, resolveSplineControlPoints, isSplinePathViable, SPLINE_PATH_INVALID_TINT } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import { resolveIntervalMarkerSamples, resolveMeshConfigIntervalMarkerSamples, resolveCenteredMeshConfigIntervalBoundarySamples, resolveMineSplineMarkerSample } from './interval-connector-path.ts';
 import { isExtensionPipeGeometryViable } from './pipe-extension-path.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2VisualMetadata } from './scene-v2-asset-metadata.ts';
@@ -169,6 +169,12 @@ function buildSplineRibbon(
     const { start, end } = foxholeSceneV2ConnectorEndpoints(data);
     const geometry = buildSplineRibbonMeshData({ spanLayer: rawLayer, pathSample: sampleFoxholeSceneV2Connector(data, asset),
         textureMapping: { repeatLength }, textureMaterialScale: primaryConfig?.materialScale, ...insets,
+        // A ribbon has two vertices per section and six indices per segment.
+        // Rail textures can repeat without adding more geometric sections.
+        ...(behavior.railTrack ? { maxSegments: Math.min(
+            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES / 2) - 1,
+            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES / 6),
+        ) } : {}),
         ...(layeredWall ? { perpendicularOffset: 0, centerTextureRepeats: true } : {}),
         ...(id === 'spline-connector-span' ? { textureSlicing: resolveConnectorSplineTextureSlicing(data.foxholeKey, rawLayer, primaryConfig?.materialScale) } : {}) }, start, end,
     foxholeSceneV2ConnectorConstraints(data, asset));

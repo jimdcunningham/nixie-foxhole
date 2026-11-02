@@ -32,6 +32,8 @@ export interface ConnectorSplinePathSample {
 }
 
 export interface BuildSplineRibbonMeshOptions {
+    /** Optional tessellation budget; material repetition and path endpoints stay independent. */
+    maxSegments?: number;
     textureMaterialScale?: readonly number[] | null;
     spanLayer: FoxholeStructureRenderLayerAsset;
     textureRepeatLength?: number;
@@ -547,45 +549,59 @@ export function buildSplineRibbonMeshData(
         uAlong: number;
     }> = [];
 
-    for (let distance = usableStart; distance <= usableEnd + 0.001; distance += step) {
-        const clampedDistance = Math.min(distance, usableEnd);
-        const sample = samplePolylineArcLengthPoint(sampled, clampedDistance);
-        if (!sample) {
-            continue;
+    const maxSegments = Math.max(1, Math.floor(options.maxSegments ?? Infinity));
+    // The legacy sampler may append one final endpoint section. Only replace
+    // sampling when that complete ribbon would exceed the caller's budget.
+    if (Math.floor((usableArcLength + 0.001) / step) + 2 > maxSegments + 1) {
+        for (let index = 0; index <= maxSegments; index++) {
+            const arcDistance = usableArcLength * (index / maxSegments);
+            const sample = samplePolylineArcLengthPoint(sampled, usableStart + arcDistance);
+            if (sample) {
+                pushCrossSection(crossSections, sample, halfWidth, perpendicularOffset,
+                    arcDistance, textureMapping, textureDistanceOffset);
+            }
         }
+    } else {
+        for (let distance = usableStart; distance <= usableEnd + 0.001; distance += step) {
+            const clampedDistance = Math.min(distance, usableEnd);
+            const sample = samplePolylineArcLengthPoint(sampled, clampedDistance);
+            if (!sample) {
+                continue;
+            }
 
-        const arcDistance = clampedDistance - usableStart;
-        pushCrossSection(
-            crossSections,
-            sample,
-            halfWidth,
-            perpendicularOffset,
-            arcDistance,
-            textureMapping,
-            textureDistanceOffset,
-        );
-
-        if (clampedDistance >= usableEnd - 0.001) {
-            break;
-        }
-    }
-
-    const endSample = samplePolylineArcLengthPoint(sampled, usableEnd);
-    if (endSample) {
-        const endArcDistance = usableEnd - usableStart;
-        const endUAlong = mapSpanTextureUAlong(endArcDistance, textureMapping);
-        const last = crossSections[crossSections.length - 1];
-        if (!last || Math.hypot(last.leftX - endSample.x, last.leftY - endSample.y) > 0.5) {
+            const arcDistance = clampedDistance - usableStart;
             pushCrossSection(
                 crossSections,
-                endSample,
+                sample,
                 halfWidth,
                 perpendicularOffset,
-                endArcDistance,
+                arcDistance,
                 textureMapping,
+                textureDistanceOffset,
             );
-        } else {
-            last.uAlong = endUAlong;
+
+            if (clampedDistance >= usableEnd - 0.001) {
+                break;
+            }
+        }
+
+        const endSample = samplePolylineArcLengthPoint(sampled, usableEnd);
+        if (endSample) {
+            const endArcDistance = usableEnd - usableStart;
+            const endUAlong = mapSpanTextureUAlong(endArcDistance, textureMapping);
+            const last = crossSections[crossSections.length - 1];
+            if (!last || Math.hypot(last.leftX - endSample.x, last.leftY - endSample.y) > 0.5) {
+                pushCrossSection(
+                    crossSections,
+                    endSample,
+                    halfWidth,
+                    perpendicularOffset,
+                    endArcDistance,
+                    textureMapping,
+                );
+            } else {
+                last.uAlong = endUAlong;
+            }
         }
     }
 
