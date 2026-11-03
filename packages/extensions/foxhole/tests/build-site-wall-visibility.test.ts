@@ -26,7 +26,11 @@ test('all build sites preserve structure walls without changing actual socket oc
         const attachment = { nodeId: 'neighbor', socketName: 'BackSocket' };
         host.getNormalizedSocketAttachments = () => ({ FrontSocket: attachment });
         const neighbor = { boardId: 'neighbor', boardState: { foxholeKey: reversed ? 'fortt3' : site }, children: [] };
-        host.getTopBoardContainer = () => ({ children: [{ children: [neighbor] }] });
+        const decoration = { get children() {
+            throw new Error('Wall lookup should not traverse Pixi decorations.');
+        } };
+        const layer = { children: [decoration, neighbor], boardChildren: [neighbor] };
+        host.getTopBoardContainer = () => ({ children: [layer] });
         assert.equal(host.getLocalAttachmentOccupancyKeys().size, 1);
         assert.equal(host.getLocalAttachmentOccupancyKeys(true).size, 0);
         host.boardState.foxholeKey = 'trencht3'; neighbor.boardState.foxholeKey = 'fortt3';

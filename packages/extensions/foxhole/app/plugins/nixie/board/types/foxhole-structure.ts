@@ -2119,12 +2119,17 @@ export class FoxholeStructureNode extends BoardSpriteNode implements BoardNodeSe
 
     private getWallVisibilityNeighborKey(nodeId: string): string | undefined {
         const visit = (node: PIXI.Container): string | undefined => {
-            const candidate = node as PIXI.Container & { boardId?: string; boardState?: { foxholeKey?: string } };
+            const candidate = node as PIXI.Container & {
+                boardId?: string;
+                boardState?: { foxholeKey?: string; };
+                boardChildren?: readonly PIXI.Container[];
+            };
             if (String(candidate.boardId) === nodeId) {
                 const targetKey = resolveStructureAssetHoverTargetKey(activeNixieStructureModificationHoverPreview.value, nodeId);
                 return targetKey && this.boardDefinition.structureResolver?.(targetKey) ? targetKey : candidate.boardState?.foxholeKey;
             }
-            for (const child of node.children) {
+            // A board node also owns render-only children such as wall overlays.
+            for (const child of candidate.boardChildren ?? node.children) {
                 const key = visit(child);
                 if (key !== undefined) return key;
             }
