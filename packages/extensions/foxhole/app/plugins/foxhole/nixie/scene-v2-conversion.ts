@@ -33,6 +33,7 @@ import {
     resolveFoxholeTriangulationFit,
 } from './triangulation.ts';
 import { getFoxholeManifest } from './manifest.ts';
+import { canContributeFoxholeProductionStats } from './production/index.ts';
 import { resolveFoxholeStockpileSelectionGroups, stockpileSelectionsToEntries } from './stockpile-groups.ts';
 import { resolveConnectorEndpointSocketNames } from './connector-behavior.ts';
 import {
@@ -1298,7 +1299,14 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     optionalAppearanceNumber('anchorY', 0.5, -10, 10);
 
     const cargoLimit = getFoxholeSceneV2CargoSupport(assetId).limit;
-    const stockpileGroups = resolveFoxholeStockpileSelectionGroups(getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === assetId)?.stockpiles);
+    const { assets } = getFoxholeManifest('/foxhole/assets/');
+    const structure = assets.find(asset => asset.id === assetId);
+    const parent = state.disableProduction === true && structure?.parentStructureId
+        ? assets.find(asset => asset.id === structure.parentStructureId)
+        : undefined;
+    const disableProduction = state.disableProduction === true
+        && structure != null && canContributeFoxholeProductionStats(structure, parent);
+    const stockpileGroups = resolveFoxholeStockpileSelectionGroups(structure?.stockpiles);
     const markedCargo = isFoxholeBuildSiteKey(assetId)
         ? []
         : clampMarkedItemCodenames(
@@ -1388,7 +1396,7 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             version: 1,
             data: {
                 orders,
-                ...(state.disableProduction === true ? { disabled: true } : {}),
+                ...(disableProduction ? { disabled: true } : {}),
             },
         }],
     };

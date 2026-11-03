@@ -4,7 +4,7 @@ import {
     buildFoxholeStructureCatalog,
 } from '../nixie/catalog.ts';
 import { getFoxholeManifest } from '../nixie/manifest.ts';
-import { getFoxholeProductionIndex } from '../nixie/production/index.ts';
+import { canContributeFoxholeProductionStats, getFoxholeProductionIndex } from '../nixie/production/index.ts';
 import { createFoxholeStructureAssetSnapshot } from '../nixie/structure-asset-snapshot.ts';
 import type { FoxholeStructureState } from '../nixie/types.ts';
 import { resolveLegacyPlanOrientationOffsetDeg } from './plan-orientation-map.ts';
@@ -396,7 +396,14 @@ export class LegacyPlanImporter {
                     : {};
                 applyLegacyStructureFlags(state, resolved.entity);
                 applyLegacyProductionState(state, resolved.entity, structure, '/foxhole/assets/');
-                state.disableProduction = resolved.entity.disableProduction === true;
+                if (resolved.entity.disableProduction === true) {
+                    const parent = structure.parentStructureId
+                        ? this.structureCatalog.structureByKey[structure.parentStructureId]
+                        : undefined;
+                    if (canContributeFoxholeProductionStats(structure, parent)) {
+                        state.disableProduction = true;
+                    }
+                }
                 if (cargo.markedItemCodenames.length) {
                     state.markedItemCodenames = cargo.markedItemCodenames;
                 }

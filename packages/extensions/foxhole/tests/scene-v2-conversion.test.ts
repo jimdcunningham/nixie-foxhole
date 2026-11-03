@@ -8,8 +8,44 @@ import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scen
 import { createFoxholeSplineConnectorSnapshot } from '../app/plugins/foxhole/nixie/spline-connector-snapshot.ts';
 import { getFoxholeManifest } from '../app/plugins/foxhole/nixie/manifest.ts';
 import { readNixieSceneV2EditableSpline } from '../../../nixie/desktop-extensions/scene-v2-spline-editing.ts';
+import { LegacyPlanImporter } from '../app/plugins/foxhole/legacy/plan-importer.ts';
+import { buildFoxholeItemCatalog, buildFoxholeStructureCatalog } from '../app/plugins/foxhole/nixie/catalog.ts';
 
 registerFoxholeSceneV2HostPolicy();
+
+test('production opt-outs survive import and conversion only for assets with production or power', async () => {
+    const manifest = getFoxholeManifest('/foxhole/assets/');
+    const importer = new LegacyPlanImporter({
+        structureCatalog: buildFoxholeStructureCatalog(manifest),
+        itemCatalog: buildFoxholeItemCatalog(manifest),
+    });
+    const cases = [
+        { key: 'motorboat', keepFlag: false },
+        { key: 'trencht1', keepFlag: false },
+        { key: 'ammunition_factory', keepFlag: true },
+        { key: 'bms_foreman_stacker', keepFlag: true },
+    ];
+    const { boardSnapshots } = await importer.importSave({
+        version: '1.0.5',
+        entities: cases.map(({ key }, i) => ({
+            id: i + 1, key, x: i * 2000, y: 0, rotation: 0, layer: 0, disableProduction: true,
+        })),
+    });
+    for (const [i, { key, keepFlag }] of cases.entries()) {
+        const node = boardSnapshots.find(node => node.id === `legacy-${i + 1}`);
+        assert.ok(node, key);
+        assert.equal(node.state.disableProduction, keepFlag ? true : undefined, key);
+
+        // A previously imported V1 asset may still carry the stale flag.
+        const result = convertNixieSceneV1ToV2([{
+            ...node,
+            state: { ...node.state, disableProduction: true },
+        }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+        const order = result.content.entities[0]?.components.find(component => component.componentId === 'production-order');
+        assert.ok(order, key);
+        assert.equal(order.data.disabled, keepFlag ? true : undefined, key);
+    }
+});
 
 test('authored Wall Tier 1 remains insertable with the implemented spline handles and finalizer', () => {
     const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === 'wallsplinet1')!;

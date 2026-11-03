@@ -7,6 +7,7 @@ import type {
     FoxholeManifestStructure,
 } from '../manifest.ts';
 import { getFoxholeManifest } from '../manifest.ts';
+import { resolveFoxholePowerDeltaMw } from '../facility-power.ts';
 import type {
     FoxholeProductionBuildTarget,
     FoxholeProductionBuildTargetKind,
@@ -424,6 +425,20 @@ export function buildFoxholeProductionIndex(
         modificationRecipeIdsBySlotVariantKey,
         parentBuildTargetIdByTargetId,
     };
+}
+
+export function canContributeFoxholeProductionStats(
+    structure: FoxholeManifestStructure,
+    parent?: FoxholeManifestStructure,
+): boolean {
+    return Boolean(
+        resolveFoxholePowerDeltaMw(structure.powerGridInfo?.powerDelta)
+        || structure.conversionEntries.length
+        || parent?.conversionEntries.length
+        || structure.modificationSlots.some(slot => (
+            Object.values(slot.variants).some(variant => variant.conversionEntries.length)
+        )),
+    );
 }
 
 export function getFoxholeProductionIndex(baseAssetsUrl: string): FoxholeProductionIndex {
