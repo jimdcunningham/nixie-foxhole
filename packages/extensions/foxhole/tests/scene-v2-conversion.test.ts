@@ -565,7 +565,7 @@ test('Foxhole spline connectors preserve live attachments without blocking inser
             socketAttachments: { PipeStart: { nodeId: 'factory-1', socketName: 'PipeEnd' } },
             modificationVariantIds: { pipeStyle: 'reinforced' },
             blueprint: true,
-            disableProduction: false,
+            disableProduction: true,
             tint: 0x55CCEE,
             brightness: 0.8,
         },

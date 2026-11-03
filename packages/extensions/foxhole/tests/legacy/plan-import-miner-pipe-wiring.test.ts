@@ -28,10 +28,10 @@ test('imports coal miners and branched pipes with reciprocal socket attachments'
     const save: LegacyPlanSave = {
         version: '1.0.5',
         entities: [
-            { id: 51, key: 'stationary_harvester_coal', x: -1056, y: -576, rotation: 0, layer: 0, sortOffset: 40, connections: { 0: { 58: 0 } } },
+            { id: 51, key: 'stationary_harvester_coal', x: -1056, y: -576, rotation: 0, layer: 0, sortOffset: 40, disableProduction: true, connections: { 0: { 58: 0 } } },
             { id: 52, key: 'stationary_harvester_coal', x: -864, y: -576, rotation: 0, layer: 0, sortOffset: 41, connections: { 0: { 56: 0 } } },
             { id: 53, key: 'stationary_harvester_coal', x: -672, y: -576, rotation: 0, layer: 0, sortOffset: 42, connections: { 0: { 57: 0 } } },
-            { id: 57, key: 'pipeline', x: -610.41, y: -457.615, rotation: 90, layer: 0, sortOffset: 32,
+            { id: 57, key: 'pipeline', x: -610.41, y: -457.615, rotation: 90, layer: 0, sortOffset: 32, disableProduction: true,
                 bezier: [{ x: 0, y: 0, rotation: 180 }, { x: 74, y: 206, rotation: -165.53 }],
                 connections: { 0: { 53: 0 }, 3: { 58: 2 } } },
             { id: 56, key: 'pipeline', x: -802.41, y: -457.615, rotation: 90, layer: 0, sortOffset: 33,
@@ -57,6 +57,10 @@ test('imports coal miners and branched pipes with reciprocal socket attachments'
     const attachments = (id: number) => state(id).socketAttachments;
 
     assert.equal(result.report.unresolvedSocketFindings.length, 0);
+    assert.equal(Reflect.get(state(51), 'disableProduction'), true);
+    for (const pipe of [56, 57, 58]) {
+        assert.equal(Object.hasOwn(state(pipe), 'disableProduction'), false);
+    }
     for (const [miner, pipe] of [[51, 58], [52, 56], [53, 57]]) {
         assert.deepEqual(attachments(miner)?.PipeInput0, { nodeId: `legacy-${pipe}`, socketName: 'BackSocket' });
         assert.deepEqual(attachments(pipe)?.BackSocket, { nodeId: `legacy-${miner}`, socketName: 'PipeInput0' });

@@ -222,7 +222,6 @@ function applyLegacyProductionState(
     if (orders.length > 0) {
         state.productionOrders = orders;
     }
-    state.disableProduction = entity.disableProduction === true;
     if (entity.maintenanceFilters && typeof entity.maintenanceFilters === 'object') {
         state.maintenanceFilters = structuredClone(entity.maintenanceFilters);
     }
@@ -397,6 +396,7 @@ export class LegacyPlanImporter {
                     : {};
                 applyLegacyStructureFlags(state, resolved.entity);
                 applyLegacyProductionState(state, resolved.entity, structure, '/foxhole/assets/');
+                state.disableProduction = resolved.entity.disableProduction === true;
                 if (cargo.markedItemCodenames.length) {
                     state.markedItemCodenames = cargo.markedItemCodenames;
                 }

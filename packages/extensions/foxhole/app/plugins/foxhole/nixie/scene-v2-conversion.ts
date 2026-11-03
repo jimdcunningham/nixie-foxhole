@@ -1129,10 +1129,10 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
         const modelData = convertedModelData(String(converted.data?.foxholeKey ?? ''));
         return {
             supported: converted.data !== null,
-            // Legacy plan imports set false even on connectors, which have no production.
+            // Older imports copied this flag onto connectors, which contribute no production or power.
             handledStateKeys: [
                 ...SPLINE_CONNECTOR_STATE_KEYS,
-                ...(node.state.disableProduction === false ? ['disableProduction'] : []),
+                ...(typeof node.state.disableProduction === 'boolean' ? ['disableProduction'] : []),
             ],
             issues: converted.issues,
             components: converted.data
