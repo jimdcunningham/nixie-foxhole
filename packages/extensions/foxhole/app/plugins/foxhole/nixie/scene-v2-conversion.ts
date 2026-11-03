@@ -1129,7 +1129,11 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
         const modelData = convertedModelData(String(converted.data?.foxholeKey ?? ''));
         return {
             supported: converted.data !== null,
-            handledStateKeys: [...SPLINE_CONNECTOR_STATE_KEYS],
+            // Legacy plan imports set false even on connectors, which have no production.
+            handledStateKeys: [
+                ...SPLINE_CONNECTOR_STATE_KEYS,
+                ...(node.state.disableProduction === false ? ['disableProduction'] : []),
+            ],
             issues: converted.issues,
             components: converted.data
                 ? [{ ownerId: FOXHOLE_SCENE_V2_OWNER_ID, componentId: 'asset', version: 1,
