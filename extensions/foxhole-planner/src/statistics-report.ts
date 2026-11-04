@@ -1,4 +1,4 @@
-import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1, NixiePanelReportPreviewV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1, NixiePanelReportPreviewV1, NixiePanelReportPreviewSectionV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { readSceneStatistics, readStatisticsPreferences } from './scene-statistics.ts';
 import { FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';
@@ -30,12 +30,32 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         return { name: asset?.label ?? resource.resourceId, category: asset?.categoryLabel ?? '',
             quantity: resource.quantity, direction: '', image: asset?.browserIcon };
     }).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+    const sections: NixiePanelReportPreviewSectionV1[] = [{
+        id: 'construction-cost',
+        title: 'Construction Cost',
+        emptyMessage: 'No published construction costs are available for this scope yet.',
+        rows: costs.slice(0, 256).map(cost => ({ label: cost.name, tone: 'cost',
+            value: 'x' + cost.quantity.toLocaleString('en-US', { maximumFractionDigits: 1 }),
+            ...(cost.image ? { image: cost.image } : {}) })),
+    }];
+    const { total, silo, pipeline } = summary.resources.liquid;
+    if (total > 0) {
+        const volume = (litres: number) => litres.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' L';
+        const rows: NixiePanelReportPreviewSectionV1['rows'] = [
+            { label: 'Total Capacity', value: volume(total), tone: 'info', icon: 'ph:drop-fill' },
+        ];
+        if (silo > 0) {
+            const image = localized('FacilitySiloOil')?.browserIcon;
+            rows.push({ label: 'Liquid Silos', value: volume(silo), tone: 'gain', icon: 'ph:oil', ...(image ? { image } : {}) });
+        }
+        if (pipeline > 0) {
+            const image = localized('FacilityPipe')?.browserIcon;
+            rows.push({ label: 'Pipelines', value: volume(pipeline), tone: 'warning', icon: 'ph:pipe', ...(image ? { image } : {}) });
+        }
+        sections.push({ id: 'liquid-capacity', title: 'Liquid Capacity', emptyMessage: 'No liquid capacity is available.', rows });
+    }
     const preview: NixiePanelReportPreviewV1 = summary.resources.structureCount > 0
-        ? { kind: 'section', id: 'construction-cost', title: 'Construction Cost',
-            emptyMessage: 'No published construction costs are available for this scope yet.',
-            rows: costs.slice(0, 256).map(cost => ({ label: cost.name, tone: 'cost',
-                value: 'x' + cost.quantity.toLocaleString('en-US', { maximumFractionDigits: 1 }),
-                ...(cost.image ? { image: cost.image } : {}) })) }
+        ? { kind: 'sections', sections }
         : { kind: 'empty', message: summary.scope === 'layer'
             ? 'Activate a layer with Foxhole nodes to review aggregated totals for that layer.'
             : preferences.scope === 'layer' || preferences.scope === 'scene'
