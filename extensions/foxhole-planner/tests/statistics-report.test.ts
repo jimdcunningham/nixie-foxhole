@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeNixieExperimentalSceneV2SnapshotNodeV1, formatNixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { encodeNixieExperimentalSceneV2SnapshotNodeV1, formatNixieExperimentalPanelReportV1, parseNixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { buildFoxholeStatisticsReport } from '../src/statistics-report.ts';
@@ -18,6 +18,14 @@ test('Planner report sections contain computed resources and the existing bunker
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const before = structuredClone(scene);
     const report = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection });
+    assert.equal(report.preview?.kind, 'section');
+    assert.equal(report.preview.title, 'Construction Cost');
+    assert.ok(report.preview.rows.some(row => row.image));
+    assert.deepEqual(parseNixieExperimentalPanelReportV1(report).preview, report.preview);
+    assert.ok(report.preview.rows.every(row => row.tone === 'cost' && /^x[0-9]/.test(row.value)));
+    const empty = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
+        scene: { ...scene, totalCount: 0, nodes: [] }, selection });
+    assert.deepEqual(empty.preview, { kind: 'empty', message: 'Select buildings to see their stats here.' });
     assert.deepEqual(report.columns, ['scope', 'section', 'metric', 'value', 'unit', 'notes']);
     assert.ok(report.sections.find(section => section.id === 'bunkerHealth')?.rows.some(row => row[2] === 'Total Health' && row[3] === '650'));
     assert.match(formatNixieExperimentalPanelReportV1(report, ['bunkerHealth']).listText, /Total Health: 650/);

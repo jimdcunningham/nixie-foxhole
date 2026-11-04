@@ -167,31 +167,6 @@ export function mountSceneStatistics(connection: NixieExtensionConnection): () =
                     productionList.append(table);
                 }
             }
-            const costTitle = document.createElement('h3');
-            costTitle.textContent = 'Construction Cost';
-            productionList.append(costTitle);
-            if (summary.resources.costs.length) {
-                const table = document.createElement('table');
-                table.setAttribute('aria-label', 'Construction Cost');
-                const header = table.createTHead().insertRow();
-                for (const name of ['Resource', 'Quantity']) {
-                    const cell = document.createElement('th');
-                    cell.textContent = name;
-                    header.append(cell);
-                }
-                const rows = table.createTBody();
-                for (const resource of summary.resources.costs) {
-                    const asset = Object.values(assets).find(candidate => candidate.codeName.toLowerCase() === resource.resourceId.toLowerCase());
-                    const row = rows.insertRow();
-                    row.insertCell().textContent = asset?.label ?? resource.resourceId;
-                    row.insertCell().textContent = resource.quantity.toLocaleString('en-US', { maximumFractionDigits: 4 });
-                }
-                productionList.append(table);
-            } else {
-                const empty = document.createElement('p');
-                empty.textContent = 'No published construction costs.';
-                productionList.append(empty);
-            }
             for (const [heading, resources] of [['Net Inputs', summary.production.inputs], ['Net Outputs', summary.production.outputs]] as const) {
                 const title = document.createElement('h3');
                 title.textContent = heading;

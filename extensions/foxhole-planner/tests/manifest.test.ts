@@ -13,7 +13,7 @@ test('declares real Planner migrations through the public SDK', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(resolve(extensionRoot, 'nixie.extension.json'), 'utf8')));
     assert.equal(manifest.id, 'nixie.foxhole-planner');
     const { header, ...panel } = manifest.contributes.panels.find(panel => panel.id === 'statistics')!;
-    assert.deepEqual(panel, { id: 'statistics', reportSystemId: 'reports.statistics', reportSectionsSettingId: 'nixie.foxhole-planner.stats.exportSections', title: 'Statistics (SDK)', icon: 'ph:chart-bar-horizontal', placement: 'right-sidebar',
+    assert.deepEqual(panel, { id: 'statistics', reportSystemId: 'reports.statistics', reportPreview: true, reportSectionsSettingId: 'nixie.foxhole-planner.stats.exportSections', title: 'Statistics (SDK)', icon: 'ph:chart-bar-horizontal', placement: 'right-sidebar',
         settingIds: ['nixie.foxhole-planner.stats.scope', 'nixie.foxhole-planner.stats.interval', 'nixie.foxhole-planner.stats.customIntervalSeconds'] });
     assert.deepEqual(header?.actions?.map(action => action.icon), ['ph:cursor', 'ph:stack', 'ph:clock']);
     assert.deepEqual(header?.report, { label: 'Export Statistics', icon: 'ph:export' });

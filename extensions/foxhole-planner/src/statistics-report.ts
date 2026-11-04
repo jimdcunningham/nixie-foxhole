@@ -1,4 +1,4 @@
-import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1, NixiePanelReportPreviewV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { readSceneStatistics, readStatisticsPreferences } from './scene-statistics.ts';
 import { FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';
@@ -25,12 +25,26 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         const named = weapon.name && ![weapon.codeName, weapon.id].some(value => value.toLowerCase() === weapon.name.toLowerCase());
         return named ? weapon.name : localized(weapon.codeName)?.label ?? weapon.name;
     };
+    const costs = summary.resources.costs.map(resource => {
+        const asset = localized(resource.resourceId);
+        return { name: asset?.label ?? resource.resourceId, category: asset?.categoryLabel ?? '',
+            quantity: resource.quantity, direction: '', image: asset?.browserIcon };
+    }).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+    const preview: NixiePanelReportPreviewV1 = summary.resources.structureCount > 0
+        ? { kind: 'section', id: 'construction-cost', title: 'Construction Cost',
+            emptyMessage: 'No published construction costs are available for this scope yet.',
+            rows: costs.slice(0, 256).map(cost => ({ label: cost.name, tone: 'cost',
+                value: 'x' + cost.quantity.toLocaleString('en-US', { maximumFractionDigits: 1 }),
+                ...(cost.image ? { image: cost.image } : {}) })) }
+        : { kind: 'empty', message: summary.scope === 'layer'
+            ? 'Activate a layer with Foxhole nodes to review aggregated totals for that layer.'
+            : preferences.scope === 'layer' || preferences.scope === 'scene'
+                ? 'Place buildings to see their stats here.'
+                : 'Select buildings to see their stats here.' };
     const scope: FoxholeStatsExportScopePayload = {
         id: summary.scope, label: summary.scope === 'selection' ? 'Selection' : summary.scope === 'layer' ? 'Layer' : 'Scene',
         detail, nodeCount: summary.metrics.Entities,
-        costEntries: summary.resources.costs.map(resource => ({ name: localized(resource.resourceId)?.label ?? resource.resourceId,
-            category: localized(resource.resourceId)?.categoryLabel ?? '', quantity: resource.quantity, direction: '' }))
-            .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })),
+        costEntries: costs,
         liquidCapacity: summary.resources.liquid, facilityPower: summary.resources.power, maintenanceSupplies: summary.resources.maintenanceSupplies,
         production: { activeOrderCount: summary.production.activeOrderCount, powerMw: summary.production.powerMw,
             inputs: summary.production.inputs.map(resource => ({ name: localized(resource.resourceId)?.label ?? resource.resourceId, category: resource.channel,
@@ -51,7 +65,7 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
     const listHeader = `${scope.label} Statistics\n${scope.detail}`;
     const options = { scopes: [scope], scopeIds: [scope.id], intervalLabel };
     return { contractVersion: 1, title: buildFoxholeStatsExportSpreadsheetTitle(options), fileName: buildFoxholeStatsExportCsvFileName(options),
-        listHeader, columns: ['scope', 'section', 'metric', 'value', 'unit', 'notes'],
+        listHeader, preview, columns: ['scope', 'section', 'metric', 'value', 'unit', 'notes'],
         sections: FOXHOLE_STATS_EXPORT_SECTION_IDS.filter(id => scope.nodeCount > 0 && availability[id]).map(id => ({
             id, title: FOXHOLE_STATS_EXPORT_SECTION_LABELS[id],
             listText: buildFoxholeStatsExportListText({ ...options, sectionIds: [id] }).slice(listHeader.length).trim(),
