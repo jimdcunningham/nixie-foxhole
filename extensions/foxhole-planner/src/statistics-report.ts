@@ -54,6 +54,22 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         }
         sections.push({ id: 'liquid-capacity', title: 'Liquid Capacity', emptyMessage: 'No liquid capacity is available.', rows });
     }
+    const { producedMw, consumedMw, netMw } = summary.resources.power;
+    if (producedMw > 0 || consumedMw > 0 || netMw !== 0) {
+        const rows: NixiePanelReportPreviewSectionV1['rows'] = [];
+        const addPower = (label: string, megawatts: number, tone: 'cost' | 'gain') => {
+            rows.push({ label, value: megawatts.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' MW',
+                tone, icon: 'nx:lightning', iconTone: 'white' });
+        };
+        if (producedMw > 0) {
+            addPower('Produced', producedMw, 'gain');
+        }
+        if (consumedMw > 0) {
+            addPower('Consumed', consumedMw, 'cost');
+        }
+        addPower('Net Total', netMw, netMw >= 0 ? 'gain' : 'cost');
+        sections.push({ id: 'facility-power', title: 'Facility Power', emptyMessage: 'No facility power is available.', rows });
+    }
     const preview: NixiePanelReportPreviewV1 = summary.resources.structureCount > 0
         ? { kind: 'sections', sections }
         : { kind: 'empty', message: summary.scope === 'layer'

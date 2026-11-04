@@ -70,3 +70,21 @@ test('liquid capacity follows construction cost and omits zero-capacity rows', (
     assert.equal(rows[2]?.value, '100 L');
     assert.ok(rows[1]?.image && rows[2]?.image);
 });
+
+test('facility power reports production, consumption, and signed net totals in order', () => {
+    const nodes = ['facilitypowerdiesel', 'facilityrefinery1'].map((id, index) =>
+        encodeNixieExperimentalSceneV2SnapshotNodeV1(entity(String(index), id)));
+    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: nodes.length, truncated: false, nodes };
+    const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
+    const rowsFor = (selectedNodes: typeof nodes) => {
+        const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
+            scene: { ...scene, nodes: selectedNodes, totalCount: selectedNodes.length }, selection }));
+        assert.equal(preview?.kind, 'sections');
+        assert.equal(preview.sections.at(-1)?.title, 'Facility Power');
+        const rows = preview.sections.at(-1)!.rows;
+        assert.ok(rows.every(row => row.icon === 'nx:lightning' && row.iconTone === 'white'));
+        return rows.map(({ label, value, tone }) => [label, value, tone]);
+    };
+    assert.deepEqual(rowsFor(nodes), [['Produced', '5 MW', 'gain'], ['Consumed', '2 MW', 'cost'], ['Net Total', '3 MW', 'gain']]);
+    assert.deepEqual(rowsFor(nodes.slice(1)), [['Consumed', '2 MW', 'cost'], ['Net Total', '-2 MW', 'cost']]);
+});

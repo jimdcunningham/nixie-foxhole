@@ -19,6 +19,7 @@ test('production totals preserve recipe ownership, cycle limits, channel netting
     const result = aggregateFoxholeEcsProduction(entities, { factory: { production: {} } }, recipes, 120);
     assert.equal(result.activeOrderCount, 2);
     assert.equal(result.powerMw, -6);
+    assert.deepEqual(result.powerMwByEntityId, new Map([['one', -6]]));
     assert.deepEqual(result.inputs, [{ channel: 'item', resourceId: 'Input', quantity: 4 }]);
     assert.deepEqual(result.outputs, [{ channel: 'crate', resourceId: 'Output', quantity: 2 }, { channel: 'item', resourceId: 'Output', quantity: 5 }]);
     assert.deepEqual(entities, before);

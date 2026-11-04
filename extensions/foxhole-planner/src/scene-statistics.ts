@@ -75,8 +75,9 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
             const orders = data(entity, 'production-order')?.orders;
             return total + (Array.isArray(orders) ? orders.length : 0);
         }, 0) };
-    return { scope, metrics, entities: owned, production: aggregateFoxholeEcsProduction(owned, assets, productionRecipesById, intervalSeconds),
-        resources: aggregateFoxholeEcsResources(owned, assets, intervalSeconds),
+    const production = aggregateFoxholeEcsProduction(owned, assets, productionRecipesById, intervalSeconds);
+    return { scope, metrics, entities: owned, production,
+        resources: aggregateFoxholeEcsResources(owned, assets, intervalSeconds, production.powerMwByEntityId),
         bunker: resolveFoxholeEcsBunkerStatistics(entities, owned.map(entity => entity.entityId), assets, bunkerDestructionWeapons, intervalSeconds) };
 }
 
@@ -109,8 +110,6 @@ export function mountSceneStatistics(connection: NixieExtensionConnection): () =
             status.textContent = summary.scope === 'selection' ? 'Current selection and its descendants.' : summary.scope === 'layer' ? 'Current layer and its descendants.' : 'Whole scene.';
             for (const [name, value] of Object.entries({ ...summary.metrics, 'Active Orders': summary.production.activeOrderCount,
                 'Production Power (MW)': summary.production.powerMw,
-                'Power Produced (MW)': summary.resources.power.producedMw,
-                'Power Consumed (MW)': summary.resources.power.consumedMw, 'Net Facility Power (MW)': summary.resources.power.netMw,
                 'Maintenance Supplies': summary.resources.maintenanceSupplies, 'Missing Construction Costs': summary.resources.missingCostCount,
                 'Repair Cost': summary.resources.repairCost, 'Inventory Slots': summary.resources.inventorySlots, 'Fuel Capacity': summary.resources.fuelCapacity })) {
                 const row = document.createElement('div');

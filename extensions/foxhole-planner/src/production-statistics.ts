@@ -71,6 +71,7 @@ export function aggregateFoxholeEcsProduction(entities: readonly NixieExperiment
     const outputs = new Map<string, FoxholeStatisticsResource>();
     const orders: FoxholeStatisticsOrder[] = [];
     let powerMw = 0;
+    const powerMwByEntityId = new Map<string, number>();
     const add = (store: Map<string, FoxholeStatisticsResource>, source: Record<string, number>, channel: FoxholeStatisticsResource['channel'], cycles: number) => {
         for (const [resourceId, amount] of Object.entries(source)) {
             const quantity = amount * cycles;
@@ -140,7 +141,10 @@ export function aggregateFoxholeEcsProduction(entities: readonly NixieExperiment
         if (active === 0 && ['fieldmodificationcenter', 'bmsforemanstacker'].includes(compact)) {
             structurePower = (structure.powerDelta ?? 0) / 1000;
         }
-        powerMw += structurePower ?? 0;
+        if (structurePower !== null && structurePower !== 0) {
+            powerMwByEntityId.set(entity.entityId, structurePower);
+            powerMw += structurePower;
+        }
     }
     for (const [key, input] of inputs) {
         const output = outputs.get(key);
@@ -161,5 +165,5 @@ export function aggregateFoxholeEcsProduction(entities: readonly NixieExperiment
     }
     const sorted = (values: Iterable<FoxholeStatisticsResource>) => [...values].filter(value => value.quantity > 0)
         .sort((a, b) => a.channel.localeCompare(b.channel) || a.resourceId.localeCompare(b.resourceId));
-    return { inputs: sorted(inputs.values()), outputs: sorted(outputs.values()), orders, activeOrderCount: orders.length, powerMw };
+    return { inputs: sorted(inputs.values()), outputs: sorted(outputs.values()), orders, activeOrderCount: orders.length, powerMw, powerMwByEntityId };
 }

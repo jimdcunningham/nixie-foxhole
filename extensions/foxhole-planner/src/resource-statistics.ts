@@ -125,7 +125,8 @@ const capacityFallbacks: Record<string, number> = { facilitysilooil: 5000, fuel_
 const finite = (value: number | null | undefined) => Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
 export function aggregateFoxholeEcsResources(entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
-    assets: Readonly<Record<string, FoxholeResourceStatisticsAsset>>, intervalSeconds: number) {
+    assets: Readonly<Record<string, FoxholeResourceStatisticsAsset>>, intervalSeconds: number,
+    powerMwByEntityId?: ReadonlyMap<string, number>) {
     const costs = new Map<string, number>();
     const result = { structureCount: 0, vehicles: 0, facilities: 0, bunkers: 0, missingCostCount: 0,
         liquid: { total: 0, silo: 0, pipeline: 0 }, power: { producedMw: 0, consumedMw: 0, netMw: 0 },
@@ -184,7 +185,7 @@ export function aggregateFoxholeEcsResources(entities: readonly NixieExperimenta
         } else if (keys.some(key => pipelineKeys.has(key))) {
             result.liquid.pipeline += volume;
         }
-        const power = finite(stats.powerDelta) / 1000;
+        const power = powerMwByEntityId?.get(entity.entityId) ?? finite(stats.powerDelta) / 1000;
         result.power.netMw += power;
         if (power > 0) {
             result.power.producedMw += power;

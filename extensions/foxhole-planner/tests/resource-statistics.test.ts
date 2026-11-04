@@ -21,6 +21,8 @@ test('resource totals retain authored costs, modification choices and legacy vol
     assert.deepEqual(result.costs, [{ resourceId: 'material', quantity: 12 }]);
     assert.deepEqual(result.liquid, { total: 5100, silo: 5000, pipeline: 100 });
     assert.deepEqual(result.power, { producedMw: 4, consumedMw: 2, netMw: 2 });
+    const active = aggregateFoxholeEcsResources(entities, assets, 1800, new Map([['facilitypipe', -5.5]]));
+    assert.deepEqual(active.power, { producedMw: 4, consumedMw: 5.5, netMw: -1.5 });
     assert.equal(result.maintenanceSupplies, 1.5);
     assert.equal(result.missingCostCount, 1);
     assert.equal(result.repairCost, 5);
