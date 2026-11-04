@@ -9,6 +9,12 @@ function validPoints(value: unknown): value is number[] {
         && value.every(number => typeof number === 'number' && Number.isFinite(number) && Math.abs(number) <= 1_000_000);
 }
 
+export function resolveFoxholeDefaultHitboxPolygons(asset: FoxholeSceneV2AssetMetadata, variants: readonly FoxholeSceneV2ModificationVariantMetadata[]): number[][] {
+    const variantPolygons = variants.find(variant => (variant.lineOfSightPolygons ?? []).some(polygon => validPoints(polygon.shape)))?.lineOfSightPolygons;
+    return (variantPolygons ?? asset.lineOfSightPolygons ?? []).flatMap(polygon =>
+        validPoints(polygon.shape) ? [polygon.shape.map(point => point * 32)] : []);
+}
+
 /** Match Scene V1: authored children supersede modification and base extracted polygons. */
 export function renderFoxholeHitboxOverlays(subject: NixieExperimentalComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata, variants: FoxholeSceneV2ModificationVariantMetadata[],
@@ -25,9 +31,7 @@ export function renderFoxholeHitboxOverlays(subject: NixieExperimentalComponentE
         const sx = width > 0 ? asset.width / width : 1, sy = height > 0 ? asset.height / height : 1;
         return [hitbox.data.points.map((point, i) => point * (i % 2 ? sy : sx))];
     });
-    const variantPolygons = variants.find(variant => (variant.lineOfSightPolygons ?? []).some(polygon => validPoints(polygon.shape)))?.lineOfSightPolygons;
-    const fallback = variantPolygons ?? asset.lineOfSightPolygons ?? [];
-    const polygons = authored.length ? authored : fallback.flatMap(polygon => validPoints(polygon.shape) ? [polygon.shape.map(point => point * 32)] : []);
+    const polygons = authored.length ? authored : resolveFoxholeDefaultHitboxPolygons(asset, variants);
     const children: NixieExtensionRenderNodeV1[] = polygons.slice(0, 128).map((points, index) => ({
         id: `structure-hitbox-${index}`, kind: 'graphics', commands: [
             { op: 'polygon', points: Array.from({ length: points.length / 2 }, (_, i) => ({ x: points[i * 2]!, y: points[i * 2 + 1]! })), close: true },

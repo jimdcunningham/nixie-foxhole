@@ -735,7 +735,10 @@ test('Inspector tier actions update model resources and dimensions with identity
         const retained = host.readEntity(id).components.filter(component => !['asset', 'model'].includes(component.componentId));
         const mutation = resolveFoxholeStructureTierMutation(catalog, project().state, direction)!;
         assert.equal(mutation.targetAsset.foxholeKey, target);
-        apply(mutation.patch);
+        const action = foxholeSceneV2StateAdapter.inspectorHeaderActions!(host.readEntity(id))
+            .find(candidate => candidate.id === direction);
+        assert.deepEqual(action?.patch, mutation.patch);
+        apply(action!.patch!);
         const changed = host.readEntity(id);
         const expected = fixture('foxholeAsset', { foxholeKey: target }).host.listEntities()[0]!
             .components.find(component => component.componentId === 'model')!.data;

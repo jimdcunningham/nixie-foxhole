@@ -56,6 +56,11 @@ export const FOXHOLE_STATISTICS_INTERVALS = [
     { id: '24h', label: '24 Hours', seconds: 86400 }, { id: '3d', label: '3 Days', seconds: 259200 },
 ] as const;
 const singleOrderStructures = new Set(['facilityvehiclefactory1', 'facilityvehiclefactory2', 'facilityvehiclefactory3', 'facilitymodificationcenter', 'rocketsite']);
+export function resolveFoxholeSdkProductionOrderLimit(assetId: string, configured: number | null | undefined): number {
+    return typeof configured === 'number' && Number.isFinite(configured) && configured > 0
+        ? Math.floor(configured)
+        : singleOrderStructures.has(assetId.toLowerCase()) ? 1 : 5;
+}
 
 export function aggregateFoxholeEcsProduction(entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
     assets: Readonly<Record<string, { production?: FoxholeStatisticsStructure; }>>, recipes: Readonly<Record<string, FoxholeStatisticsRecipe>>, intervalSeconds: number) {
@@ -91,8 +96,7 @@ export function aggregateFoxholeEcsProduction(entities: readonly NixieExperiment
             continue;
         }
         const structure = asset.production ?? {};
-        const maximum = Number(structure.maxOrders);
-        const limit = Number.isFinite(maximum) && maximum > 0 ? Math.floor(maximum) : singleOrderStructures.has(String(assetId).toLowerCase()) ? 1 : 5;
+        const limit = resolveFoxholeSdkProductionOrderLimit(String(assetId), structure.maxOrders);
         const selections = data('modification')?.selections;
         const variants = Array.isArray(selections)
             ? selections.flatMap(value => value && typeof value === 'object' && !Array.isArray(value)

@@ -1,18 +1,13 @@
 import type { NixieSceneV2RenderPresentationAdapter } from '#nixie/plugins/nixie/scene-v2/render-presentation.ts';
-import { resolveFoxholeRangeState } from './range.ts';
-import type { FoxholeRangeState } from './range.ts';
-import { renderFoxholeRangeVisuals, getFoxholeRangeLabelTextStyle } from '../../nixie/board/types/foxhole-range.ts';
 import { renderFoxholeTacticalLineGraphics } from '../../nixie/board/types/foxhole-tactical-line.ts';
 import { applyFoxholeTacticalLinePreset } from './tactical-line.ts';
 import type { FoxholeTacticalLineState } from './tactical-line.ts';
-import { prepareBoardTextFonts } from '#nixie/plugins/nixie/board/utils/board-text-markup.ts';
 import { NIXIE_DEFAULT_RENDER_LANE, FOXHOLE_STRUCTURE_RENDER_LANES, FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, resolveFoxholeConnectorRenderLane } from './render-lanes.ts';
 import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeEffectiveBuildSockets } from './structure-socket-resolution.ts';
 import { createFoxholePowerSocketVisual, createFoxholePipeSocketVisual, createFoxholeSocketLabel, resolveFoxholePipeSocketFlow, resolveFoxholePipeSocketColor, FOXHOLE_POWER_SOCKET_COLOR } from './structure-socket-visuals.ts';
 import { FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS } from './structure-debug-settings.ts';
 import { Graphics } from 'pixi.js';
-import type { Container } from 'pixi.js';
 import { normalizeFoxholeSplineConnectorState, resolveEffectiveConnectorPathStyle, isPowerlineConnector } from './spline-connector.ts';
 import { allowsConnectorRotationHandles, resolveConnectorPathStyle, resolveConnectorSpanCrossHalfWidth } from './pipe-connector-path.ts';
 import { resolveFoxholeSplinePathConstraints, resolveFoxholeSplineGuidePath, drawFoxholeSplinePathGuide, drawFoxholeSplineEndpointGizmo } from './spline-connector-guides.ts';
@@ -302,51 +297,5 @@ export const prepareFoxholeSceneV2RenderPresentation: NixieSceneV2RenderPresenta
             },
         };
     }
-    const range = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
-        && component.componentId === 'range' && component.version === 1 && component.definitionAvailable);
-    const labelLayer = plan.root.children.find(node => node.id === 'range-label-layer' && node.kind === 'group');
-    if (!range || !labelLayer) {
-        return prepareStructurePresentation(entity, plan, renderScale, settings, toolColors);
-    }
-    const state = resolveFoxholeRangeState({ ...range.data, ...transform } as Partial<FoxholeRangeState>);
-    let graphics: Graphics | null = null;
-    let labels: Container | null = null;
-    let displayedScale: number | null = null;
-    const redraw = (scale = displayedScale ?? renderScale) => {
-        if (graphics && labels && !graphics.destroyed && !labels.destroyed && displayedScale !== scale) {
-            renderFoxholeRangeVisuals(graphics, labels, state, scale);
-            displayedScale = scale;
-        }
-    };
-    return {
-        refresh: redraw,
-        plan: { ...plan,
-            // Native drawing replaces these SDK text nodes; its trusted geometry
-            // adapter already owns the measured Range selection bounds.
-            ...(plan.experimentalSelectionGeometry
-                ? { experimentalSelectionGeometry: {
-                    ...plan.experimentalSelectionGeometry, measuredTextBounds: [],
-                } }
-                : {}),
-            root: { ...plan.root, children: plan.root.children.map(node => {
-            // V1 draws a range body and its labels together in the default lane.
-                if (node === labelLayer) {
-                    return { ...node, laneId: NIXIE_DEFAULT_RENDER_LANE.laneId, laneOrder: NIXIE_DEFAULT_RENDER_LANE.laneOrder, children: [] };
-                }
-                return node.id === 'range-graphics' && node.kind === 'graphics'
-                    ? { ...node, laneId: NIXIE_DEFAULT_RENDER_LANE.laneId, laneOrder: NIXIE_DEFAULT_RENDER_LANE.laneOrder, commands: [] }
-                    : node;
-            }) } },
-        async apply(resolveNode) {
-            const body = resolveNode('range-graphics');
-            labels = resolveNode('range-label-layer');
-            graphics = body instanceof Graphics ? body : null;
-            if (!graphics || !labels) {
-                return;
-            }
-            await prepareBoardTextFonts(getFoxholeRangeLabelTextStyle(state));
-            // Reuse Native geometry, measured labels and the current full-world scale.
-            redraw();
-        },
-    };
+    return prepareStructurePresentation(entity, plan, renderScale, settings, toolColors);
 };

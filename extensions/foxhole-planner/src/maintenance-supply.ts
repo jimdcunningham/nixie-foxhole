@@ -66,6 +66,14 @@ export interface FoxholeMaintenanceCandidate {
     operational: boolean;
 }
 
+/** Whether an in-range neighboring structure consumes supplies under these filters. */
+export function includesFoxholeMaintenanceNeighbor(
+    candidate: Pick<FoxholeMaintenanceCandidate, 'operational' | 'drain' | 'category'>,
+    exclusions: readonly string[],
+): boolean {
+    return candidate.operational && candidate.drain > 0 && !exclusions.includes(candidate.category);
+}
+
 /** Positions are in board pixels (32 px/m). Each tunnel is estimated independently. */
 export function resolveFoxholeMaintenanceCoverage(
     tunnel: FoxholeMaintenanceCandidate, candidates: readonly FoxholeMaintenanceCandidate[], filters: unknown,
@@ -76,7 +84,7 @@ export function resolveFoxholeMaintenanceCoverage(
     const { range, exclusions } = normalizeFoxholeMaintenanceFilters(filters);
     const unique = new Map([[tunnel.id, tunnel], ...candidates.map(candidate => [candidate.id, candidate] as const)]);
     const structures = [...unique.values()].filter(candidate => candidate.operational && (
-        candidate.id === tunnel.id || (candidate.drain > 0 && !exclusions.includes(candidate.category)
+        candidate.id === tunnel.id || (includesFoxholeMaintenanceNeighbor(candidate, exclusions)
             && range > 0 && Math.hypot(candidate.x - tunnel.x, candidate.y - tunnel.y) <= range * 32)
     ));
     return { structures, suppliesPerHour: structures.reduce((total, candidate) => total + candidate.drain, 0) };

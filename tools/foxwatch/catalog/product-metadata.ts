@@ -18,6 +18,8 @@ import type { FoxholeBunkerStatisticsSocket } from '../../../extensions/foxhole-
 import type { FoxholeBunkerDestructionWeaponInput } from '../../../extensions/foxhole-planner/src/bunker-statistics-destruction.ts';
 
 export interface FoxholeSceneV2ModificationVariantMetadata {
+    requiredSocketConnectionMask?: number | null;
+    hiddenBySocketConnectionMask?: number | null;
     localizedText?: { name?: string; description?: string; };
     description?: string;
     browserRenderedIcon?: FoxholeSceneV2AssetMetadata['browserIcon'];
@@ -39,6 +41,8 @@ export interface FoxholeSceneV2ModificationVariantMetadata {
 }
 
 export interface FoxholeSceneV2ModificationSlotMetadata {
+    isLinkedToSocket?: boolean;
+    blockedByModSlotNames?: string[];
     componentType?: string;
     linkedSocketNames?: string[];
     blockedByModTypes?: string[];
@@ -206,6 +210,8 @@ export interface FoxholeSceneV2AssetMetadata {
     hasHigherTierSibling?: boolean;
     parentStructureId?: string | null;
     downgradeStructureId?: string | null;
+    upgradeStructureId?: string | null;
+    conversionStructureIds?: string[];
     implicitUpgradeTier?: number | null;
     width: number;
     height: number;
@@ -393,6 +399,8 @@ interface PublishedFoxholeConversionEntry extends FoxholePublishedProductionEntr
 }
 
 interface PublishedFoxholeModificationVariant {
+    requiredSocketConnectionMask?: number | null;
+    hiddenBySocketConnectionMask?: number | null;
     previewUrl?: string;
     description?: string;
     icons?: { default?: string; rendered?: string; };
@@ -409,6 +417,8 @@ interface PublishedFoxholeModificationVariant {
 }
 
 interface PublishedFoxholeModificationSlot {
+    isLinkedToSocket?: boolean;
+    blockedByModSlotNames?: string[];
     componentType?: string;
     name?: string;
     x?: number;
@@ -458,6 +468,7 @@ export interface PublishedFoxholeAssetForSceneV2 {
     upgradeStructureCodeName?: string;
     upgradeStructureId?: string;
     conversionCodeNames?: string[];
+    conversionStructureIds?: string[];
     profileType?: string;
     wheelBase?: number;
     railCouplers?: unknown[];
@@ -806,6 +817,8 @@ export function createFoxholeSceneV2AssetMetadata(
                     browserPreview: browserImage(resolved.icons?.rendered ?? resolved.icons?.default),
                     description: strings[resolved.description ?? '']?.trim() || undefined,
                     id: variantId,
+                    requiredSocketConnectionMask: resolved.requiredSocketConnectionMask,
+                    hiddenBySocketConnectionMask: resolved.hiddenBySocketConnectionMask,
                     overlaySockets: overlaySocketMetadata(resolved.buildSockets),
                     resourceId: `foxhole.mod.${resourceSuffix}`,
                     width: resolvedSprite.width * FOXHOLE_BOARD_SPRITE_SCALE,
@@ -829,6 +842,8 @@ export function createFoxholeSceneV2AssetMetadata(
                 componentType: slot.componentType,
                 linkedSocketNames: slot.linkedSocketNames ?? [],
                 blockedByModTypes: slot.blockedByModTypes ?? [],
+                isLinkedToSocket: slot.isLinkedToSocket,
+                blockedByModSlotNames: slot.blockedByModSlotNames ?? [],
                 x: anchor.x,
                 y: anchor.y,
                 rotation: finiteNumber(slot.rotation) * (Math.PI / 180),
@@ -1004,6 +1019,8 @@ export function createFoxholeSceneV2AssetMetadata(
             techId: asset.techId ?? '',
             parentStructureId: asset.parentStructureId ?? null,
             downgradeStructureId: lowerTierById.get(asset.id) ?? null,
+            upgradeStructureId: asset.upgradeStructureId,
+            conversionStructureIds: [...new Set([...(asset.conversionStructureIds ?? []), ...(asset.conversionCodeNames ?? [])])],
             isVehicle: asset.isVehicle === true || asset.profileType?.trim().toLowerCase() === 'vehicleproxy',
             isBunker: asset.isBunker === true,
             isFacility: asset.isFacility === true,

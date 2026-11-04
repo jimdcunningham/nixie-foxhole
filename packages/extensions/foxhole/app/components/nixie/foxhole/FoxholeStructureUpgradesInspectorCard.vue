@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { reconcileFoxholeAssetCargoPatch } from '#foxhole/plugins/foxhole/nixie/hold-profile.ts';
+import NxIconButton from '#nixie/components/NxIconButton.vue';
 import NxMenu from '#nixie/components/NxMenu.vue';
 import type { ResolvedMenuItem } from '#nixie/plugins/nixie/registry/menu-resolver.ts';
 import NixieAssetIncompleteBadge from '#nixie/components/nixie/NixieAssetIncompleteBadge.vue';
@@ -22,7 +23,6 @@ import {
 import {
     buildFoxholeStructureModAvailabilityContext,
     collectFoxholeStructureModAvailabilitySceneNodes,
-    filterAvailableModificationVariants,
     isFoxholeModificationVariantAvailable,
     prepareFoxholeModificationSelection,
 } from '#foxhole/plugins/foxhole/nixie/structure-mod-availability.ts';
@@ -40,6 +40,7 @@ import { FOXHOLE_STRUCTURE_NODE_TYPE, normalizeFoxholeStructureSocketAttachmentM
 import { resolveModificationTilePreviewSlot } from '#foxhole/plugins/foxhole/nixie/structure-modification-hover-preview.ts';
 import { FOXHOLE_SPLINE_CONNECTOR_NODE_TYPE } from '#foxhole/plugins/foxhole/nixie/spline-connector.ts';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
+import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNixieEditorDocumentSession.ts';
 import { useNixieSidebarAssetHoverCard } from '#nixie/composables/useNixieSidebarAssetHoverCard.ts';
 import type {
     NixieAssetBrowserContext,
@@ -55,10 +56,12 @@ const props = defineProps<{
     canEdit: boolean;
     effectiveLocked: boolean;
     patchNode: (patch: Record<string, unknown>, reason: string) => void | Promise<void>;
+    patchEntities?: (edits: readonly { id: string; patch: Record<string, unknown>; }[]) => void | Promise<void>;
 }>();
 
 const { assetBaseUrl, t } = useFoxholeLocalization();
 const runtime = useNixieRuntime();
+const documentSession = useNixieEditorDocumentSessionOptional();
 const runtimeConfig = useRuntimeConfig();
 const settingsStore = useNixieSettingsStore();
 const sidebarAssetHoverCard = useNixieSidebarAssetHoverCard();
@@ -68,11 +71,13 @@ const foxholeKey = computed(() => String(state.value.foxholeKey ?? '').trim());
 const catalog = computed(() => getFoxholeStructureCatalog(assetBaseUrl.value));
 const asset = computed(() => foxholeKey.value ? getFoxholeStructureAsset(foxholeKey.value, assetBaseUrl.value) : null);
 const structure = computed(() => foxholeKey.value ? catalog.value.structureByKey[foxholeKey.value] : null);
-const modAvailabilityContext = computed(() => {
+const isSceneV2Batch = computed(() => documentSession?.isSceneV2Active.value && props.node.targetIds.length > 1);
+const modificationTargets = computed(() => isSceneV2Batch.value ? props.node.snapshots : [props.node.snapshot]);
+const modAvailabilityContexts = computed(() => {
     const currentAsset = asset.value;
     const currentStructure = structure.value;
     if (!currentAsset || !currentStructure) {
-        return null;
+        return [];
     }
 
     const scene = runtime.projectStore.scene;
@@ -91,17 +96,42 @@ const modAvailabilityContext = computed(() => {
         ]
         : [];
 
-    return buildFoxholeStructureModAvailabilityContext({
-        nodeId: String(props.node.id),
-        asset: currentAsset,
-        buildSockets: currentStructure.buildSockets ?? [],
-        socketAttachments: normalizeFoxholeStructureSocketAttachmentMap(state.value.socketAttachments),
-        modificationVariantIds: selectionMap.value,
-        sceneNodes,
-    });
+    return modificationTargets.value.map(target => String(target.state.foxholeKey ?? '').trim() !== foxholeKey.value ? null
+        : buildFoxholeStructureModAvailabilityContext({
+            nodeId: String(target.id),
+            asset: currentAsset,
+            buildSockets: currentStructure.buildSockets ?? [],
+            socketAttachments: normalizeFoxholeStructureSocketAttachmentMap(target.state.socketAttachments),
+            modificationVariantIds: normalizeFoxholeModificationSelectionMap(target.state.modificationVariantIds),
+            sceneNodes,
+        }));
 });
+
+function isModificationAvailable(slot: FoxholeStructureModificationSlotAsset, variant: FoxholeStructureModificationSlotVariantAsset): boolean {
+    return modAvailabilityContexts.value.every(context => context !== null && isFoxholeModificationVariantAvailable(variant, context, slot));
+}
 const canEdit = computed(() => props.canEdit && !props.effectiveLocked);
 const selectionMap = computed(() => normalizeFoxholeModificationSelectionMap(state.value.modificationVariantIds));
+const modificationSelections = computed(() => modificationTargets.value.map(target => ({
+    id: String(target.id),
+    selections: normalizeFoxholeModificationSelectionMap(target.state.modificationVariantIds),
+})));
+const canEditModifications = computed(() => canEdit.value && (!isSceneV2Batch.value || Boolean(props.patchEntities)));
+
+async function patchModifications(
+    update: (selections: typeof selectionMap.value) => typeof selectionMap.value,
+    reason: string,
+): Promise<void> {
+    const foxholeKey = getNormalizedModificationPatchFoxholeKey();
+    if (isSceneV2Batch.value) {
+        await props.patchEntities?.(modificationSelections.value.map(({ id, selections }) => ({
+            id,
+            patch: { foxholeKey, modificationVariantIds: update(selections) },
+        })));
+        return;
+    }
+    await props.patchNode({ foxholeKey, modificationVariantIds: update(selectionMap.value) }, reason);
+}
 const pendingSelectionKey = ref<string | null>(null);
 const assetBrowserContext = computed<NixieAssetBrowserContext>(() => {
     const projectSettings = runtime.projectStore.project?.settings.value ?? runtime.projectStore.settings;
@@ -186,14 +216,13 @@ const upgradeSlots = computed(() => (
 
 const experimentalModificationGroups = computed<FoxholeStructureExperimentalModificationGroup[]>(() => {
     const currentAsset = asset.value;
-    const availabilityContext = modAvailabilityContext.value;
-    if (!currentAsset || !availabilityContext) {
+    if (!currentAsset || !modAvailabilityContexts.value.length) {
         return [];
     }
 
     const groups = new Map<string, FoxholeStructureExperimentalModificationGroup>();
     for (const slot of currentAsset.modificationSlots.filter(entry => !entry.variants.some(variant => variant.isUpgrade))) {
-        for (const variant of filterAvailableModificationVariants(slot, availabilityContext)) {
+        for (const variant of slot.variants.filter(variant => isModificationAvailable(slot, variant))) {
             const key = [
                 String(variant.modificationId ?? '').trim(),
                 String(variant.id ?? '').trim(),
@@ -238,7 +267,7 @@ const placementMenuItems = computed<ResolvedMenuItem[]>(() => {
             type: 'checkbox' as const,
             label: formatSlotName(entry.slot),
             checked: isSelectedUpgradeVariant(entry.slot, entry.variant),
-            disabled: !canEdit.value || pendingSelectionKey.value !== null,
+            disabled: !canEditModifications.value || pendingSelectionKey.value !== null,
             visible: true, adminOnly: false,
             closeOnClick: false,
             onClick: () => toggleExperimentalSlotVariant(entry.slot, entry.variant),
@@ -246,8 +275,8 @@ const placementMenuItems = computed<ResolvedMenuItem[]>(() => {
         { type: 'separator', visible: true, adminOnly: false },
         {
             type: 'item', label: 'Clear Selection', color: 'red',
-            disabled: !canEdit.value || pendingSelectionKey.value !== null
-                || !group.slots.some(entry => isSelectedUpgradeVariant(entry.slot, entry.variant)),
+            disabled: !canEditModifications.value || pendingSelectionKey.value !== null
+                || !modificationSelections.value.some(({ selections }) => group.slots.some(entry => hasPlacement(selections, entry))),
             visible: true, adminOnly: false, closeOnClick: false,
             onClick: clearPlacementSelection,
         },
@@ -256,19 +285,15 @@ const placementMenuItems = computed<ResolvedMenuItem[]>(() => {
 
 async function clearPlacementSelection(): Promise<void> {
     const group = activeExperimentalModificationGroup.value;
-    if (!group || !canEdit.value || pendingSelectionKey.value !== null) return;
-    const selected = group.slots.filter(entry => isSelectedUpgradeVariant(entry.slot, entry.variant));
-    if (!selected.length) return;
-    let nextSelections = selectionMap.value;
-    for (const entry of selected) {
-        nextSelections = setFoxholeModificationSlotVariantSelection(nextSelections, entry.slot, '');
-    }
+    if (!group || !canEditModifications.value || pendingSelectionKey.value !== null) return;
     setActiveNixieStructureModificationHoverPreview(null);
     pendingSelectionKey.value = `${group.key}:clear`;
     try {
-        await props.patchNode({
-            foxholeKey: getNormalizedModificationPatchFoxholeKey(), modificationVariantIds: nextSelections,
-        }, 'inspector:foxhole-structure-clear-placement-selection');
+        await patchModifications(selections => group.slots.reduce((nextSelections, entry) => (
+            hasPlacement(nextSelections, entry)
+                ? setFoxholeModificationSlotVariantSelection(nextSelections, entry.slot, '')
+                : nextSelections
+        ), selections), 'inspector:foxhole-structure-clear-placement-selection');
     } finally {
         pendingSelectionKey.value = null;
     }
@@ -297,8 +322,27 @@ const conversionSourceAsset = computed(() => {
     return currentAsset ? resolveFoxholeConversionSourceAsset(catalog.value, currentAsset) : null;
 });
 
-const tierUpMutation = computed(() => resolveFoxholeStructureTierMutation(catalog.value, state.value, 'up'));
-const tierDownMutation = computed(() => resolveFoxholeStructureTierMutation(catalog.value, state.value, 'down'));
+const canEditTiers = computed(() => canEditModifications.value && (!isSceneV2Batch.value
+    || (modificationTargets.value.length === props.node.targetIds.length
+        && modificationTargets.value.every(target => target.state.foxholeKey === foxholeKey.value))));
+
+function resolveTierMutations(direction: FoxholeStructureTierMutation['direction']) {
+    return modificationTargets.value.map(target => ({
+        id: String(target.id),
+        mutation: resolveFoxholeStructureTierMutation(catalog.value, target.state, direction),
+    }));
+}
+
+function getSharedTierMutation(direction: FoxholeStructureTierMutation['direction']): FoxholeStructureTierMutation | null {
+    const targets = resolveTierMutations(direction);
+    const first = targets[0]?.mutation;
+    return first && targets.every(({ mutation }) => (
+        mutation?.mode === first.mode && mutation.targetAsset.foxholeKey === first.targetAsset.foxholeKey
+    )) ? first : null;
+}
+
+const tierUpMutation = computed(() => getSharedTierMutation('up'));
+const tierDownMutation = computed(() => getSharedTierMutation('down'));
 
 const relationshipTargets = computed(() => {
     const currentAsset = asset.value;
@@ -336,10 +380,39 @@ const relationshipTargets = computed(() => {
         });
 });
 
+const unavailableSelections = computed(() => {
+    if (!documentSession?.isSceneV2Active.value || props.node.targetIds.length !== 1 || !asset.value) return [];
+    const slots = new Map(asset.value.modificationSlots.map(slot => [slot.id, slot]));
+    return Object.entries(selectionMap.value).flatMap(([slotId, variantId], index) => {
+        const slot = slots.get(slotId);
+        const variant = slot?.variantById[variantId];
+        const available = slot && variant
+            && (!slot.variants.some(entry => entry.isUpgrade) || variant.isUpgrade)
+            && isModificationAvailable(slot, variant);
+        return available ? [] : [{ slotId, index }];
+    });
+});
+
+async function removeUnavailableSelection(slotId: string): Promise<void> {
+    if (!canEditModifications.value || pendingSelectionKey.value !== null
+        || !unavailableSelections.value.some(entry => entry.slotId === slotId)) return;
+    pendingSelectionKey.value = `unavailable:${slotId}`;
+    try {
+        await patchModifications(selections => {
+            const nextSelections = { ...selections };
+            delete nextSelections[slotId];
+            return nextSelections;
+        }, 'inspector:foxhole-structure-remove-unavailable-selection');
+    } finally {
+        pendingSelectionKey.value = null;
+    }
+}
+
 const hasUpgradeControls = computed(() => (
     relationshipTargets.value.length > 0
     || upgradeSlots.value.length > 0
     || experimentalModificationGroups.value.length > 0
+    || unavailableSelections.value.length > 0
 ));
 
 const tierUpActionLabel = computed(() => tierUpMutation.value
@@ -428,12 +501,7 @@ function isSelectedTierAsset(nextAsset: FoxholeStructureAsset): boolean {
 }
 
 function getUpgradeVariants(slot: FoxholeStructureModificationSlotAsset): FoxholeStructureModificationSlotVariantAsset[] {
-    const availabilityContext = modAvailabilityContext.value;
-    if (!availabilityContext) {
-        return slot.variants.filter(variant => variant.isUpgrade);
-    }
-
-    return filterAvailableModificationVariants(slot, availabilityContext).filter(variant => variant.isUpgrade);
+    return slot.variants.filter(variant => variant.isUpgrade && isModificationAvailable(slot, variant));
 }
 
 function getUpgradeIconUrl(variant: FoxholeStructureModificationSlotVariantAsset | null): string {
@@ -509,17 +577,23 @@ async function applyTierMutation(
     mutation: FoxholeStructureTierMutation | null | undefined,
     reason: string,
 ): Promise<void> {
-    if (!mutation || !canEdit.value) {
+    if (!mutation || !canEditTiers.value) {
         return;
     }
 
     pendingSelectionKey.value = getTierMutationSelectionKey(mutation);
     setActiveNixieStructureModificationHoverPreview(null);
     try {
-        await props.patchNode(
-            mutation.patch as Record<string, unknown>,
-            reason,
-        );
+        if (isSceneV2Batch.value) {
+            const edits = resolveTierMutations(mutation.direction).flatMap(({ id, mutation: target }) => (
+                target?.mode === mutation.mode && target.targetAsset.foxholeKey === mutation.targetAsset.foxholeKey
+                    ? [{ id, patch: target.patch }]
+                    : []
+            ));
+            if (edits.length === props.node.targetIds.length) await props.patchEntities?.(edits);
+        } else {
+            await props.patchNode(mutation.patch, reason);
+        }
     } finally {
         pendingSelectionKey.value = null;
         setActiveNixieStructureModificationHoverPreview(null);
@@ -840,18 +914,20 @@ function showExperimentalSlotPreview(
     });
 }
 
-function getSelectedUpgradeVariantId(slot: FoxholeStructureModificationSlotAsset): string {
-    return resolveFoxholeModificationSlotVariantId(slot, selectionMap.value) ?? '';
-}
-
 function isSelectedUpgradeVariant(
     slot: FoxholeStructureModificationSlotAsset,
     variant: FoxholeStructureModificationSlotVariantAsset | null,
 ): boolean {
-    const selectedVariantId = getSelectedUpgradeVariantId(slot);
-    return variant == null
-        ? selectedVariantId === ''
-        : selectedVariantId === variant.id;
+    return modificationSelections.value.every(({ selections }) => (
+        (resolveFoxholeModificationSlotVariantId(slot, selections) ?? '') === (variant?.id ?? '')
+    ));
+}
+
+function hasPlacement(
+    selections: typeof selectionMap.value,
+    entry: { slot: FoxholeStructureModificationSlotAsset; variant: FoxholeStructureModificationSlotVariantAsset; },
+): boolean {
+    return resolveFoxholeModificationSlotVariantId(entry.slot, selections) === entry.variant.id;
 }
 
 function getUpgradeSelectionKey(
@@ -864,7 +940,7 @@ function getUpgradeSelectionKey(
 }
 
 async function selectTierAsset(nextAsset: FoxholeStructureAsset | null): Promise<void> {
-    if (!nextAsset || !canEdit.value || nextAsset.foxholeKey === foxholeKey.value) {
+    if (!nextAsset || !canEditTiers.value || nextAsset.foxholeKey === foxholeKey.value) {
         return;
     }
 
@@ -872,13 +948,17 @@ async function selectTierAsset(nextAsset: FoxholeStructureAsset | null): Promise
     pendingSelectionKey.value = getTierSelectionKey(nextAsset);
     setActiveNixieStructureModificationHoverPreview(null);
     try {
-        await props.patchNode(
-            reconcileFoxholeAssetCargoPatch(catalog.value, state.value, {
-                foxholeKey: nextAsset.foxholeKey,
-                modificationVariantIds: reconcileFoxholeTierModificationSelections(nextAsset.modificationSlots, selectionMap.value),
-            }),
-            'inspector:foxhole-structure-select-tier',
-        );
+        const patchFor = (state: Partial<FoxholeStructureState>) => reconcileFoxholeAssetCargoPatch(catalog.value, state, {
+            foxholeKey: nextAsset.foxholeKey,
+            modificationVariantIds: reconcileFoxholeTierModificationSelections(nextAsset.modificationSlots, state.modificationVariantIds),
+        });
+        if (isSceneV2Batch.value) {
+            await props.patchEntities?.(modificationTargets.value.map(target => ({
+                id: String(target.id), patch: patchFor(target.state),
+            })));
+        } else {
+            await props.patchNode(patchFor(state.value), 'inspector:foxhole-structure-select-tier');
+        }
     } finally {
         pendingSelectionKey.value = null;
         setActiveNixieStructureModificationHoverPreview(null);
@@ -889,12 +969,7 @@ async function selectUpgradeVariant(
     slot: FoxholeStructureModificationSlotAsset,
     variant: FoxholeStructureModificationSlotVariantAsset,
 ): Promise<void> {
-    const availabilityContext = modAvailabilityContext.value;
-    if (availabilityContext && !isFoxholeModificationVariantAvailable(variant, availabilityContext, slot)) {
-        return;
-    }
-
-    if (!canEdit.value) {
+    if (!canEditModifications.value || !isModificationAvailable(slot, variant)) {
         return;
     }
 
@@ -908,20 +983,13 @@ async function selectUpgradeVariant(
     const reason = alreadySelected
         ? 'inspector:foxhole-structure-clear-upgrade'
         : 'inspector:foxhole-structure-select-upgrade';
-    const nextSelections = alreadySelected
-        ? setFoxholeModificationSlotVariantSelection(selectionMap.value, slot, '')
-        : prepareFoxholeModificationSelection(currentAsset, selectionMap.value, slot, variant.id);
     const selectionKey = getUpgradeSelectionKey(slot, alreadySelected ? null : variant);
     pendingSelectionKey.value = selectionKey;
     setActiveNixieStructureModificationHoverPreview(null);
     try {
-        await props.patchNode(
-            {
-                foxholeKey: getNormalizedModificationPatchFoxholeKey(),
-                modificationVariantIds: nextSelections,
-            },
-            reason,
-        );
+        await patchModifications(selections => alreadySelected
+            ? setFoxholeModificationSlotVariantSelection(selections, slot, '')
+            : prepareFoxholeModificationSelection(currentAsset, selections, slot, variant.id), reason);
     } finally {
         pendingSelectionKey.value = null;
         // Keep the info card, but never leave a preview over the committed result.
@@ -958,8 +1026,7 @@ async function toggleExperimentalSlotVariant(
     slot: FoxholeStructureModificationSlotAsset,
     variant: FoxholeStructureModificationSlotVariantAsset,
 ): Promise<void> {
-    const availabilityContext = modAvailabilityContext.value;
-    if (!canEdit.value || (availabilityContext && !isFoxholeModificationVariantAvailable(variant, availabilityContext, slot))) {
+    if (!canEditModifications.value || !isModificationAvailable(slot, variant)) {
         return;
     }
 
@@ -972,19 +1039,12 @@ async function toggleExperimentalSlotVariant(
         return;
     }
 
-    const nextSelections = alreadySelected
-        ? setFoxholeModificationSlotVariantSelection(selectionMap.value, slot, '')
-        : prepareFoxholeModificationSelection(currentAsset, selectionMap.value, slot, variant.id);
     const selectionKey = getUpgradeSelectionKey(slot, variant);
     pendingSelectionKey.value = selectionKey;
     try {
-        await props.patchNode(
-            {
-                foxholeKey: getNormalizedModificationPatchFoxholeKey(),
-                modificationVariantIds: nextSelections,
-            },
-            reason,
-        );
+        await patchModifications(selections => alreadySelected
+            ? setFoxholeModificationSlotVariantSelection(selections, slot, '')
+            : prepareFoxholeModificationSelection(currentAsset, selections, slot, variant.id), reason);
     } finally {
         pendingSelectionKey.value = null;
     }
@@ -995,7 +1055,7 @@ onBeforeUnmount(() => {
     setActiveNixieStructureModificationHoverPreview(null);
 });
 defineExpose({
-    tierDownActionLabel, tierUpActionLabel, tierDownMutation, tierUpMutation,
+    tierDownActionLabel, tierUpActionLabel, tierDownMutation, tierUpMutation, canEditTiers,
     pendingSelectionKey, selectTierDown, selectTierUp,
     showTierMutationHover, scheduleHideHoverEntry,
 });
@@ -1017,7 +1077,7 @@ defineExpose({
                 preserveLabelCase
                 variant="bare"
                 size="sm"
-                :disabled="!tierDownMutation || !canEdit || pendingSelectionKey !== null"
+                :disabled="!tierDownMutation || !canEditTiers || pendingSelectionKey !== null"
                 @click="selectTierDown"
                 @mouseenter="showTierMutationHover(tierDownMutation)"
                 @focus="showTierMutationHover(tierDownMutation)"
@@ -1032,7 +1092,7 @@ defineExpose({
                 preserveLabelCase
                 variant="bare"
                 size="sm"
-                :disabled="!tierUpMutation || !canEdit || pendingSelectionKey !== null"
+                :disabled="!tierUpMutation || !canEditTiers || pendingSelectionKey !== null"
                 @click="selectTierUp"
                 @mouseenter="showTierMutationHover(tierUpMutation)"
                 @focus="showTierMutationHover(tierUpMutation)"
@@ -1043,7 +1103,7 @@ defineExpose({
 
         <div v-if="hasUpgradeControls" class="foxhole-structure-upgrades">
             <div
-                v-if="relationshipTargets.length > 0 || experimentalModificationGroups.length > 0"
+                v-if="relationshipTargets.length || experimentalModificationGroups.length || unavailableSelections.length"
                 class="foxhole-structure-upgrades__grid"
             >
                 <div
@@ -1055,7 +1115,7 @@ defineExpose({
                         type="button"
                         class="nixie-build-icon"
                         :class="{ 'is-selected': isSelectedRelationshipTarget(target) }"
-                        :disabled="!target.asset || !canEdit || pendingSelectionKey !== null"
+                        :disabled="!target.asset || !canEditTiers || pendingSelectionKey !== null"
                         :aria-pressed="isSelectedRelationshipTarget(target)"
                         :aria-label="getRelationshipTooltipLabel(target)"
                         :title="getRelationshipTooltipLabel(target)"
@@ -1116,6 +1176,17 @@ defineExpose({
                             :entry="getExperimentalGroupHoverEntry(group)!"
                         />
                     </button>
+                </div>
+                <div v-for="entry in unavailableSelections" :key="entry.slotId" class="foxhole-structure-upgrades__unavailable">
+                    <span>Unavailable Choice</span>
+                    <NxIconButton
+                        icon="ph:x"
+                        :label="`Remove Unavailable Choice ${entry.index + 1}`"
+                        variant="bare"
+                        size="sm"
+                        :disabled="!canEditModifications || pendingSelectionKey !== null"
+                        @click="removeUnavailableSelection(entry.slotId)"
+                    />
                 </div>
             </div>
 
@@ -1205,4 +1276,11 @@ defineExpose({
     gap: var(--nx-space-2);
 }
 
+.foxhole-structure-upgrades__unavailable {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--nx-text-muted);
+}
 </style>

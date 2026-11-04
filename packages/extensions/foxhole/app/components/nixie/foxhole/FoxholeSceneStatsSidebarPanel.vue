@@ -1047,7 +1047,7 @@ function scheduleHideDestructionWeaponHover(): void {
             @close="closeExportDialog"
         />
 
-        <div class="scene-stats-panel__body nx-panel-body">
+        <div class="scene-stats-panel__body" :class="{ 'nx-panel-body': activeScope.nodeCount === 0 }">
             <NxEmptyState
                 v-if="activeScope.nodeCount === 0"
                 :message="activeScope.emptyDetail"
@@ -1055,17 +1055,16 @@ function scheduleHideDestructionWeaponHover(): void {
 
             <div
                 v-else
-                class="nixie-sidebar-form"
+                class="nixie-sidebar-form nixie-sidebar-form--tree nixie-sidebar-form--sticky-sections"
             >
                 <NixieSidebarFormSection
                     title="Construction Cost"
                     sectionKey="foxhole.scene-stats.construction-cost"
-                    collapsible
+                    treeLayout
                 >
                     <FoxholeCostBreakdownList
                         v-if="costBreakdownEntries.length > 0"
                         :entries="costBreakdownEntries"
-                        flush
                     />
 
                     <NxEmptyState
@@ -1078,9 +1077,9 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="activeScope.liquidCapacity.total > 0"
                     title="Liquid Capacity"
                     sectionKey="foxhole.scene-stats.liquid-capacity"
-                    collapsible
+                    treeLayout
                 >
-                    <ul class="scene-stats-panel__metric-list scene-stats-panel__metric-list--flush">
+                    <ul class="scene-stats-panel__metric-list">
                         <li class="scene-stats-panel__metric-row scene-stats-panel__metric-row--icon">
                             <span class="scene-stats-panel__metric-icon is-total" aria-hidden="true">
                                 <NxIcon
@@ -1146,9 +1145,9 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="hasFacilityPower"
                     title="Facility Power"
                     sectionKey="foxhole.scene-stats.facility-power"
-                    collapsible
+                    treeLayout
                 >
-                    <ul class="scene-stats-panel__metric-list scene-stats-panel__metric-list--flush">
+                    <ul class="scene-stats-panel__metric-list">
                         <li
                             v-if="activeScope.facilityPower.producedMw > 0"
                             class="scene-stats-panel__metric-row scene-stats-panel__metric-row--icon"
@@ -1201,12 +1200,11 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="activeScope.maintenanceSuppliesPerHour > 0"
                     title="Building Maintenance"
                     sectionKey="foxhole.scene-stats.building-maintenance"
-                    collapsible
+                    treeLayout
                 >
                     <FoxholeCostBreakdownList
                         v-if="maintenanceBreakdownEntries.length > 0"
                         :entries="maintenanceBreakdownEntries"
-                        flush
                     />
                 </NixieSidebarFormSection>
 
@@ -1214,11 +1212,10 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="productionInputEntries.length > 0"
                     title="Production Input"
                     sectionKey="foxhole.scene-stats.production-input"
-                    collapsible
+                    treeLayout
                 >
                     <FoxholeCostBreakdownList
                         :entries="productionInputEntries"
-                        flush
                     />
                 </NixieSidebarFormSection>
 
@@ -1226,12 +1223,11 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="productionOutputEntries.length > 0"
                     title="Production Output"
                     sectionKey="foxhole.scene-stats.production-output"
-                    collapsible
+                    treeLayout
                 >
                     <FoxholeCostBreakdownList
                         :entries="productionOutputEntries"
                         quantityTone="gain"
-                        flush
                     />
                 </NixieSidebarFormSection>
 
@@ -1239,9 +1235,9 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="scopedBunkerHealth"
                     title="Bunker Health"
                     sectionKey="foxhole.scene-stats.bunker-health"
-                    collapsible
+                    treeLayout
                 >
-                    <ul class="scene-stats-panel__metric-list scene-stats-panel__metric-list--flush">
+                    <ul class="scene-stats-panel__metric-list">
                         <li class="scene-stats-panel__metric-row scene-stats-panel__metric-row--icon">
                             <span class="scene-stats-panel__metric-icon is-total" aria-hidden="true">
                                 <NxIcon
@@ -1317,9 +1313,9 @@ function scheduleHideDestructionWeaponHover(): void {
                     v-if="singleBunkerDestruction"
                     title="Bunker Destruction"
                     sectionKey="foxhole.scene-stats.bunker-destruction"
-                    collapsible
+                    treeLayout
                 >
-                    <div class="scene-stats-panel__destruction scene-stats-panel__destruction--flush">
+                    <div class="scene-stats-panel__destruction">
                         <table
                             class="scene-stats-panel__destruction-table"
                             :class="{ 'has-wet-tier': bunkerDestructionShowsWetTier }"
@@ -1407,11 +1403,6 @@ function scheduleHideDestructionWeaponHover(): void {
     min-width: 0;
 }
 
-.scene-stats-panel__metric-list--flush {
-    width: auto;
-    margin: calc(var(--nx-space-2) * -1) calc(var(--nx-space-3) * -1) calc(var(--nx-space-3) * -1);
-}
-
 .scene-stats-panel__metric-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1420,16 +1411,34 @@ function scheduleHideDestructionWeaponHover(): void {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: var(--nx-space-1) var(--nx-space-3);
+    padding: var(--nx-space-1) 0;
     min-height: 28px;
 }
 
-.scene-stats-panel__metric-row--icon {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+.scene-stats-panel__metric-row,
+.scene-stats-panel :deep(.foxhole-cost-breakdown__row) {
+    position: relative;
+    --stats-row-inset: var(--nx-space-2);
+    width: auto;
+    margin-inline: calc(var(--stats-row-inset) / -2);
+    padding-inline: var(--stats-row-inset);
+    border-radius: var(--nx-radius-sm);
 }
 
-.scene-stats-panel__metric-row + .scene-stats-panel__metric-row {
-    border-top: 1px solid var(--nx-border);
+.scene-stats-panel__metric-row + .scene-stats-panel__metric-row,
+.scene-stats-panel :deep(.foxhole-cost-breakdown__row + .foxhole-cost-breakdown__row) {
+    margin-block-start: 1px;
+    border-top: 0;
+}
+
+.scene-stats-panel__metric-row + .scene-stats-panel__metric-row::before,
+.scene-stats-panel :deep(.foxhole-cost-breakdown__row + .foxhole-cost-breakdown__row::before) {
+    content: '';
+    position: absolute;
+    inset-block-start: -1px;
+    inset-inline: var(--stats-row-inset);
+    border-block-start: 1px solid var(--nx-border);
+    pointer-events: none;
 }
 
 .scene-stats-panel__metric-icon {
@@ -1540,11 +1549,6 @@ function scheduleHideDestructionWeaponHover(): void {
     color: var(--nx-danger);
 }
 
-.scene-stats-panel__destruction--flush {
-    width: auto;
-    margin: calc(var(--nx-space-2) * -1) calc(var(--nx-space-3) * -1) calc(var(--nx-space-3) * -1);
-}
-
 .scene-stats-panel__destruction {
     container-type: inline-size;
     container-name: foxhole-scene-stats-destruction;
@@ -1580,7 +1584,7 @@ function scheduleHideDestructionWeaponHover(): void {
 .scene-stats-panel__destruction-table th:first-child,
 .scene-stats-panel__destruction-table td:first-child {
     width: auto;
-    padding-left: var(--nx-space-3);
+    padding-inline-start: var(--nx-space-3);
     text-align: left;
 }
 
@@ -1651,6 +1655,10 @@ function scheduleHideDestructionWeaponHover(): void {
     .scene-stats-panel__destruction-table.has-wet-tier .scene-stats-panel__destruction-icon {
         display: none;
     }
+}
+
+.scene-stats-panel__metric-row--icon {
+    grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .scene-stats-panel :deep(.foxhole-cost-breakdown__quantity) {

@@ -1,3 +1,4 @@
+import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters } from './maintenance-supply.ts';
 import { presentFoxholeCatalogAssets, resolveFoxholeCatalogLocale } from './catalog-presentation.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import type {
@@ -209,7 +210,14 @@ export function listFoxholeSceneV2Products(
                         componentId: 'modification',
                         version: 1,
                         data: { selections: selections ?? [] },
-                    }, ...(metadata.buildSockets.length
+                    }, ...(isFoxholeMaintenanceTunnel(assetId)
+                        ? [{
+                            ownerId: 'nixie.foxhole-planner',
+                            componentId: 'maintenance-supply',
+                            version: 1,
+                            data: { ...normalizeFoxholeMaintenanceFilters(undefined) },
+                        } satisfies NixieExperimentalComponentProductTemplateV1]
+                        : []), ...(metadata.buildSockets.length
                         ? [{
                             ownerId: 'nixie.foxhole-planner',
                             componentId: 'socket-attachments',

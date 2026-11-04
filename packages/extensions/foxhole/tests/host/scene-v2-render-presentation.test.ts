@@ -16,6 +16,7 @@ import {
 import { composeNixieSceneV2RenderPlans, resolveComposedNixieSceneV2RenderNodeLabel } from '../../../../nixie/desktop-extensions/scene-v2-render-plan-composition.ts';
 import { NixieExtensionRenderPlanHost } from '../../../../nixie/app/plugins/nixie/scene-v2/render-plan-host.ts';
 import { NixieSceneV2RenderLanes } from '../../../../nixie/app/plugins/nixie/scene-v2/render-lanes.ts';
+import { foxholeSceneV2StateAdapter } from '../../app/plugins/foxhole/nixie/scene-v2-state-adapter.ts';
 import { DEFAULT_FOXHOLE_RANGE_STATE } from '../../app/plugins/foxhole/nixie/range.ts';
 import { renderFoxholeSceneV2Range, resolveFoxholeRangeSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-ranges.ts';
 import { isFoxholeStructureRangeVisible } from '../../../../../extensions/foxhole-planner/src/structure-range-settings.ts';
@@ -199,10 +200,7 @@ test('connected pipeline retains free side indicators and all-socket occupancy w
     assert.deepEqual({ entity, plan }, original);
 });
 
-test('range presentation replaces SDK measured labels with V1 drawing without dangling measurement references or changing ECS data', async context => {
-    // This tests the presentation boundary without rasterization; browser proof
-    // uses actual font measurement and compares settled native/V2 pixels.
-    context.mock.method(PIXI.CanvasTextMetrics, 'measureText', () => ({ width: 45.8919677734375, height: 24 }));
+test('Scene V2 Range uses SDK presentation, geometry, and inspector state in Studio', () => {
     const range = { ...DEFAULT_FOXHOLE_RANGE_STATE, points: [0, 0, 60, 0], rotation: 0.25 };
     const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'range', revision: 7, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'range', version: 1, definitionAvailable: true, data: { ...range } },
@@ -212,54 +210,12 @@ test('range presentation replaces SDK measured labels with V1 drawing without da
     const plan: NixieExtensionRenderPlanV1 = { schemaVersion: 1,
         experimentalSelectionGeometry: resolveFoxholeRangeSelectionGeometry(range),
         root: { id: 'root', kind: 'group', children: renderFoxholeSceneV2Range(range, 0.25, 1.046810281974576) } };
-    const original = structuredClone({ entity, plan });
-    for (const altered of [
-        { ...entity, components: entity.components.map(component => ({ ...component, ownerId: 'unrelated.owner' })) },
-        { ...entity, components: entity.components.map(component => ({ ...component, version: 2 })) },
-        { ...entity, components: entity.components.map(component => ({ ...component, definitionAvailable: false })) },
-    ]) {
-        assert.equal(prepareFoxholeSceneV2RenderPresentation(altered, plan, 1, {}), null);
-    }
-    const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1.046810281974576, {})!;
-    assert.deepEqual(presentation.plan.experimentalSelectionGeometry, {
-        ...plan.experimentalSelectionGeometry, measuredTextBounds: [],
-    });
-    const bodyPlan = presentation.plan.root.children[0]!;
-    assert.deepEqual(bodyPlan.kind === 'graphics' && bodyPlan.commands, [], 'portable geometry is replaced by Native drawing');
-    const layerPlan = presentation.plan.root.children[1]!;
-    assert.equal(layerPlan.kind, 'group');
-    assert.deepEqual(layerPlan.kind === 'group' && layerPlan.children, [], 'estimated text/background are not materialized');
-    const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });
-    const root = await host.replace(composeNixieSceneV2RenderPlans(null, presentation.plan)!);
-    await applyNixieSceneV2RenderPresentation(presentation, root);
-    const layer = root.getChildByLabel('extension.2', true)!;
-    const label = layer.children[0]!;
-    const text = label.children[1] as PIXI.Text;
-    assert.equal(layer.rotation, -0.25);
-    assert.equal(text.text, '1.9m');
-    assert.equal(text.width, 45.8919677734375);
-    assert.equal(text.height, 24);
-    assert.equal(text.resolution, null, 'retain native automatic resolution instead of imposing the general board-text resolution');
-    assert.equal(label.scale.x, 1.036413207352225);
-    assert.equal(label.children[0]!.getLocalBounds().width, 59.8919677734375);
-    presentation.refresh!(0.5);
-    assert.equal(label.destroyed, true, 'scale changes retire the old measured label');
-    const replacement = layer.children[0]!;
-    assert.equal(replacement.scale.x, 0.5);
-    presentation.refresh!();
-    assert.equal(layer.children[0], replacement, 'color refresh preserves the current full-world scale and measured label');
-    assert.deepEqual({ entity, plan }, original);
-    const world = new PIXI.Container();
-    const lanes = new NixieSceneV2RenderLanes();
-    world.addChild(root);
-    lanes.sync(world, [entity], new Map([[entity.entityId, { entityId: entity.entityId, renderHost: host }]]));
-    const body = root.children[0]!;
-    assert.equal(body.parentRenderLayer === replacement.children[1]!.parentRenderLayer, true, 'the center marker must stay behind the label as in V1');
-    assert.deepEqual(body.parentRenderLayer!.renderLayerChildren.map(child => child.constructor.name), ['Graphics', 'Graphics', 'Text']);
-    lanes.destroy();
-    host.destroy();
-    world.destroy({ children: true });
-    assert.equal(text.destroyed, true);
+    assert.ok(plan.experimentalSelectionGeometry?.measuredTextBounds?.length);
+    assert.equal(prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, {}), null);
+    assert.equal(foxholeSceneV2StateAdapter.project(entity), null);
+    assert.deepEqual(foxholeSceneV2StateAdapter.editableHandles?.(entity), []);
+    assert.equal(foxholeSceneV2StateAdapter.selectionLocalBounds?.(entity, 1), null);
+    assert.equal(foxholeSceneV2StateAdapter.selectionTransformOriginLocal?.(entity), null);
 });
 
 test('tactical presentation retains Native cap order and full-world scaling without materializing duplicate decorations', async () => {

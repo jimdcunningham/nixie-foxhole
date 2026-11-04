@@ -32,6 +32,19 @@ export function resolveFoxholeStockpileSelectionGroups(stockpiles: NativeStockpi
     }));
 }
 
+export function labelFoxholeStockpileGroups(groups: readonly Pick<FoxholeStockpileSelectionGroup, 'key' | 'entryType'>[]): Map<string, string> {
+    const counts = new Map<string, number>();
+    for (const group of groups) {
+        counts.set(group.entryType, (counts.get(group.entryType) ?? 0) + 1);
+    }
+    const positions = new Map<string, number>();
+    return new Map(groups.map(group => {
+        const position = (positions.get(group.entryType) ?? 0) + 1;
+        positions.set(group.entryType, position);
+        return [group.key, (counts.get(group.entryType) ?? 0) > 1 ? `${group.entryType} ${position}` : group.entryType];
+    }));
+}
+
 /** A present empty group intentionally overrides legacy cargo; absence preserves old projects. */
 export function resolveFoxholeStockpileGroupSelection(group: FoxholeStockpileSelectionGroup, selections: unknown, legacy: unknown): string[] {
     const map = selections && typeof selections === 'object' && !Array.isArray(selections) ? selections as Record<string, unknown> : {};

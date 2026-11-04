@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import NxMultiSelect from '#nixie/components/NxMultiSelect.vue';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { getFoxholeItemCatalog, getFoxholeStructureCatalog } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
-import { formatFoxholeStockpileLimits, resolveFoxholeStockpileGroupSelection, resolveFoxholeStockpileOptions } from '#foxhole/plugins/foxhole/nixie/stockpile-groups.ts';
+import { formatFoxholeStockpileLimits, labelFoxholeStockpileGroups, resolveFoxholeStockpileGroupSelection, resolveFoxholeStockpileOptions } from '#foxhole/plugins/foxhole/nixie/stockpile-groups.ts';
 import type { FoxholeStockpileSelectionGroup } from '#foxhole/plugins/foxhole/nixie/stockpile-groups.ts';
 import type { FoxholeStructureState } from '#foxhole/plugins/foxhole/nixie/types.ts';
 import type { NixieInspectorContributionNode } from '#nixie/plugins/nixie/registry/index.ts';
@@ -15,22 +15,23 @@ const props = defineProps<{
     node: NixieInspectorContributionNode<Record<string, unknown>>;
     canEdit: boolean;
     patchNode: (patch: Record<string, unknown>, reason: string) => void | Promise<void>;
-    patchNodeById?: (nodeId: string, patch: Record<string, unknown>, reason: string) => void | Promise<void>;
+    patchEntities?: (edits: readonly { id: string; patch: Record<string, unknown>; }[]) => void | Promise<void>;
     showAsset: (entry: NixieResolvedAssetEntry) => void;
     hideAsset: () => void;
 }>();
 const { assetBaseUrl, t } = useFoxholeLocalization();
 const runtime = useNixieRuntime();
-const editable = computed(() => props.canEdit && (props.node.targetIds.length === 1 || Boolean(props.patchNodeById)));
+const editable = computed(() => props.canEdit && (props.node.targetIds.length === 1 || Boolean(props.patchEntities)));
 function liveState(id: string): Partial<FoxholeStructureState> {
     const scene = runtime.projectStore.scene;
     void scene?.revision.value;
-    return (scene?.getNodeById(id)?.boardState ?? props.node.snapshots.find(snapshot => snapshot.id === id)?.state
+    return (scene?.getNodeById(id)?.boardState ?? props.node.snapshots.find(snapshot => String(snapshot.id) === id)?.state
         ?? props.node.snapshot.state ?? {}) as Partial<FoxholeStructureState>;
 }
 const rows = computed(() => {
     const items = getFoxholeItemCatalog(assetBaseUrl.value);
     const structures = getFoxholeStructureCatalog(assetBaseUrl.value);
+    const labels = labelFoxholeStockpileGroups(props.groups);
     return props.groups.map(group => {
         const options = resolveFoxholeStockpileOptions(group, items.assets, structures.assets, asset => t(asset.nameLocalizationId, asset.name));
         const selections = props.node.targetIds.map(id => {
@@ -38,19 +39,20 @@ const rows = computed(() => {
             return resolveFoxholeStockpileGroupSelection(group, state.markedStockpileItems, state.markedItemCodenames);
         });
         const selected = selections.every(value => JSON.stringify(value) === JSON.stringify(selections[0])) ? selections[0] ?? [] : [];
-        return { group, options, selected };
+        return { group, label: labels.get(group.key), options, selected };
     });
 });
 async function updateGroup(group: FoxholeStockpileSelectionGroup, value: string[]): Promise<void> {
-    if (!editable.value) return;
-    for (const id of props.node.targetIds) {
+    const selected = rows.value.find(row => row.group.key === group.key)?.selected;
+    if (!editable.value || !selected || JSON.stringify(value) === JSON.stringify(selected)) return;
+    const edits = props.node.targetIds.map(id => {
         const state = liveState(id);
         const markedStockpileItems = { ...(state.markedStockpileItems ?? {}), [group.key]: value };
         markedStockpileItems[group.key] = resolveFoxholeStockpileGroupSelection(group, markedStockpileItems, []);
-        const patch = { markedStockpileItems };
-        if (props.node.targetIds.length > 1 && props.patchNodeById) await props.patchNodeById(id, patch, 'inspector:foxhole-stockpile-cargo');
-        else await props.patchNode(patch, 'inspector:foxhole-stockpile-cargo');
-    }
+        return { id, patch: { markedStockpileItems } };
+    });
+    if (edits.length > 1) await props.patchEntities?.(edits);
+    else if (edits[0]) await props.patchNode(edits[0].patch, 'inspector:foxhole-stockpile-cargo');
 }
 type Option = ReturnType<typeof resolveFoxholeStockpileOptions>[number];
 function icon(option: Option): string {
@@ -66,8 +68,8 @@ function show(option: Option): void {
 
 <template>
     <div class="foxhole-stockpile-groups">
-        <div v-for="row in rows" :key="row.group.key" role="group" :aria-label="row.group.label" class="foxhole-stockpile-groups__group">
-            <h4>{{ row.group.label }}</h4>
+        <div v-for="row in rows" :key="row.group.key" role="group" :aria-label="row.label" class="foxhole-stockpile-groups__group">
+            <h4>{{ row.label }}</h4>
             <NxMultiSelect
                 :modelValue="row.selected"
                 :options="row.options"
@@ -99,7 +101,7 @@ function show(option: Option): void {
 .foxhole-stockpile-groups, .foxhole-stockpile-groups__group { display: grid; gap: var(--nx-space-2); }
 .foxhole-stockpile-groups { gap: var(--nx-space-4); }
 h4 { margin: 0; font-size: inherit; font-weight: 500; }
-p { margin: 0; }
+p { margin: 0; text-align: center; }
 .foxhole-stockpile-groups__selected { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: var(--nx-space-2); }
 .foxhole-stockpile-groups__selected img { width: 100%; height: 100%; object-fit: contain; }
 </style>

@@ -18,6 +18,7 @@ const props = defineProps<{
     canEdit: boolean;
     effectiveLocked: boolean;
     patchNode: (patch: Record<string, unknown>, reason: string) => void | Promise<void>;
+    patchEntities?: (edits: readonly { id: string; patch: Record<string, unknown>; }[]) => void | Promise<void>;
 }>();
 const rangeInputId = `foxhole-maintenance-range-${useId()}`;
 const runtime = useNixieRuntime();
@@ -25,7 +26,10 @@ const session = useNixieEditorDocumentSessionOptional();
 const { assetBaseUrl, t } = useFoxholeLocalization();
 const catalog = computed(() => getFoxholeStructureCatalog(assetBaseUrl.value));
 const supplyItem = computed(() => getFoxholeItemCatalog(assetBaseUrl.value).assetByKey.maintenancesupplies);
-const filters = computed(() => normalizeFoxholeMaintenanceFilters(props.node.snapshot.state.maintenanceFilters));
+const batch = computed(() => props.patchEntities && props.node.targetIds.length > 1 ? props.patchEntities : undefined);
+const filters = computed(() => normalizeFoxholeMaintenanceFilters(
+    (batch.value ? props.node.snapshots[0] ?? props.node.snapshot : props.node.snapshot).state.maintenanceFilters,
+));
 const supplyAvailable = computed(() => {
     void session?.sceneV2Editor.value?.revision;
     return !session?.isSceneV2Active.value
@@ -44,18 +48,33 @@ const mixedCategories = computed(() => props.node.snapshots.some(snapshot =>
     JSON.stringify(normalizeFoxholeMaintenanceFilters(snapshot.state.maintenanceFilters).exclusions.slice().sort())
     !== JSON.stringify(filters.value.exclusions.slice().sort())));
 
+function patchFilters(change: Partial<ReturnType<typeof normalizeFoxholeMaintenanceFilters>>, reason: string): void {
+    const patchEntities = batch.value;
+    if (patchEntities) {
+        const snapshots = new Map(props.node.snapshots.map(snapshot => [String(snapshot.id), snapshot]));
+        const edits = props.node.targetIds.flatMap(id => {
+            const snapshot = snapshots.get(id);
+            if (!snapshot) return [];
+            const current = normalizeFoxholeMaintenanceFilters(snapshot.state.maintenanceFilters);
+            return [{ id, patch: { maintenanceFilters: normalizeFoxholeMaintenanceFilters({ ...current, ...change }) } }];
+        });
+        if (edits.length === props.node.targetIds.length) void patchEntities(edits);
+        return;
+    }
+    void props.patchNode({ maintenanceFilters: normalizeFoxholeMaintenanceFilters({ ...filters.value, ...change }) }, reason);
+}
+
 function setRange(range: number | null): void {
     if (disabled.value || range === null) {
         return;
     }
-    void props.patchNode({ maintenanceFilters: normalizeFoxholeMaintenanceFilters({ ...filters.value, range }) }, 'inspector:foxhole-maintenance-range');
+    patchFilters({ range }, 'inspector:foxhole-maintenance-range');
 }
 function setCategories(ids: string[]): void {
     if (disabled.value) {
         return;
     }
-    void props.patchNode({ maintenanceFilters: { ...filters.value,
-        exclusions: FOXHOLE_MAINTENANCE_CATEGORIES.filter(key => !ids.includes(key)) } }, 'inspector:foxhole-maintenance-categories');
+    patchFilters({ exclusions: FOXHOLE_MAINTENANCE_CATEGORIES.filter(key => !ids.includes(key)) }, 'inspector:foxhole-maintenance-categories');
 }
 const coverage = computed(() => {
     if (props.node.targetIds.length !== 1) {

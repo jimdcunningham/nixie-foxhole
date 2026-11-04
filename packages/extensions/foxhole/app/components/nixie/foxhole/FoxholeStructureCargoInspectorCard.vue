@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount } from 'vue';
+import { computed, onBeforeUnmount, watch } from 'vue';
 import FoxholeStockpileGroupsInspector from './FoxholeStockpileGroupsInspector.vue';
 import { resolveFoxholeStockpileSelectionGroups } from '#foxhole/plugins/foxhole/nixie/stockpile-groups.ts';
 import NxButton from '#nixie/components/NxButton.vue';
@@ -8,6 +8,10 @@ import NxNumberInput from '#nixie/components/NxNumberInput.vue';
 import NixieAssetIncompleteBadge from '#nixie/components/nixie/NixieAssetIncompleteBadge.vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
+import { useNixieEditorDocumentSessionOptional } from '#nixie/composables/useNixieEditorDocumentSession.ts';
+import { useNixieSceneV2DevelopmentPreviewAccess } from '#nixie/composables/useNixieSceneV2DevelopmentPreviewAccess.ts';
+import { sceneV2DevelopmentPreviews } from '#nixie/utils/nixie-scene-v2-development-preview.ts';
+import { useNixieSceneV2ExtensionCatalog } from '#nixie-internal/desktop-extensions/scene-v2-extension-catalog.ts';
 import { useNixieSidebarAssetHoverCard } from '#nixie/composables/useNixieSidebarAssetHoverCard.ts';
 import {
     getFoxholeItemCatalog,
@@ -47,7 +51,6 @@ import type {
 } from '#nixie/plugins/nixie/registry/index.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 
-const showDevCargoOverlayControls = import.meta.dev;
 const { devOverridesByFoxholeKey } = useFoxholeMarkedCargoOverlayDevOverrides();
 
 const props = defineProps<{
@@ -56,7 +59,7 @@ const props = defineProps<{
     canEdit: boolean;
     effectiveLocked: boolean;
     patchNode: (patch: Record<string, unknown>, reason: string) => void | Promise<void>;
-    patchNodeById?: (nodeId: string, patch: Record<string, unknown>, reason: string) => void | Promise<void>;
+    patchEntities?: (edits: readonly { id: string; patch: Record<string, unknown>; }[]) => void | Promise<void>;
 }>();
 
 defineEmits<{
@@ -69,6 +72,22 @@ defineOptions({
 
 const { assetBaseUrl, t } = useFoxholeLocalization();
 const runtime = useNixieRuntime();
+const session = useNixieEditorDocumentSessionOptional();
+const route = useRoute();
+const extensions = useNixieSceneV2ExtensionCatalog();
+const previewOwnerId = 'nixie.foxhole-planner';
+const previewToken = Symbol('bundled-storage-offset');
+const sceneV2Active = computed(() => session?.isSceneV2Active.value === true);
+const controller = computed(() => session?.sceneV2Editor.value?.controller);
+const previewGeneration = computed(() => extensions.value.find(extension => extension.ownerId === previewOwnerId)?.generationHash);
+const previewEntityId = computed(() => props.node.targetIds.length === 1 ? props.node.targetIds[0] : undefined);
+const { canPreview } = useNixieSceneV2DevelopmentPreviewAccess();
+const showDevCargoOverlayControls = computed(() => sceneV2Active.value
+    ? Boolean(controller.value && previewGeneration.value && previewEntityId.value && canPreview(previewOwnerId, previewGeneration.value))
+    : import.meta.dev);
+const preview = computed(() => sceneV2DevelopmentPreviews.get(previewToken));
+watch([() => route.params.projectId, controller, () => controller.value?.documentGeneration, previewGeneration, previewEntityId, sceneV2Active, showDevCargoOverlayControls],
+    () => sceneV2DevelopmentPreviews.delete(previewToken), { flush: 'sync' });
 const runtimeConfig = useRuntimeConfig();
 const settingsStore = useNixieSettingsStore();
 const sidebarAssetHoverCard = useNixieSidebarAssetHoverCard();
@@ -215,10 +234,10 @@ function resolveLiveMarkedItemCodenamesForTargets(): string[] {
 
     void scene.revision.value;
     const selections = props.node.targetIds.map(nodeId => {
-        const node = scene.getNodeById(nodeId);
-        return normalizeMarkedItemCodenames(
-            (node?.boardState as Partial<FoxholeStructureState> | undefined)?.markedItemCodenames,
-        );
+        const currentState = scene.getNodeById(nodeId)?.boardState
+            ?? props.node.snapshots.find(snapshot => String(snapshot.id) === nodeId)?.state
+            ?? props.node.snapshot.state;
+        return normalizeMarkedItemCodenames((currentState as Partial<FoxholeStructureState>)?.markedItemCodenames);
     });
 
     if (!selections.length) {
@@ -323,32 +342,47 @@ function getSelectedItemLabel(codename: string): string {
 
 void devOverridesByFoxholeKey;
 
-const effectiveMarkedCargoOffset = computed(() => resolveFoxholeMarkedCargoOverlayLocalOffset({
-    foxholeKey: foxholeKey.value,
-    manifestOverlay: manifestMarkedCargoOverlay.value,
-}));
+const effectiveMarkedCargoOffset = computed(() => {
+    const offset = resolveFoxholeMarkedCargoOverlayLocalOffset({
+        foxholeKey: sceneV2Active.value ? undefined : foxholeKey.value,
+        manifestOverlay: manifestMarkedCargoOverlay.value,
+    });
+    return {
+        x: preview.value?.data.cargoOffsetX ?? offset.x,
+        y: preview.value?.data.cargoOffsetY ?? offset.y,
+    };
+});
 
-const devMarkedCargoOverlay = computed(() => getFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value));
-
+const devMarkedCargoOverlay = computed(() => sceneV2Active.value ? preview.value : getFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value));
 const cargoOverlayOverridePrompt = computed(() => formatMarkedCargoOverlayOverridePrompt(
     foxholeKey.value,
     effectiveMarkedCargoOffset.value,
 ));
 
-function updateDevMarkedCargoOffsetX(value: number): void {
-    setFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value, { offsetX: value });
-}
-
-function updateDevMarkedCargoOffsetY(value: number): void {
-    setFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value, { offsetY: value });
+function updateDevMarkedCargoOffset(axis: 'offsetX' | 'offsetY', value: number | null): void {
+    if (!showDevCargoOverlayControls.value || value === null || !Number.isFinite(value)) return;
+    if (!sceneV2Active.value) {
+        setFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value, { [axis]: value });
+        return;
+    }
+    const entityId = previewEntityId.value;
+    const generation = previewGeneration.value;
+    const document = controller.value?.documentGeneration;
+    if (!entityId || !generation || document === undefined || Math.abs(value) > 10000) return;
+    const key = axis === 'offsetX' ? 'cargoOffsetX' : 'cargoOffsetY';
+    sceneV2DevelopmentPreviews.set(previewToken, {
+        project: String(route.params.projectId ?? ''), document, entityId,
+        ownerId: previewOwnerId, generation, componentId: 'cargo', data: { ...preview.value?.data, [key]: value },
+    });
 }
 
 function resetDevMarkedCargoOverlay(): void {
-    setFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value, null);
+    if (sceneV2Active.value) sceneV2DevelopmentPreviews.delete(previewToken);
+    else setFoxholeMarkedCargoOverlayDevOverride(foxholeKey.value, null);
 }
 
 async function copyCargoOverlayOverridePrompt(): Promise<void> {
-    if (!import.meta.client || !navigator?.clipboard?.writeText) {
+    if (!showDevCargoOverlayControls.value || !import.meta.client || !navigator?.clipboard?.writeText) {
         return;
     }
 
@@ -356,6 +390,7 @@ async function copyCargoOverlayOverridePrompt(): Promise<void> {
 }
 
 onBeforeUnmount(() => {
+    sceneV2DevelopmentPreviews.delete(previewToken);
     sidebarAssetHoverCard?.hideAsset();
 });
 </script>
@@ -381,7 +416,7 @@ onBeforeUnmount(() => {
             :node="node"
             :canEdit="canEdit"
             :patchNode="patchNode"
-            :patchNodeById="patchNodeById"
+            :patchEntities="patchEntities"
             :showAsset="showStockpileAsset"
             :hideAsset="scheduleHideSelectedItemHoverCard"
         />
@@ -454,7 +489,7 @@ onBeforeUnmount(() => {
                         label="X"
                         suffix="px"
                         :step="1"
-                        @update:model-value="updateDevMarkedCargoOffsetX"
+                        @update:model-value="updateDevMarkedCargoOffset('offsetX', $event)"
                     />
                     <NxNumberInput
                         :modelValue="effectiveMarkedCargoOffset.y"
@@ -462,7 +497,7 @@ onBeforeUnmount(() => {
                         label="Y"
                         suffix="px"
                         :step="1"
-                        @update:model-value="updateDevMarkedCargoOffsetY"
+                        @update:model-value="updateDevMarkedCargoOffset('offsetY', $event)"
                     />
                 </div>
             </div>

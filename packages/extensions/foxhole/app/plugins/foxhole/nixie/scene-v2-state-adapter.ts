@@ -4,9 +4,6 @@ import { resolveFoxholeSceneV2RenderPreview } from './scene-v2-inspector-preview
 import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2StateAdapter, NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { convertFoxholeSceneV1NodeToV2 } from './scene-v2-conversion.ts';
-import { getFoxholeRangeMetrics, resolveFoxholeRangeState, normalizeFoxholeRangeState } from './range.ts';
-import type { FoxholeRangeState } from './range.ts';
-import { getFoxholeRangeSelectionLocalBounds } from '../../nixie/board/types/foxhole-range.ts';
 import { getPolylineEditableLocalHandles, movePolylineLocalVertex } from '#nixie/plugins/nixie/board/utils/polyline-editing.ts';
 import { getFoxholeTriangulationFit, resolveFoxholeTriangulationState } from './triangulation.ts';
 import type { FoxholeTriangulationState } from './triangulation.ts';
@@ -20,6 +17,8 @@ import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeStockpileSelectionGroups, stockpileEntriesToSelections } from './stockpile-groups.ts';
 import { reconcileFoxholeAssetCargoPatch } from './hold-profile.ts';
 import { getFoxholeStructureCatalog } from './catalog.ts';
+import { getFoxholeLegacyStructureCatalog } from './legacy-asset-catalog.ts';
+import { resolveFoxholeStructureTierMutation } from './structure-tier-actions.ts';
 import { getFoxholeSelectedModificationSlotVariants, normalizeFoxholeModificationSelectionMap } from './modification-slots.ts';
 import { isStructureReplacementModificationVariant } from './structure-modification-hover-preview.ts';
 import { resolveFoxholeStructureDimensions, resolveFoxholeStructureSpriteOffset, FOXHOLE_BOARD_SPRITE_SCALE } from './structure-dimensions.ts';
@@ -39,7 +38,6 @@ import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters } from '
 const OWNER = 'nixie.foxhole-planner';
 const NODE_COMPONENTS = {
     'tactical-line': 'foxholeTacticalLine',
-    'range': 'foxholeRange',
     'binocular-line': 'foxholeBinocularLine',
     'triangulation': 'foxholeTriangulation',
     'connector': 'foxholeConnector',
@@ -51,11 +49,6 @@ function data(entity: NixieExperimentalComponentEntitySnapshotV1, id: string) {
 }
 
 function editablePoints(entity: NixieExperimentalComponentEntitySnapshotV1) {
-    const range = data(entity, 'range');
-    if (range) {
-        return { field: 'points', points: resolveFoxholeRangeState(range as Partial<FoxholeRangeState>).points,
-            range, options: { canDeleteVertex: () => false } };
-    }
     for (const id of ['tactical-line', 'binocular-line']) {
         const line = data(entity, id);
         if (line && Array.isArray(line.points)) {
@@ -388,7 +381,7 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         const source = editablePoints(entity);
         return source ? getPolylineEditableLocalHandles(source.points, source.options) : [];
     },
-    editableHandlePatch(entity, handleId, localPoint, committed, context) {
+    editableHandlePatch(entity, handleId, localPoint, _committed, context) {
         const spline = editableSpline(entity);
         if (spline && (handleId === 'start' || handleId === 'end')) {
             const { state, pathStyle } = spline;
@@ -420,17 +413,7 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         if (!points || (source.triangulation && !getFoxholeTriangulationFit({ ...source.triangulation, edgePoints: points }))) {
             return null;
         }
-        if (!committed || !source.range) {
-            return { [source.field]: points };
-        }
-        const transform = entity.components.find(component => component.ownerId === 'nixie.core'
-            && component.componentId === 'transform' && component.definitionAvailable)?.data;
-        if (!transform) {
-            return null;
-        }
-        // V1 reanchors points when serializing the accepted edit.
-        const normalized = normalizeFoxholeRangeState({ ...source.range, ...transform, points } as Partial<FoxholeRangeState>);
-        return { points: normalized.points, x: normalized.x, y: normalized.y };
+        return { [source.field]: points };
     },
     selectionLocalQuad(entity) {
         const spline = editableSpline(entity);
@@ -469,10 +452,6 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
                     : { ...dimensions, anchorX: Number(state.anchorX), anchorY: Number(state.anchorY), offsetX: offset.x, offsetY: offset.y },
                 pixelsPerUnit: 32 })?.bounds ?? null;
         }
-        const range = data(entity, 'range');
-        if (range) {
-            return getFoxholeRangeSelectionLocalBounds(resolveFoxholeRangeState(range as Partial<FoxholeRangeState>), renderScale);
-        }
         const triangulation = data(entity, 'triangulation');
         if (!triangulation) {
             return null;
@@ -490,17 +469,32 @@ export const foxholeSceneV2StateAdapter: NixieSceneV2StateAdapter = {
         if (data(entity, 'asset')?.catalogId === 'foxhole.structures') {
             return { x: 0, y: 0 };
         }
-        const range = data(entity, 'range');
-        if (!range) {
-            return null;
-        }
-        const metrics = getFoxholeRangeMetrics(resolveFoxholeRangeState(range as Partial<FoxholeRangeState>));
-        return { x: metrics.centerX, y: metrics.centerY };
+        return null;
     },
     requestsTransformGizmo(entity) {
         return data(entity, 'asset')?.catalogId === 'foxhole.structures';
     },
     project,
+    inspectorHeaderActions(entity) {
+        const projected = project(entity);
+        if (projected?.type !== 'foxholeAsset') {
+            return [];
+        }
+        const catalog = getFoxholeLegacyStructureCatalog();
+        const available = projected.state.destroyed !== true && projected.state.packaged !== true;
+        return (['down', 'up'] as const).map(direction => {
+            const mutation = available ? resolveFoxholeStructureTierMutation(catalog, projected.state, direction) : null;
+            const down = direction === 'down';
+            return {
+                id: direction,
+                icon: down ? 'ph:arrow-down' : 'ph:arrow-up',
+                label: mutation
+                    ? `Tier ${down ? 'Down' : 'Up'} to ${mutation.targetAsset.name}`
+                    : `No ${down ? 'lower' : 'higher'} tier available`,
+                patch: mutation?.patch,
+            };
+        });
+    },
     patch(entity, patch) {
         const projected = project(entity);
         if (!projected || !Object.keys(patch).length || projected.type === 'nixieIcon') {

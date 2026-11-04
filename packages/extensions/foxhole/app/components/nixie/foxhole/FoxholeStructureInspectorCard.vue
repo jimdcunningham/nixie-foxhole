@@ -58,6 +58,7 @@ const props = defineProps<{
     canEdit: boolean;
     effectiveLocked: boolean;
     patchNode: (patch: Record<string, unknown>, reason: string) => void | Promise<void>;
+    patchEntities?: (edits: readonly { id: string; patch: Record<string, unknown>; }[]) => void | Promise<void>;
 }>();
 
 const upgradesCard = ref<InstanceType<typeof FoxholeStructureUpgradesInspectorCard> | null>(null);
@@ -1111,7 +1112,7 @@ watch(() => props.node.snapshot.id, () => {
                 preserveLabelCase
                 variant="bare"
                 size="sm"
-                :disabled="!upgradesCard?.tierDownMutation || !canEdit || upgradesCard?.pendingSelectionKey != null"
+                :disabled="!upgradesCard?.tierDownMutation || !upgradesCard?.canEditTiers || upgradesCard?.pendingSelectionKey != null"
                 @click="upgradesCard?.selectTierDown()"
                 @mouseenter="upgradesCard?.showTierMutationHover(upgradesCard.tierDownMutation)"
                 @focus="upgradesCard?.showTierMutationHover(upgradesCard.tierDownMutation)"
@@ -1126,7 +1127,7 @@ watch(() => props.node.snapshot.id, () => {
                 preserveLabelCase
                 variant="bare"
                 size="sm"
-                :disabled="!upgradesCard?.tierUpMutation || !canEdit || upgradesCard?.pendingSelectionKey != null"
+                :disabled="!upgradesCard?.tierUpMutation || !upgradesCard?.canEditTiers || upgradesCard?.pendingSelectionKey != null"
                 @click="upgradesCard?.selectTierUp()"
                 @mouseenter="upgradesCard?.showTierMutationHover(upgradesCard.tierUpMutation)"
                 @focus="upgradesCard?.showTierMutationHover(upgradesCard.tierUpMutation)"

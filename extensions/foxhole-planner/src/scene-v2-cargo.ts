@@ -144,6 +144,7 @@ function renderOverlayCells(options: {
 
 export function renderFoxholeSceneV2Cargo(options: {
     cargoData: Record<string, unknown> | undefined;
+    developmentPreview?: Record<string, number>;
     productionData: Record<string, unknown> | undefined;
     productionOutputsByRecipeId: Readonly<Record<string, readonly string[]>>;
     asset: FoxholeSceneV2AssetMetadata;
@@ -226,8 +227,8 @@ export function renderFoxholeSceneV2Cargo(options: {
         kind: 'group',
         laneId: 'overlay',
         laneOrder: 1000,
-        x: options.asset.cargo?.offsetX ?? 0,
-        y: options.asset.cargo?.offsetY ?? 0,
+        x: options.developmentPreview?.cargoOffsetX ?? options.asset.cargo?.offsetX ?? 0,
+        y: options.developmentPreview?.cargoOffsetY ?? options.asset.cargo?.offsetY ?? 0,
         rotation: -options.rotation,
         experimentalPresentation: { contractVersion: 1, worldUpright: true },
         children,

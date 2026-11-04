@@ -9,13 +9,14 @@ import assets from '#foxhole-scene-v2-assets';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
 const provider = manifest.contributes.experimentalInspectorProviders![0]!;
-function inspect(assetId: string, overrides: Record<string, Record<string, unknown>> = {}) {
+function inspect(assetId: string, overrides: Record<string, Record<string, unknown>> = {}, faction?: string) {
     const data = { 'asset': { catalogId: 'foxhole.structures', assetId }, 'appearance': {}, 'modification': { selections: [] },
         'cargo': { items: [] }, 'production-order': { orders: [] }, 'socket-attachments': { attachments: [] }, ...overrides };
     const subject = { entityId: 'fixture', revision: 1, components: Object.entries(data).map(([componentId, value]) => ({
         ownerId: manifest.id, componentId, version: 1, definitionAvailable: true, data: value,
     })) };
     const request = projectNixieExperimentalInspectorSubjectV1(subject as Parameters<typeof projectNixieExperimentalInspectorSubjectV1>[0], manifest.id, provider);
+    if (faction) request.settings = { 'foxhole.assets.filter.faction': faction };
     const result = inspectFoxholeSceneV2Structure(request);
     validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
     return result;
@@ -50,7 +51,8 @@ test('firing ports and infrastructure exclude only their own wall in either sele
                 const sameWall = infra.linkedSocketNames!.some(name => wall.linkedSocketNames!.includes(name));
                 assert.equal(includes(choices(wallId, 'firingport'), infraId, 'kitchen'), !sameWall);
                 assert.equal(includes(choices(infraId, 'kitchen'), wallId, 'firingport'), !sameWall);
-                assert.ok(includes(choices(infraId, 'kitchen'), wallId, 'door'));
+                const baseline = inspect(assetId).components.find(component => component.componentId === 'modification')!.fields[0]!.choices!.options;
+                assert.equal(includes(choices(infraId, 'kitchen'), wallId, 'door'), includes(baseline, wallId, 'door'));
             }
         }
     }
@@ -73,10 +75,21 @@ test('Bowhead storage exposes all five typed groups and native limits through th
     assert.equal(field.hidden, false);
     assert.equal(field.choices?.options.length, 34);
     assert.equal(new Set(field.choices!.options.map(option => (option.value as Record<string, string>).groupKey)).size, 5);
-    assert.match(field.description!, /30,000/u);
-    assert.match(field.description!, /32,500/u);
-    assert.ok(!field.description!.includes('95,000'));
-    assert.ok(field.choices!.options.some(option => option.label.includes('Scrap Hauler')));
+    const groups = field.choices!.groupedSelection!.groups;
+    assert.deepEqual(groups.map(group => group.label), ['Vehicles', 'Structures', 'Items 1', 'Items 2', 'Items 3']);
+    const hints = groups.map(group => group.hint).join(' ');
+    assert.match(hints, /30,000/u);
+    assert.match(hints, /32,500/u);
+    assert.ok(!hints.includes('95,000'));
+    const hauler = field.choices!.options.find(option => option.label.includes('Scrap Hauler'))!;
+    assert.ok(hauler.image);
+    const codename = (hauler.value as Record<string, string>).codename!;
+    const legacy = inspect('largeshipresourceship', { cargo: { items: [codename] } }).components.find(component => component.componentId === 'cargo')!;
+    assert.equal(legacy.fields[0]?.hidden, true);
+    const legacyOptions = legacy.fields[1]!.choices!.options;
+    assert.ok(legacyOptions.some(option => option.initiallySelected && option.label === hauler.label));
+    const explicit = inspect('largeshipresourceship', { cargo: { items: [codename], stockpileItems: [] } });
+    assert.ok(explicit.components.find(component => component.componentId === 'cargo')!.fields[1]!.choices!.options.every(option => !option.initiallySelected));
 });
 
 test('modification choices are paired and unique per slot; recipes follow selected variants', () => {
@@ -86,11 +99,24 @@ test('modification choices are paired and unique per slot; recipes follow select
     const upgrade = modifications.options.find(option => typeof option.value === 'object' && option.value !== null
         && option.value.variantId === 'tripodfactory')!;
     assert.ok(upgrade);
+    const draftRecipes = before.components.find(component => component.componentId === 'production-order')!.fields[0]!.choices!;
+    const upgradeRecipe = draftRecipes.options.find(option => typeof option.value === 'object' && option.value !== null
+        && typeof option.value.recipeId === 'string' && option.value.recipeId.includes(':tripodfactory:'))!;
+    assert.ok(upgradeRecipe.actionId);
+    const action = before.layout!.actions!.find(candidate => candidate.id === upgradeRecipe.actionId);
+    assert.deepEqual(action?.collection, { componentId: 'production-order', propertyId: 'orders' });
+    assert.deepEqual(action?.patches, [{ componentId: 'modification', set: { selections: [upgrade.value] } }]);
     const after = inspect('facilityfactoryammo', { modification: { selections: [upgrade.value] } });
     const recipes = after.components.find(component => component.componentId === 'production-order')!.fields[0]!.choices!;
     assert.ok(recipes.options.some(option => typeof option.value === 'object' && option.value !== null
         && typeof option.value.recipeId === 'string' && option.value.recipeId.includes(':tripodfactory:')));
     assert.ok(recipes.options.some(option => typeof option.value === 'object' && option.value !== null && option.value.parent === true));
+});
+
+test('production lists base recipes first and inherits operating power for Forge recipes', () => {
+    const options = inspect('facilityrefinery1').components.find(component => component.componentId === 'production-order')!.fields[0]!.choices!.options;
+    assert.equal(options[0]!.details!.group, 'Base Facility');
+    assert.equal(options.find(option => option.details?.group === 'Forge')?.details?.metrics?.find(metric => metric.label === 'Power')?.value, -2);
 });
 
 test('appearance offers only published variants and atomic valid state combinations', () => {
@@ -162,3 +188,29 @@ for (const id of ['engineroomt2', 'engineroomt3']) {
         assert.ok(has('RightFortStairsModSlot', 'stairs'));
     });
 }
+
+test('assembly picker filters by faction without losing details for previously saved recipes', () => {
+    const options = (faction: string) => inspect('facilityvehiclefactory1', {}, faction).components
+        .find(component => component.componentId === 'production-order')!.fields[0]!.choices!.options;
+    const find = (faction: string, name: string) => options(faction).find(choice => choice.label.includes(name))?.details;
+    const warden = 'Dunne Leatherback';
+    const colonial = 'Salva';
+    assert.equal(find('all', warden)?.omitFromPicker, undefined);
+    assert.equal(find('c', warden)?.omitFromPicker, true);
+    assert.equal(find('c', warden)?.sections?.length, 2);
+    assert.equal(find('w', warden)?.omitFromPicker, undefined);
+    assert.equal(find('c', colonial)?.omitFromPicker, undefined);
+    assert.equal(find('w', colonial)?.omitFromPicker, true);
+    assert.equal(find('c', 'Material Pallet')?.omitFromPicker, undefined);
+});
+
+test('assembly recipe previews retain catalog punctuation and distinguish crates', () => {
+    const choices = (id: string) => inspect(id).components
+        .find(component => component.componentId === 'production-order')!.fields[0]!.choices!.options;
+    const bluefin = choices('facilityvehiclefactory3').find(option => option.label === 'BMS - Bluefin');
+    assert.ok(bluefin?.details?.sections?.find(section => section.title === 'Outputs')?.rows
+        .some(row => row.label === 'BMS - Bluefin' && row.unit === undefined));
+    const aircraft = choices('facilityvehiclefactory2').find(option => option.label === 'Daimon aK-5 “Harpy”');
+    assert.ok(aircraft?.details?.sections?.find(section => section.title === 'Outputs')?.rows
+        .some(row => row.label === 'Daimon aK-5 “Harpy” (Crate)' && row.unit === 'crates'));
+});

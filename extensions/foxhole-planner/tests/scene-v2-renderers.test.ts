@@ -550,7 +550,7 @@ test('applies blueprint and custom appearance through bounded static render tran
 });
 
 test('renders persisted marked cargo as upright bounded item-icon tiles', () => {
-    const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
+    const entity: Parameters<typeof renderFoxholeSceneV2Entity>[0] = {
         entityId: 'cargo-1',
         revision: 1,
         components: [{
@@ -572,7 +572,15 @@ test('renders persisted marked cargo as upright bounded item-icon tiles', () => 
             definitionAvailable: true,
             data: { x: 0, y: 0, rotation: 0.4, scaleX: 1, scaleY: 1 },
         }],
+    };
+    const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity));
+    const preview = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, {
+        contractVersion: 1, entities: [], developmentPreview: { cargoOffsetX: 80, cargoOffsetY: -30 },
     }));
+    const previewCargo = preview.root.children.find(node => node.id === 'marked-cargo');
+    assert.equal(previewCargo?.x, 80);
+    assert.equal(previewCargo?.y, -30);
+    assert.deepEqual(entity.components[1]?.data, { items: ['Diesel', 'Petrol'] });
 
     const cargo = plan.root.children.find(node => node.id === 'marked-cargo');
     assert.equal(cargo?.kind, 'group');

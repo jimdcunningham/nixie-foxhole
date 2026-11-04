@@ -221,6 +221,21 @@ function selectedFoxholeSceneV2Modifications(
     return filterFoxholeSameWallInfrastructureSelections(assetMetadata.modifications, validSelections);
 }
 
+export function resolveFoxholeSceneV2HitboxFrame(entity: NixieExperimentalComponentEntitySnapshotV1, assetId: string,
+    asset: FoxholeSceneV2AssetMetadata) {
+    const appearance = readFoxholeSceneV2Appearance(entity);
+    const visual = resolveFoxholeSceneV2Visual(assetId, asset, appearance);
+    const replacement = !appearance.destroyed && !appearance.packaged
+        ? selectedFoxholeSceneV2Modifications(entity, asset).find(entry => entry.variant.isUpgrade)?.variant
+        : undefined;
+    return {
+        width: Math.max(1, replacement?.width ?? visual.width ?? asset.width),
+        height: Math.max(1, replacement?.height ?? visual.height ?? asset.height),
+        anchorX: appearance.anchorX ?? 0.5,
+        anchorY: appearance.anchorY ?? 0.5,
+    };
+}
+
 function renderFoxholeSceneV2Asset(
     entity: NixieExperimentalComponentEntitySnapshotV1,
     assetId: string,
@@ -791,6 +806,7 @@ function renderFoxholeSceneV2EntityPlan(
         ? null
         : renderFoxholeSceneV2Cargo({
             cargoData: cargo?.data,
+            developmentPreview: context.developmentPreview,
             productionData: production?.data,
             productionOutputsByRecipeId,
             asset: assetMetadata,

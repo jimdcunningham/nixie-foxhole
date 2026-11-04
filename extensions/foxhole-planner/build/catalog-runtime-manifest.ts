@@ -19,6 +19,17 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
                 {id: product.id, assetGroup: product.assetGroup, variant, sha256: resource.sha256})};
     })).concat(catalog.sharedResources.filter(resource => resource.id.startsWith('shared.') && resource.mediaType === 'model/gltf-binary')
         .map(resource => ({contractVersion: 1 as const, id: 'foxhole.model.' + resource.id, kind: 'model' as const, assetPack: declaration.id, path: resource.path})));
+    const categoryIcons = ['defense', 'bunker', 'general', 'facility', 'mining', 'power', 'liquid', 'foundation', 'shippingcontainer'];
+    const privateFiles = (catalog.data as {privateFiles?: Record<string, unknown>} | undefined)?.privateFiles;
+    for (const suffix of categoryIcons) {
+        const name = 'iconfilter' + suffix;
+        const path = privateFiles?.['icons/' + name + '.webp'];
+        const image = catalog.sharedResources.find(resource => resource.path === path && resource.mediaType === 'image/webp');
+        if (image) {
+            manifest.contributes.experimentalResources.push({contractVersion: 1, id: 'foxhole.icon.' + name,
+                kind: 'texture', assetPack: declaration.id, path: image.path});
+        }
+    }
     const paths: Record<string, string> = {
         'foxhole.browser.': 'shared/icons/browser-{id}.webp', 'foxhole.map.': 'maps/{id}.webp',
         'foxhole.asset.': 'textures/{id}.webp', 'foxhole.icon.': 'icons/{id}.webp',
