@@ -14,7 +14,15 @@ export function readStatisticsPreferences(scene: SceneSnapshotV1): { scope: Stat
     const values = context?.ownerId === ownerId && context.panelId === 'statistics' ? context.values : {};
     const requestedScope = values[`${ownerId}.stats.scope`];
     const scope: StatisticsScope = ['selection', 'layer', 'scene'].includes(String(requestedScope)) ? requestedScope as StatisticsScope : 'auto';
-    const interval = FOXHOLE_STATISTICS_INTERVALS.find(candidate => candidate.id === values[`${ownerId}.stats.interval`]);
+    const intervalId = values[`${ownerId}.stats.interval`];
+    if (intervalId === 'custom') {
+        const seconds = values[`${ownerId}.stats.customIntervalSeconds`];
+        const intervalSeconds = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+            ? Math.max(1, Math.min(Math.round(seconds), 30 * 86400))
+            : 3600;
+        return { scope, intervalSeconds };
+    }
+    const interval = FOXHOLE_STATISTICS_INTERVALS.find(candidate => candidate.id === intervalId);
     return { scope, intervalSeconds: interval?.seconds ?? 3600 };
 }
 

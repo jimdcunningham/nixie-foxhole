@@ -25,6 +25,13 @@ test('statistics consume only declared owner-local saved panel preferences', () 
         },
     } };
     assert.deepEqual(readStatisticsPreferences(scene), { scope: 'scene', intervalSeconds: 259200 });
+    for (const [seconds, expected] of [[90.4, 90], [0.1, 1], [31 * 86400, 30 * 86400], [0, 3600], ['90', 3600]] as const) {
+        assert.deepEqual(readStatisticsPreferences({ ...scene, experimentalPanelContext: { ...scene.experimentalPanelContext, values: {
+            ...scene.experimentalPanelContext.values,
+            'nixie.foxhole-planner.stats.interval': 'custom',
+            'nixie.foxhole-planner.stats.customIntervalSeconds': seconds,
+        } } }), { scope: 'scene', intervalSeconds: expected });
+    }
     assert.deepEqual(readStatisticsPreferences({ ...scene, experimentalPanelContext: { ...scene.experimentalPanelContext, ownerId: 'example.foreign' } }), { scope: 'auto', intervalSeconds: 3600 });
     assert.deepEqual(readStatisticsPreferences({ ...scene, experimentalPanelContext: { ...scene.experimentalPanelContext, panelId: 'other' } }), { scope: 'auto', intervalSeconds: 3600 });
     assert.deepEqual(readStatisticsPreferences({ ...scene, experimentalPanelContext: { ...scene.experimentalPanelContext, values: { 'nixie.foxhole-planner.stats.scope': 'invalid' } } }), { scope: 'auto', intervalSeconds: 3600 });

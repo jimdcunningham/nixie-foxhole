@@ -26,6 +26,11 @@ test('Planner report sections contain computed resources and the existing bunker
     const dry = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene,
         experimentalPanelContext: { ...scene.experimentalPanelContext, values: { [`${ownerId}.stats.interval`]: '3d' } } }, selection });
     assert.equal(dry.sections.find(section => section.id === 'bunkerDestruction')?.rows.some(row => row[5] === 'T3 Wet'), false);
+    const custom = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene,
+        experimentalPanelContext: { ...scene.experimentalPanelContext, values: {
+            [`${ownerId}.stats.interval`]: 'custom', [`${ownerId}.stats.customIntervalSeconds`]: 3 * 86400,
+        } } }, selection });
+    assert.deepEqual(custom, dry);
     assert.deepEqual(scene, before);
     assert.throws(() => buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene, truncated: true }, selection }), /Complete scene/);
 });
