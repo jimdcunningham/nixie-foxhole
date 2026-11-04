@@ -81,17 +81,15 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
         bunker: resolveFoxholeEcsBunkerStatistics(entities, owned.map(entity => entity.entityId), assets, bunkerDestructionWeapons, intervalSeconds) };
 }
 
-export function mountSceneStatistics(connection: NixieExtensionConnection): () => void {
+export function mountBunkerDestructionStatistics(connection: NixieExtensionConnection): () => void {
     const root = document.createElement('main');
     const style = document.createElement('style');
-    style.textContent = 'body{margin:0;padding:16px;background:#111319;color:#e8ebef;font:14px system-ui}label{display:flex;align-items:center;justify-content:space-between;gap:12px}select{padding:7px;background:#20232a;color:inherit;border:1px solid #3d4149;border-radius:6px}p{font-size:12px;color:#a4abb7}dl{margin:16px 0}dl>div{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #292d34}dd{margin:0;font-variant-numeric:tabular-nums}';
-    style.textContent += 'label+label{margin-top:12px}section{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:left;color:#a4abb7}td,th{padding:6px 4px;border-bottom:1px solid #292d34}td:last-child,th:last-child{text-align:right}h3{font-size:14px;margin-top:24px}';
+    style.textContent = 'body{margin:0;padding:16px;background:#111319;color:#e8ebef;font:14px system-ui}p{font-size:12px;color:#a4abb7}table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:left;color:#a4abb7}td,th{padding:6px 4px;border-bottom:1px solid #292d34}td:last-child,th:last-child{text-align:right}h3{font-size:14px;margin-top:24px}';
     document.head.append(style);
     const status = document.createElement('p');
     status.setAttribute('role', 'status');
-    const list = document.createElement('dl');
-    const productionList = document.createElement('section');
-    root.append(status, list, productionList);
+    const destructionContent = document.createElement('section');
+    root.append(status, destructionContent);
     document.body.append(root);
     let active = true;
     let sceneRevision = 0;
@@ -102,98 +100,37 @@ export function mountSceneStatistics(connection: NixieExtensionConnection): () =
         if (!active) {
             return;
         }
-        list.replaceChildren();
-        productionList.replaceChildren();
+        status.textContent = '';
+        destructionContent.replaceChildren();
         try {
             const preferences = readStatisticsPreferences(scene);
-            const summary = readSceneStatistics(scene, selection, preferences.scope, preferences.intervalSeconds);
-            status.textContent = summary.scope === 'selection' ? 'Current selection and its descendants.' : summary.scope === 'layer' ? 'Current layer and its descendants.' : 'Whole scene.';
-            for (const [name, value] of Object.entries({ ...summary.metrics, 'Active Orders': summary.production.activeOrderCount,
-                'Production Power (MW)': summary.production.powerMw,
-                'Maintenance Supplies': summary.resources.maintenanceSupplies, 'Missing Construction Costs': summary.resources.missingCostCount,
-                'Repair Cost': summary.resources.repairCost, 'Inventory Slots': summary.resources.inventorySlots, 'Fuel Capacity': summary.resources.fuelCapacity })) {
-                const row = document.createElement('div');
-                const title = document.createElement('dt');
-                title.textContent = name;
-                const amount = document.createElement('dd');
-                amount.textContent = value.toLocaleString('en-US', { maximumFractionDigits: 4 });
-                row.append(title, amount);
-                list.append(row);
+            const destruction = readSceneStatistics(scene, selection, preferences.scope, preferences.intervalSeconds).bunker?.destruction;
+            if (!destruction?.weapons.length) {
+                return;
             }
-            if (summary.bunker) {
-                const health = summary.bunker.health;
-                const heading = document.createElement('h3');
-                heading.textContent = 'Bunker Health';
-                productionList.append(heading);
-                const details = document.createElement('dl');
-                for (const [name, value] of Object.entries({ 'Pieces': health.pieceCount, 'Effective Health': health.effectiveHealth,
-                    'Repair Cost': health.repairCost, 'Repair Rate': Math.floor(health.repairRate), 'Breachable Health': health.breachableHealth,
-                    'Integrity (%)': health.structuralIntegrityPercent })) {
-                    const row = document.createElement('div');
-                    const title = document.createElement('dt');
-                    title.textContent = name;
-                    const amount = document.createElement('dd');
-                    amount.textContent = value.toLocaleString('en-US', { maximumFractionDigits: 4 });
-                    row.append(title, amount);
-                    details.append(row);
-                }
-                productionList.append(details);
-                const destruction = summary.bunker.destruction;
-                if (destruction?.weapons.length) {
-                    const destructionHeading = document.createElement('h3');
-                    destructionHeading.textContent = 'Bunker Destruction';
-                    productionList.append(destructionHeading);
-                    const table = document.createElement('table');
-                    table.setAttribute('aria-label', 'Bunker Destruction');
-                    const wet = destruction.weapons.some(weapon => weapon.shots.t3wet !== null);
-                    const header = table.createTHead().insertRow();
-                    for (const columnLabel of ['Weapon', 'T1', 'T2', ...(wet ? ['T3 Wet', 'T3 Dry'] : ['T3'])]) {
-                        const cell = document.createElement('th');
-                        cell.textContent = columnLabel;
-                        header.append(cell);
-                    }
-                    const rows = table.createTBody();
-                    for (const weapon of destruction.weapons) {
-                        const row = rows.insertRow();
-                        const localized = Object.values(assets).find(asset => asset.codeName.toLowerCase() === weapon.codeName.toLowerCase());
-                        const named = weapon.name && ![weapon.codeName, weapon.id].some(value => value.toLowerCase() === weapon.name.toLowerCase());
-                        row.insertCell().textContent = named ? weapon.name : localized?.label ?? weapon.name;
-                        for (const count of [weapon.shots.t1, weapon.shots.t2, ...(wet ? [weapon.shots.t3wet, weapon.shots.t3] : [weapon.shots.t3])]) {
-                            row.insertCell().textContent = count === null ? '—' : count.toLocaleString('en-US');
-                        }
-                    }
-                    productionList.append(table);
+            const destructionHeading = document.createElement('h3');
+            destructionHeading.textContent = 'Bunker Destruction';
+            destructionContent.append(destructionHeading);
+            const table = document.createElement('table');
+            table.setAttribute('aria-label', 'Bunker Destruction');
+            const wet = destruction.weapons.some(weapon => weapon.shots.t3wet !== null);
+            const header = table.createTHead().insertRow();
+            for (const columnLabel of ['Weapon', 'T1', 'T2', ...(wet ? ['T3 Wet', 'T3 Dry'] : ['T3'])]) {
+                const cell = document.createElement('th');
+                cell.textContent = columnLabel;
+                header.append(cell);
+            }
+            const rows = table.createTBody();
+            for (const weapon of destruction.weapons) {
+                const row = rows.insertRow();
+                const localized = Object.values(assets).find(asset => asset.codeName.toLowerCase() === weapon.codeName.toLowerCase());
+                const named = weapon.name && ![weapon.codeName, weapon.id].some(value => value.toLowerCase() === weapon.name.toLowerCase());
+                row.insertCell().textContent = named ? weapon.name : localized?.label ?? weapon.name;
+                for (const count of [weapon.shots.t1, weapon.shots.t2, ...(wet ? [weapon.shots.t3wet, weapon.shots.t3] : [weapon.shots.t3])]) {
+                    row.insertCell().textContent = count === null ? '—' : count.toLocaleString('en-US');
                 }
             }
-            for (const [heading, resources] of [['Net Inputs', summary.production.inputs], ['Net Outputs', summary.production.outputs]] as const) {
-                const title = document.createElement('h3');
-                title.textContent = heading;
-                productionList.append(title);
-                if (!resources.length) {
-                    const empty = document.createElement('p');
-                    empty.textContent = 'No resources in this interval.';
-                    productionList.append(empty);
-                    continue;
-                }
-                const table = document.createElement('table');
-                table.setAttribute('aria-label', heading);
-                const header = table.createTHead().insertRow();
-                for (const text of ['Resource', 'Channel', 'Quantity']) {
-                    const cell = document.createElement('th');
-                    cell.textContent = text;
-                    header.append(cell);
-                }
-                const rows = table.createTBody();
-                for (const resource of resources) {
-                    const row = rows.insertRow();
-                    const asset = Object.values(assets).find(candidate => candidate.codeName.toLowerCase() === resource.resourceId.toLowerCase());
-                    for (const text of [asset?.label ?? resource.resourceId, resource.channel === 'item' ? 'Item' : resource.channel === 'crate' ? 'Crate' : 'Liquid',
-                        resource.quantity.toLocaleString('en-US', { maximumFractionDigits: 4 })]) {
-                        row.insertCell().textContent = text;
-                    }
-                }
-                productionList.append(table);
-            }
+            destructionContent.append(table);
         } catch (error) {
             status.textContent = error instanceof Error ? error.message : 'Statistics are unavailable.';
         }
@@ -210,8 +147,7 @@ export function mountSceneStatistics(connection: NixieExtensionConnection): () =
             render();
         }),
         connection.onDisconnected(() => {
-            list.replaceChildren();
-            productionList.replaceChildren();
+            destructionContent.replaceChildren();
             status.textContent = 'Statistics are unavailable.';
         }),
     ];

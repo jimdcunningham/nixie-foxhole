@@ -19,7 +19,12 @@ test('Planner report sections contain computed resources and the existing bunker
     const before = structuredClone(scene);
     const report = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection });
     assert.equal(report.preview?.kind, 'sections');
-    assert.equal(report.preview.sections.length, 1);
+    const health = report.preview.sections.find(section => section.id === 'bunker-health');
+    assert.deepEqual(health?.rows.map(row => row.label),
+        ['Total Health', 'Repair Cost', 'Repair Rate', 'Breachable Health', 'Structural Integrity']);
+    assert.equal(health?.rows[0]?.value, '650');
+    assert.ok(health?.rows.every(row => row.icon === 'ph:shield-fill'));
+    assert.equal(report.preview.showEmbeddedContent, true);
     const construction = report.preview.sections[0]!;
     assert.equal(construction.title, 'Construction Cost');
     assert.ok(construction.rows.some(row => row.image));
@@ -53,7 +58,7 @@ test('liquid capacity follows construction cost and omits zero-capacity rows', (
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection }));
     assert.equal(preview?.kind, 'sections');
-    assert.deepEqual(preview.sections.map(section => section.title), ['Construction Cost', 'Liquid Capacity']);
+    assert.deepEqual(preview.sections.slice(0, 2).map(section => section.title), ['Construction Cost', 'Liquid Capacity']);
     assert.deepEqual(preview.sections[1]!.rows.map(({ label, value, tone }) => ({ label, value, tone })), [
         { label: 'Total Capacity', value: '5,000 L', tone: 'info' },
         { label: 'Liquid Silos', value: '5,000 L', tone: 'gain' },
@@ -80,11 +85,31 @@ test('facility power reports production, consumption, and signed net totals in o
         const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
             scene: { ...scene, nodes: selectedNodes, totalCount: selectedNodes.length }, selection }));
         assert.equal(preview?.kind, 'sections');
-        assert.equal(preview.sections.at(-1)?.title, 'Facility Power');
-        const rows = preview.sections.at(-1)!.rows;
+        const power = preview.sections.find(section => section.id === 'facility-power');
+        assert.equal(power?.title, 'Facility Power');
+        const rows = power.rows;
         assert.ok(rows.every(row => row.icon === 'nx:lightning' && row.iconTone === 'white'));
         return rows.map(({ label, value, tone }) => [label, value, tone]);
     };
     assert.deepEqual(rowsFor(nodes), [['Produced', '5 MW', 'gain'], ['Consumed', '2 MW', 'cost'], ['Net Total', '3 MW', 'gain']]);
     assert.deepEqual(rowsFor(nodes.slice(1)), [['Consumed', '2 MW', 'cost'], ['Net Total', '-2 MW', 'cost']]);
+});
+
+test('maintenance and production appear in order with resource icons and interval totals', () => {
+    const refinery = entity('refinery', 'facilityrefinery1');
+    refinery.components.push({ ownerId, componentId: 'production-order', version: 1, definitionAvailable: true,
+        data: { orders: [{ recipeId: 'structure:facilityrefinery1:recipe:1', cycles: 2 }] } });
+    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: 1, truncated: false,
+        nodes: [encodeNixieExperimentalSceneV2SnapshotNodeV1(refinery)], experimentalPanelContext: {
+            contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.interval`]: '30m' },
+        } };
+    const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
+    const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection }));
+    assert.equal(preview?.kind, 'sections');
+    assert.equal(preview.showEmbeddedContent, false);
+    assert.deepEqual(preview.sections.map(section => section.title),
+        ['Construction Cost', 'Facility Power', 'Building Maintenance', 'Production Input', 'Production Output']);
+    const rows = preview.sections.slice(2).map(section => section.rows[0]!);
+    assert.deepEqual(rows.map(({ value, tone }) => [value, tone]), [['x0.5', 'cost'], ['x300', 'cost'], ['x40', 'gain']]);
+    assert.ok(rows.every(row => row.image));
 });

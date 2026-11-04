@@ -13,6 +13,15 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
     const intervalLabel = FOXHOLE_STATISTICS_INTERVALS.find(interval => interval.seconds === preferences.intervalSeconds)?.label ?? '1 Hour';
     const localized = (id: string) => Object.values(assets).find(asset => asset.codeName.toLowerCase() === id.toLowerCase());
     const health = summary.bunker?.health;
+    const destruction = summary.bunker?.destruction;
+    const quantity = (value: number) => 'x' + value.toLocaleString('en-US', { maximumFractionDigits: 1 });
+    const whole = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const resourceRow = (resource: { resourceId: string; quantity: number; }, tone: 'cost' | 'gain',
+        fallback = resource.resourceId): NixiePanelReportPreviewSectionV1['rows'][number] => {
+        const asset = localized(resource.resourceId);
+        const image = asset?.browserIcon ?? asset?.browserPreview;
+        return { label: asset?.label ?? fallback, value: quantity(resource.quantity), tone, ...(image ? { image } : {}) };
+    };
     const ownedAssets = summary.entities.flatMap(entity => {
         const id = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner' && component.componentId === 'asset')?.data.assetId;
         return typeof id === 'string' && assets[id] ? [assets[id]] : [];
@@ -35,7 +44,7 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         title: 'Construction Cost',
         emptyMessage: 'No published construction costs are available for this scope yet.',
         rows: costs.slice(0, 256).map(cost => ({ label: cost.name, tone: 'cost',
-            value: 'x' + cost.quantity.toLocaleString('en-US', { maximumFractionDigits: 1 }),
+            value: quantity(cost.quantity),
             ...(cost.image ? { image: cost.image } : {}) })),
     }];
     const { total, silo, pipeline } = summary.resources.liquid;
@@ -70,8 +79,37 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         addPower('Net Total', netMw, netMw >= 0 ? 'gain' : 'cost');
         sections.push({ id: 'facility-power', title: 'Facility Power', emptyMessage: 'No facility power is available.', rows });
     }
+    if (summary.resources.maintenancePerHour > 0) {
+        const supplies = summary.resources.maintenanceSupplies;
+        sections.push({ id: 'building-maintenance', title: 'Building Maintenance',
+            emptyMessage: 'No maintenance supplies are required for this interval.',
+            rows: supplies > 0 ? [resourceRow({ resourceId: 'maintenancesupplies', quantity: supplies }, 'cost', 'Maintenance Supplies')] : [] });
+    }
+    for (const [id, title, resources, tone] of [
+        ['production-input', 'Production Input', summary.production.inputs, 'cost'],
+        ['production-output', 'Production Output', summary.production.outputs, 'gain'],
+    ] as const) {
+        if (resources.length) {
+            sections.push({ id, title, emptyMessage: 'No resources in this interval.',
+                rows: resources.slice(0, 256).map(resource => resourceRow(resource, tone)) });
+        }
+    }
+    if (health) {
+        const integrity = health.structuralIntegrityClass;
+        const integrityTone = { high: 'gain', medium: 'warning', low: 'caution', critical: 'cost' } as const;
+        const integrityLabel = integrity.charAt(0).toUpperCase() + integrity.slice(1);
+        const rows: NixiePanelReportPreviewSectionV1['rows'] = [
+            { label: 'Total Health', value: whole(health.effectiveHealth), tone: 'gain' },
+            { label: 'Repair Cost', value: whole(health.repairCost), tone: 'warning' },
+            { label: 'Repair Rate', value: whole(Math.floor(health.repairRate)) + '/swing', tone: 'warning' },
+            { label: 'Breachable Health', value: `${whole(health.breachableHealth)} (${whole(health.breachableHealthPercent)}%)`, tone: integrityTone[integrity] },
+            { label: 'Structural Integrity', value: `${whole(health.structuralIntegrityPercent)}% (${integrityLabel})`, tone: integrityTone[integrity] },
+        ];
+        sections.push({ id: 'bunker-health', title: 'Bunker Health', emptyMessage: 'No bunker health is available.',
+            rows: rows.map(row => ({ ...row, icon: 'ph:shield-fill', iconTone: 'white' })) });
+    }
     const preview: NixiePanelReportPreviewV1 = summary.resources.structureCount > 0
-        ? { kind: 'sections', sections }
+        ? { kind: 'sections', sections, showEmbeddedContent: !!destruction?.weapons.length }
         : { kind: 'empty', message: summary.scope === 'layer'
             ? 'Activate a layer with Foxhole nodes to review aggregated totals for that layer.'
             : preferences.scope === 'layer' || preferences.scope === 'scene'
@@ -92,8 +130,8 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
                 breachableHealth: health.breachableHealth, breachableHealthPercent: health.breachableHealthPercent,
                 structuralIntegrityPercent: health.structuralIntegrityPercent, structuralIntegrityClass: health.structuralIntegrityClass }
             : null,
-        bunkerDestruction: summary.bunker?.destruction
-            ? { weapons: summary.bunker.destruction.weapons.map(weapon => ({
+        bunkerDestruction: destruction
+            ? { weapons: destruction.weapons.map(weapon => ({
                 name: weaponName(weapon), ...weapon.shots })) }
             : null,
     };
