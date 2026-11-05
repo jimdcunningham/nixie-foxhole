@@ -110,7 +110,7 @@ export default defineContribution({
             headerActions: FoxholeSceneStatsSidebarActions,
             headerOverflow: FoxholeSceneStatsSidebarOverflow,
             order: 55,
-            visible: () => isFoxholeSceneSurfaceActive(),
+            visible: () => getNixieEditorDocumentSessionBridge()?.isSceneActive.value === true,
             sections: [
                 {
                     id: 'foxhole-scene-stats',
