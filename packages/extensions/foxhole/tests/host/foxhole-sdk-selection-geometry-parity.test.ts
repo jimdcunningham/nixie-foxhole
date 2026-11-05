@@ -3,8 +3,9 @@ import { resolveFoxholeConnectorSelectionGeometry } from '../../../../../extensi
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '../../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
-import { resolveFoxholeSceneV2StructureSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
+import { renderFoxholeSceneV2Entity, resolveFoxholeSceneV2StructureSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { registerHooks } from 'node:module';
+import { DEFAULT_FOXHOLE_RANGE_STATE } from '../../app/plugins/foxhole/nixie/range.ts';
 import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 registerHooks({ resolve(specifier, context, nextResolve) {
@@ -79,10 +80,12 @@ test('SDK connector origins and power-line quads match the actual bundled adapte
     }
 });
 
-test('range origins retain the first authored endpoint independently of the visual bounds', () => {
+test('SDK range origins retain the first authored endpoint without a private adapter', () => {
     for (const points of [[0, 0, 80, 0], [12, -40, -90, 30]]) {
         const subject = { entityId: 'range', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'range', version: 1,
-            definitionAvailable: true, data: { points } }] };
-        assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal?.(subject), { x: points[0], y: points[1] });
+            definitionAvailable: true, data: { ...DEFAULT_FOXHOLE_RANGE_STATE, points } }] };
+        const plan = renderFoxholeSceneV2Entity(subject);
+        assert.deepEqual(plan.experimentalSelectionGeometry?.transformOrigin, { x: points[0], y: points[1] });
+        assert.equal(foxholeSceneV2StateAdapter.selectionTransformOriginLocal?.(subject), null);
     }
 });
