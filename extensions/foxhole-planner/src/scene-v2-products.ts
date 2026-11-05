@@ -1,5 +1,5 @@
+import { localizedFoxholeCatalog, foxholeLocalization } from './catalog-localization.ts';
 import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters } from './maintenance-supply.ts';
-import { presentFoxholeCatalogAssets, resolveFoxholeCatalogLocale } from './catalog-presentation.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import type {
     NixieExperimentalComponentProductTemplateV1,
@@ -8,7 +8,7 @@ import type {
     NixieExperimentalProductPresentationV1,
     NixieExperimentalProductDetailCellV1,
 } from '@nixiejs/extension-sdk/experimental/scene-v2';
-import foxholeSceneV2Assets, { productionRecipesById, catalogLocalizations } from '#foxhole-scene-v2-assets';
+import { productionRecipesById } from '#foxhole-scene-v2-assets';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeSceneV2SplineProductData } from './scene-v2-connector-products.ts';
 
@@ -45,13 +45,13 @@ const upgrades: AssetProductEntry[] = assets.flatMap(({ assetId, metadata }) => 
 return { assets, upgrades, dictionary };
 }
 const presentationCatalogs = new Map<string, ReturnType<typeof catalogEntries>>();
-function catalogForQuery(settings: Readonly<Record<string, boolean | string>> = {}) {
-    const locale = resolveFoxholeCatalogLocale(settings['foxhole.locale'], typeof navigator === 'undefined' ? 'en' : navigator.languages?.[0] ?? navigator.language);
+function catalogForQuery(settings: Readonly<Record<string, boolean | string>> = {}, preference?: string) {
+    const locale = foxholeLocalization.resolveLocale(preference ?? settings['foxhole.locale']);
     const rendered = settings['foxhole.assets.browser.iconSet'] === 'rendered';
     const key = `${locale}:${rendered}`;
     let result = presentationCatalogs.get(key);
     if (!result) {
-        result = catalogEntries(presentFoxholeCatalogAssets(foxholeSceneV2Assets, catalogLocalizations[locale] ?? {}, rendered));
+        result = catalogEntries(localizedFoxholeCatalog(locale, rendered));
         presentationCatalogs.set(key, result);
     }
     return result;
@@ -160,7 +160,7 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
 export function listFoxholeSceneV2Products(
     query: NixieExperimentalProductQueryV1,
 ): NixieExperimentalProductResultV1 {
-    const { assets, upgrades, dictionary } = catalogForQuery(query.settings);
+    const { assets, upgrades, dictionary } = catalogForQuery(query.settings, query.locale);
     const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     const needle = query.query.toLocaleLowerCase();
     const candidates = query.settings?.['foxhole.assets.filter.upgrades'] === true ? [...assets, ...upgrades] : assets;

@@ -1,5 +1,6 @@
+import { createNixieLocalizationV1 } from '@nixiejs/extension-sdk';
 import { createFoxholeAssetsBaseUrl, getFoxholeLocalizationStrings } from './catalog.ts';
-import { FOXHOLE_LOCALE_SETTING_ID } from './asset-settings.ts';
+import { FOXHOLE_LOCALE_OPTIONS, FOXHOLE_LOCALE_SETTING_ID } from './asset-settings.ts';
 import { resolveFoxholeLocalizedText as resolveFoxholeLocalizedTextInternal } from './localization-text.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 
@@ -20,32 +21,11 @@ function getFoxholeUserLocalePreference(): string | null {
     }
 }
 
+const localization = createNixieLocalizationV1({ defaultLocale: DEFAULT_FOXHOLE_LOCALE,
+    supportedLocales: FOXHOLE_LOCALE_OPTIONS.filter(option => option.value !== 'auto').map(option => option.value) });
+
 export function getFoxholePreferredLocale(explicitLocale?: string | null): string {
-    const preferred = String(explicitLocale ?? '').trim();
-    if (preferred) {
-        return preferred;
-    }
-
-    const userPreference = getFoxholeUserLocalePreference();
-    if (userPreference) {
-        return userPreference;
-    }
-
-    if (typeof navigator !== 'undefined') {
-        const browserLocale = navigator.languages?.find(Boolean) ?? navigator.language;
-        if (browserLocale) {
-            return browserLocale;
-        }
-    }
-
-    if (typeof document !== 'undefined') {
-        const documentLocale = document.documentElement?.lang;
-        if (documentLocale) {
-            return documentLocale;
-        }
-    }
-
-    return DEFAULT_FOXHOLE_LOCALE;
+    return localization.resolveLocale(explicitLocale || getFoxholeUserLocalePreference());
 }
 
 export function getFoxholeLocalizedText(

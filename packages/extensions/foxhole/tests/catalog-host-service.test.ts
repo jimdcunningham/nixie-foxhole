@@ -1,4 +1,4 @@
-import {getFoxholeManifest, getFoxholeManifestRevision, installFoxholeManifest} from '../app/plugins/foxhole/nixie/manifest.ts';
+import {getFoxholeManifest, getFoxholeManifestRevision, installFoxholeManifest, loadFoxholeManifestLocalizationMap} from '../app/plugins/foxhole/nixie/manifest.ts';
 import {installFoxholeAssetLocations} from '../app/plugins/foxhole/nixie/asset-locations.ts';
 import { readFileSync } from 'node:fs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
@@ -124,5 +124,23 @@ test('private inspector indexes replace bootstrap URLs when the same active gene
     } finally {
         installFoxholeAssetLocations(null);installFoxholeManifest(null);
         unregister();service.destroy();replaceNixieSceneV2ExtensionCatalog([]);
+    }
+});
+
+test('localization bundles resolve through the selected immutable asset delivery', async t => {
+    const selected = JSON.parse(readFileSync(new URL('../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
+    selected.localizationIndex = { availableLocales: ['en', 'fr'], files: { fr: 'localizations/fr.json' } };
+    const strings = { example: 'Révision' };
+    installFoxholeAssetLocations(path => 'https://assets.example/objects/' + path);
+    installFoxholeManifest(selected);
+    t.mock.method(globalThis, 'fetch', async input => {
+        assert.equal(input, 'https://assets.example/objects/localizations/fr.json');
+        return new Response(JSON.stringify(strings), { headers: { 'Content-Type': 'application/json' } });
+    });
+    try {
+        assert.deepEqual(await loadFoxholeManifestLocalizationMap('/foxhole/assets/', 'fr'), strings);
+    } finally {
+        installFoxholeAssetLocations(null);
+        installFoxholeManifest(null);
     }
 });

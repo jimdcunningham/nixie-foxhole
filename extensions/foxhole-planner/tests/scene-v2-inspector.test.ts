@@ -9,13 +9,14 @@ import assets from '#foxhole-scene-v2-assets';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
 const provider = manifest.contributes.experimentalInspectorProviders![0]!;
-function inspect(assetId: string, overrides: Record<string, Record<string, unknown>> = {}, faction?: string) {
+function inspect(assetId: string, overrides: Record<string, Record<string, unknown>> = {}, faction?: string, locale?: string) {
     const data = { 'asset': { catalogId: 'foxhole.structures', assetId }, 'appearance': {}, 'modification': { selections: [] },
         'cargo': { items: [] }, 'production-order': { orders: [] }, 'socket-attachments': { attachments: [] }, ...overrides };
     const subject = { entityId: 'fixture', revision: 1, components: Object.entries(data).map(([componentId, value]) => ({
         ownerId: manifest.id, componentId, version: 1, definitionAvailable: true, data: value,
     })) };
     const request = projectNixieExperimentalInspectorSubjectV1(subject as Parameters<typeof projectNixieExperimentalInspectorSubjectV1>[0], manifest.id, provider);
+    if (locale) request.locale = locale;
     if (faction) request.settings = { 'foxhole.assets.filter.faction': faction };
     const result = inspectFoxholeSceneV2Structure(request);
     validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
@@ -229,4 +230,18 @@ test('assembly recipe previews retain catalog punctuation and distinguish crates
     const aircraft = choices('facilityvehiclefactory2').find(option => option.label === 'Daimon aK-5 “Harpy”');
     assert.ok(aircraft?.details?.sections?.find(section => section.title === 'Outputs')?.rows
         .some(row => row.label === 'Daimon aK-5 “Harpy” (Crate)' && row.unit === 'crates'));
+});
+
+test('Inspector catalog text follows the shared locale while IDs and wiki targets remain canonical', () => {
+    const english = inspect('facilityrefinery1', {}, undefined, 'en');
+    const french = inspect('facilityrefinery1', {}, undefined, 'fr-CA');
+    assert.equal(french.layout?.summary?.title, 'Usine de Matériaux');
+    assert.notEqual(french.layout?.summary?.title, english.layout?.summary?.title);
+    assert.deepEqual(french.layout?.summary?.link, english.layout?.summary?.link);
+    assert.equal(french.layout?.summary?.identifier, '#facilityrefinery1');
+    const recipes = (result: ReturnType<typeof inspect>) => result.components.find(component => component.componentId === 'production-order')!.fields[0]!.choices!.options;
+    assert.deepEqual(recipes(french).map(option => option.value), recipes(english).map(option => option.value));
+    assert.ok(recipes(french).some((option, index) => option.label !== recipes(english)[index]!.label));
+    assert.equal(inspect('facilityrefinery1', {}, undefined, 'ja').layout?.summary?.title, english.layout?.summary?.title);
+    assert.equal(inspect('facilitypipe', {}, undefined, 'fr').layout?.summary?.title, 'Pipeline');
 });

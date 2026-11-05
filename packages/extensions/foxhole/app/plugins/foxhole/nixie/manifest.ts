@@ -1,3 +1,4 @@
+import { resolveFoxholeAssetUrl } from './asset-locations.ts';
 import {shallowRef} from 'vue';
 import publishedFoxholeManifest from '../../../../public/foxhole/assets/manifest.v1.json' with { type: 'json' };
 import { z } from 'zod';
@@ -91,11 +92,10 @@ function resolveFoxholeLocalizationFileUrl(
         return null;
     }
 
-    if (/^https?:\/\//i.test(file) || file.startsWith('/')) {
-        return file;
-    }
-
-    return `${String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/'}${file.replace(/^\/+/, '')}`;
+    const url = /^https?:\/\//i.test(file) || file.startsWith('/')
+        ? file
+        : `${String(baseAssetsUrl ?? '').trim() || '/foxhole/assets/'}${file.replace(/^\/+/, '')}`;
+    return resolveFoxholeAssetUrl(url, baseAssetsUrl);
 }
 
 async function fetchFoxholeLocalizationBundle(url: string): Promise<Record<string, string>> {

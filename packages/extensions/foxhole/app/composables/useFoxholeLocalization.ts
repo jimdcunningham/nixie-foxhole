@@ -1,3 +1,4 @@
+import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
 import { computed, shallowRef, watch } from 'vue';
 import {
     createFoxholeAssetsBaseUrl,
@@ -15,16 +16,19 @@ export function useFoxholeLocalization() {
     const locale = computed(() => getFoxholePreferredLocale());
     const strings = shallowRef<Record<string, string>>({});
 
-    watch([assetBaseUrl, locale], async ([nextAssetBaseUrl, nextLocale]) => {
+    watch([assetBaseUrl, locale, getFoxholeManifestRevision], async ([nextAssetBaseUrl, nextLocale], _previous, onCleanup) => {
+        let current = true;
+        onCleanup(() => { current = false; });
         strings.value = getFoxholeLocalizationStrings(nextAssetBaseUrl, nextLocale);
         if (typeof window === 'undefined') {
             return;
         }
 
         try {
-            strings.value = await loadFoxholeLocalizationStrings(nextAssetBaseUrl, nextLocale);
+            const loaded = await loadFoxholeLocalizationStrings(nextAssetBaseUrl, nextLocale);
+            if (current) strings.value = loaded;
         } catch {
-            strings.value = getFoxholeLocalizationStrings(nextAssetBaseUrl, nextLocale);
+            if (current) strings.value = getFoxholeLocalizationStrings(nextAssetBaseUrl, nextLocale);
         }
     }, { immediate: true });
 

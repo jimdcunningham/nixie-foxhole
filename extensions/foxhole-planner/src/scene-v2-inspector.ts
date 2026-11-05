@@ -1,3 +1,4 @@
+import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
 import type { NixieExperimentalComponentJsonObjectV1, NixieExperimentalInspectorFieldV1,
@@ -29,16 +30,14 @@ export function inspectFoxholeSceneV2PlanningPath(request: NixieExperimentalInsp
         : [] };
 }
 const OWNER = 'nixie.foxhole-planner';
-const inspectRelationships = createFoxholeInspectorRelationships(assets);
-const items = Object.values(assets).filter(asset => asset.isItem);
-const itemByCode = new Map(items.map(item => [item.codeName.toLowerCase(), item]));
 function label(value: string): string {
-    return value.replace(/([a-z\d])([A-Z])/gu, '$1 $2').replace(/[_-]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 128);
+    return value.replace(/\p{Cc}/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 128);
 }
 
 function inspectorSummary(assetId: string, asset: (typeof assets)[string]) {
-    const tier = /\(Tier (\d)\)/u.exec(asset.label);
-    const wikiPage = (tier ? asset.label.slice(0, tier.index) : asset.label).trim().replaceAll(' ', '_');
+    const canonicalLabel = assets[assetId]?.label ?? asset.label;
+    const tier = /\(Tier (\d)\)/u.exec(canonicalLabel);
+    const wikiPage = (tier ? canonicalLabel.slice(0, tier.index) : canonicalLabel).trim().replaceAll(' ', '_');
     return {
         title: label(asset.label), identifier: '#' + assetId, image: asset.browserPreview ?? asset.browserIcon,
         link: { label: 'wiki.gg', host: 'foxhole.wiki.gg', path: ['wiki', wikiPage],
@@ -53,6 +52,7 @@ function connectorVariantMenu(key: string, asset: (typeof assets)[string] | unde
 }
 
 export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
+    const assets = localizedFoxholeCatalog(request.locale);
     const spline = request.subject.components.find(component => component.ownerId === OWNER && component.componentId === 'spline-connector')?.data;
     if (!spline) {
         return { contractVersion: 1, components: [] };
@@ -84,6 +84,7 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalI
 }
 
 function supplyReadouts(request: NixieExperimentalInspectorRequestV1, filters: unknown): NixieExperimentalInspectorReadoutV1[] {
+    const assets = localizedFoxholeCatalog(request.locale);
     const nearby = request.nearby;
     if (!nearby || nearby.truncated) {
         return [{ title: 'Coverage', rows: [], hint: nearby?.truncated
@@ -146,6 +147,9 @@ function supplyReadouts(request: NixieExperimentalInspectorRequestV1, filters: u
 }
 
 export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
+    const assets = localizedFoxholeCatalog(request.locale);
+    const items = Object.values(assets).filter(asset => asset.isItem);
+    const itemByCode = new Map(items.map(item => [item.codeName.toLowerCase(), item]));
     const data = (id: string): NixieExperimentalComponentJsonObjectV1 | undefined => request.subject.components
         .find(component => component.ownerId === OWNER && component.componentId === id)?.data;
     const assetId = data('asset')?.assetId;
@@ -180,7 +184,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
     const wallSelections = selections.flatMap(selection => typeof selection.slotId === 'string' && typeof selection.variantId === 'string'
         && asset.modifications[selection.slotId]?.variants[selection.variantId]
         ? [{ slotId: selection.slotId, variantId: selection.variantId }] : []);
-    const relationshipActions = inspectRelationships(request, String(assetId));
+    const relationshipActions = createFoxholeInspectorRelationships(assets)(request, String(assetId));
     const availableModification = buildFoxholeInspectorModificationAvailability(request, assets);
     const modifications = Object.entries(asset.modifications).flatMap(([slotId, slot]) => Object.entries(slot.variants)
         .filter(([variantId, variant]) => availableModification(slot, variant) && !hasFoxholeSameWallModificationConflict(slot, variantId, asset.modifications, wallSelections)

@@ -133,3 +133,17 @@ test('maintenance and production appear in order with resource icons and interva
     assert.deepEqual(rows.map(({ value, tone }) => [value, tone]), [['x0.5', 'cost'], ['x300', 'cost'], ['x40', 'gain']]);
     assert.ok(rows.every(row => row.image));
 });
+
+test('statistics catalog resource names follow the shared locale in previews and exports', () => {
+    const nodes = [encodeNixieExperimentalSceneV2SnapshotNodeV1(entity('factory', 'facilityrefinery1'))];
+    const report = (locale: string) => buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
+        scene: { protocolVersion: 1, surface: 'scene-v2', totalCount: 1, truncated: false, nodes,
+            experimentalPanelContext: { contractVersion: 1, ownerId, panelId: 'statistics', locale,
+                values: { [`${ownerId}.stats.scope`]: 'scene' } } },
+        selection: { protocolVersion: 1, totalCount: 0, truncated: false, nodes: [] } });
+    const english = report('en');
+    const french = report('fr');
+    assert.notDeepEqual(french.preview, english.preview);
+    assert.notEqual(french.sections[0]!.listText, english.sections[0]!.listText);
+    assert.deepEqual(french.sections[0]!.rows.map(row => row[3]).sort(), english.sections[0]!.rows.map(row => row[3]).sort());
+});

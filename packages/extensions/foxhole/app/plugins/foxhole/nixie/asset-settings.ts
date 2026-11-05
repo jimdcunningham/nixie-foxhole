@@ -1,3 +1,4 @@
+import { NIXIE_LOCALE_SETTING_ID } from '@nixiejs/extension-sdk';
 import {
     FOXHOLE_ASSET_FILTER_ORDER,
     FOXHOLE_ASSET_ICON_SET_SETTING_ID,
@@ -9,7 +10,7 @@ import {
 } from './settings-page-sections.ts';
 
 export const FOXHOLE_FILTER_SETTING_GROUP = 'foxhole.assets';
-export const FOXHOLE_LOCALE_SETTING_ID = 'foxhole.locale';
+export const FOXHOLE_LOCALE_SETTING_ID = NIXIE_LOCALE_SETTING_ID;
 export const FOXHOLE_TIER_SETTING_OPTIONS = [
     { value: '1', label: 'Tier 1' },
     { value: '2', label: 'Tier 2' },
@@ -126,15 +127,5 @@ export const foxholeAssetFilterSettings = withSettingsPageSection([
         group: FOXHOLE_FILTER_SETTING_GROUP,
         defaultValue: true,
     })),
-    {
-        id: FOXHOLE_LOCALE_SETTING_ID,
-        scope: 'user' as const,
-        type: 'select' as const,
-        name: 'Foxhole Language',
-        description: 'Preferred language for Foxhole asset names and descriptions.',
-        icon: 'ph:translate',
-        group: FOXHOLE_FILTER_SETTING_GROUP,
-        defaultValue: 'auto',
-        options: FOXHOLE_LOCALE_OPTIONS,
-    },
+
 ], FOXHOLE_BROWSER_SETTINGS_PAGE_SECTION);

@@ -9,8 +9,9 @@ export function resolveFoxholeCatalogLocale(value: unknown, browserLocale = 'en'
 
 /** Presentation choices never alter canonical product, asset, slot or variant IDs. */
 export function presentFoxholeCatalogAssets(assets: Readonly<Record<string, FoxholeSceneV2AssetMetadata>>,
-    strings: Readonly<Record<string, string>>, rendered: boolean): Record<string, FoxholeSceneV2AssetMetadata> {
-    const translate = (id: string | undefined, fallback: string | undefined) => (id ? strings[id]?.trim() : '') || fallback;
+    strings: Readonly<Record<string, string>> | ((id: string | undefined, fallback: string | undefined) => string | undefined), rendered: boolean): Record<string, FoxholeSceneV2AssetMetadata> {
+    const translate = typeof strings === 'function' ? strings
+        : (id: string | undefined, fallback: string | undefined) => (id ? strings[id]?.trim() : '') || fallback;
     return Object.fromEntries(Object.entries(assets).map(([id, asset]) => [id, {
         ...asset,
         label: translate(asset.localizedText?.name, asset.label)!,

@@ -5,13 +5,13 @@ import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import { resolveFoxholeCatalogLocale } from '../src/catalog-presentation.ts';
 import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 
-const find = (settings: Record<string, string | boolean>, query = 'facilityrefinery1') =>
-    parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100,
+const find = (settings: Record<string, string | boolean>, query = 'facilityrefinery1', locale = 'en') =>
+    parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100, locale,
         settings: { 'foxhole.assets.filter.showPreviousTiers': true, ...settings } }));
 
 test('catalog language choices translate names and descriptions while preserving SDK product components and IDs', () => {
-    const base = find({ 'foxhole.locale': 'en' }).items.find(item => item.product.id === 'asset.facilityrefinery1')!;
-    const french = find({ 'foxhole.locale': 'fr' }).items.find(item => item.product.id === base.product.id)!;
+    const base = find({}).items.find(item => item.product.id === 'asset.facilityrefinery1')!;
+    const french = find({}, 'facilityrefinery1', 'fr').items.find(item => item.product.id === base.product.id)!;
     const strings = JSON.parse(readFileSync(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/localizations/fr.json', import.meta.url), 'utf8'));
     assert.ok(Object.values(strings).includes(french.label));
     assert.notEqual(french.label, base.label);
