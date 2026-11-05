@@ -2,6 +2,10 @@
 
 Foxhole Planner is an independently published Nixie SDK extension. Studio installs compatible `.nxext` releases through the extension browser; explicit development roots also support unpublished builds. It imports only the published `@nixiejs/extension-sdk` entry points, including the explicit `/experimental/scene-v2` preview boundary.
 
+## Intellectual Property
+
+Foxhole and related names, marks, and assets remain the intellectual property of Siege Camp.
+
 ## Publication and R2 Asset Contract
 
 FoxWatch generates one compact `catalog.v1.json` containing product metadata,
