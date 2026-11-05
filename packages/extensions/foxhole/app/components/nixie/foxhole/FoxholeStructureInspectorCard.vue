@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 import NixieAssetIncompleteBadge from '#nixie/components/nixie/NixieAssetIncompleteBadge.vue';
 import NxMenu from '#nixie/components/NxMenu.vue';
 import { checkboxMenuItem, sectionLabelMenuItem, separatorMenuItem } from '#nixie/utils/nx-resolved-menu-builders.ts';
@@ -96,47 +96,6 @@ const activeTab = useNixieInspectorFormSectionTab(
     'foxhole.inspector.structure', 'details', 'upgrades',
     computed(() => detailTabs.value.map(tab => tab.id)),
 );
-const detailNavigationRef = ref<HTMLElement | null>(null);
-const useDetailSelect = ref(false);
-const detailSelectOptions = computed(() => detailTabs.value.map(tab => ({
-    value: tab.id,
-    label: tab.label,
-})));
-let detailNavigationResizeObserver: ResizeObserver | null = null;
-let detailNavigationFrame = 0;
-
-function updateDetailNavigationMode(): void {
-    const navigation = detailNavigationRef.value;
-    if (!navigation) {
-        return;
-    }
-
-    const options = navigation.querySelectorAll<HTMLElement>('.nx-btn-group__option');
-    useDetailSelect.value = Array.from(options).some(option => option.scrollWidth > option.clientWidth + 1);
-}
-
-function scheduleDetailNavigationModeUpdate(): void {
-    cancelAnimationFrame(detailNavigationFrame);
-    detailNavigationFrame = requestAnimationFrame(() => {
-        detailNavigationFrame = 0;
-        updateDetailNavigationMode();
-    });
-}
-
-watch(detailNavigationRef, (navigation) => {
-    detailNavigationResizeObserver?.disconnect();
-    detailNavigationResizeObserver = null;
-    if (navigation && typeof ResizeObserver !== 'undefined') {
-        detailNavigationResizeObserver = new ResizeObserver(scheduleDetailNavigationModeUpdate);
-        detailNavigationResizeObserver.observe(navigation);
-    }
-    scheduleDetailNavigationModeUpdate();
-});
-
-onBeforeUnmount(() => {
-    detailNavigationResizeObserver?.disconnect();
-    cancelAnimationFrame(detailNavigationFrame);
-});
 
 type FoxholeStructureSelectionEntry = {
     id: string;
@@ -202,10 +161,6 @@ const uniformFoxholeKey = computed(() => {
 const foxholeKey = computed(() => uniformFoxholeKey.value || String(props.node.snapshot.state?.foxholeKey ?? '').trim());
 const state = computed(() => (props.node.snapshot.state ?? {}) as Partial<FoxholeStructureState>);
 const asset = computed(() => foxholeKey.value ? getFoxholeStructureAsset(foxholeKey.value, assetBaseUrl.value) : null);
-watch(detailTabs, async () => {
-    await nextTick();
-    scheduleDetailNavigationModeUpdate();
-});
 const canEdit = computed(() => props.canEdit && !props.effectiveLocked);
 const destroyableEntries = computed(() => selectionEntries.value.filter(canSelectionEntryToggleDestroyed));
 const destroyableTargetIds = computed(() => Array.from(new Set(destroyableEntries.value
@@ -1235,27 +1190,14 @@ watch(() => props.node.snapshot.id, () => {
         <div v-if="detailTabs.length" class="foxhole-structure-card__tabs">
             <div
                 v-if="detailTabs.length > 1"
-                ref="detailNavigationRef"
                 class="foxhole-structure-card__detail-navigation"
             >
                 <NxSegmentedTabs
                     v-model="activeTab"
                     class="foxhole-structure-card__detail-tabs"
-                    :class="{ 'is-measuring': useDetailSelect }"
                     :items="detailTabs"
-                    :aria-hidden="useDetailSelect ? 'true' : undefined"
-                    :inert="useDetailSelect"
                     ariaLabel="Foxhole Details"
                     animated
-                />
-                <NxSelect
-                    v-if="useDetailSelect"
-                    v-model="activeTab"
-                    class="foxhole-structure-card__detail-select"
-                    :options="detailSelectOptions"
-                    ariaLabel="Foxhole Details"
-                    bare
-                    compact
                 />
             </div>
             <div v-else class="foxhole-structure-card__single-section-label">
@@ -1449,18 +1391,6 @@ watch(() => props.node.snapshot.id, () => {
     position: relative;
     flex-shrink: 0;
     min-width: 0;
-}
-
-.foxhole-structure-card__detail-tabs.is-measuring {
-    position: absolute;
-    inset: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.foxhole-structure-card__detail-select,
-.foxhole-structure-card__detail-select :deep(.nx-select__trigger) {
-    width: 100%;
 }
 
 .foxhole-structure-card__single-section-label {
