@@ -151,10 +151,26 @@ test('catalog and standalone spline stencils expose only applicable authoring co
         const result = inspectFoxholeSceneV2SplineConnector(request);
         validateNixieExperimentalInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
         assert.deepEqual(request, before);
+        const hasAsset = subject.components.some(component => component.componentId === 'asset');
+        let layout = result.layout;
+        if (hasAsset) {
+            assert.equal(layout, undefined, 'catalog connectors use the structure provider layout');
+            const structureRequest = projectNixieExperimentalInspectorSubjectV1(subject, manifest.id, provider);
+            const structure = inspectFoxholeSceneV2Structure(structureRequest);
+            validateNixieExperimentalInspectorResultV1(structure, provider, manifest.contributes.experimentalComponents!.components, structureRequest);
+            layout = structure.layout;
+            assert.ok(structure.components.some(component => component.componentId === 'spline-connector'));
+        }
+        assert.equal(layout?.title, 'Foxhole (SDK)', product.id);
+        assert.equal(layout?.summary?.identifier, '#' + spline.data.foxholeKey, product.id);
         const visible = result.components[0]!.fields.filter(field => !field.hidden).map(field => field.path[0]);
+        assert.equal(layout?.tabs.some(tab => tab.componentIds.includes('spline-connector')), visible.length > 0, product.id);
         assert.ok(!visible.includes('minLength') && !visible.includes('startAttachmentNodeId'));
+        assert.ok(!visible.includes('blueprint') && !visible.includes('tint') && !visible.includes('brightness'));
         if (spline.data.foxholeKey === 'facilitypipe') {
-            assert.ok(visible.includes('curveT') && visible.includes('tint'));
+            assert.deepEqual(visible, ['curveT']);
+            assert.ok(layout?.menu?.toggles?.some(toggle => toggle.propertyId === 'blueprint'), product.id);
+            assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'curveT')?.description, undefined);
         } else if (spline.data.foxholeKey === 'powerline') {
             assert.deepEqual(visible, []);
         }

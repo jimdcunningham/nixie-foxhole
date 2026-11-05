@@ -36,6 +36,22 @@ function label(value: string): string {
     return value.replace(/([a-z\d])([A-Z])/gu, '$1 $2').replace(/[_-]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 128);
 }
 
+function inspectorSummary(assetId: string, asset: (typeof assets)[string]) {
+    const tier = /\(Tier (\d)\)/u.exec(asset.label);
+    const wikiPage = (tier ? asset.label.slice(0, tier.index) : asset.label).trim().replaceAll(' ', '_');
+    return {
+        title: label(asset.label), identifier: '#' + assetId, image: asset.browserPreview ?? asset.browserIcon,
+        link: { label: 'wiki.gg', host: 'foxhole.wiki.gg', path: ['wiki', wikiPage],
+            ...(tier ? { fragment: `Tier_${tier[1]}-0` } : {}) },
+    };
+}
+
+function connectorVariantMenu(key: string, asset: (typeof assets)[string] | undefined) {
+    return asset?.canBlueprint && !resolveConnectorBehavior(key, asset.connector).powerline
+        ? { label: 'Variants', toggles: [{ componentId: 'spline-connector', propertyId: 'blueprint', label: 'Blueprint', icon: 'ph:blueprint' }] }
+        : undefined;
+}
+
 export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
     const spline = request.subject.components.find(component => component.ownerId === OWNER && component.componentId === 'spline-connector')?.data;
     if (!spline) {
@@ -43,7 +59,6 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalI
     }
     const key = typeof spline.foxholeKey === 'string' ? spline.foxholeKey : '';
     const asset = Object.hasOwn(assets, key) ? assets[key] : undefined;
-    const powerline = resolveConnectorBehavior(key, asset?.connector).powerline;
     const fields: NixieExperimentalInspectorFieldV1[] = [
         { path: ['foxholeKey'], title: 'Asset', hidden: Boolean(asset), readOnly: true,
             description: 'This asset is unavailable in the installed catalog.' },
@@ -51,13 +66,21 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalI
             'minLength', 'maxLength', 'minRadius', 'maxRadius', 'maxBuffer', 'maxTargetAngleDeg', 'maxArcAngleDeg',
             'startSocketName', 'endSocketName', 'startAttachmentNodeId', 'startAttachmentSocketName',
             'endAttachmentNodeId', 'endAttachmentSocketName'].map(property => ({ path: [property], hidden: true })),
-        { path: ['curveT'], title: 'Curvature', hidden: !usesPipeCurveScale(asset?.connector?.pathStyle, key, asset?.connector),
-            description: 'Adjust the pipe curve from 0 to 1. Move endpoints with the canvas handles.' },
-        { path: ['blueprint'], hidden: !asset?.canBlueprint || powerline },
-        { path: ['tint'], hidden: powerline },
-        { path: ['brightness'], hidden: powerline },
+        { path: ['curveT'], title: 'Curvature', hidden: !usesPipeCurveScale(asset?.connector?.pathStyle, key, asset?.connector) },
+        ...['blueprint', 'tint', 'brightness'].map(property => ({ path: [property], hidden: true })),
     ];
-    return { contractVersion: 1, components: [{ componentId: 'spline-connector', fields }] };
+    const menu = connectorVariantMenu(key, asset);
+    const hasAsset = request.subject.components.some(component => component.ownerId === OWNER && component.componentId === 'asset');
+    return { contractVersion: 1,
+        ...(!hasAsset ? { layout: {
+            title: 'Foxhole (SDK)',
+            batch: { label: 'Foxhole Nodes', hint: 'Batch edit the selected Foxhole nodes.' },
+            summary: asset ? inspectorSummary(key, asset) : { title: 'Unknown Connector', identifier: '#' + key },
+            ...(menu ? { menu } : {}),
+            tabs: fields.some(field => !field.hidden)
+                ? [{ id: 'connector', label: 'Connector', componentIds: ['spline-connector'] }] : [],
+        } } : {}),
+        components: [{ componentId: 'spline-connector', fields }] };
 }
 
 function supplyReadouts(request: NixieExperimentalInspectorRequestV1, filters: unknown): NixieExperimentalInspectorReadoutV1[] {
@@ -320,6 +343,11 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
                 ] } },
     }, { path: ['disabled'], hidden: true }]);
     result.set('socket-attachments', [{ path: ['attachments'], hidden: true }]);
+    const connector = data('spline-connector') ? inspectFoxholeSceneV2SplineConnector(request).components[0] : undefined;
+    if (connector) {
+        // The connector provider supplies fields; this layout reserves their placement.
+        result.set('spline-connector', []);
+    }
     const supplyDefaults = isFoxholeMaintenanceTunnel(assetId) && !data('maintenance-supply')
         ? { ...normalizeFoxholeMaintenanceFilters(undefined) } : undefined;
     if (data('maintenance-supply') || supplyDefaults) {
@@ -341,11 +369,14 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
         { id: 'supply', label: 'Supply', componentIds: ['maintenance-supply'],
             ...(isFoxholeMaintenanceTunnel(assetId) ? { readouts: supplyReadouts(request, data('maintenance-supply') ?? supplyDefaults) } : {}) },
         { id: 'storage', label: 'Storage', componentIds: ['cargo'] },
+        ...(connector?.fields.some(field => !field.hidden)
+            ? [{ id: 'connector', label: 'Connector', componentIds: ['spline-connector'] }] : []),
     ].filter(tab => tab.componentIds.some(componentId => (data(componentId) !== undefined || (componentId === 'maintenance-supply' && supplyDefaults))
-        && (componentId === 'maintenance-supply' || result.get(componentId)?.some(field => !field.hidden))));
+        && (componentId === 'maintenance-supply' || componentId === 'spline-connector'
+            || result.get(componentId)?.some(field => !field.hidden))));
     const hitboxKey = String(assetId).toLowerCase();
-    const tier = /\(Tier (\d)\)/u.exec(asset.label);
-    const wikiPage = (tier ? asset.label.slice(0, tier.index) : asset.label).trim().replaceAll(' ', '_');
+    const splineKey = data('spline-connector')?.foxholeKey;
+    const splineMenu = typeof splineKey === 'string' ? connectorVariantMenu(splineKey, assets[splineKey]) : undefined;
     return { contractVersion: 1, layout: {
         title: 'Foxhole (SDK)',
         batch: { label: 'Foxhole Nodes', hint: 'Batch edit the selected Foxhole nodes.' },
@@ -365,14 +396,10 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
             defaults: resolveFoxholeDefaultHitboxPolygons(asset, wallSelections.map(selection =>
                 asset.modifications[selection.slotId]!.variants[selection.variantId]!)).slice(0, 128) } } : {}),
         actions: [...relationshipActions, ...productionActions.values()],
-        summary: {
-            title: label(asset.label), identifier: '#' + assetId, image: asset.browserPreview ?? asset.browserIcon,
-            link: { label: 'wiki.gg', host: 'foxhole.wiki.gg', path: ['wiki', wikiPage],
-                ...(tier ? { fragment: `Tier_${tier[1]}-0` } : {}) },
-        },
+        summary: inspectorSummary(String(assetId), asset),
         ...(data('appearance') ? { menu: { label: 'Variants', componentId: 'appearance',
             ...(data('production-order') ? { toggles: [{ componentId: 'production-order', propertyId: 'disabled',
-                label: 'Production Stats', inverted: true, icon: 'ph:chart-bar-horizontal' }] } : {}) } } : {}),
+                label: 'Production Stats', inverted: true, icon: 'ph:chart-bar-horizontal' }] } : {}) } } : splineMenu ? { menu: splineMenu } : {}),
         tabs,
     }, components: [...result].flatMap(([componentId, fields]) => {
         if (data(componentId) !== undefined) return [{ componentId, fields }];
