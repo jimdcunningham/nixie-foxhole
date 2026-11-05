@@ -1,3 +1,4 @@
+import { foxholeColorLabel } from '../src/color-label.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -244,4 +245,22 @@ test('Inspector catalog text follows the shared locale while IDs and wiki target
     assert.ok(recipes(french).some((option, index) => option.label !== recipes(english)[index]!.label));
     assert.equal(inspect('facilityrefinery1', {}, undefined, 'ja').layout?.summary?.title, english.layout?.summary?.title);
     assert.equal(inspect('facilitypipe', {}, undefined, 'fr').layout?.summary?.title, 'Pipeline');
+});
+
+test('published structure color choices declare swatches without changing saved color values', () => {
+    let count = 0;
+    for (const [assetId, asset] of Object.entries(assets)) {
+        const colors = Object.keys(asset.colorVariants);
+        if (!colors.length) continue;
+        const choices = inspect(assetId).components.find(component => component.componentId === 'appearance')
+            ?.fields.find(field => field.path[0] === 'colorHex')?.choices?.options;
+        assert.deepEqual(choices?.map(option => [option.value, option.swatch]), colors.map(hex => [hex, `#${hex}`]));
+        count += colors.length;
+    }
+    assert.ok(count > 0);
+});
+test('swatch labels retain the native neutral and named color vocabulary', () => {
+    for (const [hex, name] of [['000000', 'Black'], ['ffffff', 'White'], ['808080', 'Gray'], ['c0c0c0', 'Silver'], ['b04040', 'Red'], ['4080c0', 'Blue'], ['c2a878', 'Tan']]) {
+        assert.equal(foxholeColorLabel(hex!), name);
+    }
 });

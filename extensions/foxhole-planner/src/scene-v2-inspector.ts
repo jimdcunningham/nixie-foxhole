@@ -1,3 +1,4 @@
+import { foxholeColorLabel } from './color-label.ts';
 import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
@@ -178,7 +179,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
         matchDefaults: defaultState, options: modes } },
     ...['destroyed', 'packaged', 'blueprint', 'anchorX', 'anchorY'].map(property => ({ path: [property], hidden: true })),
     { path: ['colorHex'], title: 'Color Variant', hidden: !Object.keys(asset.colorVariants).length && appearance.colorHex === undefined,
-        choices: { options: Object.keys(asset.colorVariants).map(hex => ({ label: `#${hex.toUpperCase()}`, value: hex })) } },
+        choices: { options: Object.keys(asset.colorVariants).map(hex => ({ label: foxholeColorLabel(hex), value: hex, swatch: `#${hex}` })) } },
     { path: ['faction'], hidden: !Object.keys(asset.factionVariants).length && appearance.faction === undefined,
         choices: { options: Object.keys(asset.factionVariants).map(faction => ({ label: faction === 'c' ? 'Colonial' : 'Warden', value: faction })) } }]);
     const wallSelections = selections.flatMap(selection => typeof selection.slotId === 'string' && typeof selection.variantId === 'string'
@@ -252,8 +253,8 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
                 }) } } } : {}) }]);
     if (cargo && (groups.length || cargoOptions.length || Array.isArray(cargoItems) && cargoItems.length)) {
         result.get('cargo')!.push(
-            { path: ['cargoOffsetX'], title: 'Offset X (px)', preview: cargo.offsetX },
-            { path: ['cargoOffsetY'], title: 'Offset Y (px)', preview: cargo.offsetY },
+            { path: ['cargoOffsetX'], title: 'Offset X (px)', suffix: 'px', preview: cargo.offsetX },
+            { path: ['cargoOffsetY'], title: 'Offset Y (px)', suffix: 'px', preview: cargo.offsetY },
         );
     }
     const hasUpgrade = selections.some(selection => typeof selection.slotId === 'string' && typeof selection.variantId === 'string'
@@ -399,6 +400,17 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
             frame: resolveFoxholeSceneV2HitboxFrame(request.subject, String(assetId), asset),
             defaults: resolveFoxholeDefaultHitboxPolygons(asset, wallSelections.map(selection =>
                 asset.modifications[selection.slotId]!.variants[selection.variantId]!)).slice(0, 128) } } : {}),
+        ...(result.get('cargo')?.some(field => field.preview !== undefined) ? { previewControls: [{
+            componentId: 'cargo', title: 'Offset', resetLabel: 'Reset Offset Overrides', fields: [
+                { propertyId: 'cargoOffsetX', label: 'X', exportKey: 'offsetX' },
+                { propertyId: 'cargoOffsetY', label: 'Y', exportKey: 'offsetY' },
+            ], handoff: { label: 'Copy Handoff Prompt', property: 'markedCargoOverlay', before: [
+                `Update the storage overlay anchor for ${assetId} using these board-local offsets from the transform center.`,
+                'Repository: https://github.com/jimdcunningham/nixie-foxhole',
+                `File: tools/foxwatch/asset-overrides/${assetId}/manifest.json`,
+                'Merge the following values into the asset override and regenerate its catalog metadata.',
+            ].join('\n') },
+        }] } : {}),
         actions: [...relationshipActions, ...productionActions.values()],
         summary: inspectorSummary(String(assetId), asset),
         ...(data('appearance') ? { menu: { label: 'Variants', componentId: 'appearance',
