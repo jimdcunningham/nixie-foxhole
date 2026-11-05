@@ -1408,7 +1408,7 @@ watch(() => props.node.snapshot.id, () => {
 }
 
 .foxhole-structure-card__tabs :deep(.nx-segmented-tabs .nx-btn-group) {
-    gap: var(--nx-space-1);
+    gap: 3px;
     padding: 3px;
     border: 1px solid var(--nixie-sidebar-row-border);
     border-radius: var(--nx-radius-md);
