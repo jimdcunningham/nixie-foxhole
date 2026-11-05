@@ -14,7 +14,7 @@ test('Planner report sections contain computed resources and the existing bunker
     assert.ok(artillery);
     const nodes = [encodeNixieExperimentalSceneV2SnapshotNodeV1(entity('garrison', artillery[0]))];
     const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: 1, truncated: false, nodes,
-        experimentalPanelContext: { contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.interval`]: '1h' } } };
+        experimentalPanelContext: { contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.scope`]: 'scene', [`${ownerId}.stats.interval`]: '1h' } } };
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const before = structuredClone(scene);
     const report = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection });
@@ -35,22 +35,36 @@ test('Planner report sections contain computed resources and the existing bunker
     assert.ok(construction.rows.every(row => row.tone === 'cost' && /^x[0-9]/.test(row.value)));
     const empty = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
         scene: { ...scene, totalCount: 0, nodes: [] }, selection });
-    assert.deepEqual(empty.preview, { kind: 'empty', message: 'Select buildings to see their stats here.' });
+    assert.deepEqual(empty.preview, { kind: 'empty', message: 'Place buildings to see their stats here.' });
+    const selectionFallback = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
+        scene: { ...scene, totalCount: 0, nodes: [], experimentalPanelContext: { ...scene.experimentalPanelContext,
+            values: { [`${ownerId}.stats.scope`]: 'selection' } } }, selection });
+    assert.equal(selectionFallback.previewLabel, 'Scene');
+    assert.deepEqual(selectionFallback.preview, { kind: 'empty', message: 'Select buildings to see their stats here.' });
+    const layerFallback = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
+        scene: { ...scene, totalCount: 0, nodes: [], experimentalPanelContext: { ...scene.experimentalPanelContext,
+            values: { [`${ownerId}.stats.scope`]: 'auto' } } }, selection });
+    assert.equal(layerFallback.previewLabel, 'Layer');
+    assert.deepEqual(layerFallback.preview, { kind: 'empty',
+        message: 'Activate a layer with Foxhole nodes to review aggregated totals for that layer.' });
     assert.deepEqual(report.columns, ['scope', 'section', 'metric', 'value', 'unit', 'notes']);
     assert.ok(report.sections.find(section => section.id === 'bunkerHealth')?.rows.some(row => row[2] === 'Total Health' && row[3] === '650'));
     assert.match(formatNixieExperimentalPanelReportV1(report, ['bunkerHealth']).listText, /Total Health: 650/);
     const destruction = report.sections.find(section => section.id === 'bunkerDestruction');
     assert.ok(destruction?.rows.some(row => row[5] === 'T3 Wet'));
     const dry = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene,
-        experimentalPanelContext: { ...scene.experimentalPanelContext, values: { [`${ownerId}.stats.interval`]: '3d' } } }, selection });
+        experimentalPanelContext: { ...scene.experimentalPanelContext, values: { [`${ownerId}.stats.scope`]: 'scene', [`${ownerId}.stats.interval`]: '3d' } } }, selection });
     assert.equal(dry.sections.find(section => section.id === 'bunkerDestruction')?.rows.some(row => row[5] === 'T3 Wet'), false);
     const custom = buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene,
         experimentalPanelContext: { ...scene.experimentalPanelContext, values: {
-            [`${ownerId}.stats.interval`]: 'custom', [`${ownerId}.stats.customIntervalSeconds`]: 3 * 86400,
+            [`${ownerId}.stats.scope`]: 'scene', [`${ownerId}.stats.interval`]: 'custom', [`${ownerId}.stats.customIntervalSeconds`]: 3 * 86400,
         } } }, selection });
     assert.equal(dry.preview?.kind, 'sections');
     assert.deepEqual(dry.preview.sections.at(-1)?.table?.columns, ['Weapon', 'T1', 'T2', 'T3']);
-    assert.deepEqual(custom, dry);
+    assert.deepEqual(custom.preview, dry.preview);
+    const customExport = formatNixieExperimentalPanelReportV1(custom, ['bunkerDestruction', 'maintenance']);
+    assert.match(customExport.listText, /Custom \(3d\)/);
+    assert.match(customExport.csvText, /Custom \(3d\)/);
     assert.deepEqual(scene, before);
     assert.throws(() => buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene, truncated: true }, selection }), /Complete scene/);
 });
@@ -59,7 +73,8 @@ test('liquid capacity follows construction cost and omits zero-capacity rows', (
     const silo = Object.entries(assets).find(([, asset]) => asset.codeName.toLowerCase() === 'facilitysilooil');
     assert.ok(silo);
     const nodes = [encodeNixieExperimentalSceneV2SnapshotNodeV1(entity('silo', silo[0]))];
-    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: nodes.length, truncated: false, nodes };
+    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: nodes.length, truncated: false, nodes,
+        experimentalPanelContext: { contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.scope`]: 'scene' } } };
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection }));
     assert.equal(preview?.kind, 'sections');
@@ -84,7 +99,8 @@ test('liquid capacity follows construction cost and omits zero-capacity rows', (
 test('facility power reports production, consumption, and signed net totals in order', () => {
     const nodes = ['facilitypowerdiesel', 'facilityrefinery1'].map((id, index) =>
         encodeNixieExperimentalSceneV2SnapshotNodeV1(entity(String(index), id)));
-    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: nodes.length, truncated: false, nodes };
+    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: nodes.length, truncated: false, nodes,
+        experimentalPanelContext: { contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.scope`]: 'scene' } } };
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const rowsFor = (selectedNodes: typeof nodes) => {
         const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics',
@@ -106,7 +122,7 @@ test('maintenance and production appear in order with resource icons and interva
         data: { orders: [{ recipeId: 'structure:facilityrefinery1:recipe:1', cycles: 2 }] } });
     const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: 1, truncated: false,
         nodes: [encodeNixieExperimentalSceneV2SnapshotNodeV1(refinery)], experimentalPanelContext: {
-            contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.interval`]: '30m' },
+            contractVersion: 1 as const, ownerId, panelId: 'statistics', values: { [`${ownerId}.stats.scope`]: 'scene', [`${ownerId}.stats.interval`]: '30m' },
         } };
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection }));

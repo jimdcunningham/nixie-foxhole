@@ -9,7 +9,7 @@ import { resolveFoxholeEcsBunkerStatistics } from './bunker-statistics.ts';
 export type StatisticsScope = 'auto' | 'selection' | 'layer' | 'scene';
 const ownerId = 'nixie.foxhole-planner';
 
-export function readStatisticsPreferences(scene: SceneSnapshotV1): { scope: StatisticsScope; intervalSeconds: number; } {
+export function readStatisticsPreferences(scene: SceneSnapshotV1): { scope: StatisticsScope; intervalSeconds: number; intervalLabel: string; } {
     const context = scene.experimentalPanelContext;
     const values = context?.ownerId === ownerId && context.panelId === 'statistics' ? context.values : {};
     const requestedScope = values[`${ownerId}.stats.scope`];
@@ -20,10 +20,19 @@ export function readStatisticsPreferences(scene: SceneSnapshotV1): { scope: Stat
         const intervalSeconds = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
             ? Math.max(1, Math.min(Math.round(seconds), 30 * 86400))
             : 3600;
-        return { scope, intervalSeconds };
+        let remaining = intervalSeconds;
+        const parts: string[] = [];
+        for (const [unit, suffix] of [[86400, 'd'], [3600, 'h'], [60, 'm'], [1, 's']] as const) {
+            const count = Math.floor(remaining / unit);
+            if (count > 0) {
+                parts.push(`${count}${suffix}`);
+                remaining %= unit;
+            }
+        }
+        return { scope, intervalSeconds, intervalLabel: `Custom (${parts.join(' ')})` };
     }
     const interval = FOXHOLE_STATISTICS_INTERVALS.find(candidate => candidate.id === intervalId);
-    return { scope, intervalSeconds: interval?.seconds ?? 3600 };
+    return { scope, intervalSeconds: interval?.seconds ?? 3600, intervalLabel: interval?.label ?? '1 Hour' };
 }
 
 export function readSceneStatistics(scene: SceneSnapshotV1, selection: SelectionSnapshotV1, requestedScope: StatisticsScope = 'auto', intervalSeconds = 3600) {
@@ -40,19 +49,16 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
     if (new Set(entities.map(entity => entity.entityId)).size !== entities.length) {
         throw new Error('This scene contains duplicate entity data.');
     }
-    const scope = requestedScope === 'auto' ? selection.totalCount > 0 ? 'selection' : scene.activeLayerId ? 'layer' : 'scene' : requestedScope;
-    if (scope === 'selection' && selection.truncated) {
+    const selectionEnabled = requestedScope === 'auto' || requestedScope === 'selection';
+    if (selectionEnabled && selection.truncated) {
         throw new Error('Complete selection statistics are unavailable.');
     }
-    const roots = new Set(scope === 'selection' ? selection.nodes.map(node => node.id) : scope === 'layer' && scene.activeLayerId ? [scene.activeLayerId] : []);
+    const selected = new Set(selection.nodes.map(node => node.id));
     const parents = new Map(entities.map(entity => {
         const parent = entity.components.find(component => component.ownerId === 'nixie.core' && component.componentId === 'hierarchy')?.data.parentId;
         return [entity.entityId, typeof parent === 'string' ? parent : null];
     }));
-    const included = (id: string): boolean => {
-        if (scope === 'scene') {
-            return true;
-        }
+    const belongsTo = (id: string, roots: ReadonlySet<string>): boolean => {
         const seen = new Set<string>();
         for (let current: string | null | undefined = id; current && !seen.has(current); current = parents.get(current)) {
             if (roots.has(current)) {
@@ -62,12 +68,21 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
         }
         return false;
     };
-    const owned = entities.filter(entity => included(entity.entityId) && entity.components.some(component => component.ownerId === ownerId && component.definitionAvailable));
-    if (entities.some(entity => included(entity.entityId) && entity.components.some(component => component.ownerId === ownerId && !component.definitionAvailable))) {
-        throw new Error('Statistics are unavailable for unresolved components.');
-    }
     const data = (entity: NixieExperimentalComponentEntitySnapshotV1, componentId: string) => entity.components.find(component =>
         component.ownerId === ownerId && component.componentId === componentId && component.definitionAvailable)?.data;
+    const hasSelectedStructure = selectionEnabled && selected.size > 0 && entities.some(entity => {
+        const assetId = data(entity, 'asset')?.assetId;
+        const asset = typeof assetId === 'string' ? assets[assetId] : undefined;
+        return !!asset && !asset.isItem && belongsTo(entity.entityId, selected);
+    });
+    const layerEnabled = requestedScope === 'auto' || requestedScope === 'layer';
+    const scope: Exclude<StatisticsScope, 'auto'> = hasSelectedStructure ? 'selection' : layerEnabled ? 'layer' : 'scene';
+    const roots = scope === 'selection' ? selected : new Set(scene.activeLayerId ? [scene.activeLayerId] : []);
+    const scoped = scope === 'scene' ? entities : entities.filter(entity => belongsTo(entity.entityId, roots));
+    const owned = scoped.filter(entity => entity.components.some(component => component.ownerId === ownerId && component.definitionAvailable));
+    if (scoped.some(entity => entity.components.some(component => component.ownerId === ownerId && !component.definitionAvailable))) {
+        throw new Error('Statistics are unavailable for unresolved components.');
+    }
     const metrics = { 'Entities': owned.length, 'Assets': owned.filter(entity => !!data(entity, 'asset')).length,
         'Connectors': owned.filter(entity => !!data(entity, 'connector') || !!data(entity, 'spline-connector')).length,
         'Planning Shapes': owned.filter(entity => ['range', 'binocular-line', 'triangulation', 'tactical-line'].some(id => !!data(entity, id))).length,

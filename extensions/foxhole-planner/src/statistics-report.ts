@@ -1,7 +1,6 @@
 import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1, NixiePanelReportPreviewV1, NixiePanelReportPreviewSectionV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { readSceneStatistics, readStatisticsPreferences } from './scene-statistics.ts';
-import { FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';
 import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText, buildFoxholeStatsExportCsvFileName,
     buildFoxholeStatsExportSpreadsheetTitle, resolveFoxholeStatsExportSectionAvailability,
     FOXHOLE_STATS_EXPORT_SECTION_IDS, FOXHOLE_STATS_EXPORT_SECTION_LABELS } from './statistics-export-formats.ts';
@@ -10,7 +9,7 @@ import type { FoxholeStatsExportScopePayload } from './statistics-export-formats
 export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelReportRequestV1): NixieExperimentalPanelReportV1 {
     const preferences = readStatisticsPreferences(request.scene);
     const summary = readSceneStatistics(request.scene, request.selection, preferences.scope, preferences.intervalSeconds);
-    const intervalLabel = FOXHOLE_STATISTICS_INTERVALS.find(interval => interval.seconds === preferences.intervalSeconds)?.label ?? '1 Hour';
+    const { intervalLabel } = preferences;
     const localized = (id: string) => Object.values(assets).find(asset => asset.codeName.toLowerCase() === id.toLowerCase());
     const health = summary.bunker?.health;
     const destruction = summary.bunker?.destruction;
@@ -159,7 +158,7 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
     const listHeader = `${scope.label} Statistics\n${scope.detail}`;
     const options = { scopes: [scope], scopeIds: [scope.id], intervalLabel };
     return { contractVersion: 1, title: buildFoxholeStatsExportSpreadsheetTitle(options), fileName: buildFoxholeStatsExportCsvFileName(options),
-        listHeader, preview, columns: ['scope', 'section', 'metric', 'value', 'unit', 'notes'],
+        listHeader, previewLabel: scope.label, preview, columns: ['scope', 'section', 'metric', 'value', 'unit', 'notes'],
         sections: FOXHOLE_STATS_EXPORT_SECTION_IDS.filter(id => scope.nodeCount > 0 && availability[id]).map(id => ({
             id, title: FOXHOLE_STATS_EXPORT_SECTION_LABELS[id],
             listText: buildFoxholeStatsExportListText({ ...options, sectionIds: [id] }).slice(listHeader.length).trim(),
