@@ -514,6 +514,10 @@ export function renderFoxholeSceneV2Entity(
             modelMaterial: { color: 0x4f79c6, roughness: 0.6, metallic: 0 },
         };
     }
+    if (metadata?.model && (!plan.experimentalSpatial || plan.experimentalSpatial.supplementModel === true)) {
+        plan.experimentalSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.experimentalSpatial,
+            modelLights: context.settings?.['foxhole.structure.modelLights'] === true };
+    }
     return plan;
 }
 
