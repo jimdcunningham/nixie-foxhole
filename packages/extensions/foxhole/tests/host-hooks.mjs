@@ -60,6 +60,7 @@ const { parseNixieExtensionManifestV1 } = await import('@nixiejs/extension-sdk')
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
 const { replaceNixieSdkExtensionCatalog } = await import(new URL('app/plugins/nixie/extensions/index.ts', hostLayer).href);
 const { registerNixieInternalExtensionAdapter, setNixieInternalExtensionActiveOwners } = await import(new URL('desktop-extensions/internal-extension-adapters.ts', hostLayer).href);
-registerNixieInternalExtensionAdapter({ ownerId: manifest.id, aliases: ['foxhole'], contributionSourcePrefixes: ['layer:foxhole:'], replacesSdkUi: true, enabledForLegacyProjects: true });
+const { createFoxholeRetainedSceneV2Ui } = await import('../app/plugins/foxhole/nixie/scene-v2-retained-ui.ts');
+registerNixieInternalExtensionAdapter({ retainedSceneV2Ui: createFoxholeRetainedSceneV2Ui(true), ownerId: manifest.id, aliases: ['foxhole'], contributionSourcePrefixes: ['layer:foxhole:'], replacesSdkUi: true, enabledForLegacyProjects: true });
 replaceNixieSdkExtensionCatalog([{ manifest, projectManaged: true }]);
 setNixieInternalExtensionActiveOwners([manifest.id]);

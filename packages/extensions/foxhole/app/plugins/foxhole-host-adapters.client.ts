@@ -5,6 +5,7 @@ import { defineNuxtPlugin } from '#app';
 import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
 
 import { registerNixieInternalModelResource } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
+import { createFoxholeRetainedSceneV2Ui } from '#foxhole/plugins/foxhole/nixie/scene-v2-retained-ui.ts';
 import { registerFoxholeSceneV2HostPolicy } from '#foxhole/utils/scene-v2-host-policy.ts';
 
 import { registerNixieAssistantIntegration } from '#nixie/plugins/nixie/assistant/integration-actions.ts';
@@ -43,6 +44,7 @@ export default defineNuxtPlugin({
                 };
             },
             replacesSdkUi: true,
+            retainedSceneV2Ui: createFoxholeRetainedSceneV2Ui(import.meta.dev),
             enabledForLegacyProjects: true,
             contributionSourcePrefixes: ['layer:foxhole:'],
             loadContributions: async () => {
