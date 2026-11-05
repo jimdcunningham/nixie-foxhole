@@ -571,3 +571,39 @@ test('pipe, underground pipe, and rail endpoint previews use the same portable g
         assert.deepEqual(committed.transaction?.operations, result.transaction?.operations, foxholeKey);
     }
 });
+
+
+test('SDK exchange detaches retired sockets without moving either authored endpoint', () => {
+    const target = structure('target', 0);
+    target.components[1]!.data.assetId = 'trencht1';
+    target.components[2]!.data.attachments = [{ localSocketName: 'PowerSocket', targetEntityId: 'line', targetSocketName: 'BackSocket' }];
+    const line = pipe('line', 38.4);
+    Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', startAttachmentNodeId: 'target', startAttachmentSocketName: 'PowerSocket' });
+    const before = structuredClone([target, line]);
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'target', interaction: 'exchange',
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [target, line] } });
+    assert.deepEqual(result.transform, { x: 0, y: 0 });
+    const detached = result.transaction!.operations.find(operation => operation.entityId === 'line');
+    assert.ok(detached?.op === 'patch');
+    assert.deepEqual(detached.unset, ['startAttachmentNodeId', 'startAttachmentSocketName']);
+    assert.equal(detached.set, undefined);
+    const reciprocal = result.transaction!.operations.find(operation => operation.entityId === 'target');
+    assert.ok(reciprocal?.op === 'patch');
+    assert.deepEqual(reciprocal.set, { attachments: [] });
+    assert.deepEqual([target, line], before);
+});
+
+
+test('SDK exchange retains unresolved peer relationships until its socket metadata is available', () => {
+    const target = structure('target', 0);
+    target.components[1]!.data.assetId = 'powerbox';
+    target.components[2]!.data.attachments = [{ localSocketName: 'PowerSocket', targetEntityId: 'line', targetSocketName: 'BackSocket' }];
+    const line = pipe('line', 38.4);
+    Object.assign(line.components[1]!.data, { foxholeKey: 'unavailable-line', startAttachmentNodeId: 'target', startAttachmentSocketName: 'PowerSocket' });
+    const before = structuredClone([target, line]);
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'target', interaction: 'exchange',
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [target, line] } });
+    assert.equal(result.transaction?.operations.some(operation => operation.op === 'patch' && operation.entityId === 'target'
+        && Array.isArray(operation.set?.attachments) && operation.set.attachments.length === 0) ?? false, false);
+    assert.deepEqual([target, line], before);
+});

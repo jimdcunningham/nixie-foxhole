@@ -240,6 +240,15 @@ export function listFoxholeSceneV2Products(
                         } satisfies NixieExperimentalComponentProductTemplateV1]
                         : [])],
                 };
+            product.exchange = { ownerId: 'nixie.foxhole-planner', componentId: 'asset',
+                match: { catalogId: metadata.isItem ? 'foxhole.icons' : 'foxhole.structures' },
+                ...(!metadata.isItem ? { preserve: [
+                    { componentId: 'socket-attachments' },
+                    ...(metadata.connector?.spline ? [{ componentId: 'spline-connector', propertyIds: [
+                        'startX', 'startY', 'startRotation', 'startHandleLength', 'endX', 'endY', 'endRotation', 'endHandleLength',
+                        'startSocketName', 'endSocketName', 'startAttachmentNodeId', 'startAttachmentSocketName', 'endAttachmentNodeId', 'endAttachmentSocketName',
+                    ] }] : []),
+                ] } : {}) };
             product.interactionProfile = { move: true, rotate: true };
             return {
                 label: metadata.label,

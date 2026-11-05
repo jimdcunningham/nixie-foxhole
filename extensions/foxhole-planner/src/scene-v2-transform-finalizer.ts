@@ -594,7 +594,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
     return { contractVersion: 1, transform: finalizedTransform, ...(operations.length ? { transaction: { contractVersion: 1, transactionId: `connector-snap-${globalThis.crypto.randomUUID()}`, operations } } : {}) };
 }
 
-export function finalizeFoxholeSceneV2Transform(
+function finalizeFoxholeSceneV2TransformCore(
     request: NixieExperimentalTransformFinalizeRequestV1,
 ): NixieExperimentalTransformFinalizeResultV1 {
     const entities = request.context.entities;
@@ -624,7 +624,7 @@ export function finalizeFoxholeSceneV2Transform(
     }));
     let best: { moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; distance: number; overlap: number; }> = [];
-    for (const entity of entities) {
+    for (const entity of request.interaction === 'exchange' ? [] : entities) {
         if (movingIds.has(entity.entityId)) {
             continue;
         }
@@ -663,7 +663,7 @@ export function finalizeFoxholeSceneV2Transform(
         const previousAttachments = attachmentsByEntity.get(member.entityId) ?? [];
         // Internal links move rigidly with the selection. External connectors keep
         // following their sockets; only stationary structure links are re-evaluated.
-        const retained = previousAttachments.filter(attachment => movingIds.has(attachment.targetEntityId)
+        const retained = previousAttachments.filter(attachment => request.interaction === 'exchange' || movingIds.has(attachment.targetEntityId)
             || entities.some(entity => entity.entityId === attachment.targetEntityId && connectorComponent(entity)));
         setAttachments(member.entityId, [...retained]);
         for (const previous of previousAttachments) {
@@ -779,4 +779,73 @@ export function finalizeFoxholeSceneV2Transform(
             }
             : {}),
     };
+}
+
+/** A changed asset/modification can retire sockets while its entity identity remains stable. */
+function reconcileStructureAttachments(request: NixieExperimentalTransformFinalizeRequestV1) {
+    const entities = request.context.entities;
+    const worldSockets = new Map(entities.map(entity => [entity.entityId, sockets(entity, localMatrix(entity))]));
+    const knownMetadata = new Set(entities.filter(entity => assetMetadata(entity) !== null).map(entity => entity.entityId));
+    const valid = (sourceId: string, localName: string, targetId: string, targetName: string) => {
+        const source = worldSockets.get(sourceId)?.find(socket => normalizedName(socket.socket.name) === normalizedName(localName));
+        const target = worldSockets.get(targetId)?.find(socket => normalizedName(socket.socket.name) === normalizedName(targetName));
+        if ((!source && knownMetadata.has(sourceId)) || (!target && knownMetadata.has(targetId))) {
+            return false;
+        }
+        // Missing context/catalog data cannot prove a relationship invalid.
+        return !source || !target || compatible(source, target) > 0;
+    };
+    const operations: NixieExperimentalComponentOperationV1[] = [];
+    const cleaned = entities.map(entity => ({ ...entity, components: entity.components.map(candidate => {
+        if (candidate.ownerId !== FOXHOLE_OWNER_ID) {
+            return candidate;
+        }
+        if (candidate.componentId === SOCKET_ATTACHMENTS_COMPONENT_ID) {
+            const previous = readAttachments(entity);
+            const attachments = previous.filter(link => (entity.entityId !== request.entityId && link.targetEntityId !== request.entityId)
+                || valid(entity.entityId, link.localSocketName, link.targetEntityId, link.targetSocketName));
+            if (attachments.length === previous.length) {
+                return candidate;
+            }
+            operations.push({ op: 'patch', entityId: entity.entityId, componentId: candidate.componentId,
+                set: { attachments: attachments.map(link => ({ ...link })) } });
+            return { ...candidate, data: { ...candidate.data, attachments: attachments.map(link => ({ ...link })) } };
+        }
+        if (candidate.componentId !== 'spline-connector' && candidate.componentId !== 'connector') {
+            return candidate;
+        }
+        const unset: string[] = [];
+        for (const endpoint of connectorEndpoints(entity)) {
+            const link = endpointAttachmentAt(entity, endpoint.socket.name);
+            if (link?.targetEntityId !== request.entityId
+                || valid(entity.entityId, link.localSocketName, link.targetEntityId, link.targetSocketName)) {
+                continue;
+            }
+            unset.push(...(candidate.componentId === 'spline-connector'
+                ? [`${endpoint.role}AttachmentNodeId`, `${endpoint.role}AttachmentSocketName`]
+                : [`${endpoint.role}Attachment`]));
+        }
+        if (!unset.length) {
+            return candidate;
+        }
+        operations.push({ op: 'patch', entityId: entity.entityId, componentId: candidate.componentId, unset });
+        return { ...candidate, data: Object.fromEntries(Object.entries(candidate.data).filter(([key]) => !unset.includes(key))) };
+    }) }));
+    return { entities: cleaned, operations };
+}
+
+export function finalizeFoxholeSceneV2Transform(
+    request: NixieExperimentalTransformFinalizeRequestV1,
+): NixieExperimentalTransformFinalizeResultV1 {
+    const moved = request.context.entities.find(entity => entity.entityId === request.entityId);
+    if (!moved || connectorComponent(moved) || !assetMetadata(moved)) {
+        return finalizeFoxholeSceneV2TransformCore(request);
+    }
+    const cleanup = reconcileStructureAttachments(request);
+    const result = finalizeFoxholeSceneV2TransformCore({ ...request, context: { ...request.context, entities: cleanup.entities } });
+    if (!cleanup.operations.length) {
+        return result;
+    }
+    return { ...result, transaction: { contractVersion: 1, transactionId: `socket-reconcile-${globalThis.crypto.randomUUID()}`,
+        operations: [...cleanup.operations, ...(result.transaction?.operations ?? [])] } };
 }
