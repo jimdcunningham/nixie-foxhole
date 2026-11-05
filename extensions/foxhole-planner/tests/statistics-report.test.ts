@@ -24,7 +24,10 @@ test('Planner report sections contain computed resources and the existing bunker
         ['Total Health', 'Repair Cost', 'Repair Rate', 'Breachable Health', 'Structural Integrity']);
     assert.equal(health?.rows[0]?.value, '650');
     assert.ok(health?.rows.every(row => row.icon === 'ph:shield-fill'));
-    assert.equal(report.preview.showEmbeddedContent, true);
+    const table = report.preview.sections.at(-1)?.table;
+    assert.deepEqual(table?.columns, ['Weapon', 'T1', 'T2', 'T3 Wet', 'T3 Dry']);
+    assert.ok(table.rows.some(row => row.image));
+    assert.ok(table.rows.every(row => row.values.length === 4));
     const construction = report.preview.sections[0]!;
     assert.equal(construction.title, 'Construction Cost');
     assert.ok(construction.rows.some(row => row.image));
@@ -45,6 +48,8 @@ test('Planner report sections contain computed resources and the existing bunker
         experimentalPanelContext: { ...scene.experimentalPanelContext, values: {
             [`${ownerId}.stats.interval`]: 'custom', [`${ownerId}.stats.customIntervalSeconds`]: 3 * 86400,
         } } }, selection });
+    assert.equal(dry.preview?.kind, 'sections');
+    assert.deepEqual(dry.preview.sections.at(-1)?.table?.columns, ['Weapon', 'T1', 'T2', 'T3']);
     assert.deepEqual(custom, dry);
     assert.deepEqual(scene, before);
     assert.throws(() => buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene: { ...scene, truncated: true }, selection }), /Complete scene/);
@@ -106,7 +111,6 @@ test('maintenance and production appear in order with resource icons and interva
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     const { preview } = parseNixieExperimentalPanelReportV1(buildFoxholeStatisticsReport({ contractVersion: 1, panelId: 'statistics', scene, selection }));
     assert.equal(preview?.kind, 'sections');
-    assert.equal(preview.showEmbeddedContent, false);
     assert.deepEqual(preview.sections.map(section => section.title),
         ['Construction Cost', 'Facility Power', 'Building Maintenance', 'Production Input', 'Production Output']);
     const rows = preview.sections.slice(2).map(section => section.rows[0]!);

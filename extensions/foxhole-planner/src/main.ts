@@ -3,7 +3,6 @@ import { buildFoxholeStatisticsReport } from './statistics-report.ts';
 import { renderFoxholePlanningMap } from './scene-v2-map-renderer.ts';
 import { renderFoxholePlanningGrid } from './scene-v2-map-grid.ts';
 import { connectNixieExtension } from '@nixiejs/extension-sdk';
-import { mountBunkerDestructionStatistics } from './scene-statistics.ts';
 import { FOXHOLE_INSPECTOR_SYSTEM_ID, FOXHOLE_CONNECTOR_INSPECTOR_SYSTEM_ID, inspectFoxholeSceneV2Structure, inspectFoxholeSceneV2SplineConnector, inspectFoxholeSceneV2PlanningPath } from './scene-v2-inspector.ts';
 import {
     FOXHOLE_SCENE_V2_ENTITY_RENDERER_SYSTEM_ID,
@@ -42,8 +41,4 @@ const connection = await connectNixieExtension({
         },
     },
 });
-const disposeStatistics = mountBunkerDestructionStatistics(connection);
-window.addEventListener('pagehide', () => {
-    disposeStatistics();
-    connection.dispose();
-}, { once: true });
+window.addEventListener('pagehide', () => connection.dispose(), { once: true });

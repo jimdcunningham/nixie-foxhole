@@ -108,8 +108,28 @@ export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelRepo
         sections.push({ id: 'bunker-health', title: 'Bunker Health', emptyMessage: 'No bunker health is available.',
             rows: rows.map(row => ({ ...row, icon: 'ph:shield-fill', iconTone: 'white' })) });
     }
+    if (destruction?.weapons.length) {
+        const wet = destruction.weapons.some(weapon => weapon.shots.t3wet !== null);
+        sections.push({
+            id: 'bunker-destruction',
+            title: 'Bunker Destruction',
+            emptyMessage: 'No bunker destruction estimates are available.',
+            rows: [],
+            table: {
+                columns: ['Weapon', 'T1', 'T2', ...(wet ? ['T3 Wet', 'T3 Dry'] : ['T3'])],
+                rows: destruction.weapons.map(weapon => {
+                    const asset = localized(weapon.id) ?? localized(weapon.codeName);
+                    const image = asset?.browserIcon ?? asset?.browserPreview;
+                    const { t1, t2, t3, t3wet } = weapon.shots;
+                    const counts = [t1, t2, ...(wet ? [t3wet, t3] : [t3])];
+                    return { label: weaponName(weapon), values: counts.map(count => count !== null && count > 0 ? whole(count) : null),
+                        ...(image ? { image } : {}) };
+                }),
+            },
+        });
+    }
     const preview: NixiePanelReportPreviewV1 = summary.resources.structureCount > 0
-        ? { kind: 'sections', sections, showEmbeddedContent: !!destruction?.weapons.length }
+        ? { kind: 'sections', sections }
         : { kind: 'empty', message: summary.scope === 'layer'
             ? 'Activate a layer with Foxhole nodes to review aggregated totals for that layer.'
             : preferences.scope === 'layer' || preferences.scope === 'scene'

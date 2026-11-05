@@ -4,6 +4,7 @@ import FoxholeCostBreakdownList from '#foxhole/components/nixie/foxhole/FoxholeC
 import type { FoxholeCostBreakdownEntry } from '#foxhole/components/nixie/foxhole/FoxholeCostBreakdownList.vue';
 import FoxholeStatsExportDialog from '#foxhole/components/nixie/foxhole/FoxholeStatsExportDialog.vue';
 import NxEmptyState from '#nixie/components/NxEmptyState.vue';
+import NixieSidebarMetricTable from '#nixie/components/nixie/NixieSidebarMetricTable.vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
 import { useNixieRuntime } from '#nixie/composables/useNixieRuntime.ts';
 import { useNixieSidebarAssetHoverCard } from '#nixie/composables/useNixieSidebarAssetHoverCard.ts';
@@ -604,6 +605,15 @@ const bunkerDestructionWeaponRows = computed(() => (
         };
     })
 ));
+
+const bunkerDestructionColumns = computed(() => [
+    'Weapon', 'T1', 'T2', ...(bunkerDestructionShowsWetTier.value ? ['T3 Wet', 'T3 Dry'] : ['T3']),
+]);
+const bunkerDestructionTableRows = computed(() => bunkerDestructionWeaponRows.value.map(weapon => {
+    const { t1, t2, t3, t3wet } = weapon.shots;
+    const counts = [t1, t2, ...(bunkerDestructionShowsWetTier.value ? [t3wet, t3] : [t3])];
+    return { ...weapon, values: counts.map(formatShotCount) };
+}));
 
 const timeIntervalLabel = computed(() => (
     formatFoxholeMaintenanceIntervalLabel(timeIntervalId.value, customIntervalSeconds.value)
@@ -1315,55 +1325,17 @@ function scheduleHideDestructionWeaponHover(): void {
                     sectionKey="foxhole.scene-stats.bunker-destruction"
                     treeLayout
                 >
-                    <div class="scene-stats-panel__destruction">
-                        <table
-                            class="scene-stats-panel__destruction-table"
-                            :class="{ 'has-wet-tier': bunkerDestructionShowsWetTier }"
-                        >
-                            <thead>
-                                <tr>
-                                    <th scope="col">Weapon</th>
-                                    <th scope="col">T1</th>
-                                    <th scope="col">T2</th>
-                                    <th
-                                        v-if="bunkerDestructionShowsWetTier"
-                                        scope="col"
-                                    >T3 Wet</th>
-                                    <th scope="col">
-                                        {{ bunkerDestructionShowsWetTier ? 'T3 Dry' : 'T3' }}
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="weapon in bunkerDestructionWeaponRows"
-                                    :key="weapon.id"
-                                    @mouseenter="showDestructionWeaponHover(weapon)"
-                                    @mouseleave="scheduleHideDestructionWeaponHover"
-                                >
-                                    <th scope="row">
-                                        <span class="scene-stats-panel__destruction-weapon">
-                                            <span class="scene-stats-panel__destruction-icon">
-                                                <NxEntityIcon
-                                                    :src="weapon.iconUrl"
-                                                    :label="weapon.label"
-                                                />
-                                            </span>
-                                            <span class="scene-stats-panel__destruction-name">
-                                                {{ weapon.label }}
-                                            </span>
-                                        </span>
-                                    </th>
-                                    <td>{{ formatShotCount(weapon.shots.t1) }}</td>
-                                    <td>{{ formatShotCount(weapon.shots.t2) }}</td>
-                                    <td v-if="bunkerDestructionShowsWetTier">
-                                        {{ formatShotCount(weapon.shots.t3wet) }}
-                                    </td>
-                                    <td>{{ formatShotCount(weapon.shots.t3) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <NixieSidebarMetricTable
+                        :columns="bunkerDestructionColumns"
+                        :rows="bunkerDestructionTableRows"
+                        title="Bunker Destruction"
+                        @row-enter="showDestructionWeaponHover"
+                        @row-leave="scheduleHideDestructionWeaponHover"
+                    >
+                        <template #icon="{ row }">
+                            <NxEntityIcon :src="row.iconUrl" :label="row.label" />
+                        </template>
+                    </NixieSidebarMetricTable>
                 </NixieSidebarFormSection>
             </div>
         </div>
@@ -1463,8 +1435,7 @@ function scheduleHideDestructionWeaponHover(): void {
     color: var(--nx-warning);
 }
 
-.scene-stats-panel__metric-row:hover,
-.scene-stats-panel__destruction-table tbody tr:hover {
+.scene-stats-panel__metric-row:hover {
     background: var(--nx-surface-raised);
 }
 
@@ -1547,114 +1518,6 @@ function scheduleHideDestructionWeaponHover(): void {
 
 .scene-stats-panel__metric-value.is-si-critical {
     color: var(--nx-danger);
-}
-
-.scene-stats-panel__destruction {
-    container-type: inline-size;
-    container-name: foxhole-scene-stats-destruction;
-}
-
-.scene-stats-panel__destruction-table {
-    width: 100%;
-    min-width: 0;
-    border-collapse: collapse;
-    table-layout: fixed;
-}
-
-.scene-stats-panel__destruction-table th,
-.scene-stats-panel__destruction-table td {
-    box-sizing: border-box;
-    padding: var(--nx-space-1) var(--nx-space-2);
-    min-height: 28px;
-    vertical-align: middle;
-    font-size: var(--nx-text-sm);
-    font-weight: var(--nx-font-weight);
-    line-height: var(--nx-leading-tight);
-    color: var(--nx-text);
-}
-
-.scene-stats-panel__destruction-table thead th {
-    color: var(--nx-text-muted);
-    font-size: var(--nx-text-xs);
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    border-bottom: 1px solid var(--nx-border);
-}
-
-.scene-stats-panel__destruction-table th:first-child,
-.scene-stats-panel__destruction-table td:first-child {
-    width: auto;
-    padding-inline-start: var(--nx-space-3);
-    text-align: left;
-}
-
-.scene-stats-panel__destruction-table th:not(:first-child),
-.scene-stats-panel__destruction-table td:not(:first-child) {
-    width: 2.65rem;
-    padding-left: var(--nx-space-2);
-    padding-right: var(--nx-space-2);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-    border-left: 1px solid var(--nx-border);
-}
-
-.scene-stats-panel__destruction-table tbody th {
-    font-weight: var(--nx-font-weight);
-    text-align: left;
-}
-
-.scene-stats-panel__destruction-table tbody tr + tr th,
-.scene-stats-panel__destruction-table tbody tr + tr td {
-    border-top: 1px solid var(--nx-border);
-}
-
-.scene-stats-panel__destruction-weapon {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--nx-space-1);
-    min-width: 0;
-    max-width: 100%;
-}
-
-.scene-stats-panel__destruction-icon {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-}
-
-.scene-stats-panel__destruction-icon :deep(.nx-entity-icon) {
-    width: 14px;
-    height: 14px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-}
-
-.scene-stats-panel__destruction-icon :deep(.nx-entity-icon img) {
-    object-fit: contain;
-}
-
-.scene-stats-panel__destruction-icon :deep(.nx-entity-icon span) {
-    font-size: 8px;
-}
-
-.scene-stats-panel__destruction-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-@container foxhole-scene-stats-destruction (max-width: 220px) {
-    .scene-stats-panel__destruction-icon {
-        display: none;
-    }
-}
-
-@container foxhole-scene-stats-destruction (max-width: 260px) {
-    .scene-stats-panel__destruction-table.has-wet-tier .scene-stats-panel__destruction-icon {
-        display: none;
-    }
 }
 
 .scene-stats-panel__metric-row--icon {
