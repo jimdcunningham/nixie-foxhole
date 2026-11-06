@@ -105,7 +105,7 @@ export function renderFoxholeStructureRange(range: FoxholeSceneV2StructureRange,
         children.push({ id: `${prefix}-label`, kind: 'text', text: codeName && type ? `${codeName} (${type})` : codeName || type || 'Range',
             visible: false, x: directed ? x + Math.cos(angle) * (radius + 10) : x, y: directed ? y + Math.sin(angle) * (radius + 10) : y - radius - 10,
             anchorX: directed ? Math.cos(angle) >= 0 ? 0 : 1 : 0.5, anchorY: directed ? 0.5 : 1,
-            experimentalPresentation: { contractVersion: 1, worldUpright: true },
+            presentation: { contractVersion: 1, worldUpright: true },
             style: { fontFamily: 'monospace', fontWeight: '700', fontSize: 11, fill: foxholeStructureRangeColor(range.type) } });
     }
     return { id: prefix, kind: 'group', children };
@@ -125,14 +125,14 @@ export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMe
         const node = renderFoxholeStructureRange(range, `structure-range-${index}`, resolveFoxholeNightVisionRadius(asset, range, id => settings[id]));
         if (node) {
             // Keep ordinary 2D artwork, but never draw its unoccluded fill over the spatial cross-section.
-            node.experimentalPresentation = { contractVersion: 1, groundOverlay: !projected.has(index) };
+            node.presentation = { contractVersion: 1, groundOverlay: !projected.has(index) };
             (isFoxholeStructureRangeVisible(range, settings, false, asset.isVehicle === true) ? always : selected).push(node);
         }
     }
     return [[always, false], [selected, true]].flatMap(([children, selectionOnly], index) => (children as NixieExtensionRenderNodeV1[]).length
         ? [{
             id: index === 0 ? 'structure-ranges' : 'selected-structure-ranges', kind: 'group' as const, ...foxholeRenderLane(FOXHOLE_RANGE_RENDER_LANE),
-            experimentalPresentation: { contractVersion: 1 as const, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
+            presentation: { contractVersion: 1 as const, excludeFromBounds: true, selectionOnly: selectionOnly as boolean }, children: children as NixieExtensionRenderNodeV1[],
         }]
         : []);
 }

@@ -43,7 +43,7 @@ export function getFoxholeFacilityProductV1(
     manifestValue: unknown,
 ): NixieComponentProductV1 {
     const manifest = requireFoxholeManifest(manifestValue);
-    const product = manifest.contributes.experimentalProducts?.find(candidate => (
+    const product = manifest.contributes.products?.find(candidate => (
         candidate.id === FOXHOLE_FACILITY_PRODUCT_ID
     ));
     if (!product) {
@@ -64,7 +64,7 @@ export function createFoxholeFacilityProductionProductV1(
     const manifest = requireFoxholeManifest(manifestValue);
     const product = getFoxholeFacilityProductV1(manifest);
     const definitions = new Map(
-        (manifest.contributes.experimentalComponents?.components ?? []).map(definition => [definition.id, definition]),
+        (manifest.contributes.components?.components ?? []).map(definition => [definition.id, definition]),
     );
     const dataByComponent = new Map<string, NixieComponentJsonObjectV1>([
         [FOXHOLE_MODIFICATION_COMPONENT_ID, { selections: input.selections ?? [] }],

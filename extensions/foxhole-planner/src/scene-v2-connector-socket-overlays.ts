@@ -109,6 +109,6 @@ export function renderFoxholeConnectorSocketOverlays(data: FoxholeSceneV2SplineC
             { connector: true, worldUpright: requiresStraightConnectorSocketAlignment(data.foxholeKey) })
         : renderFoxholeSocketIndicatorGroups(sockets, settings[FOXHOLE_SOCKET_DISPLAY_SETTING_IDS[2]] === true, 'spline-socket', true);
     return [{ id: 'spline-connector-socket-presentation', kind: 'group', ...foxholeRenderLane(FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true },
+        presentation: { contractVersion: 1, excludeFromBounds: true },
         children }];
 }

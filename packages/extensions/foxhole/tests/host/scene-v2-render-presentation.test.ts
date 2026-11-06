@@ -62,9 +62,9 @@ test('older structure range plans retain Native fallback drawing and visibility'
     const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity] });
     // Plans from older extension generations lack the spatial overlay declaration.
     for (const node of plan.root.children) {
-        if (node.experimentalPresentation) delete node.experimentalPresentation.groundOverlay;
+        if (node.presentation) delete node.presentation.groundOverlay;
         if (node.kind === 'group') for (const child of node.children) {
-            if (child.experimentalPresentation) delete child.experimentalPresentation.groundOverlay;
+            if (child.presentation) delete child.presentation.groundOverlay;
         }
     }
     assert.ok(plan.root.children.some(node => node.id === 'selected-structure-ranges'));
@@ -208,9 +208,9 @@ test('Scene V2 Range uses SDK presentation, geometry, and inspector state in Stu
             data: { x: 140, y: 150, rotation: 0.25, scaleX: 1, scaleY: 1 } },
     ] };
     const plan: NixieExtensionRenderPlanV1 = { schemaVersion: 1,
-        experimentalSelectionGeometry: resolveFoxholeRangeSelectionGeometry(range),
+        selectionGeometry: resolveFoxholeRangeSelectionGeometry(range),
         root: { id: 'root', kind: 'group', children: renderFoxholeSceneV2Range(range, 0.25, 1.046810281974576) } };
-    assert.ok(plan.experimentalSelectionGeometry?.measuredTextBounds?.length);
+    assert.ok(plan.selectionGeometry?.measuredTextBounds?.length);
     assert.equal(prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, {}), null);
     assert.equal(foxholeSceneV2StateAdapter.project(entity), null);
     assert.deepEqual(foxholeSceneV2StateAdapter.editableHandles?.(entity), []);
@@ -345,8 +345,8 @@ test('SDK ground range groups survive the Native compatibility adapter', () => {
             assert.equal(renderedIds.includes(`structure-range-${index}`), visible, `range ${index}/${range.type}/${enabled}`);
         }
         for (const group of ranges) {
-            assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
-            assert.ok(group.children?.every(node => typeof node.experimentalPresentation?.groundOverlay === 'boolean'));
+            assert.equal(group.presentation?.excludeFromBounds, true);
+            assert.ok(group.children?.every(node => typeof node.presentation?.groundOverlay === 'boolean'));
         }
         const presentation = prepareFoxholeSceneV2RenderPresentation(entity, plan, 1, settings);
         assert.equal(presentation === null, true, 'the host must render the portable ranges without a private replacement');

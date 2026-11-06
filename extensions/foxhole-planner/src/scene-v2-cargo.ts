@@ -230,7 +230,7 @@ export function renderFoxholeSceneV2Cargo(options: {
         x: options.developmentPreview?.cargoOffsetX ?? options.asset.cargo?.offsetX ?? 0,
         y: options.developmentPreview?.cargoOffsetY ?? options.asset.cargo?.offsetY ?? 0,
         rotation: -options.rotation,
-        experimentalPresentation: { contractVersion: 1, worldUpright: true },
+        presentation: { contractVersion: 1, worldUpright: true },
         children,
     };
 }

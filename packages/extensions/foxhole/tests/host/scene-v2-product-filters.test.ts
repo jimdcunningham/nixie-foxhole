@@ -8,7 +8,7 @@ const load = (name: string) => JSON.parse(readFileSync(hostSourceUrl(`../../../.
 
 test('Planner provider settings preserve bundled button order, cycles and tier availability', () => {
     const manifest = load('foxhole-planner');
-    const filters = createNixieSceneV2ProductFilters([{ settings: manifest.settings, productProviders: manifest.experimentalProductProviders }]);
+    const filters = createNixieSceneV2ProductFilters([{ settings: manifest.settings, productProviders: manifest.productProviders }]);
     const values = Object.fromEntries(manifest.settings.map((setting: { id: string; defaultValue: unknown; }) => [setting.id, setting.defaultValue]));
     const context = { getSetting: (id: string) => values[id] } as Parameters<NonNullable<(typeof filters)[number]['enabled']>>[0];
     assert.deepEqual(filters.map(filter => typeof filter.label === 'function' ? filter.label(values[filter.settingId], context) : filter.label),
@@ -29,7 +29,7 @@ test('Planner provider settings preserve bundled button order, cycles and tier a
 
 test('neutral Diagram provider also uses the shared cyclic filter surface', () => {
     const manifest = load('scene-v2-diagram');
-    const filters = createNixieSceneV2ProductFilters([{ settings: manifest.settings, productProviders: manifest.experimentalProductProviders }]);
+    const filters = createNixieSceneV2ProductFilters([{ settings: manifest.settings, productProviders: manifest.productProviders }]);
     assert.equal(filters.length, 1);
     const filter = filters[0]!;
     const context = {} as Parameters<NonNullable<typeof filter.nextValue>>[1];

@@ -267,7 +267,7 @@ function labelNode(
         x: (segment.start.x + segment.end.x) / 2,
         y: (segment.start.y + segment.end.y) / 2,
         rotation: -nodeRotation,
-        experimentalPresentation: { contractVersion: 1, worldUpright: true },
+        presentation: { contractVersion: 1, worldUpright: true },
         scaleX: renderScale * scale,
         scaleY: renderScale * scale,
         children: [{

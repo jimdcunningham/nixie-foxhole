@@ -12,7 +12,7 @@ import { registerNixieSceneV1NodeConverter } from '../../../../nixie/app/utils/n
 import { convertFoxholeSceneV1NodeToV2 } from '../../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl('../../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.experimentalComponents! }];
+const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.components! }];
 registerNixieSceneV1NodeConverter(manifest.id, convertFoxholeSceneV1NodeToV2);
 const capabilities = () => ({ move: true, rotate: true, geometryReshape: true });
 

@@ -10,9 +10,9 @@ import { FOXHOLE_TACTICAL_PRESET_CHOICES, FOXHOLE_TACTICAL_PRESET_FIELDS } from 
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
 function subject(id: string, points: number[]): NixieComponentEntitySnapshotV1 {
-    const tool = manifest.contributes.experimentalProductTools!.find(entry => entry.id === `planning.${id}`)!;
-    const product = manifest.contributes.experimentalProducts!.find(entry => entry.id === tool.productId)!;
-    const definition = manifest.contributes.experimentalComponents!.components.find(entry => entry.id === id)!;
+    const tool = manifest.contributes.productTools!.find(entry => entry.id === `planning.${id}`)!;
+    const product = manifest.contributes.products!.find(entry => entry.id === tool.productId)!;
+    const definition = manifest.contributes.components!.components.find(entry => entry.id === id)!;
     const components = product.components.map(component => ({ ...component, definitionAvailable: true,
         data: { ...component.data, [definition.geometryPropertyId ?? 'points']: points } }));
     for (const component of components) {
@@ -26,7 +26,7 @@ function nodes(node: NixieExtensionRenderNodeV1): NixieExtensionRenderNodeV1[] {
 
 test('planning tools reference declared paths and preserve the Native meter scale and rendered measurements', () => {
     for (const id of ['range', 'binocular-line', 'tactical-line']) {
-        assert.equal(manifest.contributes.experimentalComponents!.components.find(entry => entry.id === id)?.geometry, 'polyline');
+        assert.equal(manifest.contributes.components!.components.find(entry => entry.id === id)?.geometry, 'polyline');
     }
     const range = subject('range', [0, 0, 320, 0]);
     const binoculars = subject('binocular-line', [0, 0, 320, 0, 320, 320]);
@@ -44,10 +44,10 @@ test('planning tools reference declared paths and preserve the Native meter scal
 test('planning Inspectors hide fixed measurement scale and internal preset identity while retaining authored styling', () => {
     for (const id of ['range', 'binocular-line', 'tactical-line', 'triangulation']) {
         const entity = subject(id, id === 'triangulation' ? [0, 0, 320, 0, 0, 320] : [0, 0, 320, 0]);
-        const provider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === id)!;
+        const provider = manifest.contributes.inspectorProviders!.find(entry => entry.id === id)!;
         const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
         const result = inspectFoxholeSceneV2PlanningPath(request);
-        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
         assert.deepEqual(result.components[0]!.fields.find(field => field.path[0] === (id === 'tactical-line' ? 'presetId' : 'meterPixels')),
             { path: [id === 'tactical-line' ? 'presetId' : 'meterPixels'], hidden: true });
         assert.equal(result.components[0]!.fields.some(field => field.path[0] === 'strokeColor'), false);
@@ -56,10 +56,10 @@ test('planning Inspectors hide fixed measurement scale and internal preset ident
 
 test('tactical preset choices reset all styling fields together and preserve authored vertices', () => {
     const entity = subject('tactical-line', [0, 0, 160, -80, 320, 0]);
-    const provider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === 'tactical-line')!;
+    const provider = manifest.contributes.inspectorProviders!.find(entry => entry.id === 'tactical-line')!;
     const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
     const result = inspectFoxholeSceneV2PlanningPath(request);
-    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
     const choices = result.components[0]!.fields.find(field => field.path.length === 0)!.choices!;
     assert.deepEqual(choices.valuePropertyIds, FOXHOLE_TACTICAL_PRESET_FIELDS);
     assert.equal(choices.options.length, 5);
@@ -87,6 +87,6 @@ test('triangulation product uses authored edge points and renders its fitted rad
 test('range render plans declare their authored center as the host rotation origin', () => {
     for (const points of [[0, 0, 80, 0], [12, -40, -90, 30]]) {
         const plan = renderFoxholeSceneV2Entity(subject('range', points));
-        assert.deepEqual(plan.experimentalSelectionGeometry?.transformOrigin, { x: points[0], y: points[1] });
+        assert.deepEqual(plan.selectionGeometry?.transformOrigin, { x: points[0], y: points[1] });
     }
 });

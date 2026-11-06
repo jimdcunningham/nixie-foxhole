@@ -8,9 +8,9 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
     const declaration = parseNixieProductCatalogDeclarationV1({contractVersion: 1, id: 'foxhole.catalog', baseUrl: pin.baseUrl,
         document: {path: 'dist/catalog.v1.json', sha256: pin.catalog.sha256, byteLength: pin.catalog.byteLength}});
     manifest.capabilities = [...new Set([...manifest.capabilities, 'resources.remote' as const])];
-    delete manifest.contributes.experimentalAssetPacks;
-    manifest.contributes.experimentalProductCatalogs = [declaration];
-    manifest.contributes.experimentalResources = catalog.products.flatMap(product => (product.resources.model ?? []).map(resource => {
+    delete manifest.contributes.assetPacks;
+    manifest.contributes.productCatalogs = [declaration];
+    manifest.contributes.resources = catalog.products.flatMap(product => (product.resources.model ?? []).map(resource => {
         const defaults = catalog.resourceDefaults.model!;
         const variant = resource.variant ?? defaults.variant;
         const id = variant === 'base' ? product.id : product.id + '.' + variant;
@@ -26,7 +26,7 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
         const path = privateFiles?.['icons/' + name + '.webp'];
         const image = catalog.sharedResources.find(resource => resource.path === path && resource.mediaType === 'image/webp');
         if (image) {
-            manifest.contributes.experimentalResources.push({contractVersion: 1, id: 'foxhole.icon.' + name,
+            manifest.contributes.resources.push({contractVersion: 1, id: 'foxhole.icon.' + name,
                 kind: 'texture', assetPack: declaration.id, path: image.path});
         }
     }
@@ -35,7 +35,7 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
         'foxhole.asset.': 'textures/{id}.webp', 'foxhole.icon.': 'icons/{id}.webp',
         'foxhole.mod.': 'shared/modifications/{id}.webp', 'foxhole.visual.': 'shared/visuals/{id}.webp',
     };
-    manifest.contributes.experimentalResourceTemplates = (manifest.contributes.experimentalResourceTemplates ?? []).map(template => {
+    manifest.contributes.resourceTemplates = (manifest.contributes.resourceTemplates ?? []).map(template => {
         if (!paths[template.idPrefix]) throw new Error('Unexpected Planner resource template: ' + template.idPrefix);
         return {...template, pathTemplate: paths[template.idPrefix]!, assetPack: declaration.id};
     });

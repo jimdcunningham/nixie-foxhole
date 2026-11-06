@@ -16,9 +16,9 @@ test('debug spotlights render actual catalog lights independent of nighttime, wi
     assert.equal(off.root.children.some(node => node.id === 'structure-debug-spotlights'), false);
     const group = on.root.children.find(node => node.id === 'structure-debug-spotlights');
     assert.ok(group && group.kind === 'group');
-    assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(group.presentation?.excludeFromBounds, true);
     assert.ok(group.children.length >= 1);
-    assert.deepEqual(on.experimentalSelectionGeometry, off.experimentalSelectionGeometry);
+    assert.deepEqual(on.selectionGeometry, off.selectionGeometry);
 });
 
 test('debug spotlights stay hidden for destroyed and packaged structures', () => {

@@ -15,10 +15,10 @@ test('modification slot setting renders real catalog slot anchors without changi
     assert.equal(off.root.children.some(node => node.id === 'structure-modification-slots'), false);
     const group = on.root.children.find(node => node.id === 'structure-modification-slots');
     assert.ok(group && group.kind === 'group');
-    assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(group.presentation?.excludeFromBounds, true);
     assert.ok(group.children.length >= 4);
     assert.ok(group.children.some(node => node.kind === 'group' && node.x === -80 && node.y === 0));
-    assert.deepEqual(on.experimentalSelectionGeometry, off.experimentalSelectionGeometry);
+    assert.deepEqual(on.selectionGeometry, off.selectionGeometry);
 });
 
 test('modification slot overlay honors destroyed and packaged appearances', () => {

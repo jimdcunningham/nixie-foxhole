@@ -49,7 +49,7 @@ export function renderFoxholeConnectorGuides(data: FoxholeSceneV2SplineConnector
         }
     }
     return [{ id: 'spline-connector-guides', kind: 'group', ...foxholeRenderLane(FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE),
-        experimentalPresentation: { contractVersion: 1, selectionOnly: true, excludeFromBounds: true }, children: [{
-            id: 'spline-guide-path', kind: 'graphics', experimentalPresentation: { contractVersion: 1, toolAccent: 'stem' }, commands: stem,
-        }, { id: 'spline-guide-handles', kind: 'graphics', experimentalPresentation: { contractVersion: 1, toolAccent: 'handle' }, commands: handles }] }];
+        presentation: { contractVersion: 1, selectionOnly: true, excludeFromBounds: true }, children: [{
+            id: 'spline-guide-path', kind: 'graphics', presentation: { contractVersion: 1, toolAccent: 'stem' }, commands: stem,
+        }, { id: 'spline-guide-handles', kind: 'graphics', presentation: { contractVersion: 1, toolAccent: 'handle' }, commands: handles }] }];
 }

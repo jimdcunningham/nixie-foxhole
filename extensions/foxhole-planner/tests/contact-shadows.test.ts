@@ -42,7 +42,7 @@ test('SDK sprite shadows match V1 anchors, extents, offsets, rotation and alpha'
     assert.equal(shadow.height, 451.5);
     assert.equal(shadow.alpha, 0.4);
     assert.equal(shadow.laneId, 'foxhole:structure:contact-shadow');
-    assert.equal(shadow.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(shadow.presentation?.excludeFromBounds, true);
     assert.equal(nodes[1], surface);
 });
 test('clipped wall shadows preserve cuts and remap UVs to their padded image', () => {
@@ -82,7 +82,7 @@ test('the actual SDK entity renderer consumes compiled shadows and keeps them ou
         const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity));
         const shadow = plan.root.children.find(node => node.id === 'building-texture-contact-shadow');
         assert.equal(shadow?.laneId, 'foxhole:structure:contact-shadow');
-        assert.equal(shadow?.experimentalPresentation?.excludeFromBounds, true);
+        assert.equal(shadow?.presentation?.excludeFromBounds, true);
         assert.equal(shadow?.kind === 'sprite' && shadow.width, 393);
         assert.ok(plan.root.children.some(node => node.id === 'building-texture'));
         delete asset.contactShadows;

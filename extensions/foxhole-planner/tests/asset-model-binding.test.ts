@@ -21,22 +21,22 @@ test('previously saved tier changes render the current asset instead of a stale 
         const subject = entity(assetId);
         const before = structuredClone(subject);
         const plan = renderFoxholeSceneV2Entity(subject);
-        assert.deepEqual(plan.experimentalSpatial?.model, getFoxholeSceneV2ModelComponentData(metadata[assetId]!.model!));
+        assert.deepEqual(plan.spatial?.model, getFoxholeSceneV2ModelComponentData(metadata[assetId]!.model!));
         assert.deepEqual(subject, before);
     }
-    assert.equal(renderFoxholeSceneV2Entity(entity('fortt2')).experimentalSpatial?.model, undefined);
+    assert.equal(renderFoxholeSceneV2Entity(entity('fortt2')).spatial?.model, undefined);
 });
 
 test('asset changes to flat artwork suppress an obsolete model while retaining the planar visual', () => {
     const target = Object.entries(metadata).find(([, asset]) => !asset.isItem && !asset.model && !asset.connector)!;
     assert.ok(target);
     const plan = renderFoxholeSceneV2Entity(entity(target[0]));
-    assert.equal(plan.experimentalSpatial?.model, null);
+    assert.equal(plan.spatial?.model, null);
     assert.ok(plan.root.children.length > 0);
 });
 
 test('Demolished takes priority over repairing an obsolete intact tier model', () => {
     const plan = renderFoxholeSceneV2Entity(entity('fortt3', true));
     const asset = metadata.fortt3!;
-    assert.deepEqual(plan.experimentalSpatial?.model, getFoxholeSceneV2ModelComponentData(metadata[asset.destroyedAssetId!]!.model!));
+    assert.deepEqual(plan.spatial?.model, getFoxholeSceneV2ModelComponentData(metadata[asset.destroyedAssetId!]!.model!));
 });

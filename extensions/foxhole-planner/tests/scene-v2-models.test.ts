@@ -38,7 +38,7 @@ for (const assetId of spatialAssetIds) {
         }
         const model = item.product.components.find(component => component.componentId === 'model')!;
         const manifest = createCatalogRuntimeManifest(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')), productCatalog, catalogPin);
-        const definition = manifest.contributes.experimentalComponents!.components.find((component: { id: string; }) => component.id === 'model')!;
+        const definition = manifest.contributes.components!.components.find((component: { id: string; }) => component.id === 'model')!;
         validateNixieComponentDataV1(definition.schema, model.data);
         assert.equal(model.ownerId, 'nixie.foxhole-planner');
         assert.equal(model.data.resourceId, `foxhole.model.${assetId}`);
@@ -112,7 +112,7 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.equal(binary.subarray(view.byteOffset, view.byteOffset + 4).toString(), 'RIFF');
             assert.equal(binary.subarray(view.byteOffset + 8, view.byteOffset + 12).toString(), 'WEBP');
         }
-        if (declaredBuild.has(metadata.resourceId)) assert.deepEqual(manifest.contributes.experimentalResources!.find((resource: { id: string; }) => resource.id === metadata.resourceId),
+        if (declaredBuild.has(metadata.resourceId)) assert.deepEqual(manifest.contributes.resources!.find((resource: { id: string; }) => resource.id === metadata.resourceId),
             { contractVersion: 1, id: metadata.resourceId, kind: 'model', path: `models/${metadata.assetId ?? assetId}.${metadata.assetId && metadata.assetId !== assetId ? assetId.slice(metadata.assetId.length + 1) : 'base'}.glb`,
                 assetPack: 'foxhole.catalog' });
     }
@@ -130,7 +130,7 @@ test('packaged models share their owning asset directory with textures and icons
         id: 'powerpole.upgrade.coal', assetId: 'facilitypowerdiesel', path: 'models/powerpole.upgrade.coal.glb',
     }), /Invalid Foxhole packaged model identity/);
     const manifest = createCatalogRuntimeManifest(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')), productCatalog, catalogPin);
-    const templates = Object.fromEntries(manifest.contributes.experimentalResourceTemplates!
+    const templates = Object.fromEntries(manifest.contributes.resourceTemplates!
         .map((template: { idPrefix: string; pathTemplate: string; }) => [template.idPrefix, template.pathTemplate]));
     assert.equal(templates['foxhole.asset.'], 'textures/{id}.webp');
     assert.equal(templates['foxhole.icon.'], 'icons/{id}.webp');
@@ -155,7 +155,7 @@ test('catalog-wide models bind every exportable category and keep unavailable mo
         assert.equal(models[0]!.assetId, asset.id);
     }
     const manifest = createCatalogRuntimeManifest(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')), productCatalog, catalogPin);
-    assert.deepEqual(new Set(manifest.contributes.experimentalResources!.filter((resource: { kind: string; }) => resource.kind === 'model').map((resource: { id: string; }) => resource.id)), declaredBuild);
+    assert.deepEqual(new Set(manifest.contributes.resources!.filter((resource: { kind: string; }) => resource.kind === 'model').map((resource: { id: string; }) => resource.id)), declaredBuild);
 });
 
 test('facility upgrades reference declared parts assembled in the original blueprint coordinate space', () => {

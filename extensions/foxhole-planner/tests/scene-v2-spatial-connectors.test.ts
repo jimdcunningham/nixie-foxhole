@@ -24,7 +24,7 @@ test('power cable follows real pole and facility sockets, retains heights and re
     Object.assign(spline, { startAttachmentNodeId: pole.entityId, startAttachmentSocketName: 'PowerSocket',
         endAttachmentNodeId: facility.entityId, endAttachmentSocketName: 'PowerSocket' });
     const entities = [pole, facility, cable], before = structuredClone(entities);
-    const render = () => renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).experimentalSpatial!.nodes[0]!;
+    const render = () => renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).spatial!.nodes[0]!;
     const node = render(), start = assets.powerpole!.buildSockets.find(socket => socket.name.includes('PowerSocket'))!;
     const end = assets.facilitypowerdiesel!.buildSockets.find(socket => socket.name.includes('PowerSocket'))!;
     assert.equal(node.kind, 'tube');
@@ -78,7 +78,7 @@ for (const id of ['engineroomt2', 'engineroomt3']) {
         const spline = cable.components.find(c => c.componentId === 'spline-connector')!.data;
         Object.assign(spline, { endAttachmentNodeId: engine.entityId, endAttachmentSocketName: 'PowerSocket' });
         const entities = [engine, cable], before = structuredClone(entities);
-        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).experimentalSpatial!.nodes[0]!;
+        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).spatial!.nodes[0]!;
         assert.equal(node.kind, 'tube');
         if (node.kind !== 'tube') return;
         const expected = [-147.27136 * .32, 299.42903 * .32, 62.74524 * .32];
@@ -93,7 +93,7 @@ test('underground pipe renders both rigid terminals at their authored endpoints 
     const data = pipe.components.find(c => c.componentId === 'spline-connector')!.data;
     Object.assign(data, { startX: 35, startY: -20, startRotation: .4, endX: 500, endY: 160, endRotation: -.3 });
     const before = structuredClone(pipe);
-    const render = (subject: Entity) => renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject] }).experimentalSpatial;
+    const render = (subject: Entity) => renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject] }).spatial;
     const plan = render(pipe);
     assert.ok(plan, 'a static single-model fallback cannot display the second terminal');
     assert.equal(plan.supplementModel, undefined, 'the static fallback must be replaced');
@@ -150,7 +150,7 @@ test('elevated cables sag toward world gravity independently of their local orig
     cable.components.find(c => c.componentId === 'spline-connector')!.data.endAttachmentNodeId = end.entityId;
     const entities = [start, end, cable];
     const worldPath = () => {
-        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).experimentalSpatial!.nodes[0]!;
+        const node = renderFoxholeSceneV2Entity(cable, { contractVersion: 1, entities }).spatial!.nodes[0]!;
         const projection = createFoxholeSpatialProjection(entities);
         return Array.from({ length: node.points.length / 3 }, (_, i) => projection.toWorld(cable,
             [node.points[i * 3]!, node.points[i * 3 + 1]!, node.points[i * 3 + 2]!]));

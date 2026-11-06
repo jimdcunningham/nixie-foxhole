@@ -29,7 +29,7 @@ for (const { name, listProducts } of [
             for (const item of page.items) {
                 const host = new NixieSceneV2ComponentHost();
                 host.registerExtension(NIXIE_SCENE_V2_CORE_OWNER_ID, NIXIE_SCENE_V2_CORE_COMPONENTS);
-                host.registerExtension(manifest.id, manifest.contributes.experimentalComponents);
+                host.registerExtension(manifest.id, manifest.contributes.components);
                 assert.doesNotThrow(() => host.instantiateProduct(`product-${checked}`, item.product), item.product.id);
                 checked += 1;
             }
@@ -84,7 +84,7 @@ test('all filtered upgrade products satisfy the real core/owner schemas and keep
             }
             const host = new NixieSceneV2ComponentHost();
             host.registerExtension(NIXIE_SCENE_V2_CORE_OWNER_ID, NIXIE_SCENE_V2_CORE_COMPONENTS);
-            host.registerExtension(manifest.id, manifest.contributes.experimentalComponents);
+            host.registerExtension(manifest.id, manifest.contributes.components);
             assert.doesNotThrow(() => host.instantiateProduct(`filtered-${ids.size}`, item.product), item.product.id);
         }
     }

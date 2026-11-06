@@ -26,14 +26,14 @@ test('FoxWatch packages base, replacement and shared light metadata before publi
     assert.deepEqual(catalog['foxhole.model.base'],[{nodeName:'fort-lamp',castShadow:true,poweredIntensity:120},{nodeName:'work-lamp',castShadow:false}]);
     const host=createFakeNixieExtensionHost({extensionId:'nixie.foxhole-planner'});
     const entity={entityId:'structure',revision:1,components:[]};
-    const saved=structuredClone(entity),connection=await host.connect({sceneV2:{entityRenderers:{light:(_entity,context)=>({schemaVersion:1,root:{id:'root',kind:'group',children:[]},experimentalSpatial:{
+    const saved=structuredClone(entity),connection=await host.connect({sceneV2:{entityRenderers:{light:(_entity,context)=>({schemaVersion:1,root:{id:'root',kind:'group',children:[]},spatial:{
         contractVersion:1,supplementModel:true,nodes:[],modelLights:true,
         modelLightOverrides:buildFoxholeModelLightOverrides('foxhole.model.base',catalog,context.settings?.['foxhole.ranges.poweredSpotlights']===true),
     }})}}});
     try {
         for(const enabled of [true,false,true]){
             const plan=await host.renderEntity('light',entity,{contractVersion:1,entities:[entity],settings:{'foxhole.ranges.poweredSpotlights':enabled}});
-            assert.deepEqual(plan.experimentalSpatial?.modelLightOverrides,[{nodeName:'fort-lamp',castShadow:true,intensity:120,enabled},{nodeName:'work-lamp',castShadow:false}]);
+            assert.deepEqual(plan.spatial?.modelLightOverrides,[{nodeName:'fort-lamp',castShadow:true,intensity:120,enabled},{nodeName:'work-lamp',castShadow:false}]);
             assert.deepEqual(entity,saved);
         }
         assert.deepEqual(buildFoxholeModelLightOverrides('foxhole.model.base.destroyed',catalog,true),[{nodeName:'replacement-lamp',castShadow:true,intensity:120,enabled:true}]);

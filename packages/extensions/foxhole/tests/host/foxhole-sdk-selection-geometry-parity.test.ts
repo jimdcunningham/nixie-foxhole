@@ -85,7 +85,7 @@ test('SDK range origins retain the first authored endpoint without a private ada
         const subject = { entityId: 'range', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'range', version: 1,
             definitionAvailable: true, data: { ...DEFAULT_FOXHOLE_RANGE_STATE, points } }] };
         const plan = renderFoxholeSceneV2Entity(subject);
-        assert.deepEqual(plan.experimentalSelectionGeometry?.transformOrigin, { x: points[0], y: points[1] });
+        assert.deepEqual(plan.selectionGeometry?.transformOrigin, { x: points[0], y: points[1] });
         assert.equal(foxholeSceneV2StateAdapter.selectionTransformOriginLocal?.(subject), null);
     }
 });

@@ -19,7 +19,7 @@ import { finalizeFoxholeSurfacePlacement } from '../../../../../extensions/foxho
 import { resolveFoxholeEntityStructureSockets } from '../../../../../extensions/foxhole-planner/src/effective-structure-sockets.ts';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl('../../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.experimentalComponents! }];
+const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.components! }];
 const ownerId = manifest.id;
 const product = (id: string) => listFoxholeSceneV2Products({ contractVersion: 1, query: id, offset: 0, limit: 100 }).items
     .find(item => item.product.id === `asset.${id}`)!.product;
@@ -68,7 +68,7 @@ function fixture(context: TestContext, snapping = true) {
     controller.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => finalizersEnabled
             ? [{ ownerId, name: manifest.name, generationHash: 'topology-fixture',
-                contribution: manifest.contributes.experimentalComponents!, transformFinalizers: manifest.contributes.experimentalTransformFinalizers! }]
+                contribution: manifest.contributes.components!, transformFinalizers: manifest.contributes.transformFinalizers! }]
             : [],
         getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, system, request) => {
             if (pending) {
@@ -107,10 +107,10 @@ function fixture(context: TestContext, snapping = true) {
         assert.deepEqual(reloaded.exportDocument(), after);
     }
     function inspect(id: string) {
-        const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
+        const provider = manifest.contributes.inspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
         const request = projectNixieInspectorSubjectV1(entity(id), ownerId, provider);
         const result = inspectFoxholeSceneV2Structure(request);
-        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
         return result;
     }
     function pauseFinalizers() {
@@ -311,9 +311,9 @@ test('isolated Planner catalog grids and core icons use SDK products with atomic
     const { registerNixieInternalSceneV2Adapter } = await import('../../../../nixie/desktop-extensions/internal-scene-v2-adapters.ts');
     const { placeNixieSceneV2CatalogGrid } = await import('../../../../nixie/app/utils/nixie-scene-v2-catalog-grid.ts');
     const { createNixieSceneV2CatalogIconProduct } = await import('../../../../nixie/app/utils/nixie-scene-v2-catalog-icon.ts');
-    const provider = manifest.contributes.experimentalProductProviders![0]!;
+    const provider = manifest.contributes.productProviders![0]!;
     const entry = { ownerId, name: manifest.name, generationHash: 'catalog-fixture', revision: 'catalog-fixture',
-        contribution: manifest.contributes.experimentalComponents!, products: [], productProviders: [provider],
+        contribution: manifest.contributes.components!, products: [], productProviders: [provider],
         renderers: [], resources: [], resourceTemplates: [], transformFinalizers: [] };
     replaceNixieSceneV2ExtensionCatalog([entry]);
     context.after(() => replaceNixieSceneV2ExtensionCatalog([]));

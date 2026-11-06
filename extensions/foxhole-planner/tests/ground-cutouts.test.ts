@@ -29,8 +29,8 @@ test('ground cutouts cross the actual structural renderer alongside visibility a
     for(const id of ['trencht1','trencht2','trencht3','trenchintt1','trenchempt3','fortt3','fortcornert1','fortbaset2']) {
         const entity={entityId:'preview',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:id}}]};
         const rendered=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings:{'foxhole.structure.hideRoofs':true}});
-        assert.ok(rendered.experimentalSpatial?.groundCutouts?.length,id);
-        parseNixieSpatialPlanV1(rendered.experimentalSpatial);
+        assert.ok(rendered.spatial?.groundCutouts?.length,id);
+        parseNixieSpatialPlanV1(rendered.spatial);
     }
 });
 test('connector excavations match the independently rotated native floor and remain when floors are hidden', () => {

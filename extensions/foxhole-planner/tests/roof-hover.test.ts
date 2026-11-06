@@ -21,8 +21,8 @@ test('observation bunker flags hide together with their roofs in planar and mode
         assert.ok(normal.root.children.some(node => node.id === 'structure-layer-teamflagmesh'));
         assert.ok(!hidden.root.children.some(node => node.id === 'structure-layer-teamflagmesh'));
         for (const name of asset.model!.structuralProfile!.layers.teamflagmesh!) {
-            assert.ok(!normal.experimentalSpatial?.hiddenModelNodes?.includes(name));
-            assert.ok(hidden.experimentalSpatial?.hiddenModelNodes?.includes(name));
+            assert.ok(!normal.spatial?.hiddenModelNodes?.includes(name));
+            assert.ok(hidden.spatial?.hiddenModelNodes?.includes(name));
         }
     }
     assert.equal(isFoxholeRoofRenderLayer({ id: 'teamflagmesh' }, 'UnrelatedStructure'), false);
@@ -33,18 +33,18 @@ test('roof hover fades completely, includes flags, and leaves Hide Roofs authori
     const before = structuredClone(subject);
     const hover = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
         settings: { 'foxhole.structure.hideRoofsOnHover': true, 'foxhole.structure.useStaticRender': true } }));
-    assert.equal(hover.experimentalHover!.opacity, 0);
-    assert.equal(hover.experimentalHover!.fadeDurationMs, 110);
-    assert.ok(hover.experimentalHover!.hiddenNodeIds!.includes('structure-layer-teamflagmesh'));
-    assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
-    assert.ok(hover.experimentalHover!.hiddenModelNodes!.includes('structure-layer-observationbunkert3'));
-    assert.ok(!hover.experimentalHover!.hiddenNodeIds!.includes('structure-layer-floor'));
+    assert.equal(hover.hover!.opacity, 0);
+    assert.equal(hover.hover!.fadeDurationMs, 110);
+    assert.ok(hover.hover!.hiddenNodeIds!.includes('structure-layer-teamflagmesh'));
+    assert.ok(hover.hover!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
+    assert.ok(hover.hover!.hiddenModelNodes!.includes('structure-layer-observationbunkert3'));
+    assert.ok(!hover.hover!.hiddenNodeIds!.includes('structure-layer-floor'));
     assert.deepEqual(subject, before);
     const hidden = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
         settings: { 'foxhole.structure.hideRoofsOnHover': true, 'foxhole.structure.hideRoofs': true } });
-    assert.equal(hidden.experimentalHover, undefined);
-    assert.ok(hidden.experimentalSpatial!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
-    assert.equal(renderFoxholeSceneV2Entity(subject).experimentalHover, undefined);
+    assert.equal(hidden.hover, undefined);
+    assert.ok(hidden.spatial!.hiddenModelNodes!.includes('structure-layer-teamflagmesh'));
+    assert.equal(renderFoxholeSceneV2Entity(subject).hover, undefined);
 });
 
 test('connected roof hover follows fort sockets while excluding foundation sockets and unrelated structures', () => {
@@ -55,9 +55,9 @@ test('connected roof hover follows fort sockets while excluding foundation socke
     subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1, definitionAvailable: true,
         data: { attachments: [{ localSocketName: socket.name, targetEntityId: 'neighbor', targetSocketName: socket.name }] } });
     const context = { contractVersion: 1 as const, entities: [subject, neighbor], settings: { 'foxhole.structure.hideRoofsOnHover': true } };
-    assert.deepEqual(renderFoxholeSceneV2Entity(subject, context).experimentalHover!.relatedEntityIds, ['neighbor']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(subject, context).hover!.relatedEntityIds, ['neighbor']);
     neighbor.components[0]!.data.assetId = 'facilityrefinery1';
-    assert.deepEqual(renderFoxholeSceneV2Entity(subject, context).experimentalHover!.relatedEntityIds, []);
+    assert.deepEqual(renderFoxholeSceneV2Entity(subject, context).hover!.relatedEntityIds, []);
 });
 
 test('every modeled structural asset publishes valid bounded hover visibility', () => {
@@ -82,14 +82,14 @@ test('roof-mounted flags on garrisons and intelligence buildings hide with fixed
             settings: { 'foxhole.structure.hideRoofsOnHover': true } }));
         for (const [layerId, layer] of flags) {
             assert.equal(isFoxholeRoofRenderLayer({ id: layerId, ...layer }, asset.codeName), true, `${id}:${layerId}`);
-            assert.ok(hovered.experimentalHover!.hiddenNodeIds!.includes(`structure-layer-${layerId}`), `${id}:${layerId} planar hover`);
+            assert.ok(hovered.hover!.hiddenNodeIds!.includes(`structure-layer-${layerId}`), `${id}:${layerId} planar hover`);
             for (const node of asset.model!.structuralProfile!.layers[layerId]!) {
-                assert.ok(hidden.experimentalSpatial!.hiddenModelNodes!.includes(node), `${id}:${node} fixed roof hiding`);
-                assert.ok(hovered.experimentalHover!.hiddenModelNodes!.includes(node), `${id}:${node} model hover`);
+                assert.ok(hidden.spatial!.hiddenModelNodes!.includes(node), `${id}:${node} fixed roof hiding`);
+                assert.ok(hovered.hover!.hiddenModelNodes!.includes(node), `${id}:${node} model hover`);
             }
         }
-        assert.equal(hovered.experimentalHover!.opacity, 0);
-        assert.equal(hovered.experimentalHover!.fadeDurationMs, 110);
+        assert.equal(hovered.hover!.opacity, 0);
+        assert.equal(hovered.hover!.fadeDurationMs, 110);
     }
     assert.equal(isFoxholeRoofRenderLayer({ id: 'flagmesh' }, 'UnrelatedStructure'), false);
 });
@@ -110,7 +110,7 @@ test('roof hover resolves unqualified and generated bunker socket names across c
         { localSocketName: 'FoundationSocket', targetEntityId: 'foundation', targetSocketName: 'FoundationSocket' }]);
     attachments(last, [{ localSocketName: 'BackFortSocket', targetEntityId: 'middle', targetSocketName: 'FrontFortSocket' }]);
     const context = { contractVersion: 1 as const, entities: [first, middle, last, foundation], settings: { 'foxhole.structure.hideRoofsOnHover': true } };
-    assert.deepEqual(renderFoxholeSceneV2Entity(first, context).experimentalHover!.relatedEntityIds, ['middle']);
-    assert.deepEqual(renderFoxholeSceneV2Entity(middle, context).experimentalHover!.relatedEntityIds, ['first', 'last']);
-    assert.deepEqual(renderFoxholeSceneV2Entity(last, context).experimentalHover!.relatedEntityIds, ['middle']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(first, context).hover!.relatedEntityIds, ['middle']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(middle, context).hover!.relatedEntityIds, ['first', 'last']);
+    assert.deepEqual(renderFoxholeSceneV2Entity(last, context).hover!.relatedEntityIds, ['middle']);
 });

@@ -27,7 +27,7 @@ test('an upgraded power pole lights the ground lane only during nighttime powere
         const glow = plan.root.children.find(node => node.id === 'power-pole-lamp-glow');
         if (night) {
             assert.equal(glow?.laneId, FOXHOLE_STRUCTURE_RENDER_LANES.floorDetail.laneId);
-            assert.equal(glow?.experimentalPresentation?.excludeFromBounds, true);
+            assert.equal(glow?.presentation?.excludeFromBounds, true);
         } else {
             assert.equal(glow, undefined);
         }

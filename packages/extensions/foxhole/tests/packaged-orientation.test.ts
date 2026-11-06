@@ -24,7 +24,7 @@ function aircraft(rotation: number) {
     }, children: [] }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
     const host = new NixieSceneV2ComponentHost();
     host.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
-    host.registerExtension(owner, manifest.contributes.experimentalComponents);
+    host.registerExtension(owner, manifest.contributes.components);
     host.replaceDocument(converted.content);
     return { host, id: converted.content.entities[0]!.entityId };
 }
@@ -93,7 +93,7 @@ test('published off-center pallet metadata renders aligned with its aircraft and
             ]) };
             const plan = renderFoxholeSceneV2Entity(subject);
             for (const [key, expected] of Object.entries({ minX: -71, minY: -49, maxX: 89, maxY: 31 })) {
-                near(plan.experimentalSelectionGeometry!.localBounds[key as 'minX' | 'minY' | 'maxX' | 'maxY'], expected);
+                near(plan.selectionGeometry!.localBounds[key as 'minX' | 'minY' | 'maxX' | 'maxY'], expected);
             }
             const packagedBody = plan.root.children.find(node => node.id === 'building-texture');
             assert.ok(packagedBody?.kind === 'sprite');
@@ -122,7 +122,7 @@ test('published off-center pallet metadata renders aligned with its aircraft and
                 const palletAngle = Math.atan2(palletForward.y - palletOrigin.y, palletForward.x - palletOrigin.x);
                 near(bodyAngle, degrees * Math.PI / 180);
                 near(palletAngle, bodyAngle);
-                const local = plan.experimentalSelectionGeometry!.localBounds;
+                const local = plan.selectionGeometry!.localBounds;
                 const corners = [{ x: local.minX, y: local.minY }, { x: local.maxX, y: local.minY },
                     { x: local.maxX, y: local.maxY }, { x: local.minX, y: local.maxY }].map(point => parent.toGlobal(point));
                 const bounds = pallet.getBounds();

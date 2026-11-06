@@ -449,7 +449,7 @@ test('builds the catalog from the last active manifest after a failed reload', (
         capabilities: [],
         contributes: {
             panels: [], settings: [], primaryToolbarItems: [], commands: [], menus: [], menuBars: [], settingsPageSections: [],
-            experimentalComponents: {
+            components: {
                 contractVersion: 1 as const,
                 components: [{
                     id: componentId,

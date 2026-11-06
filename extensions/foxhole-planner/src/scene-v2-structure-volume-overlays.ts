@@ -35,5 +35,5 @@ export function renderFoxholeStructureVolumeOverlays(asset: FoxholeSceneV2AssetM
     });
     return children.length ? [{ id: 'structure-volume-overlays', kind: 'group',
         ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
 }

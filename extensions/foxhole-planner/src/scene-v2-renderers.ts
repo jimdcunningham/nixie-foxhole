@@ -361,7 +361,7 @@ function renderFoxholeSceneV2Asset(
         ? resolveFoxholeBunkerSpotlightLights(assetMetadata.spotlights, lamp) : [];
     const glow: NixieExtensionRenderNodeV1[] = lights.length
         ? [{ id: 'bunker-spotlight-glow', kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.spotlight),
-            experimentalPresentation: { contractVersion: 1, excludeFromBounds: true },
+            presentation: { contractVersion: 1, excludeFromBounds: true },
             children: lights.map((light, index) => ({ id: `bunker-light-${index}`, kind: 'group',
                 x: light.x, y: light.y, rotation: light.rotation,
                 children: createFoxholeSpotlightBeamGraphics(light.beam).map(node => ({ ...node, id: `${node.id}-${index}` })),
@@ -371,7 +371,7 @@ function renderFoxholeSceneV2Asset(
         modifications.map(entry => entry.variant.id ?? ''), id => settings[id], appearance)
         ? [{ id: 'power-pole-lamp-glow', kind: 'graphics', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.floorDetail),
             x: FOXHOLE_POWER_POLE_LAMP.x, y: FOXHOLE_POWER_POLE_LAMP.y,
-            experimentalPresentation: { contractVersion: 1, excludeFromBounds: true },
+            presentation: { contractVersion: 1, excludeFromBounds: true },
             commands: [{ op: 'polygon', close: true, points: powerPoleLampFootprint() },
                 { op: 'fill-radial-gradient', center: { x: 0, y: 0 }, outerRadius: FOXHOLE_POWER_POLE_LAMP.radius,
                     colorStops: POWER_POLE_LAMP_STOPS }],
@@ -475,8 +475,8 @@ export function renderFoxholeSceneV2Entity(
             settings: { ...effectiveContext.settings, 'foxhole.structure.hideRoofs': true } });
         const ids = (node: NixieExtensionRenderNodeV1): string[] => [node.id, ...(node.kind === 'group' ? node.children.flatMap(ids) : [])];
         const retainedNodes = new Set(ids(roofless.root));
-        const retainedModels = new Set(plan.experimentalSpatial?.hiddenModelNodes ?? []);
-        const retainedPaths = new Set(roofless.experimentalSpatial?.nodes.map(node => node.id) ?? []);
+        const retainedModels = new Set(plan.spatial?.hiddenModelNodes ?? []);
+        const retainedPaths = new Set(roofless.spatial?.nodes.map(node => node.id) ?? []);
         const bunker = (candidate: FoxholeSceneV2AssetMetadata) => !candidate.isDestroyed && !candidate.isBreached
             && !/destroyed|breached|buildsite/i.test(candidate.codeName)
             && (candidate.isBunker === true || /^fort/i.test(candidate.profileType ?? '')
@@ -504,25 +504,25 @@ export function renderFoxholeSceneV2Entity(
             : [];
         const hover = { contractVersion: 1 as const, opacity: 0, fadeDurationMs: 110, relatedEntityIds,
             hiddenNodeIds: ids(plan.root).filter(id => !retainedNodes.has(id)),
-            hiddenModelNodes: (roofless.experimentalSpatial?.hiddenModelNodes ?? []).filter(name => !retainedModels.has(name)),
-            hiddenSpatialNodeIds: (plan.experimentalSpatial?.nodes ?? []).filter(node => !retainedPaths.has(node.id)).map(node => node.id) };
+            hiddenModelNodes: (roofless.spatial?.hiddenModelNodes ?? []).filter(name => !retainedModels.has(name)),
+            hiddenSpatialNodeIds: (plan.spatial?.nodes ?? []).filter(node => !retainedPaths.has(node.id)).map(node => node.id) };
         if (bunker(metadata) || hover.hiddenNodeIds.length || hover.hiddenModelNodes.length || hover.hiddenSpatialNodeIds.length) {
-            plan.experimentalHover = hover;
+            plan.hover = hover;
         }
     }
     if (metadata?.canBlueprint && !metadata.isDestroyed && !appearance.destroyed && !appearance.packaged
         && (appearance.blueprint || spline?.data.blueprint === true)) {
-        plan.experimentalSpatial = {
-            ...(plan.experimentalSpatial ?? { contractVersion: 1, supplementModel: true, nodes: [] }),
+        plan.spatial = {
+            ...(plan.spatial ?? { contractVersion: 1, supplementModel: true, nodes: [] }),
             modelMaterial: { color: 0x4f79c6, roughness: 0.6, metallic: 0 },
         };
     }
-    if (metadata?.model && (!plan.experimentalSpatial || plan.experimentalSpatial.supplementModel === true)) {
-        plan.experimentalSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.experimentalSpatial,
+    if (metadata?.model && (!plan.spatial || plan.spatial.supplementModel === true)) {
+        plan.spatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.spatial,
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
-            modelLightOverrides: buildFoxholeModelLightOverrides(plan.experimentalSpatial?.model === null ? undefined : plan.experimentalSpatial?.model?.resourceId ?? metadata.model.resourceId,
+            modelLightOverrides: buildFoxholeModelLightOverrides(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
                 modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)),
-            modelTextureTransforms: buildFoxholeModelTextureTransforms(plan.experimentalSpatial?.model === null ? undefined : plan.experimentalSpatial?.model?.resourceId ?? metadata.model.resourceId,
+            modelTextureTransforms: buildFoxholeModelTextureTransforms(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
                 flagAtlasesByResourceId, context.settings?.[FOXHOLE_SCENE_FACTION_SETTING_ID]) };
     }
     return plan;
@@ -602,9 +602,9 @@ function renderFoxholeSceneV2EntityPlan(
         const content = renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered, splineAsset, destroyedAsset);
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
+            selectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
                 ...(wheel ? { geometryWheelControl: wheel } : {}) },
-            ...(spatial ? { experimentalSpatial: spatial } : {}),
+            ...(spatial ? { spatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')]), ...renderFoxholeConnectorSocketOverlays(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')], attachments, settings ?? {})] },
@@ -620,7 +620,7 @@ function renderFoxholeSceneV2EntityPlan(
         const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: resolveFoxholeRangeSelectionGeometry(range.data as unknown as FoxholeSceneV2RangeData),
+            selectionGeometry: resolveFoxholeRangeSelectionGeometry(range.data as unknown as FoxholeSceneV2RangeData),
             root: {
                 id: 'root',
                 kind: 'group',
@@ -661,7 +661,7 @@ function renderFoxholeSceneV2EntityPlan(
         const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: resolveFoxholeTriangulationSelectionGeometry(triangulation.data as unknown as FoxholeSceneV2TriangulationData, renderScale),
+            selectionGeometry: resolveFoxholeTriangulationSelectionGeometry(triangulation.data as unknown as FoxholeSceneV2TriangulationData, renderScale),
             root: {
                 id: 'root',
                 kind: 'group',
@@ -811,8 +811,8 @@ function renderFoxholeSceneV2EntityPlan(
     if (!cargoNode) {
         return {
             schemaVersion: 1,
-            experimentalSelectionGeometry: selectionGeometry,
-            ...(placementSpatial ? { experimentalSpatial: placementSpatial } : {}),
+            selectionGeometry: selectionGeometry,
+            ...(placementSpatial ? { spatial: placementSpatial } : {}),
             root: {
                 id: 'root',
                 kind: 'group',
@@ -823,8 +823,8 @@ function renderFoxholeSceneV2EntityPlan(
     const renderedNodes = visualState.nodes;
     return {
         schemaVersion: 1,
-        experimentalSelectionGeometry: selectionGeometry,
-        ...(placementSpatial ? { experimentalSpatial: placementSpatial } : {}),
+        selectionGeometry: selectionGeometry,
+        ...(placementSpatial ? { spatial: placementSpatial } : {}),
         root: {
             id: 'root',
             kind: 'group',

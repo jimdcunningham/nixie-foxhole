@@ -55,7 +55,7 @@ export function renderFoxholeSceneV2Connector(
     }, {
         id: 'connector-handles',
         kind: 'graphics',
-        experimentalPresentation: { contractVersion: 1, selectionOnly: true, excludeFromBounds: true },
+        presentation: { contractVersion: 1, selectionOnly: true, excludeFromBounds: true },
         laneId: 'details',
         commands: connectorHandleCommands(data),
     }];

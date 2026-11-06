@@ -45,7 +45,7 @@ test('both domains materialize host-selected guides without enlarging content or
 
 test('annotated root groups retain their meaning through composition and subtree content checks', async () => {
     const plan = { schemaVersion: 1 as const, root: { id: 'root', kind: 'group' as const,
-        experimentalPresentation: { contractVersion: 1 as const, selectionOnly: true }, children: [{
+        presentation: { contractVersion: 1 as const, selectionOnly: true }, children: [{
             id: 'point', kind: 'graphics' as const, commands: [{ op: 'circle' as const, x: 0, y: 0, radius: 7 }, { op: 'fill' as const, color: 0xffffff }],
         }] } };
     assert.equal(renderPlanHasPersistentContent(plan), false);

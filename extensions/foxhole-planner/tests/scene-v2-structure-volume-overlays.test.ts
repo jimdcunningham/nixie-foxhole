@@ -19,7 +19,7 @@ test('FoxWatch normalizes real compact volume fields and independent category to
     const on = renderFoxholeStructureVolumeOverlays(fixture, { 'foxhole.debug.structure.volume.footprint': true },
         { destroyed: false, packaged: false });
     const root = on[0]; assert.ok(root && root.kind === 'group');
-    assert.equal(root.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(root.presentation?.excludeFromBounds, true);
     assert.equal(root.children.length, 1);
     const child = root.children[0]; assert.ok(child && child.kind === 'group');
     assert.equal(child.x, -8); assert.equal(child.y, 0); assert.equal(child.rotation, Math.PI / 2);
@@ -43,7 +43,7 @@ test('seat entry triggers survive catalog preparation and use an independent tog
     const id = 'foxhole.debug.structure.volume.seatTrigger';
     assert.equal(manifest.contributes.settings.find((setting: { id: string }) => setting.id === id)?.defaultValue, false);
     assert.ok(FOXHOLE_STRUCTURE_VOLUME_SETTING_IDS.includes(id));
-    assert.ok(manifest.contributes.experimentalRenderers[0].settingIds.includes(id));
+    assert.ok(manifest.contributes.renderers[0].settingIds.includes(id));
     const asset = createFoxholeSceneV2AssetMetadata({ assets: [{ id: 'crane', sprite: { width: 128, height: 128 }, structureVolumes: [
         { n: 'UseAreaBox', l: 'Use Area', g: 'useArea', w: 165, d: 165 },
         { n: 'CraneOccupiableComponentTrigger', l: 'Seat Trigger', g: 'seatTrigger', w: 300, d: 300 },

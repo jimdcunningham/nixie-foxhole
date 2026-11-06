@@ -57,7 +57,7 @@ for (const tier of [1, 2, 3]) {
         assert.deepEqual(foxholeSceneV2StateAdapter.selectionLocalBounds!(appearance, 1), wreckGeometry.bounds);
         assert.deepEqual(assets[wreckKey]!.selectionPolygons, wreck.selectionPolygons);
         assert.deepEqual(assets[intactKey]!.selectionDestroyed!.selectionPolygons, wreck.selectionPolygons);
-        assert.deepEqual(renderFoxholeSceneV2Entity(standalone).experimentalSelectionGeometry!.localBounds, wreckGeometry.bounds);
-        assert.deepEqual(renderFoxholeSceneV2Entity(appearance).experimentalSelectionGeometry!.localBounds, wreckGeometry.bounds);
+        assert.deepEqual(renderFoxholeSceneV2Entity(standalone).selectionGeometry!.localBounds, wreckGeometry.bounds);
+        assert.deepEqual(renderFoxholeSceneV2Entity(appearance).selectionGeometry!.localBounds, wreckGeometry.bounds);
     });
 }

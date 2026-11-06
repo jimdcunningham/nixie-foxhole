@@ -42,7 +42,7 @@ test('the complete index includes hidden assets and upgrades without overriding 
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
     const settings = { 'foxhole.locale': 'fr',
         'foxhole.assets.browser.iconSet': 'rendered', 'foxhole.assets.filter.upgrades': false,
-        'foxhole.assets.filter.category.facilities': false, 'foxhole.assets.filter.faction': 'colonial', ...manifest.contributes.experimentalProductProviders![0]!.indexSettings };
+        'foxhole.assets.filter.category.facilities': false, 'foxhole.assets.filter.faction': 'colonial', ...manifest.contributes.productProviders![0]!.indexSettings };
     assert.equal(settings['foxhole.locale'], 'fr');
     assert.equal(settings['foxhole.assets.browser.iconSet'], 'rendered');
     assert.equal(settings['foxhole.assets.filter.upgrades'], true);
@@ -52,9 +52,9 @@ test('the complete index includes hidden assets and upgrades without overriding 
 
 test('the real Planner index retains hidden upgrades and resolves them without another provider request', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-    const active = { ...entry('real-index'), contribution: manifest.contributes.experimentalComponents!,
-        productProviders: manifest.contributes.experimentalProductProviders!, settings: manifest.contributes.settings,
-        resources: manifest.contributes.experimentalResources ?? [], resourceTemplates: manifest.contributes.experimentalResourceTemplates ?? [] };
+    const active = { ...entry('real-index'), contribution: manifest.contributes.components!,
+        productProviders: manifest.contributes.productProviders!, settings: manifest.contributes.settings,
+        resources: manifest.contributes.resources ?? [], resourceTemplates: manifest.contributes.resourceTemplates ?? [] };
     replaceNixieSceneV2ExtensionCatalog([active]);
     let calls = 0;
     const service = createNixieExtensionProductCatalog({ catalog: useNixieSceneV2ExtensionCatalog(), eager: true,
@@ -81,10 +81,10 @@ test('the real Planner index retains hidden upgrades and resolves them without a
 test('SDK products request transforms without a registered bundled capability policy', async () => {
     const { resolveNixieSceneV2ProductCapabilities } = await import('#nixie-internal/desktop-extensions/scene-v2-capabilities.ts');
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-    const definitions = new Map(manifest.contributes.experimentalComponents!.components.map(component => [manifest.id + '\0' + component.id, component]));
+    const definitions = new Map(manifest.contributes.components!.components.map(component => [manifest.id + '\0' + component.id, component]));
     for (const query of ['facilitypipe', 'tank', 'rifle']) {
         const page = listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100,
-            settings: manifest.contributes.experimentalProductProviders![0]!.indexSettings });
+            settings: manifest.contributes.productProviders![0]!.indexSettings });
         assert.ok(page.items.length > 0, query);
         for (const item of page.items) {
             assert.deepEqual(item.product.interactionProfile, { move: true, rotate: true }, item.product.id);
@@ -95,7 +95,7 @@ test('SDK products request transforms without a registered bundled capability po
             assert.ok(!capabilities.includes('mirror'), item.product.id);
         }
     }
-    for (const product of manifest.contributes.experimentalProducts ?? []) {
+    for (const product of manifest.contributes.products ?? []) {
         if (product.components.some(component => component.ownerId === manifest.id && component.componentId === 'asset')) {
             assert.deepEqual(product.interactionProfile, { move: true, rotate: true }, product.id);
         }

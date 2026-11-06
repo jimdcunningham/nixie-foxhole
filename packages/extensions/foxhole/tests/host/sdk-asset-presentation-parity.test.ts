@@ -57,8 +57,8 @@ test('SDK library icons and hover text preserve the visible authored Native asse
             : color?.previewUrl ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${colorHex ? `.${colorHex}` : ''}.webp`);
         for (const [image, source] of [[metadata.browserIcon, asset.icons.default], [metadata.browserPreview, previewSource]] as const) {
             assert.ok(image);
-            const resource = resolveNixieResourceV1(extension.contributes.experimentalResources ?? [],
-                extension.contributes.experimentalResourceTemplates ?? [], image.resourceId);
+            const resource = resolveNixieResourceV1(extension.contributes.resources ?? [],
+                extension.contributes.resourceTemplates ?? [], image.resourceId);
             assert.equal(resource?.kind, 'texture');
             const atlasIndex = Number(image.resourceId.split('.').at(-1));
             assert.equal(resource!.path, `shared/icons/browser-${atlasIndex}.webp`);

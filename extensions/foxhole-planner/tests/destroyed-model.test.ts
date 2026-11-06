@@ -16,12 +16,12 @@ test('demolished structures select their real destroyed model without rewriting 
     ] };
     const before = structuredClone(entity);
     const destroyed = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity));
-    assert.deepEqual(destroyed.experimentalSpatial?.model, getFoxholeSceneV2ModelComponentData(metadata.facilityrefinery1destroyed!.model!));
-    assert.equal(destroyed.experimentalSpatial?.supplementModel, true);
-    assert.equal(destroyed.experimentalSpatial?.hiddenModelNodes, undefined);
+    assert.deepEqual(destroyed.spatial?.model, getFoxholeSceneV2ModelComponentData(metadata.facilityrefinery1destroyed!.model!));
+    assert.equal(destroyed.spatial?.supplementModel, true);
+    assert.equal(destroyed.spatial?.hiddenModelNodes, undefined);
     assert.deepEqual(entity, before);
     entity.components[1]!.data.destroyed = false;
-    assert.equal(renderFoxholeSceneV2Entity(entity).experimentalSpatial?.model, undefined);
+    assert.equal(renderFoxholeSceneV2Entity(entity).spatial?.model, undefined);
 });
 
 test('every published destroyed model is selected using catalog metadata and its own dimensions', () => {
@@ -33,6 +33,6 @@ test('every published destroyed model is selected using catalog metadata and its
             { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true, data: { destroyed: true } },
         ] }));
         const destroyedModel = metadata[asset.destroyedAssetId]?.model;
-        assert.deepEqual(plan.experimentalSpatial?.model, destroyedModel ? getFoxholeSceneV2ModelComponentData(destroyedModel) : null, assetId);
+        assert.deepEqual(plan.spatial?.model, destroyedModel ? getFoxholeSceneV2ModelComponentData(destroyedModel) : null, assetId);
     }
 });

@@ -44,8 +44,8 @@ test('powered night lights have a bounded glow without changing the asset select
         const glow = night.root.children.find(node => node.id === 'bunker-spotlight-glow');
         assert.ok(glow?.kind === 'group');
         assert.equal(glow.laneId, FOXHOLE_STRUCTURE_RENDER_LANES.spotlight.laneId);
-        assert.equal(glow.experimentalPresentation?.excludeFromBounds, true);
-        assert.deepEqual(night.experimentalSelectionGeometry, day.experimentalSelectionGeometry);
+        assert.equal(glow.presentation?.excludeFromBounds, true);
+        assert.deepEqual(night.selectionGeometry, day.selectionGeometry);
         const light = glow.children[0];
         assert.ok(light?.kind === 'group');
         assert.deepEqual(light.children.map(node => node.id), ['light-beam-0']);

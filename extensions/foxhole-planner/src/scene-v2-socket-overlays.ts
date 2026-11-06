@@ -132,7 +132,7 @@ export function renderFoxholeSocketIndicatorGroups(sockets: ReturnType<typeof re
         const content: NixieExtensionRenderNodeV1[] = entry.kind === 'power'
             ? [{ id: `${prefix}-square`, kind: 'graphics', commands: [
                 { op: 'rect', x: -4.5, y: -4.5, width: 9, height: 9 }, { op: 'fill', color: FOXHOLE_POWER_SOCKET_COLOR, alpha: 1 },
-            ] }, { id: `${prefix}-bolt`, kind: 'group', experimentalPresentation: { contractVersion: 1, worldUpright: true }, children: [{
+            ] }, { id: `${prefix}-bolt`, kind: 'group', presentation: { contractVersion: 1, worldUpright: true }, children: [{
                 id: `${prefix}-bolt-path`, kind: 'graphics', x: -11, y: -30.5, scaleX: 22 / 16, scaleY: 22 / 16,
                 commands: [{ op: 'polygon', points: Array.from({ length: LIGHTNING_POINTS.length / 2 }, (_, point) => ({ x: LIGHTNING_POINTS[point * 2]!, y: LIGHTNING_POINTS[point * 2 + 1]! })), close: true },
                     { op: 'fill', color: 0xffffff, alpha: 1 }],
@@ -143,9 +143,9 @@ export function renderFoxholeSocketIndicatorGroups(sockets: ReturnType<typeof re
             const side = directionX >= 0 ? 1 : -1;
             content.push({ id: `${prefix}-label`, kind: 'text', text: rawNames ? entry.socket.name : socketLabel(entry.socket.name, entry.socket.componentType, entry.kind),
                 x: directionX * 36 + side * 6, y: Math.sin(entry.rotation) * 36 - 10, anchorX: side > 0 ? 0 : 1, anchorY: 0.5,
-                experimentalPresentation: { contractVersion: 1, worldUpright: true }, style: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700',
+                presentation: { contractVersion: 1, worldUpright: true }, style: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700',
                     fill: entry.kind === 'power' ? FOXHOLE_POWER_SOCKET_COLOR : FOXHOLE_PIPE_SOCKET_COLORS[entry.flow],
-                    experimentalStroke: { contractVersion: 1, color: 0x081018, width: 3, join: 'round' } } });
+                    stroke: { contractVersion: 1, color: 0x081018, width: 3, join: 'round' } } });
         }
         return { id: prefix, kind: 'group', x: entry.x, y: entry.y, rotation: entry.rotation, children: content };
     });
@@ -175,12 +175,12 @@ export function renderFoxholeSocketStatusGroups(sockets: Array<{ socket: Foxhole
             children.push({ id: 'status-label-' + index + '-' + rowIndex, kind: 'text', text: legacy ? legacy + ' — ' + display : display,
                 x: Math.cos(entry.rotation) * 36 + side * 6, y: Math.sin(entry.rotation) * 36 - 10 + (rowIndex - (group.length - 1) / 2) * 16,
                 anchorX: side > 0 ? 0 : 1, anchorY: 0.5,
-                experimentalPresentation: { contractVersion: 1, worldUpright: true },
+                presentation: { contractVersion: 1, worldUpright: true },
                 style: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', fill: color(name),
-                    experimentalStroke: { contractVersion: 1, color: 0x081018, width: 3, join: 'round' } } });
+                    stroke: { contractVersion: 1, color: 0x081018, width: 3, join: 'round' } } });
         });
         return { id: 'socket-status-' + index, kind: 'group', x: entry.x, y: entry.y,
-            ...(options.worldUpright ? { experimentalPresentation: { contractVersion: 1, worldUpright: true } } : {}), children };
+            ...(options.worldUpright ? { presentation: { contractVersion: 1, worldUpright: true } } : {}), children };
     });
 }
 
@@ -200,5 +200,5 @@ export function renderFoxholeStructureSocketOverlays(asset: FoxholeSceneV2AssetM
         ? renderFoxholeSocketStatusGroups(sockets, occupied, assetId, showLabels)
         : renderFoxholeSocketIndicatorGroups(resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings), showLabels);
     return [{ id: 'structure-socket-presentation', kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }];
 }

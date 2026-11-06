@@ -55,9 +55,9 @@ test('ambiguous markers and stale tier previews never claim an exact building',(
  const metadata={...maps,icons:{...maps.icons,'35':{...maps.icons['-2']!,name:'Safe House',previewResourceId:'foxhole.map.preview-townclargegarrisongs1'},'57':{...maps.icons['-2']!,name:'Town Base (Tier 2)',previewResourceId:'foxhole.map.preview-townbase1'}}};
  for(const iconType of ['35','57']){
   const [node]=renderFoxholePlanningMapIcons(metadata,[{...region,staticIcons:[{iconType,x:0.5,y:0.5}]}],{},25);
-  assert.equal(node?.experimentalPresentation?.tooltip?.previewResourceId,undefined);
+  assert.equal(node?.presentation?.tooltip?.previewResourceId,undefined);
  }
  metadata.icons['57'].previewResourceId='foxhole.map.preview-townbase2';
  const [node]=renderFoxholePlanningMapIcons(metadata,[{...region,staticIcons:[{iconType:'57',x:0.5,y:0.5}]}],{},25);
- assert.equal(node?.experimentalPresentation?.tooltip?.previewResourceId,'foxhole.map.preview-townbase2');
+ assert.equal(node?.presentation?.tooltip?.previewResourceId,'foxhole.map.preview-townbase2');
 });

@@ -2,7 +2,7 @@
 
 This document tracks parity between the legacy Foxhole Planner (`game-kitchen`, Pixi.js `/app` editor) and the current Nixie-based Foxhole Planner (`packages/extensions/foxhole` in the nixie monorepo).
 
-**Direction of travel:** Nixie is the product. game-kitchen is maintenance debt. New game content ships through FoxWatch into the nixie assets pipeline only. Asset rollout gating, experimental consent, and early-access launch checks have been removed — the app is live.
+**Direction of travel:** Nixie is the product. game-kitchen is maintenance debt. New game content ships through FoxWatch into the nixie assets pipeline only. Asset rollout gating, consent, and early-access launch checks have been removed — the app is live.
 
 **Last corpus check:** run `npm run legacy:migration-status` in this package (imports every downloaded fixture under `tests/fixtures/legacy-plans/raw`). As of 2026-08-01 against **1282** blueprints: **0** hard import errors, **99.1%** usable without critical issues, **97.2%** entity → board-snapshot yield. Remaining work is **fidelity**, not “build the importer.”
 
@@ -176,7 +176,7 @@ These unblock "stop patching game-kitchen."
 
 1. **Treat FoxWatch manifest as sole content source** — done in nixie; stop dual-publishing to `data.js`.
 2. **Remove asset rollout gating** — done. All manifest assets visible unless `hideInList`.
-3. **Remove launch / experimental consent gating** — done. No `NUXT_PUBLIC_NIXIE_LAUNCH_UNLOCKED` or consent modal.
+3. **Remove launch / consent gating** — done. No `NUXT_PUBLIC_NIXIE_LAUNCH_UNLOCKED` or consent modal.
 4. **Point marketing at Nixie** — public listing is `https://nixiejs.com/foxhole-planner` (domain redirects later, if ever).
 5. **Communicate format change** — import exists; say Nixie projects are the new save format and `.plan` import covers migration.
 

@@ -16,7 +16,7 @@ test('every foundation trim shape binds all authored borders and keeps its floor
   bindFoxholeModelLayerNodes(asset,readFoxholeGeneratedModel(id));
   assert.ok(Number.isFinite((asset as typeof asset & {foundationSurfaceZ:number}).foundationSurfaceZ));
   const entity=make(id,asset.buildSockets.map(socket=>socket.name));const before=structuredClone(entity);
-  const plan=renderFoxholeSceneV2Entity(entity);const names=plan.experimentalSpatial?.hiddenModelNodes??[];
+  const plan=renderFoxholeSceneV2Entity(entity);const names=plan.spatial?.hiddenModelNodes??[];
   assert.ok(names.length>0,id);assert.ok(!names.includes('structure-layer-floor'));assert.deepEqual(entity,before);
   assert.equal('structuralProfile' in getFoxholeSceneV2ModelComponentData(asset.model),false);
  }
@@ -27,8 +27,8 @@ test('bunker and trench layers derive 3D visibility from the authored layer rule
   assert.deepEqual(Object.keys(asset.model.structuralProfile.layers).sort(),Object.keys(asset.renderLayers).sort());
   const entity=make(id);const normal=renderFoxholeSceneV2Entity(entity);
   const hidden=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideWalls':true,'foxhole.structure.hideRoofs':true}});
-  assert.ok((hidden.experimentalSpatial?.hiddenModelNodes?.length??0)>(normal.experimentalSpatial?.hiddenModelNodes?.length??0));
-  if(id==='trencht3') assert.ok(normal.experimentalSpatial?.hiddenModelNodes?.includes('structure-layer-openwallleft'));
+  assert.ok((hidden.spatial?.hiddenModelNodes?.length??0)>(normal.spatial?.hiddenModelNodes?.length??0));
+  if(id==='trencht3') assert.ok(normal.spatial?.hiddenModelNodes?.includes('structure-layer-openwallleft'));
  }
 });
 
@@ -40,7 +40,7 @@ test('every optional bunker and trench part starts hidden and wall replacements 
   const asset=assets[id]!,profile=asset.model!.structuralProfile!;
   const expected=Object.values(asset.modifications).reduce((sum,slot)=>sum+Object.values(slot.variants).filter(v=>!v.isUpgrade).length,0);
   assert.equal(profile.modifications!.length,expected,id);
-  const defaultNames=renderFoxholeSceneV2Entity(make(id)).experimentalSpatial!.hiddenModelNodes!;
+  const defaultNames=renderFoxholeSceneV2Entity(make(id)).spatial!.hiddenModelNodes!;
   assert.ok(profile.modifications!.every(part=>part.nodeNames.every(name=>defaultNames.includes(name))));
   const bytes=readFoxholeGeneratedModel(id);
   const gltf=JSON.parse(bytes.subarray(20,20+bytes.readUInt32LE(12)).toString());const exported=new Set(gltf.nodes.map((n:{name:string})=>n.name));
@@ -50,12 +50,12 @@ test('every optional bunker and trench part starts hidden and wall replacements 
  const door=parts.find(p=>p.slotId==='FrontModSlot'&&p.variantId==='door')!;
  const stairs=parts.find(p=>p.slotId==='BackFortStairsModSlot'&&p.variantId==='stairs')!;
  const entity=modified('fortt3',[door,stairs].map(({slotId,variantId})=>({slotId,variantId})));const before=structuredClone(entity);
- const plan=renderFoxholeSceneV2Entity(entity),hidden=plan.experimentalSpatial!.hiddenModelNodes!;
+ const plan=renderFoxholeSceneV2Entity(entity),hidden=plan.spatial!.hiddenModelNodes!;
  assert.ok(door.nodeNames.every(name=>!hidden.includes(name)));assert.ok(stairs.nodeNames.every(name=>!hidden.includes(name)));
  assert.ok(profile.layers.frontwall!.every(name=>hidden.includes(name)));
  assert.ok(profile.layers.backwall!.every(name=>!hidden.includes(name)));
  assert.deepEqual(entity,before);assert.deepEqual(renderFoxholeSceneV2Entity(JSON.parse(JSON.stringify(entity))),plan);
- const walls=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideWalls':true}}).experimentalSpatial!.hiddenModelNodes!;
+ const walls=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideWalls':true}}).spatial!.hiddenModelNodes!;
  assert.ok(door.nodeNames.every(name=>walls.includes(name)));assert.equal(new Set(walls).size,walls.length);
 });
 test('joined trench sides swap solid meshes for authored openings and retain the opposite side',()=>{
@@ -63,7 +63,7 @@ test('joined trench sides swap solid meshes for authored openings and retain the
   const asset=assets[id]!,profile=asset.model!.structuralProfile!;
   const names=sides.map(side=>asset.buildSockets.find(s=>s.name.split(':').at(-1)===side+'Socket')!.name);
   const entity=make(id,names),neighbor=make(id);neighbor.entityId='neighbor';
-  const plan=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity,neighbor]}),hidden=plan.experimentalSpatial!.hiddenModelNodes!;
+  const plan=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity,neighbor]}),hidden=plan.spatial!.hiddenModelNodes!;
   for(const side of ['Left','Right']){
    const joined=sides.includes(side),key=side.toLowerCase();
    assert.ok(profile.layers[key+'wall']!.every(name=>hidden.includes(name)===joined));
@@ -75,8 +75,8 @@ test('joined trench sides swap solid meshes for authored openings and retain the
 test('roof modifications follow visibility settings and malformed recipes fail at binding',()=>{
  const profile=assets.trencht3!.model!.structuralProfile!,roof=profile.modifications!.find(p=>p.variantId==='trenchroof')!;
  const entity=modified('trencht3',[{slotId:roof.slotId,variantId:roof.variantId}]);
- const normal=renderFoxholeSceneV2Entity(entity).experimentalSpatial!.hiddenModelNodes!;
- const hidden=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideRoofs':true}}).experimentalSpatial!.hiddenModelNodes!;
+ const normal=renderFoxholeSceneV2Entity(entity).spatial!.hiddenModelNodes!;
+ const hidden=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[],settings:{'foxhole.structure.hideRoofs':true}}).spatial!.hiddenModelNodes!;
  assert.ok(roof.nodeNames.every(name=>!normal.includes(name)&&hidden.includes(name)));
  assert.throws(()=>readFoxholeStructuralModelProfile({version:1,layers:{roof:['roof']},modifications:[{slotId:'Roof',variantId:'roof',nodeNames:['part'],replacesLayers:['missing']}]}));
 });

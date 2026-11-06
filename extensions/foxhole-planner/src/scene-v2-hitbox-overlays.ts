@@ -39,5 +39,5 @@ export function renderFoxholeHitboxOverlays(subject: NixieComponentEntitySnapsho
         ],
     }));
     return children.length ? [{ id: 'structure-hitboxes', kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
 }

@@ -23,7 +23,7 @@ export function renderFoxholePlanningMap(request: NixieDocumentRenderRequestV1):
     const majorAlpha = scale < 125 ? 1 : 1 - (scale - 125) / 15;
     const text = (id: string, value: string, x: number, y: number, size: number, textScale: number, alpha: number): NixieExtensionRenderNodeV1 => ({
         id, kind: 'text', text: value, x, y, anchorX: 0.5, anchorY: 0.5, scaleX: textScale, scaleY: textScale, alpha: Math.max(0, Math.min(1, alpha)),
-        style: { fontFamily: 'Jost', fontSize: size, fill: 0xffffff, experimentalStroke: { contractVersion: 1, color: 0x505050, width: 4 } },
+        style: { fontFamily: 'Jost', fontSize: size, fill: 0xffffff, stroke: { contractVersion: 1, color: 0x505050, width: 4 } },
     });
     for (const region of regions) {
         const base = enabled('base_map') ? 'base' : enabled('colors') ? 'topo' : enabled('base_map_full') ? 'full' : 'terrain';

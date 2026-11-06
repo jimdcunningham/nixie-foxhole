@@ -26,7 +26,7 @@ test('the real pipeline renderer bends a packaged profile and keeps both exporte
     Object.assign(state, { endX: 320, endY: 96, endRotation: Math.PI, curveT: 1 });
     const entity = { entityId: 'pipeline-proof', revision: 0, components };
     const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity] });
-    const node = plan.experimentalSpatial!.nodes[0]!;
+    const node = plan.spatial!.nodes[0]!;
     const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);
     const modelManifest = JSON.parse(await readFile(new URL('models/manifest.v1.json', assetsRoot), 'utf8'));
     const bytes = prepareNixieSceneV2ModelGlb(await readFile(new URL(modelManifest.assets.facilitypipe.path, assetsRoot)));

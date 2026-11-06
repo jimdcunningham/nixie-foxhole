@@ -15,7 +15,7 @@ test('Planner declares model-light visibility through renderer RPC without chang
     assert.equal(setting.scope, 'user');
     assert.equal(manifest.contributes.settings.find(entry => entry.id === 'foxhole.ranges.nighttime')?.visible, true, 'the retained nighttime preference must be reachable in Settings');
     assert.equal(manifest.contributes.settings.find(entry => entry.id === 'foxhole.ranges.poweredSpotlights')?.visible, true, 'the retained SDK spotlight preference must be reachable in Settings');
-    assert.ok(manifest.contributes.experimentalRenderers!.find(renderer => renderer.id === 'foxhole-assets')!.settingIds!.includes(settingId));
+    assert.ok(manifest.contributes.renderers!.find(renderer => renderer.id === 'foxhole-assets')!.settingIds!.includes(settingId));
     const [assetId] = Object.entries(assets).find(([, metadata]) => metadata.model && !metadata.isItem && !metadata.isDestroyed)!;
     const entity = { entityId: 'lit-structure', revision: 1, components: [{ ownerId: manifest.id, componentId: 'asset', version: 1,
         definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId } }] };
@@ -25,12 +25,12 @@ test('Planner declares model-light visibility through renderer RPC without chang
     try {
         for (const enabled of [false, true, false, true]) {
             const plan = await host.renderEntity('render.entity', entity, { contractVersion: 1, entities: [entity], settings: { [settingId]: enabled } });
-            assert.equal(plan.experimentalSpatial?.modelLights, enabled);
-            assert.equal(plan.experimentalSpatial?.supplementModel, true);
+            assert.equal(plan.spatial?.modelLights, enabled);
+            assert.equal(plan.spatial?.supplementModel, true);
             assert.deepEqual(entity, before);
         }
         const defaults = await host.renderEntity('render.entity', entity);
-        assert.equal(defaults.experimentalSpatial?.modelLights, false);
+        assert.equal(defaults.spatial?.modelLights, false);
     } finally {
         connection.dispose();
     }

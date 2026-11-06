@@ -66,8 +66,8 @@ function splineFixture(name: 'scene-v2-diagram' | 'foxhole-planner') {
     const f = fixture();
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl(`../../../../../extensions/${name}/nixie.extension.json`, import.meta.url), 'utf8')));
     f.runtime.load({ type: 'scene-v2', contractVersion: 1, entities: [] }, [{ ownerId: manifest.id,
-        contribution: manifest.contributes.experimentalComponents! }]);
-    const product = manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component =>
+        contribution: manifest.contributes.components! }]);
+    const product = manifest.contributes.products!.find(entry => entry.components.some(component =>
         component.componentId === (name === 'scene-v2-diagram' ? 'connection' : 'spline-connector')))!;
     const begin = () => f.runtime.beginProductPlacement(product, manifest.id, 'Drawn Connection', () => 'drawn', f.isGenerationCurrent);
     return { ...f, begin, manifest };
@@ -75,7 +75,7 @@ function splineFixture(name: 'scene-v2-diagram' | 'foxhole-planner') {
 
 function polylineFixture(name: 'scene-v2-diagram' | 'foxhole-planner') {
     const f = splineFixture(name);
-    const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component =>
+    const product = f.manifest.contributes.products!.find(entry => entry.components.some(component =>
         component.componentId === (name === 'scene-v2-diagram' ? 'route' : 'connector')))!;
     return { ...f, begin: () => f.runtime.beginProductPlacement(product, f.manifest.id, 'Point Path', () => 'drawn-path', f.isGenerationCurrent) };
 }
@@ -84,8 +84,8 @@ test('tool defaults edit a detached draft without history and apply to successiv
     const saved = new Map<string, unknown>();
     for (const name of ['foxhole-planner', 'scene-v2-diagram'] as const) {
         const f = splineFixture(name);
-        const declaration = f.manifest.contributes.experimentalProductTools!.find(tool => tool.id === (name === 'foxhole-planner' ? 'planning.range' : 'route'))!;
-        const product = f.manifest.contributes.experimentalProducts!.find(candidate => candidate.id === declaration.productId)!;
+        const declaration = f.manifest.contributes.productTools!.find(tool => tool.id === (name === 'foxhole-planner' ? 'planning.range' : 'route'))!;
+        const product = f.manifest.contributes.products!.find(candidate => candidate.id === declaration.productId)!;
         const tool = { ...declaration, id: `extension:${f.manifest.id}:${declaration.id}`, ownerId: f.manifest.id, generationHash: 'one', product };
         let next = 0;
         const port = { read: (id: string) => saved.get(id), write: (id: string, value: unknown) => {
@@ -131,7 +131,7 @@ test('Planner and neutral drawing minimums reject short input and rearm without 
     for (const name of ['foxhole-planner', 'scene-v2-diagram'] as const) {
         const f = splineFixture(name);
         const productId = name === 'foxhole-planner' ? 'planning.range' : 'connection';
-        const product = f.manifest.contributes.experimentalProducts!.find(candidate => candidate.id === productId)!;
+        const product = f.manifest.contributes.products!.find(candidate => candidate.id === productId)!;
         let identity = 0;
         const begin = () => f.runtime.beginProductPlacement(product, f.manifest.id, 'Span', () => `span-${++identity}`, f.isGenerationCurrent);
         assert.equal(begin(), true);
@@ -151,8 +151,8 @@ test('Planner and neutral drawing minimums reject short input and rearm without 
 
 test('obsolete or invalid tool preferences cannot restore geometry, references or out-of-schema defaults', () => {
     const f = splineFixture('foxhole-planner');
-    const declaration = f.manifest.contributes.experimentalProductTools!.find(tool => tool.id === 'planning.range')!;
-    const product = f.manifest.contributes.experimentalProducts!.find(candidate => candidate.id === declaration.productId)!;
+    const declaration = f.manifest.contributes.productTools!.find(tool => tool.id === 'planning.range')!;
+    const product = f.manifest.contributes.products!.find(candidate => candidate.id === declaration.productId)!;
     const tool = { ...declaration, id: 'extension:range', ownerId: f.manifest.id, generationHash: 'one', product };
     f.runtime.attachProductToolOptions({ read: () => ({ contractVersion: 1, components: { range: { sweepAngle: 999, meterPixels: 1,
         points: [0, 0, 400, 0], strokeWidth: 4 } } }), write: () => {} });
@@ -167,8 +167,8 @@ test('obsolete or invalid tool preferences cannot restore geometry, references o
 
 test('oversized preferences and failed preference writes retain contributed defaults without authoring', () => {
     const f = splineFixture('foxhole-planner');
-    const declaration = f.manifest.contributes.experimentalProductTools!.find(tool => tool.id === 'planning.range')!;
-    const product = f.manifest.contributes.experimentalProducts!.find(candidate => candidate.id === declaration.productId)!;
+    const declaration = f.manifest.contributes.productTools!.find(tool => tool.id === 'planning.range')!;
+    const product = f.manifest.contributes.products!.find(candidate => candidate.id === declaration.productId)!;
     const tool = { ...declaration, id: 'extension:range', ownerId: f.manifest.id, generationHash: 'one', product };
     f.runtime.attachProductToolOptions({ read: () => ({ contractVersion: 1, components: { range: { sweepAngle: 180 } },
         obsolete: 'x'.repeat(32 * 1024) }), write: () => {
@@ -188,7 +188,7 @@ test('complete preset styling commits once without touching geometry, node conte
     for (const name of ['foxhole-planner', 'scene-v2-diagram'] as const) {
         const f = splineFixture(name);
         const componentId = name === 'foxhole-planner' ? 'tactical-line' : 'node-style';
-        const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === (name === 'foxhole-planner' ? 'planning.tactical-line' : 'styled-node'))!;
+        const product = f.manifest.contributes.products!.find(entry => entry.id === (name === 'foxhole-planner' ? 'planning.tactical-line' : 'styled-node'))!;
         assert.equal(f.runtime.instantiateProduct(product, f.manifest.id, 'Styled', () => 'styled').ok, true);
         const before = f.runtime.entities[0]!;
         const component = before.components.find(entry => entry.componentId === componentId)!;
@@ -221,8 +221,8 @@ test('complete preset styling commits once without touching geometry, node conte
 
 test('product tools activate owned drawing, repeat after one atomic creation, and cancel back to selection', async () => {
     const f = polylineFixture('scene-v2-diagram');
-    const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'route')!;
-    const declaration = f.manifest.contributes.experimentalProductTools![0]!;
+    const product = f.manifest.contributes.products!.find(entry => entry.id === 'route')!;
+    const declaration = f.manifest.contributes.productTools![0]!;
     const tool = { ...declaration, id: 'extension:example.scene-v2-diagram:route', ownerId: f.manifest.id, generationHash: 'one', product };
     let next = 0;
     f.runtime.setProductTools([tool], () => `route-${++next}`);
@@ -246,7 +246,7 @@ test('product tools activate owned drawing, repeat after one atomic creation, an
 test('product tool switching, read-only state and generation replacement retire detached drafts', async () => {
     for (const action of ['selection', 'readonly', 'generation', 'removed'] as const) {
         const f = polylineFixture('scene-v2-diagram');
-        const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'route')!;
+        const product = f.manifest.contributes.products!.find(entry => entry.id === 'route')!;
         const tool = { id: 'extension:example.scene-v2-diagram:route', ownerId: f.manifest.id, generationHash: 'one',
             label: 'Route', icon: 'ph:path', product };
         f.runtime.setProductTools([tool], () => 'draft');
@@ -276,7 +276,7 @@ test('product tool switching, read-only state and generation replacement retire 
 
 test('fixed two-point Planner range products complete automatically and keep measurement defaults', async () => {
     const f = polylineFixture('foxhole-planner');
-    const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'planning.range')!;
+    const product = f.manifest.contributes.products!.find(entry => entry.id === 'planning.range')!;
     assert.equal(f.runtime.beginProductPlacement(product, f.manifest.id, 'Range', () => 'range', f.isGenerationCurrent), true);
     await f.runtime.commitProductPlacement({ x: 100, y: 200 });
     assert.equal(f.runtime.entities.length, 0);
@@ -293,7 +293,7 @@ test('named triangulation and waypoint arrays draw and edit without creating a p
         const f = splineFixture(name);
         const componentId = name === 'foxhole-planner' ? 'triangulation' : 'waypoint-route';
         const propertyId = name === 'foxhole-planner' ? 'edgePoints' : 'waypoints';
-        const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component => component.componentId === componentId))!;
+        const product = f.manifest.contributes.products!.find(entry => entry.components.some(component => component.componentId === componentId))!;
         assert.equal(f.runtime.beginProductPlacement(product, f.manifest.id, 'Named Path', () => 'named-path', f.isGenerationCurrent), true);
         await f.runtime.commitProductPlacement({ x: 100, y: 200 });
         await f.runtime.commitProductPlacement({ x: 200, y: 220 });
@@ -411,7 +411,7 @@ test('declared vertex edits retain unrelated data, enforce counts and reject mal
 
 test('multiple declared geometries and unpaired points cannot begin SDK drawing', () => {
     const f = polylineFixture('scene-v2-diagram');
-    const products = f.manifest.contributes.experimentalProducts!;
+    const products = f.manifest.contributes.products!;
     const route = products.find(entry => entry.id === 'route')!;
     const connection = products.find(entry => entry.id === 'connection')!;
     const begin = (product: typeof route) => f.runtime.beginProductPlacement(product, f.manifest.id, 'Invalid', () => 'invalid', f.isGenerationCurrent);
@@ -425,7 +425,7 @@ test('multiple declared geometries and unpaired points cannot begin SDK drawing'
 function attachRealFinalizer(f: ReturnType<typeof splineFixture>, finalize: typeof finalizeDiagramTransform) {
     f.runtime.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => [{ ownerId: f.manifest.id, name: f.manifest.name, generationHash: 'fixture-generation',
-            contribution: f.manifest.contributes.experimentalComponents!, transformFinalizers: f.manifest.contributes.experimentalTransformFinalizers! }],
+            contribution: f.manifest.contributes.components!, transformFinalizers: f.manifest.contributes.transformFinalizers! }],
         getClient: () => ({ finalizeSceneV2Transform: async (_ownerId, _generation, _system, request) => finalize(request) }),
         isSettingEnabled: () => true,
     }));
@@ -434,7 +434,7 @@ function attachRealFinalizer(f: ReturnType<typeof splineFixture>, finalize: type
 test('ordinary Diagram placement finalizes the detached new subject and persists core snap plus owner data once', async () => {
     const f = splineFixture('scene-v2-diagram');
     attachRealFinalizer(f, finalizeDiagramTransform);
-    const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'process-node')!;
+    const product = f.manifest.contributes.products!.find(entry => entry.id === 'process-node')!;
     assert.equal(f.runtime.beginProductPlacement(product, f.manifest.id, 'Process', () => 'new-process', f.isGenerationCurrent), true);
     const result = await f.runtime.commitProductPlacement({ x: 37, y: 50 });
     assert.equal(result.ok, true);
@@ -500,7 +500,7 @@ test('pending creation finalizers remain detached, reject duplicate confirmation
 test('invalid creation proposals and rejected persistence cannot publish partial finalizer writes', async () => {
     for (const rejectedWrite of [false, true]) {
         const f = splineFixture('scene-v2-diagram');
-        const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'process-node')!;
+        const product = f.manifest.contributes.products!.find(entry => entry.id === 'process-node')!;
         f.runtime.attachTransformFinalizer({ replaceEntities: () => {}, finalize: async (_id, transform) => ({
             transform, warnings: [], transactions: [{ ownerId: f.manifest.id, transaction: { contractVersion: 1,
                 transactionId: 'creation-proposal', operations: [{ op: 'patch', entityId: 'new-process', componentId: 'node',
@@ -581,7 +581,7 @@ test('two-point spline drawing preserves both world endpoints beneath a transfor
     const f = splineFixture('scene-v2-diagram');
     const content = convertNixieSceneV1ToV2([{ id: 'layer', type: 'layer', key: 'Layer',
         state: { x: 100, y: 40, rotation: Math.PI / 4, scaleX: 2, scaleY: 2 }, children: [] }]).content;
-    f.runtime.load(content, [{ ownerId: f.manifest.id, contribution: f.manifest.contributes.experimentalComponents! }]);
+    f.runtime.load(content, [{ ownerId: f.manifest.id, contribution: f.manifest.contributes.components! }]);
     f.runtime.setActiveLayer(content.entities[0]!.entityId);
     assert.equal(f.begin(), true);
     await f.runtime.commitProductPlacement({ x: 100, y: 60 });
@@ -597,7 +597,7 @@ test('two-point spline drawing preserves both world endpoints beneath a transfor
 
 test('a schema-valid but semantically invalid declared spline cannot fall back to ordinary point placement', async () => {
     const f = splineFixture('scene-v2-diagram');
-    const product = structuredClone(f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'connection')!);
+    const product = structuredClone(f.manifest.contributes.products!.find(entry => entry.id === 'connection')!);
     product.components[0]!.data.minLength = 100;
     product.components[0]!.data.maxLength = 50;
     assert.equal(f.runtime.beginProductPlacement(product, f.manifest.id, 'Invalid Connection', () => 'invalid', () => true), false);
@@ -716,7 +716,7 @@ test('real Planner surface finalizer grounds placement and live moves even with 
         { entityId: 'floor', ownerId: 'nixie.core', componentId: 'spatial-transform', createIfMissing: true, set: { elevation: 64 } }]);
     f.runtime.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => [{ ownerId: f.manifest.id, name: f.manifest.name, generationHash: 'fixture',
-            contribution: f.manifest.contributes.experimentalComponents!, transformFinalizers: f.manifest.contributes.experimentalTransformFinalizers! }],
+            contribution: f.manifest.contributes.components!, transformFinalizers: f.manifest.contributes.transformFinalizers! }],
         getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, system, request) => {
             assert.equal(system, 'transforms.surface-placement');
             return finalizeFoxholeSurfacePlacement(request);

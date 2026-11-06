@@ -20,8 +20,8 @@ test('packed foundation borders follow the same socket visibility as flat layers
     const connected = make(['FrontSocket0', 'FrontSocket1'].map(localSocketName => ({ localSocketName,
         targetEntityId: 'neighbor', targetSocketName: 'BackSocket0' })));
     const plan = renderFoxholeSceneV2Entity(connected);
-    assert.equal(plan.experimentalSpatial?.hiddenModelNodes?.length, 4);
-    assert.deepEqual(new Set(plan.experimentalSpatial?.hiddenModelNodes), new Set(['frontborder0', 'frontborder1', 'frontleftpillar', 'frontrightpillar'].flatMap(id => metadata.modelLayerNodes![id]!)));
+    assert.equal(plan.spatial?.hiddenModelNodes?.length, 4);
+    assert.deepEqual(new Set(plan.spatial?.hiddenModelNodes), new Set(['frontborder0', 'frontborder1', 'frontleftpillar', 'frontrightpillar'].flatMap(id => metadata.modelLayerNodes![id]!)));
     const detached = renderFoxholeSceneV2Entity(make([]));
-    assert.equal(detached.experimentalSpatial?.hiddenModelNodes, undefined);
+    assert.equal(detached.spatial?.hiddenModelNodes, undefined);
 });

@@ -52,7 +52,7 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
         },
     });
     registry.register(sdkSource, createNixieSurfaceRoutedSdkUi(manifest.id, sdkSource, declaration,
-        new Set((manifest.contributes.experimentalProductTools ?? []).map(tool => `nixie.tool.activate.extension:${manifest.id}:${tool.id}`)), registry));
+        new Set((manifest.contributes.productTools ?? []).map(tool => `nixie.tool.activate.extension:${manifest.id}:${tool.id}`)), registry));
     context.after(() => {
         configureNixieSceneV2AuthoringIsolation(false, false);
         registerNixieEditorDocumentSessionBridge(null);

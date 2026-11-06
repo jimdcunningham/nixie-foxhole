@@ -21,29 +21,29 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.ok(manifest.development?.contributionOverrides.includes('foxhole-browser'));
     assert.ok(manifest.development?.contributionOverrides.includes('foxhole.structure.lineOfSight'));
     assert.equal(manifest.contributes.settings.find(setting => setting.id === 'foxhole.structure.lineOfSight')?.defaultValue, false);
-    assert.ok(manifest.contributes.experimentalProducts?.some(product => product.id === 'facility.ammo-factory.icon'));
-    assert.ok(manifest.contributes.experimentalProducts?.some(product => product.id === 'bunker.artillery-garrison.bunkbed'));
-    assert.equal(manifest.contributes.experimentalProductProviders?.[0]?.systemId, 'products.assets');
-    const socketFinalizer = manifest.contributes.experimentalTransformFinalizers?.find(finalizer => finalizer.systemId === 'transforms.socket-snapping');
+    assert.ok(manifest.contributes.products?.some(product => product.id === 'facility.ammo-factory.icon'));
+    assert.ok(manifest.contributes.products?.some(product => product.id === 'bunker.artillery-garrison.bunkbed'));
+    assert.equal(manifest.contributes.productProviders?.[0]?.systemId, 'products.assets');
+    const socketFinalizer = manifest.contributes.transformFinalizers?.find(finalizer => finalizer.systemId === 'transforms.socket-snapping');
     assert.equal(socketFinalizer?.systemId, 'transforms.socket-snapping');
     assert.equal(socketFinalizer?.enabledSettingId, 'foxhole.viewport.socketSnapping');
     assert.equal(socketFinalizer?.candidateQuery.worldRadius, 4096);
     assert.equal(socketFinalizer?.match.componentId, 'socket-attachments');
     assert.equal(socketFinalizer?.candidateQuery.maxCandidates, 256);
     assert.equal(socketFinalizer?.candidateQuery.match.componentId, 'socket-attachments');
-    const surfaceFinalizer = manifest.contributes.experimentalTransformFinalizers?.find(finalizer => finalizer.id === 'surface-placement');
+    const surfaceFinalizer = manifest.contributes.transformFinalizers?.find(finalizer => finalizer.id === 'surface-placement');
     assert.equal(surfaceFinalizer?.enabledSettingId, undefined);
     assert.equal(surfaceFinalizer?.candidateQuery.match.componentId, 'asset');
     const largestSocketOffset = Math.max(...Object.values(foxholeSceneV2Assets).flatMap(asset => (
         asset.buildSockets.map(socket => Math.hypot(socket.x, socket.y))
     )));
     assert.ok(socketFinalizer!.candidateQuery.worldRadius > largestSocketOffset * 2 + 20);
-    assert.deepEqual(manifest.contributes.experimentalTransformFinalizers?.map(finalizer => finalizer.match.componentId).sort(), ['asset', 'connector', 'socket-attachments', 'spline-connector']);
-    assert.ok(manifest.contributes.experimentalResourceTemplates?.some(resource => resource.idPrefix === 'foxhole.icon.'));
-    assert.ok(manifest.contributes.experimentalResourceTemplates?.some(resource => resource.idPrefix === 'foxhole.asset.'));
-    assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-icons'));
-    assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'foxhole-assets'));
-    assert.ok(manifest.contributes.experimentalRenderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('foxhole.structure.lineOfSight'));
+    assert.deepEqual(manifest.contributes.transformFinalizers?.map(finalizer => finalizer.match.componentId).sort(), ['asset', 'connector', 'socket-attachments', 'spline-connector']);
+    assert.ok(manifest.contributes.resourceTemplates?.some(resource => resource.idPrefix === 'foxhole.icon.'));
+    assert.ok(manifest.contributes.resourceTemplates?.some(resource => resource.idPrefix === 'foxhole.asset.'));
+    assert.ok(manifest.contributes.renderers?.some(renderer => renderer.id === 'foxhole-icons'));
+    assert.ok(manifest.contributes.renderers?.some(renderer => renderer.id === 'foxhole-assets'));
+    assert.ok(manifest.contributes.renderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('foxhole.structure.lineOfSight'));
     const placementWarnings = manifest.contributes.settings.find(setting => setting.id === 'nixie.foxhole-planner.debug.placementWarnings');
     assert.equal(placementWarnings?.defaultValue, false);
     assert.equal(placementWarnings?.accessibleInDev, true);
@@ -52,11 +52,11 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.equal(placementOverlay?.menu, 'overlays.debug');
     assert.equal(placementOverlay?.type, 'toggle-setting');
     assert.equal(placementOverlay?.type === 'toggle-setting' && placementOverlay.settingId, 'nixie.foxhole-planner.debug.placementWarnings');
-    assert.ok(manifest.contributes.experimentalRenderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('nixie.foxhole-planner.debug.placementWarnings'));
-    assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'spline-connector'));
-    assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'cargo'));
-    assert.ok(manifest.contributes.experimentalComponents?.components.some(component => component.id === 'socket-attachments'));
-    const socketAttachments = manifest.contributes.experimentalComponents?.components.find(
+    assert.ok(manifest.contributes.renderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('nixie.foxhole-planner.debug.placementWarnings'));
+    assert.ok(manifest.contributes.components?.components.some(component => component.id === 'spline-connector'));
+    assert.ok(manifest.contributes.components?.components.some(component => component.id === 'cargo'));
+    assert.ok(manifest.contributes.components?.components.some(component => component.id === 'socket-attachments'));
+    const socketAttachments = manifest.contributes.components?.components.find(
         component => component.id === 'socket-attachments',
     );
     assert.equal(
@@ -64,8 +64,8 @@ test('declares real Planner migrations through the public SDK', async () => {
         "Connections from this structure's local sockets to sockets on other scene entities.",
     );
     assert.equal(socketAttachments?.schema.properties.attachments?.title, 'Socket Attachments');
-    assert.ok(manifest.contributes.experimentalProducts?.some(product => product.id === 'connector.facility-pipe'));
-    assert.ok(manifest.contributes.experimentalRenderers?.some(renderer => renderer.id === 'spline-connector'));
+    assert.ok(manifest.contributes.products?.some(product => product.id === 'connector.facility-pipe'));
+    assert.ok(manifest.contributes.renderers?.some(renderer => renderer.id === 'spline-connector'));
 });
 
 test('connects with the local migration capability', async () => {
@@ -84,5 +84,5 @@ test('War owns map controls without duplicate sidebar panels or lost saved setti
         'foxhole.map.iconCategories.bases', 'foxhole.map.iconCategories.resources', 'foxhole.map.iconCategories.structures', 'foxhole.map.iconBlacklist']) {
         assert.ok(manifest.contributes.settings.some(setting => setting.id === id), id);
     }
-    assert.deepEqual(manifest.contributes.experimentalDocumentRenderers?.map(renderer => renderer.id), ['planning-map', 'planning-grid']);
+    assert.deepEqual(manifest.contributes.documentRenderers?.map(renderer => renderer.id), ['planning-map', 'planning-grid']);
 });

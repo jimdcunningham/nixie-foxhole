@@ -16,8 +16,8 @@ test('all catalog map resources resolve through the declared texture template', 
     assert.equal(maps.regions.reduce((total, region) => total + region.staticIcons.length, 0), 135);
     assert.equal(new Set(foxholeMapResources.map(resource => resource.path)).size, foxholeMapResources.length);
     for (const resource of foxholeMapResources) {
-        assert.equal(resolveNixieResourceV1(manifest.contributes.experimentalResources ?? [],
-            manifest.contributes.experimentalResourceTemplates ?? [], resource.id)?.path, resource.path, resource.id);
+        assert.equal(resolveNixieResourceV1(manifest.contributes.resources ?? [],
+            manifest.contributes.resourceTemplates ?? [], resource.id)?.path, resource.path, resource.id);
         assert.match(resource.path, /^maps\/[a-z0-9/._-]+\.webp$/);
         assert.match(resource.sha256, /^[a-f0-9]{64}$/);
     }

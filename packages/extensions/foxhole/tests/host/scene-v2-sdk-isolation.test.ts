@@ -17,7 +17,7 @@ import { inspectFoxholeSceneV2Structure } from '../../../../../extensions/foxhol
 import { renderFoxholeSceneV2Entity } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourceUrl('../../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.experimentalComponents! }];
+const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.components! }];
 
 test('real Planner structures expose SDK inspection, edit, render and reload with private authoring poisoned', context => {
     configureNixieSceneV2AuthoringIsolation(true, true);
@@ -41,10 +41,10 @@ test('real Planner structures expose SDK inspection, edit, render and reload wit
     const entity = controller.entities.find(candidate => candidate.entityId === 'facilityfactoryammo')!;
     const inspection = buildNixieSceneV2ExtensionInspection(controller, entity.entityId)!;
     assert.ok(inspection.components.some(component => component.instance.componentId === 'appearance'));
-    const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
+    const provider = manifest.contributes.inspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
     const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
     const result = inspectFoxholeSceneV2Structure(request);
-    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
     const choice = result.components.find(component => component.componentId === 'appearance')!.fields.find(field => field.path.length === 0)!.choices!.options.find(option => typeof option.value === 'object' && option.value !== null && option.value.blueprint === true)!;
     assert.ok(choice, 'the SDK must supply the Blueprint workflow');
     const edited = controller.updateEntityComponents([{ entityId: entity.entityId, ownerId: manifest.id, componentId: 'appearance', set: choice.value as Record<string, boolean> }]);
@@ -82,12 +82,12 @@ test('isolated Planner appearance, supply, cargo and production edits persist th
     }, 'scene', catalog, true);
     context.after(() => { view.destroy(); project.destroy(); });
     const controller = view.controller;
-    const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
+    const provider = manifest.contributes.inspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
     const inspect = (id: string) => {
         const entity = controller.entities.find(candidate => candidate.entityId === id)!;
         const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
         const result = inspectFoxholeSceneV2Structure(request);
-        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
         return result;
     };
     function edit(id: string, componentId: string, set: Record<string, unknown>, createIfMissing = false) {
@@ -119,7 +119,7 @@ test('isolated Planner appearance, supply, cargo and production edits persist th
     const orders = inspect('facilityfactoryammo').components.find(component => component.componentId === 'production-order')!;
     const recipe = orders.fields.find(field => field.path[0] === 'orders')!.choices!.options.find(option => !option.actionId)!;
     assert.ok(recipe);
-    const schema = manifest.contributes.experimentalComponents!.components.find(component => component.id === 'production-order')!.schema.properties.orders!;
+    const schema = manifest.contributes.components!.components.find(component => component.id === 'production-order')!.schema.properties.orders!;
     assert.equal(schema.type, 'array');
     if (schema.type !== 'array') throw new Error('Expected order array');
     const choices = orders.fields.find(field => field.path[0] === 'orders')!.choices!;

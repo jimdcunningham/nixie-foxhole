@@ -16,7 +16,7 @@ test('Planner and neutral product tool commands use host activation and fail clo
         const calls: string[] = [];
         let available = true;
         const contribution = createExternalDeclarativeContribution(source, ['ui.toolbar'], { canActivateProductTool: () => available });
-        const tools = source.contributes.experimentalProductTools!;
+        const tools = source.contributes.productTools!;
         assert.equal(contribution.commands!.length, tools.length);
         const context = { activeSurface: 'scene-v2', capabilities: { canEdit: true }, getActiveToolId: () => 'selection',
             activateTool: async (id: string) => {

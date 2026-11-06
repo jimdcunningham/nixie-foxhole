@@ -39,7 +39,7 @@ function componentData(entity: Parameters<NixieSceneV2RenderPresentationAdapter>
 
 function prepareStructureSocketPresentation(...[entity, plan, , settings]: Parameters<NixieSceneV2RenderPresentationAdapter>) {
     // Empty SDK groups deliberately declare a handled overlay with no visible sockets.
-    if (plan.root.children.some(node => node.id === 'structure-socket-presentation' && node.experimentalPresentation?.excludeFromBounds === true)) return null;
+    if (plan.root.children.some(node => node.id === 'structure-socket-presentation' && node.presentation?.excludeFromBounds === true)) return null;
     const asset = componentData(entity, 'asset');
     if (asset?.catalogId !== 'foxhole.structures' || typeof asset.assetId !== 'string') {
         return null;
@@ -131,9 +131,9 @@ function prepareStructurePresentation(...args: Parameters<NixieSceneV2RenderPres
     const [entity, plan, , settings] = args;
     const sockets = prepareStructureSocketPresentation(...args);
     if (plan.root.children.some(node => (node.id === 'structure-ranges' || node.id === 'selected-structure-ranges')
-        && (node.experimentalPresentation?.groundOverlay === true
+        && (node.presentation?.groundOverlay === true
             || (node.kind === 'group' && node.children.length > 0
-                && node.children.every(child => typeof child.experimentalPresentation?.groundOverlay === 'boolean'))))) {
+                && node.children.every(child => typeof child.presentation?.groundOverlay === 'boolean'))))) {
         return sockets;
     }
 
@@ -186,8 +186,8 @@ function prepareStructurePresentation(...args: Parameters<NixieSceneV2RenderPres
 export const prepareFoxholeSceneV2RenderPresentation: NixieSceneV2RenderPresentationAdapter = (entity, plan, renderScale, settings = {}, toolColors = () => ({ stem: 0x8BE9FF, handle: 0xD8F7FF })) => {
     const spline = componentData(entity, 'spline-connector');
     if (spline) {
-        const portableGuides = plan.root.children.some(node => node.id === 'spline-connector-guides' && node.experimentalPresentation?.selectionOnly === true);
-        const portableSockets = plan.root.children.some(node => node.id === 'spline-connector-socket-presentation' && node.experimentalPresentation?.excludeFromBounds === true);
+        const portableGuides = plan.root.children.some(node => node.id === 'spline-connector-guides' && node.presentation?.selectionOnly === true);
+        const portableSockets = plan.root.children.some(node => node.id === 'spline-connector-socket-presentation' && node.presentation?.excludeFromBounds === true);
         if (portableGuides && portableSockets) return null;
         const state = normalizeFoxholeSplineConnectorState({ ...spline,
             start: { x: Number(spline.startX), y: Number(spline.startY), rotation: Number(spline.startRotation) },

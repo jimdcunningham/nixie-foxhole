@@ -28,7 +28,7 @@ test('detached legacy pipe commits both socket links in one undoable transaction
     const runtime = new NixieSceneV2EditorRuntimeController();
     runtime.setEditable(true);
     assert.equal(runtime.load(initial, [{ ownerId: manifest.id, name: manifest.name,
-        contribution: manifest.contributes.experimentalComponents }]).ok, true);
+        contribution: manifest.contributes.components }]).ok, true);
     const port = editor.asPersistencePort();
     let writes = 0;
     runtime.attachPersistence({ ...port, applyEntityMutations: (mutations, options) => {
@@ -37,8 +37,8 @@ test('detached legacy pipe commits both socket links in one undoable transaction
     } });
     runtime.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => [{ ownerId: manifest.id, name: manifest.name, generationHash: 'test',
-            contribution: manifest.contributes.experimentalComponents,
-            transformFinalizers: manifest.contributes.experimentalTransformFinalizers }],
+            contribution: manifest.contributes.components,
+            transformFinalizers: manifest.contributes.transformFinalizers }],
         isSettingEnabled: () => true,
         getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, _system, request) =>
             finalizeFoxholeSceneV2Transform(request) }),

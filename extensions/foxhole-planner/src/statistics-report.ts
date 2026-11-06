@@ -7,7 +7,7 @@ import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText, buildF
 import type { FoxholeStatsExportScopePayload } from './statistics-export-formats.ts';
 
 export function buildFoxholeStatisticsReport(request: NixiePanelReportRequestV1): NixiePanelReportV1 {
-    const assets = localizedFoxholeCatalog(request.scene.experimentalPanelContext?.locale);
+    const assets = localizedFoxholeCatalog(request.scene.panelContext?.locale);
     const preferences = readStatisticsPreferences(request.scene);
     const summary = readSceneStatistics(request.scene, request.selection, preferences.scope, preferences.intervalSeconds);
     const { intervalLabel } = preferences;

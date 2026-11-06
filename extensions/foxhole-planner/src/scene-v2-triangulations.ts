@@ -290,9 +290,9 @@ function radiusLabel(
     }
     const text = `${(fit.radius / Math.max(1, data.meterPixels)).toFixed(data.decimals)}m`;
     return [{ id: 'triangulation-radius-label', kind: 'group', x: fit.centerX + fit.radius * 0.5, y: fit.centerY,
-        rotation: -nodeRotation, experimentalPresentation: { contractVersion: 1, worldUpright: true },
+        rotation: -nodeRotation, presentation: { contractVersion: 1, worldUpright: true },
         children: [{ id: 'triangulation-radius-label-text', kind: 'text', text, anchorX: 0.5, anchorY: 0.5,
-            experimentalBox: { contractVersion: 1, padding: data.labelPadding, backgroundColor: data.labelBackgroundColor,
+            box: { contractVersion: 1, padding: data.labelPadding, backgroundColor: data.labelBackgroundColor,
                 backgroundAlpha: data.labelBackgroundAlpha, strokeColor: data.strokeColor, strokeWidth: data.labelStrokeWidth,
                 strokeAlpha: data.strokeAlpha, renderScale, maximumSize: fit.radius, minimumScale: 0.2 },
             style: { fontFamily: 'Jost, Arial, sans-serif', fontSize: data.labelFontSize, fontWeight: 'normal',

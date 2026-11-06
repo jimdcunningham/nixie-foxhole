@@ -26,7 +26,7 @@ test('maintenance coverage uses world positions through transformed parents in b
     const manifest = JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8'));
     const host = new NixieSceneV2ComponentHost();
     host.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
-    host.registerExtension('nixie.foxhole-planner', manifest.contributes.experimentalComponents);
+    host.registerExtension('nixie.foxhole-planner', manifest.contributes.components);
     host.replaceDocument(converted.content);
     const modern = projectFoxholeMaintenanceSceneV2(host.listEntities(), catalog);
     for (const candidates of [legacy, modern]) {

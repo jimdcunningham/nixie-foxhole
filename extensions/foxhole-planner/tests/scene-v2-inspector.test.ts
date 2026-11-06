@@ -9,7 +9,7 @@ import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import assets from '#foxhole-scene-v2-assets';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
-const provider = manifest.contributes.experimentalInspectorProviders![0]!;
+const provider = manifest.contributes.inspectorProviders![0]!;
 function inspect(assetId: string, overrides: Record<string, Record<string, unknown>> = {}, faction?: string, locale?: string) {
     const data = { 'asset': { catalogId: 'foxhole.structures', assetId }, 'appearance': {}, 'modification': { selections: [] },
         'cargo': { items: [] }, 'production-order': { orders: [] }, 'socket-attachments': { attachments: [] }, ...overrides };
@@ -20,7 +20,7 @@ function inspect(assetId: string, overrides: Record<string, Record<string, unkno
     if (locale) request.locale = locale;
     if (faction) request.settings = { 'foxhole.assets.filter.faction': faction };
     const result = inspectFoxholeSceneV2Structure(request);
-    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
     return result;
 }
 
@@ -134,12 +134,12 @@ test('appearance offers only published variants and atomic valid state combinati
 });
 
 test('catalog and standalone spline stencils expose only applicable authoring controls without changing geometry', () => {
-    const connectorProvider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === 'spline-connector')!;
+    const connectorProvider = manifest.contributes.inspectorProviders!.find(entry => entry.id === 'spline-connector')!;
     const products = [];
     for (let offset = 0; offset < Object.keys(assets).length; offset += 100) {
         products.push(...listFoxholeSceneV2Products({ contractVersion: 1, query: '', offset, limit: 100 }).items.map(item => item.product));
     }
-    products.push(...manifest.contributes.experimentalProducts!.filter(product => product.components.some(component => component.componentId === 'spline-connector')));
+    products.push(...manifest.contributes.products!.filter(product => product.components.some(component => component.componentId === 'spline-connector')));
     let count = 0;
     for (const product of products) {
         const spline = product.components.find(component => component.componentId === 'spline-connector');
@@ -151,7 +151,7 @@ test('catalog and standalone spline stencils expose only applicable authoring co
         const request = projectNixieInspectorSubjectV1(subject, manifest.id, connectorProvider);
         const before = structuredClone(request);
         const result = inspectFoxholeSceneV2SplineConnector(request);
-        validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.components!.components, request);
         assert.deepEqual(request, before);
         const hasAsset = subject.components.some(component => component.componentId === 'asset');
         let layout = result.layout;
@@ -159,7 +159,7 @@ test('catalog and standalone spline stencils expose only applicable authoring co
             assert.equal(layout, undefined, 'catalog connectors use the structure provider layout');
             const structureRequest = projectNixieInspectorSubjectV1(subject, manifest.id, provider);
             const structure = inspectFoxholeSceneV2Structure(structureRequest);
-            validateNixieInspectorResultV1(structure, provider, manifest.contributes.experimentalComponents!.components, structureRequest);
+            validateNixieInspectorResultV1(structure, provider, manifest.contributes.components!.components, structureRequest);
             layout = structure.layout;
             assert.ok(structure.components.some(component => component.componentId === 'spline-connector'));
         }
@@ -181,14 +181,14 @@ test('catalog and standalone spline stencils expose only applicable authoring co
 });
 
 test('an unavailable connector retains authored geometry and identity for inspection', () => {
-    const connectorProvider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === 'spline-connector')!;
-    const product = manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component => component.componentId === 'spline-connector'))!;
+    const connectorProvider = manifest.contributes.inspectorProviders!.find(entry => entry.id === 'spline-connector')!;
+    const product = manifest.contributes.products!.find(entry => entry.components.some(component => component.componentId === 'spline-connector'))!;
     const components = structuredClone(product.components).map(component => ({ ...component, definitionAvailable: true }));
     components.find(component => component.componentId === 'spline-connector')!.data.foxholeKey = 'unavailable-connector';
     const request = projectNixieInspectorSubjectV1({ entityId: 'missing', revision: 1, components }, manifest.id, connectorProvider);
     const before = structuredClone(request);
     const result = inspectFoxholeSceneV2SplineConnector(request);
-    validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.components!.components, request);
     assert.deepEqual(request, before);
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.readOnly, true);
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.hidden, false);

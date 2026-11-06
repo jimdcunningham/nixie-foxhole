@@ -10,7 +10,7 @@ export type StatisticsScope = 'auto' | 'selection' | 'layer' | 'scene';
 const ownerId = 'nixie.foxhole-planner';
 
 export function readStatisticsPreferences(scene: SceneSnapshotV1): { scope: StatisticsScope; intervalSeconds: number; intervalLabel: string; } {
-    const context = scene.experimentalPanelContext;
+    const context = scene.panelContext;
     const values = context?.ownerId === ownerId && context.panelId === 'statistics' ? context.values : {};
     const requestedScope = values[`${ownerId}.stats.scope`];
     const scope: StatisticsScope = ['selection', 'layer', 'scene'].includes(String(requestedScope)) ? requestedScope as StatisticsScope : 'auto';

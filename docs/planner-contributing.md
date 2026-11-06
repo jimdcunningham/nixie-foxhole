@@ -92,7 +92,7 @@ in the runtime catalog.
 
 ## SDK Packages and Source
 
-Published SDK JavaScript, TypeScript declarations, experimental Scene V2 exports,
+Published SDK JavaScript, TypeScript declarations, Scene V2 exports,
 and fake-host testing helpers are sufficient to build and test Planner. A separate
 SDK Git repository is not required. Planner uses the public package entry points;
 private Studio code is not part of the extension contract.

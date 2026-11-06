@@ -273,7 +273,7 @@ test('deleting a connected entity clears reciprocal sockets atomically and rejec
                 return accepted;
             } });
         controller.load(host.exportDocument(), [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole',
-            contribution: manifest.contributes.experimentalComponents }]);
+            contribution: manifest.contributes.components }]);
         const before = controller.exportDocument();
         assert.equal(controller.deleteEntities([converted.content.entities[1]!.entityId]).ok, accepted);
         assert.equal(saves, 1);
@@ -326,7 +326,7 @@ test('component placement rejects stale, locked, read-only and failed saves atom
                 return scenario !== 'rejected';
             } });
         assert.equal(controller.load(document, [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole',
-            contribution: manifest.contributes.experimentalComponents }]).ok, true);
+            contribution: manifest.contributes.components }]).ok, true);
         const initial = controller.entities[0]!;
         const placement = foxholeSceneV2StateAdapter.startPlacement!(initial)!;
         placement.confirm({ x: -224, y: -192 });
@@ -363,7 +363,7 @@ function fixture(type = 'foxholeAsset', state: Record<string, unknown> = { foxho
     const manifest = JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8'));
     const host = new NixieSceneV2ComponentHost();
     host.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
-    host.registerExtension('nixie.foxhole-planner', manifest.contributes.experimentalComponents);
+    host.registerExtension('nixie.foxhole-planner', manifest.contributes.components);
     host.replaceDocument(converted.content);
     const id = converted.content.entities[0]!.entityId;
     const apply = (patch: Record<string, unknown>) => {
@@ -488,7 +488,7 @@ function portableCurveUpdates(entity: NixieComponentEntitySnapshotV1, delta: num
     if (!geometry) return null;
     const data = geometry.data as unknown as FoxholeSceneV2SplineConnectorData;
     const manifest = JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8'));
-    const definitions = new Map<string, NixieComponentDefinitionV1>(manifest.contributes.experimentalComponents.components.map((c: NixieComponentDefinitionV1) => ['nixie.foxhole-planner\0' + c.id, c]));
+    const definitions = new Map<string, NixieComponentDefinitionV1>(manifest.contributes.components.components.map((c: NixieComponentDefinitionV1) => ['nixie.foxhole-planner\0' + c.id, c]));
     return buildNixieSceneV2GeometryWheelUpdates(entity, 'nixie.foxhole-planner', foxholeConnectorGeometryWheel(data, assets[data.foxholeKey]), delta, definitions);
 }
 
@@ -537,7 +537,7 @@ test('pipeline wheel writes reject stale, locked, read-only, detached and failed
                 return scenario !== 'rejected';
             } });
         assert.equal(controller.load(document, [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole',
-            contribution: manifest.contributes.experimentalComponents }]).ok, true);
+            contribution: manifest.contributes.components }]).ok, true);
         const entity = controller.entities[0]!;
         const before = controller.exportDocument();
         const result = controller.reshapeComponentGeometry({ entityId: id,
@@ -629,7 +629,7 @@ test('range geometry commits are atomic, revision guarded, capability checked an
                 return scenario !== 'rejected';
             } });
         assert.equal(controller.load(document, [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole',
-            contribution: manifest.contributes.experimentalComponents }]).ok, true);
+            contribution: manifest.contributes.components }]).ok, true);
         const initial = controller.entities[0]!;
         const updates = buildNixieSceneV2EditableHandleUpdates(initial, 'point-0', { x: 20, y: 20 }, true)!;
         if (scenario === 'invalid') {
@@ -839,10 +839,10 @@ test('Explorer powerline drafts preview socket links and retain the snapped anch
     runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
         applyEntityMutations: () => { writes++; return true; } });
     assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name,
-        contribution: manifest.contributes.experimentalComponents }]).ok, true);
+        contribution: manifest.contributes.components }]).ok, true);
     runtime.attachTransformFinalizer(new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => [{ ownerId: manifest.id, name: manifest.name, generationHash: 'test',
-            contribution: manifest.contributes.experimentalComponents!, transformFinalizers: manifest.contributes.experimentalTransformFinalizers! }],
+            contribution: manifest.contributes.components!, transformFinalizers: manifest.contributes.transformFinalizers! }],
         isSettingEnabled: () => true,
         getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, _system, request) => finalizeFoxholeSceneV2Transform(request) }),
     }));
@@ -1002,7 +1002,7 @@ test('maintenance filters convert, edit, and survive a document reload', () => {
     assert.deepEqual(project().state.maintenanceFilters, { range: 20, exclusions: ['power'] });
     const reloaded = new NixieSceneV2ComponentHost();
     reloaded.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
-    reloaded.registerExtension('nixie.foxhole-planner', manifest.contributes.experimentalComponents);
+    reloaded.registerExtension('nixie.foxhole-planner', manifest.contributes.components);
     reloaded.replaceDocument(host.exportDocument());
     assert.deepEqual(foxholeSceneV2StateAdapter.project(reloaded.readEntity(id))!.state.maintenanceFilters, { range: 20, exclusions: ['power'] });
 });
@@ -1023,7 +1023,7 @@ test('maintenance preview edits remain detached and create the typed component f
     const { host, id, manifest } = fixture('foxholeAsset', { foxholeKey: 'maintenancetunnel' });
     const runtime = new NixieSceneV2EditorRuntimeController();
     runtime.setEditable(true);
-    runtime.load(host.exportDocument(), [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole', contribution: manifest.contributes.experimentalComponents }]);
+    runtime.load(host.exportDocument(), [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole', contribution: manifest.contributes.components }]);
     runtime.selection.set([id]);
     const draftEntity = { ...host.readEntity(id), entityId: 'maintenance-draft', components: host.readEntity(id).components.filter(component => component.componentId !== 'maintenance-supply') };
     const draft = { entities: [draftEntity], rootIds: ['maintenance-draft'], label: 'Maintenance Tunnel', x: 0, y: 0, rotation: 0,
@@ -1055,7 +1055,7 @@ test('Inspector bunkbed hover previews reveal the interior without saving', () =
  assert.ok(Object.values(preview.resourceOpacity!).includes(.52));assert.ok(Object.values(preview.modelNodeOpacity!).includes(.52));
  assert.equal(preview.resourceOpacity![shadow.resourceId],.52);
  const plan=renderFoxholeSceneV2Entity(preview.entity,{contractVersion:1,entities:[preview.entity],settings:preview.settings});
- assert.ok(plan.experimentalSpatial?.hiddenModelNodes?.includes('structure-layer-roof'));
+ assert.ok(plan.spatial?.hiddenModelNodes?.includes('structure-layer-roof'));
  assert.deepEqual(host.exportDocument(),before);assert.deepEqual(project().state.modificationVariantIds,selected);
  assert.equal(buildFoxholeSceneV2RenderPreview(original,null,{},assets.fortt3,foxholeSceneV2StateAdapter),null);
  assert.equal(buildFoxholeSceneV2RenderPreview(original,{...hover,nodeIds:['other']},{},assets.fortt3,foxholeSceneV2StateAdapter),null);
@@ -1097,7 +1097,7 @@ test('Scene V2 bracket tier edits use typed finalized updates and one persistenc
     runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
         applyEntityMutations: () => { writes++; return true; } });
     assert.equal(runtime.load(host.exportDocument(), [{ ownerId: manifest.id, name: manifest.name,
-        contribution: manifest.contributes.experimentalComponents }]).ok, true);
+        contribution: manifest.contributes.components }]).ok, true);
     runtime.selection.set([id]);
     for (const [direction, target] of [['up', 'trencht2'], ['up', 'trencht3'], ['down', 'trencht2'], ['down', 'trencht1']] as const) {
         const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, direction);
@@ -1130,7 +1130,7 @@ test('Scene V2 tier commands batch mixed selections and reject locked tier targe
         runtime.setEditable(true);
         runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
             applyEntityMutations: () => { writes++; return true; } });
-        assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name, contribution: manifest.contributes.experimentalComponents }]).ok, true);
+        assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name, contribution: manifest.contributes.components }]).ok, true);
         runtime.selection.set(runtime.entities.map(entity => entity.entityId));
         const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up');
         if (locked) { assert.deepEqual(updates, []);continue; }

@@ -18,7 +18,7 @@ import type { NixieGeometryGestureV1 } from '@nixiejs/extension-sdk';
 
 test('Planner placement and endpoint gestures run through the SDK without the Nuxt integration', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-    const owner = manifest.id, contribution = manifest.contributes.experimentalComponents!;
+    const owner = manifest.id, contribution = manifest.contributes.components!;
     assert.equal(listNixieSceneV2StateAdapters().length, 0);
     assert.equal(getNixieInternalSceneV2Adapter(owner), undefined);
     const product = (id: string) => listFoxholeSceneV2Products({ contractVersion: 1, query: id, offset: 0, limit: 100 }).items.find(item => item.product.id === 'asset.' + id)!.product;
@@ -33,7 +33,7 @@ test('Planner placement and endpoint gestures run through the SDK without the Nu
     let enabled = true, writes = 0;
     const adapter = new NixieSceneV2TransformFinalizerAdapter({
         getCatalog: () => [{ ownerId: owner, name: manifest.name, generationHash: 'one', contribution,
-            transformFinalizers: manifest.contributes.experimentalTransformFinalizers! }], isSettingEnabled: () => enabled,
+            transformFinalizers: manifest.contributes.transformFinalizers! }], isSettingEnabled: () => enabled,
         getClient: () => ({ finalizeSceneV2Transform: async (_owner, _generation, system, request) => fake.finalizeTransform(system, request) }),
     });
     const runtime = new NixieSceneV2EditorRuntimeController();
@@ -67,8 +67,8 @@ test('Planner placement and endpoint gestures run through the SDK without the Nu
     const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(line, { contractVersion: 1, entities: runtime.entities }));
     const definitions = new Map([...NIXIE_SCENE_V2_CORE_COMPONENTS.components.map(c => ['nixie.core\0' + c.id, c] as const),
         ...contribution.components.map(c => [owner + '\0' + c.id, c] as const)]);
-    assert.deepEqual(getNixieSceneV2EditableHandles(line, definitions, plan.experimentalSelectionGeometry?.geometryHandles).map(h => h.id), ['start', 'end']);
-    assert.match(JSON.stringify(plan.experimentalSpatial), /pole/);
+    assert.deepEqual(getNixieSceneV2EditableHandles(line, definitions, plan.selectionGeometry?.geometryHandles).map(h => h.id), ['start', 'end']);
+    assert.match(JSON.stringify(plan.spatial), /pole/);
     for (const id of ['plant', 'pole']) assert.ok(runtime.entities.find(e => e.entityId === id)!.components.find(c => c.componentId === 'socket-attachments')?.data.attachments?.length);
     const originalTransform = line.components.find(c => c.componentId === 'transform')!.data;
     const updates = buildNixieSceneV2EditableHandleUpdates(line, 'end', { x: 600, y: 50 }, false, definitions)!;
@@ -97,7 +97,7 @@ test('Planner placement and endpoint gestures run through the SDK without the Nu
 
 test('pipe curve wheels work during SDK-only placement and emit field-only saved edits', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
-    const owner = manifest.id, contribution = manifest.contributes.experimentalComponents!;
+    const owner = manifest.id, contribution = manifest.contributes.components!;
     assert.equal(listNixieSceneV2StateAdapters().length, 0);
     assert.equal(getNixieInternalSceneV2Adapter(owner), undefined);
     const definitions = new Map(contribution.components.map(c => [owner + '\0' + c.id, c]));
@@ -112,7 +112,7 @@ test('pipe curve wheels work during SDK-only placement and emit field-only saved
         runtime.canvas.attach({} as never);
         assert.equal(runtime.beginProductPlacement(products(key), owner, key, () => key, () => true), true);
         const render = () => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(runtime.productPlacement!.entity, { contractVersion: 1, entities: [] }));
-        const control = render().experimentalSelectionGeometry!.geometryWheelControl!;
+        const control = render().selectionGeometry!.geometryWheelControl!;
         assert.deepEqual(control, { componentId: 'spline-connector', propertyId: 'curveT', step: 0.05, minimum: 0, maximum: 1 });
         const data = () => runtime.productPlacement!.entity.components.find(c => c.componentId === 'spline-connector')!.data;
         const initial = Number(data().curveT);
@@ -141,6 +141,6 @@ test('pipe curve wheels work during SDK-only placement and emit field-only saved
         const result = listFoxholeSceneV2Products({ contractVersion: 1, query: key, offset: 0, limit: 100 }).items.find(i => i.product.id === 'asset.' + key);
         assert.ok(result);
         const entity = { entityId: key, revision: 0, components: withNixieSceneV2CoreComponents(result.product, { name: key, x: 0, y: 0 }).components.map(c => ({ ...c, definitionAvailable: true })) };
-        assert.equal(parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [] })).experimentalSelectionGeometry?.geometryWheelControl, undefined);
+        assert.equal(parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [] })).selectionGeometry?.geometryWheelControl, undefined);
     }
 });

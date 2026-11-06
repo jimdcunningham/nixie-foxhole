@@ -76,7 +76,7 @@ test('real published AI overlays shrink in both visibility groups and stay valid
 
 test('all night preferences are declared to the extension renderer and default to daytime', () => {
     const manifest = JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8'));
-    const renderer = manifest.contributes.experimentalRenderers.find((entry: { id: string }) => entry.id === 'foxhole-assets');
+    const renderer = manifest.contributes.renderers.find((entry: { id: string }) => entry.id === 'foxhole-assets');
     for (const id of FOXHOLE_NIGHT_RANGE_SETTING_IDS) {
         assert.ok(renderer.settingIds.includes(id));
         assert.equal(manifest.contributes.settings.find((entry: { id: string }) => entry.id === id)?.defaultValue, false);

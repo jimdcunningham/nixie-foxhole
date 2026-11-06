@@ -36,5 +36,5 @@ export function renderFoxholeDebugSpotlightOverlays(asset: FoxholeSceneV2AssetMe
     });
     return children.length ? [{ id: 'structure-debug-spotlights', kind: 'group',
         ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
 }

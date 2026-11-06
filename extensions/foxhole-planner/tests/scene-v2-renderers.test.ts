@@ -1005,7 +1005,7 @@ test('derives a manifest-textured cubic ribbon for Foxhole spline connectors', (
 
     assert.equal(plan.root.children.filter(child => child.id !== 'spline-connector-guides' && child.id !== 'spline-connector-socket-presentation').length, 3);
     assert.ok(plan.root.children.every(child => child.kind !== 'graphics'), 'editing handles and draft outlines remain inside declared selected-only groups');
-    assert.deepEqual(plan.root.children.find(child => child.id === 'spline-connector-guides')?.experimentalPresentation,
+    assert.deepEqual(plan.root.children.find(child => child.id === 'spline-connector-guides')?.presentation,
         { contractVersion: 1, selectionOnly: true, excludeFromBounds: true });
     const ribbon = plan.root.children[0];
     assert.equal(ribbon?.kind, 'mesh');
@@ -1121,7 +1121,7 @@ test('reproduces V1 viewport-relative detail scaling without changing persisted 
     assert.equal(range[1]?.kind === 'group'
         && range[1].children[0]?.kind === 'group'
         && range[1].children[0].children[0]?.kind === 'text'
-        && range[1].children[0].children[0].experimentalBox?.renderScale, 4);
+        && range[1].children[0].children[0].box?.renderScale, 4);
 
     const binocular = renderFoxholeSceneV2BinocularLine({
         points: [0, 0, 1_000, 0],
@@ -1185,5 +1185,5 @@ test('reproduces V1 viewport-relative detail scaling without changing persisted 
     assert.equal(triangulation[1]?.kind === 'group'
         && triangulation[1].children[0]?.kind === 'group'
         && triangulation[1].children[0].children[0]?.kind === 'text'
-        && triangulation[1].children[0].children[0].experimentalBox?.renderScale, 4);
+        && triangulation[1].children[0].children[0].box?.renderScale, 4);
 });

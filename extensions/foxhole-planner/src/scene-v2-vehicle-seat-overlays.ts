@@ -30,10 +30,10 @@ export function renderFoxholeVehicleSeatOverlays(asset: FoxholeSceneV2AssetMetad
                 { op: 'fill', color: SEAT_COLOR, alpha: 0.95 },
             ] }, { id: `vehicle-seat-${index}-label`, kind: 'text',
                 text: (direction ? `${label} (${direction})` : label).slice(0, 128), x: 0, y: -12, anchorX: 0.5, anchorY: 1,
-                experimentalPresentation: { contractVersion: 1, worldUpright: true },
+                presentation: { contractVersion: 1, worldUpright: true },
                 style: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', fill: SEAT_COLOR } }] }];
     });
     return children.length ? [{ id: 'structure-vehicle-seats', kind: 'group',
         ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
 }

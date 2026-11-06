@@ -40,7 +40,7 @@ export function renderFoxholePlanningMapIcons(metadata: FoxholeSceneV2MapMetadat
         children.push({ id: `${id}-image`, kind: 'sprite', resourceId: definition.resourceId, anchorX: 0.5, anchorY: 0.5, tint });
         return [{ id, kind: 'group', x: region.x - metadata.regionWidth / 2 + icon.x * metadata.regionWidth,
             y: region.y - metadata.regionHeight / 2 + icon.y * metadata.regionHeight, scaleX: iconScale, scaleY: iconScale,
-            experimentalPresentation: { contractVersion: 1, tooltip: { contractVersion: 1, title: definition.name, category: definition.tooltipCategory,
+            presentation: { contractVersion: 1, tooltip: { contractVersion: 1, title: definition.name, category: definition.tooltipCategory,
                 iconResourceId: definition.resourceId, ...(previewResourceId ? { previewResourceId, previewOnShift: true } : {}),
                 ...(detail ? { detail } : {}), ...(detailColor === undefined ? {} : { detailColor }) } }, children }];
     }));

@@ -204,7 +204,7 @@ export function renderFoxholeStructurePlacementOverlay(
         id: `placement-invalid-${index}`,
         kind: 'graphics',
         ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true },
+        presentation: { contractVersion: 1, excludeFromBounds: true },
         commands: [{ op: 'polygon', close: true, points: polygon },
             { op: 'fill', color, alpha: 0.18 }, { op: 'stroke', color, alpha: 1, width: 4, join: 'round' }],
     }));

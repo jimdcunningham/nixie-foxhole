@@ -49,7 +49,7 @@ test('document tooltip references follow only accepted replacements and retire o
     const host = new NixieSceneV2DocumentOverlayHost({ acquireResources: () => () => {}, releaseUnusedResources: () => {},
         rendererOptions: () => ({ loadTexture: async () => PIXI.Texture.EMPTY }) });
     const result = { contractVersion: 1 as const, plan: { schemaVersion: 1 as const, root: { id: 'root', kind: 'group' as const,
-        children: [{ id: 'body', kind: 'graphics' as const, experimentalPresentation: { contractVersion: 1 as const, tooltip: { contractVersion: 1 as const, title: 'Well' } },
+        children: [{ id: 'body', kind: 'graphics' as const, presentation: { contractVersion: 1 as const, tooltip: { contractVersion: 1 as const, title: 'Well' } },
             commands: [{ op: 'circle' as const, x: 0, y: 0, radius: 20 }, { op: 'fill' as const, color: 0xffffff }] }] } },
     clip: { minX: -10, minY: -10, maxX: 10, maxY: 10 } };
     await host.replace('one', async () => result);

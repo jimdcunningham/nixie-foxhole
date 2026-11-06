@@ -17,7 +17,7 @@ export function renderFoxholeContactShadows(nodes: NixieExtensionRenderNodeV1[],
         }
         const common = { id: `${node.id}-contact-shadow`, ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.contactShadow),
             resourceId: shadow.resourceId, alpha: node.alpha, visible: node.visible,
-            experimentalPresentation: { contractVersion: 1 as const, excludeFromBounds: true } };
+            presentation: { contractVersion: 1 as const, excludeFromBounds: true } };
         if (node.kind === 'mesh') {
             const uvs = node.uvs.map((value, index) => index % 2 === 0
                 ? (value * shadow.surfaceWidth + shadow.width / 2 - shadow.surfaceWidth / 2 + shadow.surfaceOffsetX - shadow.offsetX) / shadow.width
@@ -31,7 +31,7 @@ export function renderFoxholeContactShadows(nodes: NixieExtensionRenderNodeV1[],
         const center = resolveFoxholeContactShadowCenter({ ...shadow, textureUrl: '' }, node.anchorX ?? 0, node.anchorY ?? 0);
         if (node.scaleX !== undefined || node.scaleY !== undefined) {
             return [{ id: common.id, kind: 'group', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.contactShadow),
-                alpha: node.alpha, visible: node.visible, experimentalPresentation: common.experimentalPresentation,
+                alpha: node.alpha, visible: node.visible, presentation: common.presentation,
                 x: node.x, y: node.y, rotation: node.rotation, scaleX: node.scaleX, scaleY: node.scaleY,
                 children: [{ id: `${common.id}-image`, kind: 'sprite', resourceId: shadow.resourceId,
                     anchorX: 0.5, anchorY: 0.5, x: center.x * sx, y: center.y * sy,

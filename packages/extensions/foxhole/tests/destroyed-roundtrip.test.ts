@@ -25,7 +25,7 @@ function fixture(foxholeKey: string) {
     const converted = convertNixieSceneV1ToV2(source, { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
     const host = new NixieSceneV2ComponentHost();
     host.registerExtension('nixie.core', NIXIE_SCENE_V2_CORE_COMPONENTS);
-    host.registerExtension('nixie.foxhole-planner', manifest.contributes.experimentalComponents);
+    host.registerExtension('nixie.foxhole-planner', manifest.contributes.components);
     host.replaceDocument(converted.content);
     return { host, id: converted.content.entities[0]!.entityId };
 }
@@ -49,7 +49,7 @@ for (const [wreckKey, intactAssets] of Object.entries(groups).filter(([, assets]
         const wreckFixture = fixture(wreckKey);
         const wreckEntity = wreckFixture.host.readEntity(wreckFixture.id);
         const nativeWreckBounds = foxholeSceneV2StateAdapter.selectionLocalBounds!(wreckEntity, 1);
-        const sdkWreckBounds = renderFoxholeSceneV2Entity(wreckEntity).experimentalSelectionGeometry!.localBounds;
+        const sdkWreckBounds = renderFoxholeSceneV2Entity(wreckEntity).selectionGeometry!.localBounds;
         for (const intact of intactAssets!) {
             const { host, id } = fixture(intact.foxholeKey);
             const before = host.exportDocument();
@@ -74,7 +74,7 @@ for (const [wreckKey, intactAssets] of Object.entries(groups).filter(([, assets]
             const destroyed = edit(true);
             assert.deepEqual(foxholeSceneV2StateAdapter.selectionLocalBounds!(destroyed, 1), nativeWreckBounds, intact.foxholeKey);
             const destroyedPlan = renderFoxholeSceneV2Entity(destroyed);
-            assert.deepEqual(destroyedPlan.experimentalSelectionGeometry!.localBounds, sdkWreckBounds, intact.foxholeKey);
+            assert.deepEqual(destroyedPlan.selectionGeometry!.localBounds, sdkWreckBounds, intact.foxholeKey);
             const body = destroyedPlan.root.children.find(node => node.id === 'building-texture');
             assert.ok(body?.kind === 'sprite');
             assert.equal(body.resourceId, `foxhole.asset.${wreckKey}`);

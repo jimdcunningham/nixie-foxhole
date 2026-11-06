@@ -26,5 +26,5 @@ export function renderFoxholeModificationSlotOverlays(asset: FoxholeSceneV2Asset
     });
     return children.length ? [{ id: 'structure-modification-slots', kind: 'group',
         ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
-        experimentalPresentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
+        presentation: { contractVersion: 1, excludeFromBounds: true }, children }] : [];
 }

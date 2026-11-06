@@ -111,7 +111,7 @@ test('canonical floating placement retains draft and tilted parent pose through 
 test('canonical planning labels and bearings retain authored yaw for every planning renderer', () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
     for (const id of ['range', 'binocular-line', 'triangulation', 'tactical-line']) {
-        const product = manifest.contributes.experimentalProducts!.find(candidate => candidate.components.some(component => component.componentId === id))!;
+        const product = manifest.contributes.products!.find(candidate => candidate.components.some(component => component.componentId === id))!;
         assert.ok(product, id);
         const subject = entity(id);
         subject.components = [...subject.components.filter(component => component.ownerId === 'nixie.core'),

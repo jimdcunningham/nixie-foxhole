@@ -21,7 +21,7 @@ test('model socket markers retain height, selected upgrade sockets and occupancy
     const hidden = renderFoxholeSpatialSocketMarkers(elevated, [], [{ localSocketName: 'PowerSocket' }], {}, { destroyed: false, packaged: false });
     assert.ok(hidden.every(marker => marker.label !== 'PowerSocket'));
     assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: [] },
-        experimentalSpatial: { contractVersion: 1, supplementModel: true, nodes: [], markers } }));
+        spatial: { contractVersion: 1, supplementModel: true, nodes: [], markers } }));
 });
 
 test('multi-connection power sockets remain targetable until capacity is exhausted', () => {
@@ -66,7 +66,7 @@ test('socket display retains Native positions, occupancy exclusions and independ
     assert.deepEqual(asset, before);
     const children = renderFoxholeStructureSocketOverlays(asset, [], [], { 'foxhole.debug.structure.socketLabels': true }, { destroyed: false, packaged: false });
     assert.equal(children.length, 1);
-    assert.deepEqual(children[0]?.experimentalPresentation, { contractVersion: 1, excludeFromBounds: true });
+    assert.deepEqual(children[0]?.presentation, { contractVersion: 1, excludeFromBounds: true });
     assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children } }));
     assert.equal(renderFoxholeStructureSocketOverlays(asset, [], [], {}, { destroyed: true, packaged: false }).length, 0);
     assert.equal(renderFoxholeStructureSocketOverlays(asset, [], [], {}, { destroyed: false, packaged: true }).length, 0);
@@ -114,7 +114,7 @@ test('all-socket SDK output includes occupied and generic terminals, grouped leg
     const labels = first.children.filter(n => n.kind === 'text');
     assert.deepEqual(labels.map(n => n.text), ['2 — Front', '0 — Back']);
     assert.deepEqual(labels.map(n => n.y), [18, 34]);
-    assert.ok(labels.every(n => n.experimentalPresentation?.worldUpright === true));
+    assert.ok(labels.every(n => n.presentation?.worldUpright === true));
     assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: overlays } }));
     const hidden = renderFoxholeStructureSocketOverlays(fixture, [], [], { 'foxhole.debug.structure.powerSockets': false,
         'foxhole.debug.structure.pipeSockets': false }, { destroyed: false, packaged: false });

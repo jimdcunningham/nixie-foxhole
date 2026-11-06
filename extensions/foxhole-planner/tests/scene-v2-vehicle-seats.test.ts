@@ -20,7 +20,7 @@ test('2D seat overlays preserve compact source coordinates, labels and availabil
     const group = renderFoxholeVehicleSeatOverlays(asset, { 'foxhole.debug.structure.vehicleSeats': true }, appearance)[0]!;
     assert.equal(group.kind, 'group');
     if (group.kind !== 'group') throw Error('expected group');
-    assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(group.presentation?.excludeFromBounds, true);
     assert.equal(group.children.length, 3);
     const gunner = group.children[1]!;
     assert.equal(gunner.kind, 'group');

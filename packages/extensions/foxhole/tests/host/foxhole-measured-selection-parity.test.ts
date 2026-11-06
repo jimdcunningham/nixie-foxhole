@@ -43,7 +43,7 @@ test('host-measured Range labels and bounds match Native for radius, sweep, orie
                     const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });
                     try {
                         await host.replace(plan);
-                        const geometry = resolveNixieMeasuredSelectionGeometry(plan.experimentalSelectionGeometry, id => host.getTextBoxLayout(id));
+                        const geometry = resolveNixieMeasuredSelectionGeometry(plan.selectionGeometry, id => host.getTextBoxLayout(id));
                         const expected = getFoxholeRangeSelectionLocalBounds(data, renderScale);
                         for (const edge of ['minX', 'minY', 'maxX', 'maxY'] as const) {
                             assert.ok(Math.abs(geometry!.localBounds![edge] - expected[edge]) < 1e-7,
@@ -68,7 +68,7 @@ test('Triangulation bounds retain Native circle and marker padding across viewpo
             const data = { ...DEFAULT_FOXHOLE_TRIANGULATION_STATE, edgePoints };
             const subject = { entityId: 'triangulation', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'triangulation', version: 1,
                 definitionAvailable: true, data }] };
-            const actual = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], viewport: { renderScale } }).experimentalSelectionGeometry?.localBounds;
+            const actual = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], viewport: { renderScale } }).selectionGeometry?.localBounds;
             const expected = getFoxholeTriangulationSelectionLocalBounds(data, renderScale);
             assert.ok(actual && expected);
             for (const edge of ['minX', 'minY', 'maxX', 'maxY'] as const) {

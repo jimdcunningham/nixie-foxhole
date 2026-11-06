@@ -26,7 +26,7 @@ function polygon(result: ReturnType<typeof renderFoxholeHitboxOverlays>) {
     const command = graphics.commands[0];
     assert.equal(command?.op, 'polygon');
     if (command?.op !== 'polygon') throw Error('expected polygon');
-    assert.equal(group.experimentalPresentation?.excludeFromBounds, true);
+    assert.equal(group.presentation?.excludeFromBounds, true);
     assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: group }));
     return command.points;
 }

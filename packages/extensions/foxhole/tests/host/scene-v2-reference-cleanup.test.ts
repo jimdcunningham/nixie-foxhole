@@ -13,7 +13,7 @@ function fixture(name: 'foxhole-planner' | 'scene-v2-diagram') {
     const batches: unknown[] = [];
     let accept = true;
     controller.setEditable(true);
-    controller.load({ type: 'scene-v2', contractVersion: 1, entities: [] }, [{ ownerId: manifest.id, contribution: manifest.contributes.experimentalComponents! }]);
+    controller.load({ type: 'scene-v2', contractVersion: 1, entities: [] }, [{ ownerId: manifest.id, contribution: manifest.contributes.components! }]);
     controller.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false, undo: () => false, redo: () => false,
         applyEntityMutations: entries => {
             if (!accept) {
@@ -75,7 +75,7 @@ test('optional point connector attachment records are removed without changing t
 
 test('neutral dependency cleanup removes only matching records and preserves unresolved references and notes', () => {
     const f = fixture('scene-v2-diagram');
-    const product = f.manifest.contributes.experimentalProducts!.find(entry => entry.id === 'process-node')!;
+    const product = f.manifest.contributes.products!.find(entry => entry.id === 'process-node')!;
     for (const id of ['source', 'dependent']) {
         assert.equal(f.controller.instantiateProduct(product, f.manifest.id, id, () => id).ok, true);
     }

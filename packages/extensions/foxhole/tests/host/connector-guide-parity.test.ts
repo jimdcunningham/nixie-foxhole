@@ -41,7 +41,7 @@ test('portable connector guides preserve Native path samples and endpoint/rotati
             const rotations = allowsConnectorRotationHandles(style, key, { maxArcAngleDeg: state.maxArcAngleDeg });
             assert.equal(allowsFoxholeConnectorGuideRotation(data, asset), rotations, key);
             const nodes = renderFoxholeConnectorGuides(data, asset);
-            assert.deepEqual(nodes[0]?.experimentalPresentation, { contractVersion: 1, selectionOnly: true, excludeFromBounds: true });
+            assert.deepEqual(nodes[0]?.presentation, { contractVersion: 1, selectionOnly: true, excludeFromBounds: true });
             const group = nodes[0]!;
             assert.equal(group.kind, 'group');
             if (group.kind !== 'group') {

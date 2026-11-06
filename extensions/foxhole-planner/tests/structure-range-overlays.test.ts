@@ -10,8 +10,8 @@ test('range visibility separates persistent and selected-only overlays without e
     const before = structuredClone(asset);
     const selected = renderFoxholeStructureRangeOverlays(asset, {}, { destroyed: false, packaged: false });
     assert.equal(selected[0]?.id, 'selected-structure-ranges');
-    assert.deepEqual(selected[0]?.experimentalPresentation, { contractVersion: 1, excludeFromBounds: true, selectionOnly: true });
-    assert.equal(selected[0]?.kind === 'group' && selected[0].children[0]?.experimentalPresentation?.groundOverlay, true);
+    assert.deepEqual(selected[0]?.presentation, { contractVersion: 1, excludeFromBounds: true, selectionOnly: true });
+    assert.equal(selected[0]?.kind === 'group' && selected[0].children[0]?.presentation?.groundOverlay, true);
     const always = renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.artillery': true }, { destroyed: false, packaged: false });
     assert.equal(always[0]?.id, 'structure-ranges');
     assert.equal(renderFoxholeStructureRangeOverlays(asset, { 'foxhole.ranges.selectionOnly': false }, { destroyed: false, packaged: false }).length, 0);
@@ -42,8 +42,8 @@ test('spatial coverage retains existing category, selection, vehicle and nightti
             const groups = renderFoxholeStructureRangeOverlays(asset, settings, appearance);
             assert.equal(groups.length > 0, isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, true, false), `${type}:${JSON.stringify(settings)}`);
             for (const group of groups) {
-                assert.equal(group.kind === 'group' && group.children[0]?.experimentalPresentation?.groundOverlay, true);
-                assert.equal(group.experimentalPresentation?.selectionOnly, !isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, false, false));
+                assert.equal(group.kind === 'group' && group.children[0]?.presentation?.groundOverlay, true);
+                assert.equal(group.presentation?.selectionOnly, !isFoxholeStructureRangeVisible(asset.ranges[0]!, settings, false, false));
             }
             assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({ schemaVersion: 1, root: { id: 'root', kind: 'group', children: groups } }));
         }
@@ -74,8 +74,8 @@ test('source-backed mounted envelopes use ground-aligned height and existing cat
     assert.equal(renderFoxholeStructureFiringVolumes({...asset,ranges:[{type:'killbox',max:35}]},settings,appearance).length,0,'range-only data does not invent a volume');
     const entity = {entityId:'test',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:'tankettec'}}]};
     const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings}));
-    assert.deepEqual(plan.experimentalSpatial?.volumes,selected);
-    assert.equal(plan.experimentalSpatial?.supplementModel,true);
+    assert.deepEqual(plan.spatial?.volumes,selected);
+    assert.equal(plan.spatial?.supplementModel,true);
 });
 
 
@@ -101,7 +101,7 @@ test('AI uses firing cones with the existing category, selection and nighttime s
     assert.equal(renderFoxholeStructureFiringVolumes(asset,night,{destroyed:false,packaged:true}).length,0);
     const entity={entityId:'ai',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:'mgait2'}}]};
     const plan=parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings:night}));
-    assert.deepEqual(plan.experimentalSpatial?.volumes,[powered]);
+    assert.deepEqual(plan.spatial?.volumes,[powered]);
 });
 
 
@@ -157,7 +157,7 @@ test('rocket salvos use independent firing-ready muzzle origins and calibrated s
             assert.ok(Math.abs(volume.origin[axis]!-(value*32+offset))<1e-7,id);
         }));
         assert.doesNotThrow(()=>parseNixieExtensionRenderPlanV1({schemaVersion:1,root:{id:'root',kind:'group',children:[]},
-            experimentalSpatial:{contractVersion:1,nodes:[],supplementModel:true,volumes:all}}));
+            spatial:{contractVersion:1,nodes:[],supplementModel:true,volumes:all}}));
     }
     const truck=assets.truckmultic!;
     assert.deepEqual([truck.ranges![0]!.min,truck.ranges![0]!.max],[375,500],'2D coverage changed');
@@ -175,7 +175,7 @@ test('direct-fire ground coverage uses component range frames and physical sight
         assert.deepEqual(volumes[0]!.groundProjection!.lineOfSightOrigin, source.origin.map((v,i) => v * 32 + (asset.model!.blueprintOrigin?.[(['x','y','z'] as const)[i]!] ?? 0)), id);
         const groups = renderFoxholeStructureRangeOverlays(asset, {}, appearance);
         const node = groups.flatMap(group => group.kind === 'group' ? group.children : []).find(node => node.id === `structure-range-${asset.ranges!.indexOf(range)}`)!;
-        assert.equal(node.experimentalPresentation?.groundOverlay, false, id);
+        assert.equal(node.presentation?.groundOverlay, false, id);
         assert.deepEqual(asset, before);
     }
     for (const id of ['artilleryait1','truckmultic']) {
@@ -183,7 +183,7 @@ test('direct-fire ground coverage uses component range frames and physical sight
         const volumes = renderFoxholeStructureFiringVolumes(asset, settings, appearance);
         assert.ok(volumes.every(volume => !volume.id.includes('-muzzle-')), id + ' must not show a straight salvo volume');
         const groups = renderFoxholeStructureRangeOverlays(asset, settings, appearance);
-        assert.ok(groups.flatMap(group => group.kind === 'group' ? group.children : []).some(node => node.experimentalPresentation?.groundOverlay), id);
+        assert.ok(groups.flatMap(group => group.kind === 'group' ? group.children : []).some(node => node.presentation?.groundOverlay), id);
     }
 });
 
@@ -232,6 +232,6 @@ test('existing Line of Sight preference controls model occlusion without changin
     const entity = { entityId: 'ai', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: 'mgpillbox' } }] };
     for (const enabled of [false, true]) {
         const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity], settings: { 'foxhole.structure.lineOfSight': enabled } }));
-        assert.equal(Boolean(plan.experimentalSpatial!.volumes![0]!.groundProjection!.lineOfSightOrigin), enabled);
+        assert.equal(Boolean(plan.spatial!.volumes![0]!.groundProjection!.lineOfSightOrigin), enabled);
     }
 });

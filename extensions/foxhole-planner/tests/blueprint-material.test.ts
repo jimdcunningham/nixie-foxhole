@@ -13,20 +13,20 @@ test('model blueprints request solid lit materials while flat artwork keeps its 
             data: { blueprint, tint: 0x123456, brightness: 1.2 } }] });
     const subject = entity(true), before = structuredClone(subject);
     const blue = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(subject));
-    assert.deepEqual(blue.experimentalSpatial?.modelMaterial, { color: 0x4f79c6, roughness: 0.6, metallic: 0 });
-    assert.equal(blue.experimentalSpatial?.supplementModel, true);
+    assert.deepEqual(blue.spatial?.modelMaterial, { color: 0x4f79c6, roughness: 0.6, metallic: 0 });
+    assert.equal(blue.spatial?.supplementModel, true);
     const texture = blue.root.children.find(node => node.id === 'building-texture');
     assert.equal(texture?.kind === 'sprite' && texture.tint, 0x335CFF);
     assert.equal(texture?.brightness, 2.15);
     assert.deepEqual(subject, before);
     const normal = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity(false)));
-    assert.equal(normal.experimentalSpatial?.modelMaterial, undefined);
+    assert.equal(normal.spatial?.modelMaterial, undefined);
     const normalTexture = normal.root.children.find(node => node.id === 'building-texture');
     assert.equal(normalTexture?.kind === 'sprite' && normalTexture.tint, 0x123456);
     const unsupported = Object.entries(metadata).find(([, asset]) => !asset.canBlueprint)!;
     assert.ok(unsupported);
     subject.components[0]!.data.assetId = unsupported[0];
-    assert.equal(renderFoxholeSceneV2Entity(subject).experimentalSpatial?.modelMaterial, undefined);
+    assert.equal(renderFoxholeSceneV2Entity(subject).spatial?.modelMaterial, undefined);
 });
 
 test('pipeline blueprint materials preserve the model-path geometry recipe', () => {
@@ -37,9 +37,9 @@ test('pipeline blueprint materials preserve the model-path geometry recipe', () 
                 maxRadius: 800, maxBuffer: 3.2, curveT: 0, blueprint } }] });
     const blue = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity(true)));
     const normal = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity(false)));
-    assert.equal(blue.experimentalSpatial?.modelMaterial?.color, 0x4f79c6);
-    assert.deepEqual(blue.experimentalSpatial?.nodes, normal.experimentalSpatial?.nodes);
-    assert.ok(blue.experimentalSpatial?.nodes.some(node => node.kind === 'model-path'));
+    assert.equal(blue.spatial?.modelMaterial?.color, 0x4f79c6);
+    assert.deepEqual(blue.spatial?.nodes, normal.spatial?.nodes);
+    assert.ok(blue.spatial?.nodes.some(node => node.kind === 'model-path'));
 });
 
 test('previously saved demolished blueprints render only their demolished appearance', () => {
@@ -49,7 +49,7 @@ test('previously saved demolished blueprints render only their demolished appear
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
             data: { destroyed: true, blueprint: true } }] };
     const plan = renderFoxholeSceneV2Entity(entity);
-    assert.equal(plan.experimentalSpatial?.modelMaterial, undefined);
+    assert.equal(plan.spatial?.modelMaterial, undefined);
     const texture = plan.root.children.find(node => node.id === 'building-texture');
     assert.notEqual(texture?.kind === 'sprite' && texture.tint, 0x335CFF);
     entity.components[1]!.data.blueprint = false;
@@ -66,7 +66,7 @@ test('standalone wreck identities cannot render blueprint materials or tint', ()
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
             data: { blueprint: true } }] };
     const plan = renderFoxholeSceneV2Entity(entity);
-    assert.equal(plan.experimentalSpatial?.modelMaterial, undefined);
+    assert.equal(plan.spatial?.modelMaterial, undefined);
     entity.components[1]!.data.blueprint = false;
     assert.deepEqual(plan, renderFoxholeSceneV2Entity(entity));
 });

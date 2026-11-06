@@ -85,7 +85,7 @@ test('the entity renderer publishes oriented bounds from visible content rather 
             components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1,
                 definitionAvailable: true, data: JSON.parse(JSON.stringify(input)) }] }));
         const expected = resolveFoxholeConnectorSelectionGeometry(input, assets[key], renderFoxholeSceneV2SplineConnector(input, assets[key]));
-        assert.deepEqual(plan.experimentalSelectionGeometry?.localQuad, expected.localQuad);
-        assert.equal(plan.experimentalSelectionGeometry?.frameAngle, Math.PI / 4);
+        assert.deepEqual(plan.selectionGeometry?.localQuad, expected.localQuad);
+        assert.equal(plan.selectionGeometry?.frameAngle, Math.PI / 4);
     }
 });
