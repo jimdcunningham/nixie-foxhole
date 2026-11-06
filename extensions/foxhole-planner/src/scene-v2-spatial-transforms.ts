@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 
 export type FoxholeSpatialPoint = [number, number, number];

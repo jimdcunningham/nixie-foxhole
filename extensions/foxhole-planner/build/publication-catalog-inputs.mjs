@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {prepareCatalogInput, readCatalogReceipt, verifyCatalogInput} from './prepare-catalog-input.mjs';
-import {resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 const INPUTS = ['manifest.v1.json','models/manifest.v1.json','maps/map-data.v1.json', ...['de','fr','pt','ru','zh'].map(locale => 'localizations/' + locale + '.json')];
 
 /** Source/geometry fixtures are CI-only and never participate in client initialization. */

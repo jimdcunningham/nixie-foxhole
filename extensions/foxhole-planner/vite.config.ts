@@ -3,7 +3,7 @@ import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {defineConfig, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
 import {publishCompletedBuild} from './build/completed-build-publisher.ts';

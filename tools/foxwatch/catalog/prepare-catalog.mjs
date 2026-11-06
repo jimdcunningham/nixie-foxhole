@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync, brotliDecompressSync, gunzipSync, constants} from 'node:zlib';
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 import {validateTarget, portablePath, fileHash} from '../scripts/asset-pack-publication.mjs';
 import {createBrowserAtlas} from './browser-atlas-images.ts';
 import {readCatalogSources} from './read-catalog-sources.mjs';

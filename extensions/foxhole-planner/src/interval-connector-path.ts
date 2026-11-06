@@ -1,5 +1,5 @@
-import { samplePointAlongSplinePath } from '@nixiejs/extension-sdk/experimental/scene-v2';
-import type { SplinePathPoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { samplePointAlongSplinePath } from '@nixiejs/extension-sdk/scene-v2';
+import type { SplinePathPoint } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeIntervalMeshConfig as FoxholeManifestConnectorMeshConfig } from './interval-marker-distances.ts';
 import {
     resolveCenteredMeshConfigIntervalBoundaryDistances,

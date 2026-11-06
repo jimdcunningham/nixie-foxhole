@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createFakeNixieExtensionHost } from '@nixiejs/extension-sdk/testing';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalTransformFinalizeRequestV1 as Request } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalTransformFinalizeRequestV1 as Request } from '@nixiejs/extension-sdk/scene-v2';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import { resolveFoxholeSceneV2WorldMatrices } from '../src/scene-v2-attachments.ts';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';

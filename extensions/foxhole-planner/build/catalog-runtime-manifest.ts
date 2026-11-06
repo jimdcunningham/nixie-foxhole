@@ -1,4 +1,4 @@
-import { expandNixieExperimentalCatalogPathV1, parseNixieExperimentalProductCatalogDeclarationV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { expandNixieExperimentalCatalogPathV1, parseNixieExperimentalProductCatalogDeclarationV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieExperimentalProductCatalogV1, NixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 
 /** Metadata is generated already. The build only binds stable IDs to its declared paths. */

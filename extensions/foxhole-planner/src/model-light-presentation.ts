@@ -1,6 +1,6 @@
 import {FOXHOLE_NIGHTTIME_RANGES_SETTING_ID, FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID} from './night-ranges.ts';
-import {parseNixieExperimentalSpatialPlanV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
-import type {NixieExperimentalSpatialModelLightOverrideV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalSpatialPlanV1} from '@nixiejs/extension-sdk/scene-v2';
+import type {NixieExperimentalSpatialModelLightOverrideV1} from '@nixiejs/extension-sdk/scene-v2';
 export interface FoxholeModelLightMetadata {nodeName: string; castShadow: boolean; poweredIntensity?: number;}
 export type FoxholeModelLightCatalog = Record<string, FoxholeModelLightMetadata[]>;
 /** FoxWatch has already interpreted blueprint metadata; runtime only chooses a portable presentation. */

@@ -1,5 +1,5 @@
 import type { NixieExperimentalComponentJsonObjectV1,
-    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorRequestV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 

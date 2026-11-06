@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieSceneV2ComponentHost } from '../../../../nixie/desktop-extensions/scene-v2-component-host.ts';
 import { NIXIE_SCENE_V2_CORE_COMPONENTS, NIXIE_SCENE_V2_CORE_OWNER_ID } from '../../../../nixie/desktop-extensions/scene-v2-core-components.ts';
 import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';

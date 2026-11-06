@@ -4,10 +4,10 @@ import { bindFoxholeContactShadows } from '../../../tools/foxwatch/catalog/conta
 import { resolveFoxholeContactShadowProjection, resolveFoxholeContactShadowCenter } from '../src/contact-shadow.ts';
 import { renderFoxholeContactShadows } from '../src/scene-v2-contact-shadows.ts';
 import type { FoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
-import type { NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
-import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const source = '/foxhole/assets/types/structures/facilityrefinery2/facilityrefinery2.texture.webp';
 // Synthetic padded geometry keeps these contract tests independent of game sidecar files.

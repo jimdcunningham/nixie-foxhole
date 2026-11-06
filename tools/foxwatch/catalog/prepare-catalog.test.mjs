@@ -7,7 +7,7 @@ import test from 'node:test';
 import {prepareProductCatalog} from './prepare-catalog.mjs';
 import {readPublicationPlan} from '../scripts/asset-pack-publication.mjs';
 import {publishAssetPublication, inspectAssetPublication} from '../scripts/asset-pack-publisher.mjs';
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 const target = {endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'nixie-extension-assets', publicBaseUrl: 'https://assets.example.org/', prefix: 'foxhole-planner'};
 
 test('FoxWatch produces one catalog and shared content objects that resumes without overwrites', async t => {

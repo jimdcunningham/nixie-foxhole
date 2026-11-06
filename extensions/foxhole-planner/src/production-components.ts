@@ -1,11 +1,11 @@
 import {
     parseNixieExperimentalComponentProductV1,
     validateNixieExperimentalComponentDataV1,
-} from '@nixiejs/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/scene-v2';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 
-type NixieExperimentalComponentJsonObjectV1 = import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentJsonObjectV1;
-type NixieExperimentalComponentProductV1 = import('@nixiejs/extension-sdk/experimental/scene-v2').NixieExperimentalComponentProductV1;
+type NixieExperimentalComponentJsonObjectV1 = import('@nixiejs/extension-sdk/scene-v2').NixieExperimentalComponentJsonObjectV1;
+type NixieExperimentalComponentProductV1 = import('@nixiejs/extension-sdk/scene-v2').NixieExperimentalComponentProductV1;
 type NixieExtensionManifestV1 = import('@nixiejs/extension-sdk').NixieExtensionManifestV1;
 
 export const FOXHOLE_COMPONENT_OWNER_ID = 'nixie.foxhole-planner';

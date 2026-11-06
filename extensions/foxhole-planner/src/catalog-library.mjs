@@ -1,4 +1,4 @@
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 
 const MAX_DOCUMENT = 16 * 1024 ** 2;
 const MAX_RESOURCE = 512 * 1024 ** 2;

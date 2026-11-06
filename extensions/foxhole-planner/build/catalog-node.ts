@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import type {FoxholeSceneV2AssetMetadata} from '../src/scene-v2-asset-metadata.ts';
 import type {FoxholeSceneV2MapMetadata} from '../src/scene-v2-map-metadata.ts';
 import type {createFoxholeSceneV2AssetMetadata} from '../src/scene-v2-asset-metadata.ts';

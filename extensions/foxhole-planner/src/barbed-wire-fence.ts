@@ -1,5 +1,5 @@
-import { buildArcLengthTable } from '@nixiejs/extension-sdk/experimental/scene-v2';
-import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { buildArcLengthTable } from '@nixiejs/extension-sdk/scene-v2';
+import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/scene-v2';
 import type { ConnectorSplinePathSample } from './spline-ribbon-mesh.ts';
 
 export function isBarbedWireFence(key?: string): boolean {

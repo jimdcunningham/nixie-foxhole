@@ -3,7 +3,7 @@ import { resolveFoxholePowerlineStroke } from './powerline-stroke.ts';
 import type {
     NixieExtensionGraphicsCommandV1,
     NixieExtensionRenderGraphicsV1,
-} from '@nixiejs/extension-sdk/experimental/scene-v2';
+} from '@nixiejs/extension-sdk/scene-v2';
 
 export interface FoxholeSceneV2ConnectorData {
     foxholeKey: string;

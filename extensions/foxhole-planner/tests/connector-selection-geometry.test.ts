@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
-import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
 import test from 'node:test';
-import { parseNixieExperimentalSelectionGeometryV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { parseNixieExperimentalSelectionGeometryV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveFoxholeConnectorSelectionGeometry } from '../src/connector-selection-geometry.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 

@@ -39,7 +39,7 @@ const server = await createServer({
         { find: '#nixie-host', replacement: resolve(studioRoot, 'packages/nixie') },
         { find: '../../extensions/foxhole-planner', replacement: resolve(import.meta.dirname, '../../extensions/foxhole-planner') },
         { find: /^pixi\.js(.*)$/, replacement: resolve(studioRoot, 'node_modules/pixi.js') + '$1' },
-        { find: '@nixiejs/extension-sdk/experimental/scene-v2', replacement: resolve(studioRoot, 'packages/extension-sdk/dist/experimental/scene-v2.js') },
+        { find: '@nixiejs/extension-sdk/scene-v2', replacement: resolve(studioRoot, 'packages/extension-sdk/dist/scene-v2/index.js') },
         { find: '@nixiejs/extension-sdk', replacement: resolve(studioRoot, 'packages/extension-sdk/dist/index.js') },
         { find: '@pixi/3d', replacement: resolve(studioRoot, 'node_modules/@pixi/3d') },
     ] },

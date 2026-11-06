@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {createCatalogRuntimeManifest} from '../build/catalog-runtime-manifest.ts';
 test('generated catalogs bind stable base, variant, and shared model IDs without changing authored bytes', async () => {
     const original = await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8');

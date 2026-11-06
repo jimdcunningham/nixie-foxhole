@@ -6,7 +6,7 @@ import test from 'node:test';
 const extensionRoot = resolve(import.meta.dirname, '..');
 const allowedStandaloneImports = new Set([
     '@nixiejs/extension-sdk',
-    '@nixiejs/extension-sdk/experimental/scene-v2',
+    '@nixiejs/extension-sdk/scene-v2',
     '@nixiejs/extension-sdk/testing',
     'vue',
 ]);

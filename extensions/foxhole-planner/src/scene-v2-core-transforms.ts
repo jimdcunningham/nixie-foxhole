@@ -1,6 +1,6 @@
-import { isNixieExperimentalCoreTransformDataV2, readNixieExperimentalCoreTransformV2 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { isNixieExperimentalCoreTransformDataV2, readNixieExperimentalCoreTransformV2 } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalCoreTransformDataV2,
-    NixieExperimentalTransformV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+    NixieExperimentalTransformV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const finite = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 

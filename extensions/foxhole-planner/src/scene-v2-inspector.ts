@@ -3,7 +3,7 @@ import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
 import type { NixieExperimentalComponentJsonObjectV1, NixieExperimentalInspectorFieldV1,
-    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorReadoutV1, NixieExperimentalInspectorRequestV1, NixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorReadoutV1, NixieExperimentalInspectorRequestV1, NixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets, { productionOutputsByRecipeId, productionRecipesById } from '#foxhole-scene-v2-assets';
 import { createFoxholeInspectorRelationships } from './scene-v2-inspector-relationships.ts';
 import { resolveConnectorBehavior } from './connector-behavior.ts';

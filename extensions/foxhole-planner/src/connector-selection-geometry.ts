@@ -1,4 +1,4 @@
-import type { NixieExperimentalSelectionGeometryV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import type { NixieExperimentalSelectionGeometryV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveConnectorBehavior, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import { FOXHOLE_POWERLINE_CORE_WIDTH } from './powerline-stroke.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';

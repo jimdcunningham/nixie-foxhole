@@ -1,4 +1,4 @@
-import { samplePointAlongSplinePath } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { samplePointAlongSplinePath } from '@nixiejs/extension-sdk/scene-v2';
 
 /** Native pipe side sockets follow the arc midpoint and cross-section edges. */
 export function resolveFacilityPipeSideSocketsFromPath(path: {

@@ -1,5 +1,5 @@
-import {parseNixieExperimentalSpatialPlanV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
-import type {NixieExperimentalSpatialModelTextureTransformV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
+import {parseNixieExperimentalSpatialPlanV1} from '@nixiejs/extension-sdk/scene-v2';
+import type {NixieExperimentalSpatialModelTextureTransformV1} from '@nixiejs/extension-sdk/scene-v2';
 
 export const FOXHOLE_SCENE_FACTION_SETTING_ID = 'nixie.scene.foxholeFaction';
 export interface FoxholeFlagAtlasMetadata {

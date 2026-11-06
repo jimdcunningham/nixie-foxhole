@@ -4,7 +4,7 @@ import type { TestContext } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { hostSourceUrl } from '../host-source-url.mjs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
 import { NixieSceneV2ViewSession } from '../../../../nixie/app/utils/nixie-scene-v2-view-session.ts';
 import { configureNixieSceneV2AuthoringIsolation, isNixieSceneV2AuthoringIsolated } from '../../../../nixie/app/utils/nixie-scene-v2-authoring-isolation.ts';
