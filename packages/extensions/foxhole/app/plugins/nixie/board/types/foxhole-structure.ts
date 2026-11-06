@@ -704,6 +704,7 @@ interface FoxholeConnectorGeometryPatchTarget {
 const STRUCTURE_VOLUME_COLOR_BY_CATEGORY: Record<string, { fill: number; stroke: number; }> = {
     footprint: { fill: 0x00E5A8, stroke: 0x6EFFE2 },
     useArea: { fill: 0x1DD3B0, stroke: 0x6EFFE2 },
+    seatTrigger: { fill: 0xE9C46A, stroke: 0xFFE6A7 },
     killVolume: { fill: 0xD7263D, stroke: 0xFF90A1 },
     garageFootprint: { fill: 0xFF9F1C, stroke: 0xFFD08A },
     parkingSpot: { fill: 0x3A86FF, stroke: 0xA7C8FF },

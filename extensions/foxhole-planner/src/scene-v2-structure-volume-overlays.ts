@@ -4,6 +4,7 @@ import { FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane } from './render-lane
 
 const VOLUME_COLORS: Record<string, { fill: number; stroke: number; }> = {
     footprint: { fill: 0x00e5a8, stroke: 0x6effe2 }, useArea: { fill: 0x1dd3b0, stroke: 0x6effe2 },
+    seatTrigger: { fill: 0xe9c46a, stroke: 0xffe6a7 },
     killVolume: { fill: 0xd7263d, stroke: 0xff90a1 }, garageFootprint: { fill: 0xff9f1c, stroke: 0xffd08a },
     parkingSpot: { fill: 0x3a86ff, stroke: 0xa7c8ff }, loadingArea: { fill: 0x8338ec, stroke: 0xd1b3ff },
     interiorArea: { fill: 0x2a9d8f, stroke: 0x9be7de }, noBuild: { fill: 0x6c757d, stroke: 0xcdd3d8 },

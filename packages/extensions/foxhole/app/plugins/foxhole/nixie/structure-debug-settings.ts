@@ -28,6 +28,7 @@ export const FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS = {
     spotlights: 'foxhole.debug.structure.spotlights',
     volumeFootprint: 'foxhole.debug.structure.volume.footprint',
     volumeUseArea: 'foxhole.debug.structure.volume.useArea',
+    volumeSeatTrigger: 'foxhole.debug.structure.volume.seatTrigger',
     volumeKillVolume: 'foxhole.debug.structure.volume.killVolume',
     volumeGarageFootprint: 'foxhole.debug.structure.volume.garageFootprint',
     volumeParkingSpot: 'foxhole.debug.structure.volume.parkingSpot',
@@ -55,6 +56,7 @@ const publicStructureOverlaySettingIds = new Set<string>([
 export const FOXHOLE_STRUCTURE_VOLUME_OVERLAY_DEFINITIONS = [
     { category: 'footprint', label: 'Footprint', icon: 'ph:squares-four', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeFootprint },
     { category: 'useArea', label: 'Use Area', icon: 'ph:hand-tap', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeUseArea },
+    { category: 'seatTrigger', label: 'Seat Triggers', icon: 'ph:seat', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeSeatTrigger },
     { category: 'killVolume', label: 'Kill Volume', icon: 'ph:skull', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeKillVolume },
     { category: 'garageFootprint', label: 'Garage Footprint', icon: 'ph:garage', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeGarageFootprint },
     { category: 'parkingSpot', label: 'Parking Spot', icon: 'ph:car', settingId: FOXHOLE_STRUCTURE_DEBUG_SETTING_IDS.volumeParkingSpot },

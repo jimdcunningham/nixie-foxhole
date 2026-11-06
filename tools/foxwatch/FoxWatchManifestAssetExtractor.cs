@@ -8030,11 +8030,9 @@ public partial class FoxWatchManifestAssetExtractor
         private static bool IsStructureVolumeComponent(object component)
         {
             var componentType = GetObjectTypeName(component);
-            if (!componentType.Contains("BoxComponent", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
+            // Cooked subclasses often serialize their own type name (SeatTriggerComponent,
+            // BPStructureInteriorArea_C, BPKillVolume_C), without "BoxComponent" in it.
+            // Use the authored box geometry rather than a type-name inheritance guess.
             if (componentType.Contains("BuildFootprintBoxComponent", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
@@ -9092,8 +9090,8 @@ public partial class FoxWatchManifestAssetExtractor
             return new FoxWatchManifestStructureVolume
             {
                 Name = rawName,
-                Label = HumanizeStructureVolumeLabel(rawName),
-                Category = ClassifyStructureVolumeCategory(rawName),
+                Label = HumanizeStructureVolumeLabel(rawName, GetObjectTypeName(component)),
+                Category = ClassifyStructureVolumeCategory(rawName, GetObjectTypeName(component)),
                 ComponentType = GetObjectTypeName(component),
                 X = transform.X,
                 Y = transform.Y,
@@ -9105,7 +9103,7 @@ public partial class FoxWatchManifestAssetExtractor
             };
         }
 
-        private static string HumanizeStructureVolumeLabel(string? name)
+        private static string HumanizeStructureVolumeLabel(string? name, string? componentType = null)
         {
             var normalized = NormalizeString(name);
             if (string.IsNullOrWhiteSpace(normalized))
@@ -9117,9 +9115,10 @@ public partial class FoxWatchManifestAssetExtractor
             normalized = Regex.Replace(normalized, @"Component$", string.Empty, RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
             normalized = Regex.Replace(normalized, @"\d+$", string.Empty, RegexOptions.CultureInvariant);
 
-            return ClassifyStructureVolumeCategory(normalized) switch
+            return ClassifyStructureVolumeCategory(normalized, componentType) switch
             {
                 "useArea" => "Use Area",
+                "seatTrigger" => "Seat Trigger",
                 "killVolume" => "Kill Volume",
                 "garageFootprint" => "Garage Footprint",
                 "parkingSpot" => "Parking Spot",
@@ -9144,11 +9143,17 @@ public partial class FoxWatchManifestAssetExtractor
             return string.IsNullOrWhiteSpace(humanized) ? "Volume" : humanized;
         }
 
-        private static string ClassifyStructureVolumeCategory(string? name)
+        private static string ClassifyStructureVolumeCategory(string? name, string? componentType = null)
         {
-            var normalized = NormalizeString(name);
+            var normalized = $"{NormalizeString(name)} {NormalizeString(componentType)}";
 
-            if (normalized.Contains("UseArea", StringComparison.OrdinalIgnoreCase))
+            if (normalized.Contains("SeatTrigger", StringComparison.OrdinalIgnoreCase))
+            {
+                return "seatTrigger";
+            }
+
+            if (normalized.Contains("UseArea", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Contains("RailSwitchUseComponent", StringComparison.OrdinalIgnoreCase))
             {
                 return "useArea";
             }
@@ -9183,7 +9188,7 @@ public partial class FoxWatchManifestAssetExtractor
                 return "noBuild";
             }
 
-            if (normalized.Contains("Docking", StringComparison.OrdinalIgnoreCase))
+            if (normalized.Contains("Docking", StringComparison.OrdinalIgnoreCase) || normalized.Contains("DockComponent", StringComparison.OrdinalIgnoreCase))
             {
                 return "docking";
             }

@@ -146,7 +146,7 @@ export interface FoxholeSceneV2StructureVolume {
 /** Normalize compact FoxWatch volume records once while building the catalog. */
 export function normalizeFoxholeSceneV2StructureVolumes(value: unknown): FoxholeSceneV2StructureVolume[] {
     if (!Array.isArray(value)) return [];
-    const categories = new Set(['footprint', 'useArea', 'killVolume', 'garageFootprint', 'parkingSpot', 'loadingArea',
+    const categories = new Set(['footprint', 'useArea', 'seatTrigger', 'killVolume', 'garageFootprint', 'parkingSpot', 'loadingArea',
         'interiorArea', 'noBuild', 'docking', 'temperature', 'passenger', 'iceBlocker', 'other']);
     return value.slice(0, 128).flatMap(entry => {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
