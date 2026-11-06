@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createFakeNixieExtensionHost} from '@nixiejs/extension-sdk/testing';
 import {createFoxholeModelLightCatalog} from '../build/model-light-metadata.ts';
-import {buildFoxholeModelLightOverrides} from '../src/model-light-presentation.ts';
+import {buildFoxholeModelLightOverrides, shouldEnableFoxholePoweredModelLights} from '../src/model-light-presentation.ts';
 
 function glb(nodes: unknown[]) {
     const json = new TextEncoder().encode(JSON.stringify({asset:{version:'2.0'},nodes}));
@@ -51,4 +51,15 @@ test('light metadata rejects malformed resources, conflicting dependencies and e
     await assert.rejects(createFoxholeModelLightCatalog([{...models[0]!,dependencyIds:['base']}],async()=>glb([])),/dependency/);
     await assert.rejects(createFoxholeModelLightCatalog([{...models[0]!,dependencyIds:[]}],async()=>glb(Array.from({length:65},(_,i)=>lamp('lamp-'+i)))),/Spatial plans/);
     assert.throws(()=>buildFoxholeModelLightOverrides('model',{model:[{nodeName:'lamp',castShadow:true,poweredIntensity:-1}]},true));
+});
+
+test('powered model lights preserve nighttime, roof and power controls without changing settings', () => {
+    assert.equal(shouldEnableFoxholePoweredModelLights(undefined),false);
+    for(const night of [false,true])for(const powered of [false,true])for(const roof of [false,true]){
+        const settings={'foxhole.ranges.nighttime':night,'foxhole.ranges.poweredSpotlights':powered,'foxhole.structure.hideRoofs':roof};
+        const before=structuredClone(settings);
+        assert.equal(shouldEnableFoxholePoweredModelLights(settings),night&&powered&&!roof);
+        assert.deepEqual(settings,before);
+    }
+    assert.equal(shouldEnableFoxholePoweredModelLights({'foxhole.ranges.nighttime':'true','foxhole.ranges.poweredSpotlights':true}),false);
 });

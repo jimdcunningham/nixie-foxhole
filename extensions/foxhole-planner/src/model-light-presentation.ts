@@ -1,3 +1,4 @@
+import {FOXHOLE_NIGHTTIME_RANGES_SETTING_ID, FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID} from './night-ranges.ts';
 import {parseNixieExperimentalSpatialPlanV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
 import type {NixieExperimentalSpatialModelLightOverrideV1} from '@nixiejs/extension-sdk/experimental/scene-v2';
 export interface FoxholeModelLightMetadata {nodeName: string; castShadow: boolean; poweredIntensity?: number;}
@@ -9,4 +10,11 @@ export function buildFoxholeModelLightOverrides(resourceId: string | undefined, 
         nodeName:light.nodeName,castShadow:light.castShadow,
         ...(light.poweredIntensity===undefined?{}:{intensity:light.poweredIntensity,enabled:powered}),
     }))}).modelLightOverrides!;
+}
+
+/** Keep powered lamp presentation aligned with the retained nighttime and roof controls. */
+export function shouldEnableFoxholePoweredModelLights(settings: Record<string, unknown> | undefined): boolean {
+    return settings?.[FOXHOLE_NIGHTTIME_RANGES_SETTING_ID] === true
+        && settings?.[FOXHOLE_POWERED_SPOTLIGHTS_SETTING_ID] === true
+        && settings?.['foxhole.structure.hideRoofs'] !== true;
 }
