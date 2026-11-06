@@ -5,7 +5,7 @@ import { shallowRef } from 'vue';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { NixieRegistry } from '#nixie/plugins/nixie/registry/index.ts';
 import type { NixiePrimaryToolbarContext } from '#nixie/plugins/nixie/registry/types.ts';
-import { configureNixieSceneV2AuthoringIsolation } from '#nixie/utils/nixie-scene-v2-authoring-isolation.ts';
+
 import { registerNixieEditorDocumentSessionBridge } from '#nixie/utils/nixie-editor-document-session-bridge.ts';
 import { createExternalDeclarativeContribution } from '#nixie-internal/desktop-extensions/contribution-adapter.ts';
 import { createNixieSurfaceRoutedSdkUi } from '#nixie-internal/desktop-extensions/ui-routing.ts';
@@ -54,11 +54,11 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
     registry.register(sdkSource, createNixieSurfaceRoutedSdkUi(manifest.id, sdkSource, declaration,
         new Set((manifest.contributes.productTools ?? []).map(tool => `nixie.tool.activate.extension:${manifest.id}:${tool.id}`)), registry));
     context.after(() => {
-        configureNixieSceneV2AuthoringIsolation(false, false);
         registerNixieEditorDocumentSessionBridge(null);
     });
-    configureNixieSceneV2AuthoringIsolation(true, true);
-    registerNixieEditorDocumentSessionBridge({ isSceneV2Active: shallowRef(true) } as never);
+
+    const isSceneV2Active = shallowRef(true);
+    registerNixieEditorDocumentSessionBridge({ isSceneV2Active } as never);
     registry.refreshExtensionContributions();
     assert.equal(registry.getSettingDefinition(socketId)?.name, 'Socket Snapping');
     assert.equal(registry.normalizeSettingValue(registry.getSettingDefinition(socketId)!, false), false);
@@ -85,7 +85,8 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
     assert.equal(mapCalls, 1);
     assert.deepEqual(registry.getDiagnostics(), []);
     assert.equal(createFoxholeRetainedSceneV2Ui(false)[0]!.settings!.includes(foxholeSceneMapRendererSetting.id), false);
-    configureNixieSceneV2AuthoringIsolation(false, false);
+    isSceneV2Active.value = false;
+
     registry.refreshExtensionContributions();
     assert.equal(registry.getSettingDefinition(socketId)?.name, 'Private Socket Snapping');
     assert.equal(registry.getAllPrimaryToolbarItems().find(item => item.id === socketItemId)?.label, 'Private Socket Snapping');

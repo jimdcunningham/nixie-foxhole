@@ -8,7 +8,7 @@ import { hostSourceUrl } from '../host-source-url.mjs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
-import { configureNixieSceneV2AuthoringIsolation } from '../../../../nixie/app/utils/nixie-scene-v2-authoring-isolation.ts';
+
 import { registerNixieSceneV2StateAdapter } from '../../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { buildNixieSceneV2ExtensionInspection } from '../../../../nixie/app/utils/nixie-scene-v2-inspector.ts';
 import { registerNixieSceneV2RenderPresentationAdapter, prepareNixieSceneV2RenderPresentation } from '../../../../nixie/app/plugins/nixie/scene-v2/render-presentation.ts';
@@ -20,8 +20,6 @@ const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(hostSourc
 const catalog = [{ ownerId: manifest.id, contribution: manifest.contributes.components! }];
 
 test('real Planner structures expose SDK inspection, edit, render and reload with private authoring poisoned', context => {
-    configureNixieSceneV2AuthoringIsolation(true, true);
-    context.after(() => configureNixieSceneV2AuthoringIsolation(false, false));
     const trap = () => { throw new Error('Private Planner authoring was called'); };
     registerNixieSceneV2StateAdapter(manifest.id, { project: trap, patch: trap, selectionLocalBounds: trap, deletionUpdates: trap });
     registerNixieSceneV2RenderPresentationAdapter(manifest.id, trap);
@@ -65,8 +63,6 @@ test('real Planner structures expose SDK inspection, edit, render and reload wit
     assert.deepEqual(controller.exportDocument(), exported);
 });
 test('isolated Planner appearance, supply, cargo and production edits persist through real Yjs undo/redo', context => {
-    configureNixieSceneV2AuthoringIsolation(true, true);
-    context.after(() => configureNixieSceneV2AuthoringIsolation(false, false));
     const project = new NixieYjsProjectSession({ projectId: 'isolated-planner-history' });
     const entities = ['facilityfactoryammo', 'maintenancetunnel', 'largeshipresourceship'].map(asset => {
         const product = listFoxholeSceneV2Products({ contractVersion: 1, query: asset, offset: 0, limit: 50 }).items

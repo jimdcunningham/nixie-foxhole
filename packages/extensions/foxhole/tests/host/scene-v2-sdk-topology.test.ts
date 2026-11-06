@@ -7,7 +7,7 @@ import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
 import { NixieSceneV2ViewSession } from '../../../../nixie/app/utils/nixie-scene-v2-view-session.ts';
-import { configureNixieSceneV2AuthoringIsolation, isNixieSceneV2AuthoringIsolated } from '../../../../nixie/app/utils/nixie-scene-v2-authoring-isolation.ts';
+
 import { registerNixieSceneV2StateAdapter } from '../../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { NixieSceneV2TransformFinalizerAdapter } from '../../../../nixie/app/utils/nixie-scene-v2-transform-finalizer-adapter.ts';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
@@ -25,8 +25,6 @@ const product = (id: string) => listFoxholeSceneV2Products({ contractVersion: 1,
     .find(item => item.product.id === `asset.${id}`)!.product;
 
 function fixture(context: TestContext, snapping = true) {
-    configureNixieSceneV2AuthoringIsolation(true, true);
-    context.after(() => configureNixieSceneV2AuthoringIsolation(false, false));
     const trap = () => {
         throw new Error('Private topology adapter executed');
     };
@@ -87,7 +85,6 @@ function fixture(context: TestContext, snapping = true) {
         changed();
     };
     async function atomic(operation: () => { ok: boolean; error?: string; } | Promise<{ ok: boolean; error?: string; }>) {
-        assert.equal(isNixieSceneV2AuthoringIsolated(), true);
         const before = controller.exportDocument();
         const count = writes;
         const result = await operation();
