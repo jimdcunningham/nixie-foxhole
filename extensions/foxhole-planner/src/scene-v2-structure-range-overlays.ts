@@ -1,5 +1,5 @@
 import { resolveFoxholeMaintenanceRanges } from './maintenance-supply.ts';
-import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialVolumeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieSpatialVolumeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2StructureRange } from './scene-v2-asset-metadata.ts';
 import { isFoxholeStructureRangeVisible, foxholeStructureRangeColor } from './structure-range-settings.ts';
 import { FOXHOLE_RANGE_RENDER_LANE, foxholeRenderLane } from './render-lanes.ts';
@@ -140,7 +140,7 @@ export function renderFoxholeStructureRangeOverlays(asset: FoxholeSceneV2AssetMe
 
 /** Source envelopes remain available independently of their spatial presentation. */
 export function createFoxholeStructureFiringEnvelopes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
-    appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialVolumeV1[] {
+    appearance: { destroyed: boolean; packaged: boolean; }): NixieSpatialVolumeV1[] {
     if (appearance.destroyed || appearance.packaged || !asset.model) return [];
     return (asset.ranges ?? []).flatMap((range, index) => {
         const source = range.firingVolume;
@@ -179,7 +179,7 @@ export function createFoxholeStructureFiringEnvelopes(asset: FoxholeSceneV2Asset
  * Indirect fire and anti-air retain authored ground bands: straight aiming rays are not landing trajectories.
  */
 export function renderFoxholeStructureFiringVolumes(asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, boolean>>,
-    appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialVolumeV1[] {
+    appearance: { destroyed: boolean; packaged: boolean; }): NixieSpatialVolumeV1[] {
     return createFoxholeStructureFiringEnvelopes(asset, settings, appearance).flatMap(volume => {
         const index = Number(volume.id.match(/^firing-volume-(\d+)/)?.[1]), range = asset.ranges?.[index];
         if (!range || ['killboxArty','killboxRocket','killboxAA'].includes(range.type)) return [];

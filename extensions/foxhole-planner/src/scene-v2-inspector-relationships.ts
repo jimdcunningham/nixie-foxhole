@@ -1,18 +1,18 @@
-import type { NixieExperimentalComponentJsonObjectV1,
-    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentJsonObjectV1,
+    NixieInspectorActionV1, NixieInspectorRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 
 const OWNER = 'nixie.foxhole-planner';
-type Patches = NonNullable<NixieExperimentalInspectorActionV1['patches']>;
+type Patches = NonNullable<NixieInspectorActionV1['patches']>;
 type AssetCatalog = Readonly<Record<string, FoxholeSceneV2AssetMetadata>>;
 
-function objects(value: unknown): NixieExperimentalComponentJsonObjectV1[] {
-    return Array.isArray(value) ? value.filter((entry): entry is NixieExperimentalComponentJsonObjectV1 =>
+function objects(value: unknown): NixieComponentJsonObjectV1[] {
+    return Array.isArray(value) ? value.filter((entry): entry is NixieComponentJsonObjectV1 =>
         entry !== null && typeof entry === 'object' && !Array.isArray(entry)) : [];
 }
 
-function cargoPatch(cargo: NixieExperimentalComponentJsonObjectV1, source: FoxholeSceneV2AssetMetadata, target: FoxholeSceneV2AssetMetadata): Patches[number] {
+function cargoPatch(cargo: NixieComponentJsonObjectV1, source: FoxholeSceneV2AssetMetadata, target: FoxholeSceneV2AssetMetadata): Patches[number] {
     const original = Array.isArray(cargo.items) ? cargo.items.filter((item): item is string => typeof item === 'string') : [];
     const nativeNonItems = new Set((source.cargo?.groups ?? []).filter(group => group.entryType !== 'Items')
         .flatMap(group => group.allowed.map(code => code.toLowerCase())));
@@ -24,7 +24,7 @@ function cargoPatch(cargo: NixieExperimentalComponentJsonObjectV1, source: Foxho
         : allowed.has(code.toLowerCase())).slice(0, target.cargo?.limit ?? 256);
     const groups = target.cargo?.groups ?? [];
     const stored = cargo.stockpileItems;
-    const set: NixieExperimentalComponentJsonObjectV1 = { items };
+    const set: NixieComponentJsonObjectV1 = { items };
     if (Array.isArray(stored) && groups.length) {
         const rows = objects(stored);
         set.stockpileItems = groups.flatMap(group => {
@@ -59,7 +59,7 @@ export function createFoxholeInspectorRelationships(assets: AssetCatalog) {
             }
         }
     }
-    return (request: NixieExperimentalInspectorRequestV1, assetId: string): NixieExperimentalInspectorActionV1[] => {
+    return (request: NixieInspectorRequestV1, assetId: string): NixieInspectorActionV1[] => {
         const asset = assets[assetId]!;
         const data = (id: string) => request.subject.components.find(component => component.ownerId === OWNER && component.componentId === id)?.data;
         const appearance = data('appearance');
@@ -101,7 +101,7 @@ export function createFoxholeInspectorRelationships(assets: AssetCatalog) {
         };
         const up = upgradeTarget(asset);
         const down = resolve(asset.downgradeStructureId) ?? conversionParents.get(assetId);
-        const headers: NixieExperimentalInspectorActionV1[] = (['down', 'up'] as const).map(direction => {
+        const headers: NixieInspectorActionV1[] = (['down', 'up'] as const).map(direction => {
             const isDown = direction === 'down';
             const clearUpgrade = isDown && hasUpgrade;
             const targetId = clearUpgrade ? assetId : isDown ? down : up;
@@ -118,7 +118,7 @@ export function createFoxholeInspectorRelationships(assets: AssetCatalog) {
         const sourceId = conversionTargets(asset).length ? assetId : conversionParent ?? upgradeSource;
         const source = sourceId ? assets[sourceId] : undefined;
         const targets = new Set([up, ...(source ? [upgradeTarget(source), ...conversionTargets(source)] : [])].filter((key): key is string => Boolean(key)));
-        const tiles: NixieExperimentalInspectorActionV1[] = Array.from(targets, (key, index) => {
+        const tiles: NixieInspectorActionV1[] = Array.from(targets, (key, index) => {
             const target = assets[key]!;
             const selected = key === assetId;
             const destination = selected ? conversionParent ?? upgradeSource : key;

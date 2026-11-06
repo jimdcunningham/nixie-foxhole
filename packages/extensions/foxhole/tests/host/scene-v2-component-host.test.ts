@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalSceneV2DocumentV1 } from '@nixiejs/extension-sdk';
+import { parseNixieSceneV2DocumentV1 } from '@nixiejs/extension-sdk';
 import {
     NixieSceneV2ComponentHost,
     NixieSceneV2ComponentHostError,
@@ -78,7 +78,7 @@ test('parsed document matching compares the complete live graph without exportin
         exports += 1;
         return originalExport();
     };
-    assert.equal(host.matchesParsedDocument(parseNixieExperimentalSceneV2DocumentV1(equivalent)), true, 'entity, component and object-key order do not change the document');
+    assert.equal(host.matchesParsedDocument(parseNixieSceneV2DocumentV1(equivalent)), true, 'entity, component and object-key order do not change the document');
     for (const change of [
         (value: typeof source) => {
             value.entities[0]!.revision += 1;
@@ -104,7 +104,7 @@ test('parsed document matching compares the complete live graph without exportin
     ]) {
         const changed = structuredClone(source);
         change(changed);
-        assert.equal(host.matchesParsedDocument(parseNixieExperimentalSceneV2DocumentV1(changed)), false);
+        assert.equal(host.matchesParsedDocument(parseNixieSceneV2DocumentV1(changed)), false);
     }
     assert.equal(exports, 0);
     assert.deepEqual(originalExport(), before);

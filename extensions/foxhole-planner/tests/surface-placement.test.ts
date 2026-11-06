@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFoxholeGeneratedModel } from './generated-models.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { bindFoxholeModelLayerNodes } from '../src/model-layer-nodes.ts';
 import type { FoxholeModelLayerMetadata } from '../src/model-layer-nodes.ts';

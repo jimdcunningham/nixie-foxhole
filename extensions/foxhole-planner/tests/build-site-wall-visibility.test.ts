@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
-const entity = (id: string, assetId: string): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: id, revision: 1, components: [
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+const entity = (id: string, assetId: string): NixieComponentEntitySnapshotV1 => ({ entityId: id, revision: 1, components: [
     { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId } },
 ] });
 test('build-site neighbors do not remove structure layers in Scene V2', () => {

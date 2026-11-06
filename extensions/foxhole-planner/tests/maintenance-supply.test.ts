@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage, resolveFoxholeMaintenanceRanges } from '../src/maintenance-supply.ts';
@@ -42,7 +42,7 @@ test('the Supply overlay follows saved range and selection policy without changi
 
 test('the real tunnel renderer consumes the saved maintenance component', async () => {
     const { renderFoxholeSceneV2Entity } = await import('../src/scene-v2-renderers.ts');
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'tunnel', revision: 1, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'tunnel', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'maintenancetunnel' } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'maintenance-supply', version: 1, definitionAvailable: true,

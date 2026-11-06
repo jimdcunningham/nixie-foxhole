@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
@@ -7,7 +7,7 @@ import metadata from '../src/scene-v2-assets-node.ts';
 import { getFoxholeSceneV2ModelComponentData } from '../src/scene-v2-models.ts';
 
 test('demolished structures select their real destroyed model without rewriting saved identity or upgrades', () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'factory', revision: 1, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'factory', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'facilityrefinery1' } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true, data: { destroyed: true } },

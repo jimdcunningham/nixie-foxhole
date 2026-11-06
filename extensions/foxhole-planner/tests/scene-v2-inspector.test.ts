@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { inspectFoxholeSceneV2Structure, inspectFoxholeSceneV2SplineConnector } from '../src/scene-v2-inspector.ts';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import assets from '#foxhole-scene-v2-assets';
@@ -16,11 +16,11 @@ function inspect(assetId: string, overrides: Record<string, Record<string, unkno
     const subject = { entityId: 'fixture', revision: 1, components: Object.entries(data).map(([componentId, value]) => ({
         ownerId: manifest.id, componentId, version: 1, definitionAvailable: true, data: value,
     })) };
-    const request = projectNixieExperimentalInspectorSubjectV1(subject as Parameters<typeof projectNixieExperimentalInspectorSubjectV1>[0], manifest.id, provider);
+    const request = projectNixieInspectorSubjectV1(subject as Parameters<typeof projectNixieInspectorSubjectV1>[0], manifest.id, provider);
     if (locale) request.locale = locale;
     if (faction) request.settings = { 'foxhole.assets.filter.faction': faction };
     const result = inspectFoxholeSceneV2Structure(request);
-    validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
     return result;
 }
 
@@ -148,18 +148,18 @@ test('catalog and standalone spline stencils expose only applicable authoring co
         }
         count++;
         const subject = { entityId: product.id, revision: 1, components: product.components.map(component => ({ ...component, definitionAvailable: true })) };
-        const request = projectNixieExperimentalInspectorSubjectV1(subject, manifest.id, connectorProvider);
+        const request = projectNixieInspectorSubjectV1(subject, manifest.id, connectorProvider);
         const before = structuredClone(request);
         const result = inspectFoxholeSceneV2SplineConnector(request);
-        validateNixieExperimentalInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
         assert.deepEqual(request, before);
         const hasAsset = subject.components.some(component => component.componentId === 'asset');
         let layout = result.layout;
         if (hasAsset) {
             assert.equal(layout, undefined, 'catalog connectors use the structure provider layout');
-            const structureRequest = projectNixieExperimentalInspectorSubjectV1(subject, manifest.id, provider);
+            const structureRequest = projectNixieInspectorSubjectV1(subject, manifest.id, provider);
             const structure = inspectFoxholeSceneV2Structure(structureRequest);
-            validateNixieExperimentalInspectorResultV1(structure, provider, manifest.contributes.experimentalComponents!.components, structureRequest);
+            validateNixieInspectorResultV1(structure, provider, manifest.contributes.experimentalComponents!.components, structureRequest);
             layout = structure.layout;
             assert.ok(structure.components.some(component => component.componentId === 'spline-connector'));
         }
@@ -185,10 +185,10 @@ test('an unavailable connector retains authored geometry and identity for inspec
     const product = manifest.contributes.experimentalProducts!.find(entry => entry.components.some(component => component.componentId === 'spline-connector'))!;
     const components = structuredClone(product.components).map(component => ({ ...component, definitionAvailable: true }));
     components.find(component => component.componentId === 'spline-connector')!.data.foxholeKey = 'unavailable-connector';
-    const request = projectNixieExperimentalInspectorSubjectV1({ entityId: 'missing', revision: 1, components }, manifest.id, connectorProvider);
+    const request = projectNixieInspectorSubjectV1({ entityId: 'missing', revision: 1, components }, manifest.id, connectorProvider);
     const before = structuredClone(request);
     const result = inspectFoxholeSceneV2SplineConnector(request);
-    validateNixieExperimentalInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, connectorProvider, manifest.contributes.experimentalComponents!.components, request);
     assert.deepEqual(request, before);
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.readOnly, true);
     assert.equal(result.components[0]!.fields.find(field => field.path[0] === 'foxholeKey')!.hidden, false);

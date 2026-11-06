@@ -1,4 +1,4 @@
-import type { NixieExperimentalPanelReportRequestV1, NixieExperimentalPanelReportV1, NixiePanelReportPreviewV1, NixiePanelReportPreviewSectionV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixiePanelReportRequestV1, NixiePanelReportV1, NixiePanelReportPreviewV1, NixiePanelReportPreviewSectionV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { readSceneStatistics, readStatisticsPreferences } from './scene-statistics.ts';
 import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText, buildFoxholeStatsExportCsvFileName,
@@ -6,7 +6,7 @@ import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText, buildF
     FOXHOLE_STATS_EXPORT_SECTION_IDS, FOXHOLE_STATS_EXPORT_SECTION_LABELS } from './statistics-export-formats.ts';
 import type { FoxholeStatsExportScopePayload } from './statistics-export-formats.ts';
 
-export function buildFoxholeStatisticsReport(request: NixieExperimentalPanelReportRequestV1): NixieExperimentalPanelReportV1 {
+export function buildFoxholeStatisticsReport(request: NixiePanelReportRequestV1): NixiePanelReportV1 {
     const assets = localizedFoxholeCatalog(request.scene.experimentalPanelContext?.locale);
     const preferences = readStatisticsPreferences(request.scene);
     const summary = readSceneStatistics(request.scene, request.selection, preferences.scope, preferences.intervalSeconds);

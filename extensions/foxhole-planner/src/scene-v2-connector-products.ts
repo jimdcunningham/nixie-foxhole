@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2ConnectorMetadata } from './scene-v2-asset-metadata.ts';
 
 const PIXELS_PER_CENTIMETER = 32 / 100;
@@ -7,7 +7,7 @@ function pixels(value: number | undefined, fallback: number): number {
 }
 
 /** Same catalog-unit normalization as Native snapshot creation; templates contain only authored spline state. */
-export function createFoxholeSceneV2SplineProductData(assetId: string, connector: FoxholeSceneV2ConnectorMetadata): NixieExperimentalComponentJsonObjectV1 {
+export function createFoxholeSceneV2SplineProductData(assetId: string, connector: FoxholeSceneV2ConnectorMetadata): NixieComponentJsonObjectV1 {
     const minLength = Math.max(1, pixels(connector.minLengthCm, 300));
     const maxLength = Math.max(minLength, pixels(connector.maxLengthCm, 2000));
     const minRadius = Math.max(1, pixels(connector.minRadiusCm, 50));

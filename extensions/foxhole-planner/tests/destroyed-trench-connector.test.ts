@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { destroyedTrenchConnectorPieces } from '../src/destroyed-trench-connector.ts';
 import { trenchLayerQuad } from '../src/trench-connector.ts';
 import assetMetadata from '../src/scene-v2-assets-node.ts';
@@ -83,7 +83,7 @@ test('destroyed connector mesh plans use the saved endpoints and authored wreck 
         const data = { foxholeKey: `trenchconnectort${tier}`, startX: -40, startY: -20, startRotation: Math.PI / 7,
             endX: 170, endY: 35, endRotation: -Math.PI / 9, minLength: 80, maxLength: 256,
             minRadius: 0, maxRadius: 0, maxBuffer: 0, curveT: 0, blueprint: false };
-        const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'connector', revision: 1, components: [
+        const entity: NixieComponentEntitySnapshotV1 = { entityId: 'connector', revision: 1, components: [
             { ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true, data },
             { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true, data: { destroyed: true } },
         ] };

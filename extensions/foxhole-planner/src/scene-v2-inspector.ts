@@ -2,8 +2,8 @@ import { foxholeColorLabel } from './color-label.ts';
 import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
-import type { NixieExperimentalComponentJsonObjectV1, NixieExperimentalInspectorFieldV1,
-    NixieExperimentalInspectorActionV1, NixieExperimentalInspectorReadoutV1, NixieExperimentalInspectorRequestV1, NixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentJsonObjectV1, NixieInspectorFieldV1,
+    NixieInspectorActionV1, NixieInspectorReadoutV1, NixieInspectorRequestV1, NixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets, { productionOutputsByRecipeId, productionRecipesById } from '#foxhole-scene-v2-assets';
 import { createFoxholeInspectorRelationships } from './scene-v2-inspector-relationships.ts';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
@@ -19,7 +19,7 @@ export const FOXHOLE_INSPECTOR_SYSTEM_ID = 'inspect.structure';
 export const FOXHOLE_CONNECTOR_INSPECTOR_SYSTEM_ID = 'inspect.spline-connector';
 
 /** Geometry uses Nixie's handles; measurement scale and preset identity remain domain-owned metadata. */
-export function inspectFoxholeSceneV2PlanningPath(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
+export function inspectFoxholeSceneV2PlanningPath(request: NixieInspectorRequestV1): NixieInspectorResultV1 {
     const component = request.subject.components.find(candidate => ['range', 'binocular-line', 'tactical-line', 'triangulation'].includes(candidate.componentId));
     return { contractVersion: 1, components: component
         ? [{ componentId: component.componentId,
@@ -52,7 +52,7 @@ function connectorVariantMenu(key: string, asset: (typeof assets)[string] | unde
         : undefined;
 }
 
-export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
+export function inspectFoxholeSceneV2SplineConnector(request: NixieInspectorRequestV1): NixieInspectorResultV1 {
     const assets = localizedFoxholeCatalog(request.locale);
     const spline = request.subject.components.find(component => component.ownerId === OWNER && component.componentId === 'spline-connector')?.data;
     if (!spline) {
@@ -60,7 +60,7 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalI
     }
     const key = typeof spline.foxholeKey === 'string' ? spline.foxholeKey : '';
     const asset = Object.hasOwn(assets, key) ? assets[key] : undefined;
-    const fields: NixieExperimentalInspectorFieldV1[] = [
+    const fields: NixieInspectorFieldV1[] = [
         { path: ['foxholeKey'], title: 'Asset', hidden: Boolean(asset), readOnly: true,
             description: 'This asset is unavailable in the installed catalog.' },
         ...['startX', 'startY', 'startRotation', 'startHandleLength', 'endX', 'endY', 'endRotation', 'endHandleLength',
@@ -84,7 +84,7 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieExperimentalI
         components: [{ componentId: 'spline-connector', fields }] };
 }
 
-function supplyReadouts(request: NixieExperimentalInspectorRequestV1, filters: unknown): NixieExperimentalInspectorReadoutV1[] {
+function supplyReadouts(request: NixieInspectorRequestV1, filters: unknown): NixieInspectorReadoutV1[] {
     const assets = localizedFoxholeCatalog(request.locale);
     const nearby = request.nearby;
     if (!nearby || nearby.truncated) {
@@ -147,15 +147,15 @@ function supplyReadouts(request: NixieExperimentalInspectorRequestV1, filters: u
     ];
 }
 
-export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspectorRequestV1): NixieExperimentalInspectorResultV1 {
+export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1): NixieInspectorResultV1 {
     const assets = localizedFoxholeCatalog(request.locale);
     const items = Object.values(assets).filter(asset => asset.isItem);
     const itemByCode = new Map(items.map(item => [item.codeName.toLowerCase(), item]));
-    const data = (id: string): NixieExperimentalComponentJsonObjectV1 | undefined => request.subject.components
+    const data = (id: string): NixieComponentJsonObjectV1 | undefined => request.subject.components
         .find(component => component.ownerId === OWNER && component.componentId === id)?.data;
     const assetId = data('asset')?.assetId;
     const asset = typeof assetId === 'string' && Object.hasOwn(assets, assetId) ? assets[assetId] : undefined;
-    const result = new Map<string, NixieExperimentalInspectorFieldV1[]>();
+    const result = new Map<string, NixieInspectorFieldV1[]>();
     result.set('asset', [{ path: ['catalogId'], hidden: true }, { path: ['assetId'], readOnly: true,
         hidden: Boolean(asset), description: asset ? 'Catalog identity for this asset.' : 'This asset is unavailable in the installed catalog.' }]);
     if (!asset) {
@@ -164,7 +164,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
     const appearance = data('appearance') ?? {};
     const selected = data('modification')?.selections;
     const selections = Array.isArray(selected)
-        ? selected.filter((entry): entry is NixieExperimentalComponentJsonObjectV1 =>
+        ? selected.filter((entry): entry is NixieComponentJsonObjectV1 =>
             entry !== null && typeof entry === 'object' && !Array.isArray(entry))
         : [];
     const cargoItems = data('cargo')?.items;
@@ -259,7 +259,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieExperimentalInspect
     }
     const hasUpgrade = selections.some(selection => typeof selection.slotId === 'string' && typeof selection.variantId === 'string'
         && asset.modifications[selection.slotId]?.variants[selection.variantId]?.isUpgrade);
-    const productionActions = new Map<string, NixieExperimentalInspectorActionV1>();
+    const productionActions = new Map<string, NixieInspectorActionV1>();
     const recipeFaction = request.settings?.['foxhole.assets.filter.faction'];
     const recipePrefix = `structure:${assetId}:recipe:`;
     const modificationPrefix = `modification:${assetId}:`;

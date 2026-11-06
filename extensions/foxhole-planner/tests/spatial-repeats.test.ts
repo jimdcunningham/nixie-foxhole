@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import { createFoxholeSceneV2SplineProductData } from '../src/scene-v2-connector-products.ts';
@@ -22,7 +22,7 @@ test('all rail profiles preserve the authored path and rigid sleepers through se
                 startZ: 16, endZ: 48 });
             const before = structuredClone(data);
             const plan = renderFoxholeSpatialConnector(entity, { ...data, endpointBindings }, asset)!;
-            assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan), plan);
+            assert.deepEqual(parseNixieSpatialPlanV1(plan), plan);
             assert.deepEqual(renderFoxholeSpatialConnector(entity, { ...JSON.parse(JSON.stringify(data)), endpointBindings }, asset), plan);
             assert.deepEqual(data, before);
             const sleeper = plan.nodes.find(node => node.id === 'rail-sleepers');
@@ -44,7 +44,7 @@ test('barbed wire repeats both rigid coil rows with lateral separation and endpo
     const data = createFoxholeSceneV2SplineProductData('barbedwirespline', asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
     Object.assign(data, { endX: data.maxLength, endY: 32, endZ: 64 });
     const plan = renderFoxholeSpatialConnector(entity,data,asset)!;
-    assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan),plan);
+    assert.deepEqual(parseNixieSpatialPlanV1(plan),plan);
     const [first,second,posts] = plan.nodes;
     assert.ok(first?.kind === 'model-path' && second?.kind === 'model-path' && posts?.kind === 'model-path');
     assert.ok(first.instances!.length > 1 && second.instances!.length > 1);
@@ -61,7 +61,7 @@ test('fence panels retain sharp sections, separate corner posts and global previ
         Object.assign(data, { endX: data[limit], endY: 32, startZ: 16, endZ: 48 });
         const before = structuredClone(data);
         const plan = renderFoxholeSpatialConnector(entity,{ ...data, endpointBindings },asset)!;
-        assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan),plan);
+        assert.deepEqual(parseNixieSpatialPlanV1(plan),plan);
         const panels = plan.nodes.filter(node => node.id.startsWith('fence-section'));
         assert.equal(panels.length,3);
         let previousEnd = 0;

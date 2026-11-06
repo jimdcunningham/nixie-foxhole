@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { preserveTestGlobal } from '../../../../nixie/tests/nixie/preserve-test-global.ts';
 import * as PIXI from 'pixi.js';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import { NixieSceneV2RenderLanes } from '../../../../nixie/app/plugins/nixie/scene-v2/render-lanes.ts';
 import { NixieExtensionRenderPlanHost } from '../../../../nixie/app/plugins/nixie/scene-v2/render-plan-host.ts';
 import { renderDiagramNode } from '../../../../../extensions/scene-v2-diagram/src/scene-v2.ts';
@@ -12,7 +12,7 @@ import { DEFAULT_FOXHOLE_TACTICAL_LINE_STATE } from '../../app/plugins/foxhole/n
 test('shared lanes preserve logical parents and sort bodies before labels across unrelated entities', async () => {
     const world = new PIXI.Container();
     const lanes = new NixieSceneV2RenderLanes();
-    const entities: NixieExperimentalComponentEntitySnapshotV1[] = ['first', 'second'].map(entityId => ({ entityId, revision: 1, components: [] }));
+    const entities: NixieComponentEntitySnapshotV1[] = ['first', 'second'].map(entityId => ({ entityId, revision: 1, components: [] }));
     const visuals = new Map();
     for (const entity of entities) {
         const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });

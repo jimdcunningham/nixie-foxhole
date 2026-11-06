@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { renderSpatialTrench } from '../src/scene-v2-spatial-trench.ts';
 import { structuralModelClips, triangulateStructureRegion } from '../src/scene-v2-structural-clips.ts';
@@ -12,7 +12,7 @@ test('all trench tiers preserve rotated native pieces, connected end geometry an
             for (const mask of [0, 1, 2, 3]) {
                 const asset = assets[id]!, input = { ...data(id), endX: 10 + length, endY: 20, startAttachmentNodeId: mask & 1 ? 'a' : undefined, endAttachmentNodeId: mask & 2 ? 'b' : undefined };
                 const before = structuredClone(input), plan = renderSpatialTrench(entity, input, asset)!;
-                parseNixieExperimentalSpatialPlanV1(plan);
+                parseNixieSpatialPlanV1(plan);
                 assert.ok(plan.nodes.length <= 64);
                 assert.deepEqual(input, before);
                 const floor = plan.nodes.find(n => n.id === 'trench-floor');
@@ -21,7 +21,7 @@ test('all trench tiers preserve rotated native pieces, connected end geometry an
                 for (const selection of mods) {
                     const modified = { ...entity, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true, data: { selections: [selection] } }] };
                     const changed = renderSpatialTrench(modified, input, asset)!;
-                    parseNixieExperimentalSpatialPlanV1(changed);
+                    parseNixieSpatialPlanV1(changed);
                     assert.ok(changed.nodes.length > plan.nodes.length, selection.variantId);
                 }
             }
@@ -31,7 +31,7 @@ test('intersection floors and emplacement approaches publish convex clip unions 
         for (let mask = 0; mask < 16; mask++) {
             const occupied = new Set(['back', 'front', 'left', 'right'].filter((_, i) => mask & (1 << i))), clips = structuralModelClips(assets[id]!, occupied);
             assert.ok(clips.some(clip => clip.nodeNames.includes('structure-layer-floor')), id);
-            parseNixieExperimentalSpatialPlanV1({ contractVersion: 1, supplementModel: true, nodes: [], modelClips: clips });
+            parseNixieSpatialPlanV1({ contractVersion: 1, supplementModel: true, nodes: [], modelClips: clips });
         }
     const region = [{ x: -3, y: -1 }, { x: -1, y: -1 }, { x: -1, y: -3 }, { x: 1, y: -3 }, { x: 1, y: -1 }, { x: 3, y: -1 }, { x: 3, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 3 }, { x: -1, y: 3 }, { x: -1, y: 1 }, { x: -3, y: 1 }];
     const area = triangulateStructureRegion(region).reduce((sum, [a, b, c]) => sum + Math.abs((b!.x - a!.x) * (c!.y - a!.y) - (b!.y - a!.y) * (c!.x - a!.x)) / 2, 0);

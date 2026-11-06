@@ -6,7 +6,7 @@ import assets from '../../../../../extensions/foxhole-planner/src/scene-v2-asset
 import { renderFoxholeSceneV2Entity, resolveFoxholeSceneV2StructureSelectionGeometry } from '../../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { registerHooks } from 'node:module';
 import { DEFAULT_FOXHOLE_RANGE_STATE } from '../../app/plugins/foxhole/nixie/range.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 registerHooks({ resolve(specifier, context, nextResolve) {
     if (context.parentURL?.includes('/packages/extensions/foxhole/') && specifier.startsWith('#nixie/')) {
@@ -19,7 +19,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 const { foxholeSceneV2StateAdapter } = await import('../../app/plugins/foxhole/nixie/scene-v2-state-adapter.ts');
 
-function entity(assetId: string, appearance: Record<string, boolean | number>, selections: { slotId: string; variantId: string; }[] = []): NixieExperimentalComponentEntitySnapshotV1 {
+function entity(assetId: string, appearance: Record<string, boolean | number>, selections: { slotId: string; variantId: string; }[] = []): NixieComponentEntitySnapshotV1 {
     return { entityId: 'one', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true, data: appearance },

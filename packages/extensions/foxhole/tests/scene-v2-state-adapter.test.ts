@@ -8,7 +8,7 @@ import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-ex
 import { foxholeConnectorGeometryWheel } from '../../../../extensions/foxhole-planner/src/connector-gesture-policy.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../../../../extensions/foxhole-planner/src/scene-v2-spline-connectors.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentDefinitionV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1, NixieComponentDefinitionV1 } from '@nixiejs/extension-sdk';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -483,12 +483,12 @@ test('legacy point connector edits and target deletion preserve their nested end
     assert.deepEqual(host.exportDocument(), before);
 });
 
-function portableCurveUpdates(entity: NixieExperimentalComponentEntitySnapshotV1, delta: number) {
+function portableCurveUpdates(entity: NixieComponentEntitySnapshotV1, delta: number) {
     const geometry = entity.components.find(c => c.componentId === 'spline-connector' && c.ownerId === 'nixie.foxhole-planner');
     if (!geometry) return null;
     const data = geometry.data as unknown as FoxholeSceneV2SplineConnectorData;
     const manifest = JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8'));
-    const definitions = new Map<string, NixieExperimentalComponentDefinitionV1>(manifest.contributes.experimentalComponents.components.map((c: NixieExperimentalComponentDefinitionV1) => ['nixie.foxhole-planner\0' + c.id, c]));
+    const definitions = new Map<string, NixieComponentDefinitionV1>(manifest.contributes.experimentalComponents.components.map((c: NixieComponentDefinitionV1) => ['nixie.foxhole-planner\0' + c.id, c]));
     return buildNixieSceneV2GeometryWheelUpdates(entity, 'nixie.foxhole-planner', foxholeConnectorGeometryWheel(data, assets[data.foxholeKey]), delta, definitions);
 }
 

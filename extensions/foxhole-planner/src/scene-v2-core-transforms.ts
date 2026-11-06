@@ -1,12 +1,12 @@
-import { isNixieExperimentalCoreTransformDataV2, readNixieExperimentalCoreTransformV2 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalCoreTransformDataV2,
-    NixieExperimentalTransformV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { isNixieCoreTransformDataV2, readNixieCoreTransformV2 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity, NixieCoreTransformDataV2,
+    NixieTransformV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const finite = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 /** SDK-owned canonical data, with an explicit compatibility branch for older Studio component documents. */
-export function readFoxholeSceneV2CoreTransform(entity: Entity): NixieExperimentalCoreTransformDataV2 | null {
-    const native = readNixieExperimentalCoreTransformV2(entity);
+export function readFoxholeSceneV2CoreTransform(entity: Entity): NixieCoreTransformDataV2 | null {
+    const native = readNixieCoreTransformV2(entity);
     if (native) return native;
     const transforms = entity.components.filter(component => component.ownerId === 'nixie.core' && component.componentId === 'transform');
     const spatials = entity.components.filter(component => component.ownerId === 'nixie.core' && component.componentId === 'spatial-transform');
@@ -22,7 +22,7 @@ export function readFoxholeSceneV2CoreTransform(entity: Entity): NixieExperiment
 }
 
 /** Detached computation only; extensions never persist core transform components. */
-export function withFoxholeSceneV2TransformProposal(entity: Entity, proposed: Partial<NixieExperimentalTransformV1>, elevation?: number): Entity {
+export function withFoxholeSceneV2TransformProposal(entity: Entity, proposed: Partial<NixieTransformV1>, elevation?: number): Entity {
     const current = readFoxholeSceneV2CoreTransform(entity);
     if (!current) throw new Error('The transform proposal requires available supported core components');
     const transform = entity.components.find(component => component.ownerId === 'nixie.core' && component.componentId === 'transform');
@@ -31,7 +31,7 @@ export function withFoxholeSceneV2TransformProposal(entity: Entity, proposed: Pa
             ...(proposed.y === undefined ? {} : { y: proposed.y }), ...(elevation === undefined ? {} : { z: elevation }) },
         rotation: { ...current.rotation, ...(proposed.rotation === undefined ? {} : { z: proposed.rotation }) },
         scale: { ...current.scale, ...(proposed.scaleX === undefined ? {} : { x: proposed.scaleX }), ...(proposed.scaleY === undefined ? {} : { y: proposed.scaleY }) } };
-        if (!isNixieExperimentalCoreTransformDataV2(data)) throw new Error('The proposed native transform is invalid');
+        if (!isNixieCoreTransformDataV2(data)) throw new Error('The proposed native transform is invalid');
         return { ...entity, components: entity.components.map(component => component === transform ? { ...component, data } : component) };
     }
     if (elevation !== undefined && !Number.isFinite(elevation)) throw new Error('The proposed height must be finite');

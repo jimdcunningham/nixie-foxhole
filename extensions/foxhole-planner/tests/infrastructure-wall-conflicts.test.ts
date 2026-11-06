@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { filterFoxholeSameWallInfrastructureSelections, hasFoxholeSameWallModificationConflict } from '../src/modification-wall-conflicts.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
@@ -25,7 +25,7 @@ test('saved same-wall conflicts retain the firing port without rendering or char
         const port = { slotId: 'BackModSlot', variantId: 'firingport' };
         const kitchen = { slotId: 'BackInfraModSlot', variantId: 'kitchen' };
         const adjacent = { slotId: 'LeftInfraModSlot', variantId: 'kitchen' };
-        const entity = (selections: typeof port[]): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: assetId, revision: 1, components: [
+        const entity = (selections: typeof port[]): NixieComponentEntitySnapshotV1 => ({ entityId: assetId, revision: 1, components: [
             { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId } },
             { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true, data: { selections } },
         ] });

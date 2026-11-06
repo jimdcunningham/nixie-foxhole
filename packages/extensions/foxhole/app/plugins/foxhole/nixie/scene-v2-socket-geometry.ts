@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { getFoxholeManifest } from './manifest.ts';
 import { resolveFoxholeBuildSocketPosition, resolveFoxholeEffectiveBuildSockets } from './structure-socket-resolution.ts';
@@ -16,7 +16,7 @@ import { resolveFoxholeSplineConnectorRenderLayers } from './spline-connector-up
 import { resolveConnectorEndpointSocketNames } from './connector-behavior.ts';
 
 const OWNER = 'nixie.foxhole-planner';
-function data(entity: NixieExperimentalComponentEntitySnapshotV1, id: string) {
+function data(entity: NixieComponentEntitySnapshotV1, id: string) {
     return entity.components.find(component => component.ownerId === OWNER && component.componentId === id
         && component.version === 1 && component.definitionAvailable)?.data;
 }

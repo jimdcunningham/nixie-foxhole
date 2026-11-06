@@ -6,8 +6,8 @@ import assets from '../src/scene-v2-assets-node.ts';
 import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import { createFoxholeSceneV2SplineProductData } from '../src/scene-v2-connector-products.ts';
 import { getFoxholeSceneV2ModelComponentData, readFoxholeSpatialPathProfile } from '../src/scene-v2-models.ts';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 
 test('overhead and insulated pipelines retain rigid endpoint origins and native span insets at both length limits', () => {
     const asset = assets.facilitypipeoverhead!;
@@ -20,7 +20,7 @@ test('overhead and insulated pipelines retain rigid endpoint origins and native 
             endX: length, endY: 90, startZ: 10, endZ: 42 } as unknown as FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number; };
         const before = structuredClone({ entity, data });
         const result = renderFoxholeSpatialConnector(entity, data, asset)!;
-        assert.deepEqual(parseNixieExperimentalSpatialPlanV1(result), result);
+        assert.deepEqual(parseNixieSpatialPlanV1(result), result);
         const node = result.nodes[0]!;
         assert.ok(node.kind === 'model-path');
         const profile: FoxholeSpatialPathProfile = insulated ? asset.model.insulatedPathProfile! : asset.model.pathProfile!;

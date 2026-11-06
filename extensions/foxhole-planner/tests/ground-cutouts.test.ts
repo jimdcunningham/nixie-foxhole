@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { structuralGroundCutouts } from '../src/scene-v2-ground-cutouts.ts';
 import { renderSpatialTrench } from '../src/scene-v2-spatial-trench.ts';
@@ -20,7 +20,7 @@ test('ground openings use native floor shapes and occupied approaches without pr
     for(const id of ['trenchempt1','trenchempt2','trenchempt3'])for(let mask=0;mask<256;mask++) {
         const groundCutouts=structuralGroundCutouts(assets[id]!,new Set(tags.filter((_,i)=>mask&(1<<i))));
         assert.ok(groundCutouts.length>0);
-        parseNixieExperimentalSpatialPlanV1({contractVersion:1,supplementModel:true,nodes:[],groundCutouts});
+        parseNixieSpatialPlanV1({contractVersion:1,supplementModel:true,nodes:[],groundCutouts});
     }
     assert.deepEqual(structuralGroundCutouts(assets.facilityrefineryoil!,new Set()),[]);
     assert.deepEqual(structuralGroundCutouts({...assets.fortt3!,model:undefined},new Set()),[]);
@@ -30,7 +30,7 @@ test('ground cutouts cross the actual structural renderer alongside visibility a
         const entity={entityId:'preview',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:id}}]};
         const rendered=renderFoxholeSceneV2Entity(entity,{contractVersion:1,entities:[entity],settings:{'foxhole.structure.hideRoofs':true}});
         assert.ok(rendered.experimentalSpatial?.groundCutouts?.length,id);
-        parseNixieExperimentalSpatialPlanV1(rendered.experimentalSpatial);
+        parseNixieSpatialPlanV1(rendered.experimentalSpatial);
     }
 });
 test('connector excavations match the independently rotated native floor and remain when floors are hidden', () => {
@@ -42,6 +42,6 @@ test('connector excavations match the independently rotated native floor and rem
         assert.ok(floor?.kind==='model-path'); assert.deepEqual(plan.groundCutouts![0]!.polygon,floor.clipPolygons![0]);
         const hidden=renderSpatialTrench(entity,data,assets[id]!,{'foxhole.structure.hideFloors':true})!;
         assert.deepEqual(hidden.groundCutouts!.map(c=>c.polygon),plan.groundCutouts!.map(c=>c.polygon));
-        parseNixieExperimentalSpatialPlanV1(hidden);
+        parseNixieSpatialPlanV1(hidden);
     }
 });

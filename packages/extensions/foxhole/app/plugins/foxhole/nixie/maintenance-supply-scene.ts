@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { BoardNodeSnapshot } from '#nixie/plugins/nixie/board/types/node.ts';
 import { multiplyNixieSceneV2Matrices, nixieSceneV2TransformMatrix, resolveNixieSceneV2Transforms, NIXIE_SCENE_V2_IDENTITY_MATRIX } from '#nixie/../desktop-extensions/scene-v2-transforms.ts';
 import type { NixieSceneV2Matrix } from '#nixie/../desktop-extensions/scene-v2-transforms.ts';
@@ -22,7 +22,7 @@ function candidate(id: string, type: string, state: Record<string, unknown>, wor
         drain: resolveFoxholeMaintenanceSupplyDrain(structure), operational: state.destroyed !== true && state.packaged !== true };
 }
 
-export function projectFoxholeMaintenanceSceneV2(entities: readonly NixieExperimentalComponentEntitySnapshotV1[], catalog: Catalog): FoxholeMaintenanceCandidate[] {
+export function projectFoxholeMaintenanceSceneV2(entities: readonly NixieComponentEntitySnapshotV1[], catalog: Catalog): FoxholeMaintenanceCandidate[] {
     const transforms = resolveNixieSceneV2Transforms(entities);
     return entities.flatMap(entity => {
         const snapshot = foxholeSceneV2StateAdapter.project(entity);

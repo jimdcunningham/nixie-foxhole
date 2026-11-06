@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregateFoxholeEcsResources, resolveFoxholeStatisticsCosts } from '../src/resource-statistics.ts';
 import type { FoxholeResourceStatisticsAsset } from '../src/resource-statistics.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 test('resource totals retain authored costs, modification choices and legacy volume/power/maintenance rules', () => {
     const assets: Record<string, FoxholeResourceStatisticsAsset> = {
@@ -11,7 +11,7 @@ test('resource totals retain authored costs, modification choices and legacy vol
         facilitysilooil: { codeName: 'FacilitySiloOil', isItem: false, statistics: { cost: {}, modificationCosts: {}, powerDelta: 4000, decaySupplyDrain: 2, fuelCapacity: 0 } },
         item: { codeName: 'Item', isItem: true, statistics: { cost: { Material: 999 }, modificationCosts: {}, fuelCapacity: 0 } },
     };
-    const entities: NixieExperimentalComponentEntitySnapshotV1[] = Object.keys(assets).map((assetId): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: assetId, revision: 1, components: [
+    const entities: NixieComponentEntitySnapshotV1[] = Object.keys(assets).map((assetId): NixieComponentEntitySnapshotV1 => ({ entityId: assetId, revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,
             data: { selections: [{ slotId: 'slot', variantId: 'chosen' }] } },

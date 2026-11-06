@@ -1,6 +1,6 @@
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalEntityRendererContextV1,
+    NixieComponentEntitySnapshotV1,
+    NixieEntityRendererContextV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
@@ -33,7 +33,7 @@ const CORE_OWNER_ID = 'nixie.core';
 const IDENTITY_MATRIX: FoxholeSceneV2Matrix = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
 
 function componentData(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     ownerId: string,
     componentId: string,
 ): Record<string, unknown> | undefined {
@@ -59,7 +59,7 @@ function multiply(left: FoxholeSceneV2Matrix, right: FoxholeSceneV2Matrix): Foxh
     };
 }
 
-function localMatrix(entity: NixieExperimentalComponentEntitySnapshotV1): FoxholeSceneV2Matrix {
+function localMatrix(entity: NixieComponentEntitySnapshotV1): FoxholeSceneV2Matrix {
     const transform = readFoxholeSceneV2CoreTransform(entity);
     const rotation = finite(transform?.rotation.z, 0);
     const scaleX = finite(transform?.scale.x, 1);
@@ -77,7 +77,7 @@ function localMatrix(entity: NixieExperimentalComponentEntitySnapshotV1): Foxhol
 }
 
 export function resolveFoxholeSceneV2WorldMatrices(
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
 ): Map<string, FoxholeSceneV2Matrix> {
     const entities = new Map(context.entities.map(entity => [entity.entityId, entity]));
     const resolved = new Map<string, FoxholeSceneV2Matrix>();
@@ -135,7 +135,7 @@ function normalizedSocketName(value: string): string {
 
 function resolveSocket(
     link: Attachment | undefined,
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
     worldMatrices: Map<string, FoxholeSceneV2Matrix>,
     assetMetadataById: Record<string, FoxholeSceneV2AssetMetadata>,
 ): ResolvedSocket | null {
@@ -187,9 +187,9 @@ function toLocal(socket: ResolvedSocket | null, inverseEntityWorld: FoxholeScene
 }
 
 export function resolveFoxholeSceneV2ConnectorAttachments(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     data: FoxholeSceneV2ConnectorData & Record<string, unknown>,
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
     assetMetadataById: Record<string, FoxholeSceneV2AssetMetadata>,
 ): FoxholeSceneV2ConnectorData {
     const matrices = resolveFoxholeSceneV2WorldMatrices(context);
@@ -207,9 +207,9 @@ export function resolveFoxholeSceneV2ConnectorAttachments(
 }
 
 export function resolveFoxholeSceneV2SplineAttachments(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     data: FoxholeSceneV2SplineConnectorData & Record<string, unknown>,
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
     assetMetadataById: Record<string, FoxholeSceneV2AssetMetadata>,
 ): FoxholeSceneV2SplineConnectorData {
     const matrices = resolveFoxholeSceneV2WorldMatrices(context);

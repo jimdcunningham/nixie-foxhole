@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { createBrowserAtlas } from '../../../../../extensions/foxhole-planner/build/browser-atlas-images.ts';
-import { parseNixieExperimentalProductResultV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
+import { parseNixieProductResultV1, resolveNixieResourceV1 } from '@nixiejs/extension-sdk';
 import { createFoxholeSceneV2AssetMetadata } from '../../../../../extensions/foxhole-planner/src/scene-v2-asset-metadata.ts';
 import { listFoxholeSceneV2Products } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 import { createNixieExtensionAssetCard, getNixieExtensionAssetCardImages } from '../../../../nixie/app/utils/nixie-extension-asset-card.ts';
@@ -57,7 +57,7 @@ test('SDK library icons and hover text preserve the visible authored Native asse
             : color?.previewUrl ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${colorHex ? `.${colorHex}` : ''}.webp`);
         for (const [image, source] of [[metadata.browserIcon, asset.icons.default], [metadata.browserPreview, previewSource]] as const) {
             assert.ok(image);
-            const resource = resolveNixieExperimentalResourceV1(extension.contributes.experimentalResources ?? [],
+            const resource = resolveNixieResourceV1(extension.contributes.experimentalResources ?? [],
                 extension.contributes.experimentalResourceTemplates ?? [], image.resourceId);
             assert.equal(resource?.kind, 'texture');
             const atlasIndex = Number(image.resourceId.split('.').at(-1));
@@ -125,7 +125,7 @@ test('the full Planner library retains bounded structured recipe presentation', 
     let total = 1;
     let lists = 0;
     for (let offset = 0; offset < total; offset += 100) {
-        const result = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query: '', offset, limit: 100, settings }));
+        const result = parseNixieProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query: '', offset, limit: 100, settings }));
         total = result.total;
         lists += result.items.filter(item => item.presentation?.details?.layout === 'list').length;
     }

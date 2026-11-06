@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export const catalogPinPath = () => path.resolve(process.env.NIXIE_FOXHOLE_CATALOG_PIN_FILE?.trim() || fileURLToPath(new URL('../src/catalog-release-pin.json', import.meta.url)));
 export const readCatalogPin = async () => JSON.parse(await fs.readFile(catalogPinPath(), 'utf8'));
@@ -26,7 +26,7 @@ export async function prepareCatalogInput({pin, output, localFile, fetcher = fet
     const existing = await fs.readFile(output).catch(error => {if (error.code === 'ENOENT') return null; throw error;});
     const bytes = existing ?? (localFile ? await fs.readFile(localFile) : await readCatalogReceipt(pin.catalog, fetcher));
     verifyCatalogInput(bytes, pin.catalog);
-    const catalog = parseNixieExperimentalProductCatalogV1(JSON.parse(bytes));
+    const catalog = parseNixieProductCatalogV1(JSON.parse(bytes));
     const base = new URL(pin.baseUrl), location = new URL(pin.catalog.url);
     if (location.origin !== base.origin || !location.pathname.startsWith(base.pathname)) throw Error('Catalog input is outside its pinned origin/namespace');
     if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', base).href !== location.href) throw Error('Catalog input does not belong to its pinned release');

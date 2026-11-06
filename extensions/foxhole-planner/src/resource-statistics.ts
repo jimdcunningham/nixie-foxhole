@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeStatisticsRecipe } from './production-statistics.ts';
 import { filterFoxholeSameWallInfrastructureSelections } from './modification-wall-conflicts.ts';
 import type { FoxholeWallModificationSlot } from './modification-wall-conflicts.ts';
@@ -124,7 +124,7 @@ const capacityFallbacks: Record<string, number> = { facilitysilooil: 5000, fuel_
     facilitypipe: 100, facilitypipeoverhead: 100, facilitypipeunderground: 50, pipeline: 100, pipeline_overhead: 100, pipeline_underground: 50 };
 const finite = (value: number | null | undefined) => Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
-export function aggregateFoxholeEcsResources(entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
+export function aggregateFoxholeEcsResources(entities: readonly NixieComponentEntitySnapshotV1[],
     assets: Readonly<Record<string, FoxholeResourceStatisticsAsset>>, intervalSeconds: number,
     powerMwByEntityId?: ReadonlyMap<string, number>) {
     const costs = new Map<string, number>();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
 import { resolveFoxholeSceneV2SplineAttachments, resolveFoxholeSceneV2ConnectorAttachments } from '../src/scene-v2-attachments.ts';
@@ -9,7 +9,7 @@ import { resolveFoxholeEntityStructureSockets } from '../src/effective-structure
 const port = assets.facilityrefinery1!.modifications.UpgradeSlotComponent!.variants.forge!.overlaySockets!.find(socket => socket.name === 'PipeInput0')!;
 const portX = Number(port.x) / 100 * 32;
 const portY = Number(port.y) / 100 * 32;
-function factory(): NixieExperimentalComponentEntitySnapshotV1 {
+function factory(): NixieComponentEntitySnapshotV1 {
     return { entityId: 'factory', revision: 1, components: [
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true, data: { x: 1000, y: 0, rotation: 0, scaleX: 1, scaleY: 1 } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: 'facilityrefinery1' } },
@@ -17,7 +17,7 @@ function factory(): NixieExperimentalComponentEntitySnapshotV1 {
             data: { selections: [{ slotId: 'UpgradeSlotComponent', variantId: 'forge' }] } },
     ] };
 }
-function pipe(): NixieExperimentalComponentEntitySnapshotV1 {
+function pipe(): NixieComponentEntitySnapshotV1 {
     return { entityId: 'pipe', revision: 1, components: [
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true, data: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true, data: {

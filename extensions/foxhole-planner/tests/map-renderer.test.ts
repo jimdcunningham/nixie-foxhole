@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieDocumentRenderResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholePlanningMap } from '../src/scene-v2-map-renderer.ts';
 import maps from '../src/scene-v2-map-data-node.ts';
 
@@ -9,7 +9,7 @@ test('saved map rendering selects terrain resources and clipped labels without a
         'foxhole.map.colors': true, 'foxhole.map.roads': true, 'foxhole.map.crop.enabled': true, 'foxhole.map.crop.x': -500, 'foxhole.map.crop.y': 200,
         'foxhole.map.crop.width': 1000, 'foxhole.map.crop.height': 800 }, viewport: { renderScale: 80 }, theme: 'dark' as const };
     const before = structuredClone(request);
-    const result = parseNixieExperimentalDocumentRenderResultV1(renderFoxholePlanningMap(request));
+    const result = parseNixieDocumentRenderResultV1(renderFoxholePlanningMap(request));
     assert.deepEqual(result.clip, { minX: -500, minY: 200, maxX: 500, maxY: 1000 });
     const region = maps.regions.find(value => value.key === 'DeadLandsHex')!;
     const nodes = result.plan.root.kind === 'group' ? result.plan.root.children : [];
@@ -27,6 +27,6 @@ test('saved map rendering selects terrain resources and clipped labels without a
 test('all region/layer and zoomed-out background plans remain inside SDK rendering budgets', () => {
     for (const scale of [0.5, 80, 400, 2000]) {
         const settings = { 'foxhole.map.enabled': true, ...Object.fromEntries(['base_map_full', 'roads', 'roads_tiers', 'rdz', 'dark_rdz', 'glaciers', 'bulwark', 'rail_bridge', 'rocks', 'underwater_rocks_stripes'].map(key => [`foxhole.map.${key}`, true])) };
-        assert.doesNotThrow(() => parseNixieExperimentalDocumentRenderResultV1(renderFoxholePlanningMap({ contractVersion: 1, settings, viewport: { renderScale: scale }, theme: 'dark' })));
+        assert.doesNotThrow(() => parseNixieDocumentRenderResultV1(renderFoxholePlanningMap({ contractVersion: 1, settings, viewport: { renderScale: scale }, theme: 'dark' })));
     }
 });

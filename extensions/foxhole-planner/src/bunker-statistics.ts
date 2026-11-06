@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { buildFoxholeBunkerHealthSummary } from './bunker-statistics-health.ts';
 import { buildFoxholeBunkerDestructionSummary } from './bunker-statistics-destruction.ts';
 import type { FoxholeBunkerDestructionWeaponInput } from './bunker-statistics-destruction.ts';
@@ -36,7 +36,7 @@ export function isFoxholeEcsBunkerMember(id: string, asset: FoxholeBunkerStatist
 const fortSocket = (socket: FoxholeBunkerStatisticsSocket) => socket.socketTags.some(tag => Number.isFinite(tag.category) && Math.trunc(tag.category) === 4
     && Number.isFinite(tag.mask) && tag.mask >= 0 && (BigInt(Math.trunc(tag.mask)) & ~8n) !== 0n);
 
-export function resolveFoxholeEcsBunkerStatistics(entities: readonly NixieExperimentalComponentEntitySnapshotV1[], scopeIds: readonly string[],
+export function resolveFoxholeEcsBunkerStatistics(entities: readonly NixieComponentEntitySnapshotV1[], scopeIds: readonly string[],
     assets: Readonly<Record<string, { bunker?: FoxholeBunkerStatisticsMetadata; }>>, weapons: Readonly<Record<string, FoxholeBunkerDestructionWeaponInput>>, intervalSeconds: number) {
     const members = new Map<string, { asset: FoxholeBunkerStatisticsMetadata; attachments: FoxholeBunkerStatisticsAttachmentMap; }>();
     for (const entity of entities) {
@@ -47,7 +47,7 @@ export function resolveFoxholeEcsBunkerStatistics(entities: readonly NixieExperi
             continue;
         }
         const raw = data('socket-attachments')?.attachments;
-        const rows = Array.isArray(raw) ? raw.filter((value): value is NixieExperimentalComponentJsonObjectV1 => value !== null && typeof value === 'object' && !Array.isArray(value)) : [];
+        const rows = Array.isArray(raw) ? raw.filter((value): value is NixieComponentJsonObjectV1 => value !== null && typeof value === 'object' && !Array.isArray(value)) : [];
         const attachments = Object.fromEntries(rows.flatMap(row => typeof row.localSocketName === 'string' && typeof row.targetEntityId === 'string' && typeof row.targetSocketName === 'string'
             ? [[row.localSocketName, { nodeId: row.targetEntityId, socketName: row.targetSocketName }]]
             : []));

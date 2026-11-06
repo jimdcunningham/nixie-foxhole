@@ -4,7 +4,7 @@ import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
 import test from 'node:test';
-import { parseNixieExperimentalSelectionGeometryV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSelectionGeometryV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveFoxholeConnectorSelectionGeometry } from '../src/connector-selection-geometry.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 
@@ -17,7 +17,7 @@ test('power-line selection uses its oriented core stroke and every connector ret
     assert.deepEqual(geometry.transformOrigin, { x: 60, y: 70 });
     assert.equal(geometry.frameAngle, Math.PI / 4);
     assert.equal(geometry.localQuad?.length, 4);
-    assert.deepEqual(parseNixieExperimentalSelectionGeometryV1(geometry), geometry);
+    assert.deepEqual(parseNixieSelectionGeometryV1(geometry), geometry);
     assert.deepEqual(data, before);
     assert.deepEqual(resolveFoxholeConnectorSelectionGeometry({ ...data, foxholeKey: 'facilitypipe' }), { contractVersion: 1,
         transformOrigin: { x: 60, y: 70 } });
@@ -37,7 +37,7 @@ for (const key of ['facilitypipeoverhead', 'cranerailtrackspline', 'facilitycatw
             const geometry = resolveFoxholeConnectorSelectionGeometry(input, asset, content);
             assert.ok(geometry.localQuad, key);
             assert.ok(Math.abs(geometry.frameAngle! - angle) < 1e-10);
-            assert.deepEqual(parseNixieExperimentalSelectionGeometryV1(geometry), geometry);
+            assert.deepEqual(parseNixieSelectionGeometryV1(geometry), geometry);
             const project = (point: { x: number; y: number; }) => ({ x: point.x * Math.cos(angle) + point.y * Math.sin(angle),
                 y: -point.x * Math.sin(angle) + point.y * Math.cos(angle) });
             const quad = geometry.localQuad.map(project);

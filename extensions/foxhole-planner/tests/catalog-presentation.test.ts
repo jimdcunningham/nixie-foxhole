@@ -3,10 +3,10 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
 import { resolveFoxholeCatalogLocale } from '../src/catalog-presentation.ts';
-import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const find = (settings: Record<string, string | boolean>, query = 'facilityrefinery1', locale = 'en') =>
-    parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100, locale,
+    parseNixieProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query, offset: 0, limit: 100, locale,
         settings: { 'foxhole.assets.filter.showPreviousTiers': true, ...settings } }));
 
 test('catalog language choices translate names and descriptions while preserving SDK product components and IDs', () => {

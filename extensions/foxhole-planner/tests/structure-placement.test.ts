@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 import {
     FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
     FOXHOLE_PLACEMENT_FOUNDATION_COLOR,

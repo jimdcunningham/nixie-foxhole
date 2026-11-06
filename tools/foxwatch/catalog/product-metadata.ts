@@ -7,7 +7,7 @@ import { readFoxholeAuthoredSpotlight } from '../../../extensions/foxhole-planne
 import type { FoxholeAuthoredSpotlight } from '../../../extensions/foxhole-planner/src/spotlight-beam.ts';
 import { isFoxholeModificationSlotTierEligible } from '../../../extensions/foxhole-planner/src/modification-tier.ts';
 import { resolveFoxholeEmplacementModificationSplineEnd } from '../../../extensions/foxhole-planner/src/modification-spline.ts';
-import type { NixieExperimentalProductAttributeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieProductAttributeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveConnectorBehavior, resolveConnectorEndpointSocketNames, resolveConnectorVisualPathStyle } from '../../../extensions/foxhole-planner/src/connector-behavior.ts';
 import { createFoxholeStatisticsRecipe } from '../../../extensions/foxhole-planner/src/production-statistics.ts';
 import type { FoxholePublishedProductionEntry, FoxholeStatisticsRecipe, FoxholeStatisticsStructure } from '../../../extensions/foxhole-planner/src/production-statistics.ts';
@@ -166,7 +166,7 @@ export interface FoxholeSceneV2AssetMetadata {
     contactShadows?: Record<string, Omit<import('../../../extensions/foxhole-planner/src/contact-shadow.ts').FoxholeContactShadowProjection, 'textureUrl'> & { resourceId: string; }>;
 
     model?: import('../../../extensions/foxhole-planner/src/scene-v2-models.ts').FoxholeSceneV2ModelMetadata;
-    browserAttributes?: NixieExperimentalProductAttributeV1[];
+    browserAttributes?: NixieProductAttributeV1[];
     description?: string;
     categoryOrder?: number;
     order?: number;

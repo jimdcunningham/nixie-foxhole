@@ -7,7 +7,7 @@ import test from 'node:test';
 import {prepareProductCatalog} from './prepare-catalog.mjs';
 import {readPublicationPlan} from '../scripts/asset-pack-publication.mjs';
 import {publishAssetPublication, inspectAssetPublication} from '../scripts/asset-pack-publisher.mjs';
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 const target = {endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'nixie-extension-assets', publicBaseUrl: 'https://assets.example.org/', prefix: 'foxhole-planner'};
 
 test('FoxWatch produces one catalog and shared content objects that resumes without overwrites', async t => {
@@ -35,8 +35,8 @@ test('FoxWatch produces one catalog and shared content objects that resumes with
     assert.equal(JSON.parse(await fs.readFile(path.join(prepared.directory, frozenManifest.file))).previewUrl, '/foxhole/assets/types/structures/hospital/hospital.icon.rendered.webp');
     const catalogBytes = await fs.readFile(path.join(prepared.directory, 'catalog.v1.json'));
     assert.equal(createHash('sha256').update(catalogBytes).digest('hex'), prepared.pin.catalog.sha256);
-    const catalog = parseNixieExperimentalProductCatalogV1(JSON.parse(catalogBytes));
-    const resources = resolveNixieExperimentalProductCatalogResourcesV1(catalog);
+    const catalog = parseNixieProductCatalogV1(JSON.parse(catalogBytes));
+    const resources = resolveNixieProductCatalogResourcesV1(catalog);
     assert.equal(catalog.releaseRoot, undefined);
     assert.equal(catalog.assetRelease, undefined);
     assert.match(resources.assets.find(row => row.path === 'models/hospital.base.glb').sourcePath, /^foxhole-planner\/objects\/[a-f0-9]{64}\.glb$/);
@@ -97,7 +97,7 @@ test('legacy release objects migrate to hashed paths and subsequent catalogs reu
         existingInventory: {schemaVersion: 1, target, capturedAt: 'fixture', objects: [...stored.values()]}});
     const prepared = await prepare('first');
     const catalog = JSON.parse(await fs.readFile(path.join(prepared.directory, 'catalog.v1.json')));
-    const resource = resolveNixieExperimentalProductCatalogResourcesV1(catalog).assets.find(row => row.path === 'models/hospital.base.glb');
+    const resource = resolveNixieProductCatalogResourcesV1(catalog).assets.find(row => row.path === 'models/hospital.base.glb');
     assert.equal(resource.sourcePath, 'foxhole-planner/objects/' + hash(model) + '.glb');
     assert.equal(JSON.stringify(catalog).includes('/releases/'), false);
     const transport = {head: async key => stored.get(key), put: async row => {assert.equal(stored.has(row.key), false); stored.set(row.key, row);}, putChannel: async row => {stored.set(row.key, row);}};

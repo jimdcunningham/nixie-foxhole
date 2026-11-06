@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { aggregateFoxholeEcsProduction, createFoxholeStatisticsRecipe } from '../src/production-statistics.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const ownerId = 'nixie.foxhole-planner';
-const entity = (id: string, assetId: string, orders: NixieExperimentalComponentJsonObjectV1[], disabled = false, variants: string[] = []): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: id, revision: 1,
+const entity = (id: string, assetId: string, orders: NixieComponentJsonObjectV1[], disabled = false, variants: string[] = []): NixieComponentEntitySnapshotV1 => ({ entityId: id, revision: 1,
     components: [{ ownerId, componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId } },
         { ownerId, componentId: 'production-order', version: 1, definitionAvailable: true, data: { orders, disabled } },
         { ownerId, componentId: 'modification', version: 1, definitionAvailable: true, data: { selections: variants.map(variantId => ({ slotId: 'slot', variantId })) } }] });

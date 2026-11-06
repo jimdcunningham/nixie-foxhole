@@ -1,11 +1,11 @@
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalComponentOperationV1,
-    NixieExperimentalComponentJsonObjectV1,
-    NixieExperimentalTransformFinalizeRequestV1,
-    NixieExperimentalTransformFinalizeResultV1,
+    NixieComponentEntitySnapshotV1,
+    NixieComponentOperationV1,
+    NixieComponentJsonObjectV1,
+    NixieTransformFinalizeRequestV1,
+    NixieTransformFinalizeResultV1,
 } from '@nixiejs/extension-sdk/scene-v2';
-import { clampDraggedSplineEndpoint, selectNixieExperimentalConnectionTargetV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { clampDraggedSplineEndpoint, selectNixieConnectionTargetV1 } from '@nixiejs/extension-sdk/scene-v2';
 import foxholeSceneV2Assets from '#foxhole-scene-v2-assets';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { sampleFoxholeSceneV2Connector, foxholeSceneV2ConnectorConstraints, foxholeSceneV2ConnectorEndpoints } from './scene-v2-connector-path.ts';
@@ -59,7 +59,7 @@ interface WorldSocket {
 const IDENTITY: Matrix = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
 
 function component(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     ownerId: string,
     componentId: string,
 ) {
@@ -86,8 +86,8 @@ function multiply(left: Matrix, right: Matrix): Matrix {
 }
 
 function localMatrix(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
-    override?: NixieExperimentalTransformFinalizeRequestV1['transform'],
+    entity: NixieComponentEntitySnapshotV1,
+    override?: NixieTransformFinalizeRequestV1['transform'],
 ): Matrix {
     const data = readFoxholeSceneV2CoreTransform(entity);
     const rotation = override?.rotation ?? finite(data?.rotation.z, 0);
@@ -105,15 +105,15 @@ function localMatrix(
     };
 }
 
-function parentId(entity: NixieExperimentalComponentEntitySnapshotV1): string {
+function parentId(entity: NixieComponentEntitySnapshotV1): string {
     const value = component(entity, CORE_OWNER_ID, 'hierarchy')?.data.parentId;
     return typeof value === 'string' ? value : '';
 }
 
 function worldMatrices(
-    entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
+    entities: readonly NixieComponentEntitySnapshotV1[],
     movedEntityId: string,
-    transform: NixieExperimentalTransformFinalizeRequestV1['transform'],
+    transform: NixieTransformFinalizeRequestV1['transform'],
 ): Map<string, Matrix> {
     const byId = new Map(entities.map(entity => [entity.entityId, entity]));
     const resolved = new Map<string, Matrix>();
@@ -158,17 +158,17 @@ function inverseVector(matrix: Matrix, x: number, y: number): { x: number; y: nu
     };
 }
 
-function assetMetadata(entity: NixieExperimentalComponentEntitySnapshotV1): FoxholeSceneV2AssetMetadata | null {
+function assetMetadata(entity: NixieComponentEntitySnapshotV1): FoxholeSceneV2AssetMetadata | null {
     const assetId = component(entity, FOXHOLE_OWNER_ID, 'asset')?.data.assetId
         ?? connectorComponent(entity)?.data.foxholeKey;
     return typeof assetId === 'string' ? assets[assetId] ?? null : null;
 }
 
-function connectorComponent(entity: NixieExperimentalComponentEntitySnapshotV1) {
+function connectorComponent(entity: NixieComponentEntitySnapshotV1) {
     return component(entity, FOXHOLE_OWNER_ID, 'spline-connector') ?? component(entity, FOXHOLE_OWNER_ID, 'connector');
 }
 
-function connectorEndpoints(entity: NixieExperimentalComponentEntitySnapshotV1): Array<{ role: 'start' | 'end'; socket: FoxholeSceneV2BuildSocketMetadata; }> {
+function connectorEndpoints(entity: NixieComponentEntitySnapshotV1): Array<{ role: 'start' | 'end'; socket: FoxholeSceneV2BuildSocketMetadata; }> {
     const connector = connectorComponent(entity);
     if (!connector) {
         return [];
@@ -203,7 +203,7 @@ function connectorEndpoints(entity: NixieExperimentalComponentEntitySnapshotV1):
     });
 }
 
-function sockets(entity: NixieExperimentalComponentEntitySnapshotV1, matrix: Matrix,
+function sockets(entity: NixieComponentEntitySnapshotV1, matrix: Matrix,
     projection?: ReturnType<typeof createFoxholeSpatialProjection>): WorldSocket[] {
     const localSockets = connectorComponent(entity)
         ? connectorEndpoints(entity).map(endpoint => endpoint.socket)
@@ -289,7 +289,7 @@ function compatible(left: WorldSocket, right: WorldSocket): number {
     return sharedTagCount(left.socket, right.socket);
 }
 
-function readAttachments(entity: NixieExperimentalComponentEntitySnapshotV1): Attachment[] {
+function readAttachments(entity: NixieComponentEntitySnapshotV1): Attachment[] {
     const value = component(entity, FOXHOLE_OWNER_ID, SOCKET_ATTACHMENTS_COMPONENT_ID)?.data.attachments;
     if (!Array.isArray(value)) {
         return [];
@@ -316,7 +316,7 @@ function attachmentAt(items: readonly Attachment[], socketName: string): Attachm
     return items.find(item => normalizedName(item.localSocketName) === key);
 }
 
-function endpointAttachmentAt(entity: NixieExperimentalComponentEntitySnapshotV1, socketName: string): Attachment | undefined {
+function endpointAttachmentAt(entity: NixieComponentEntitySnapshotV1, socketName: string): Attachment | undefined {
     const connector = connectorComponent(entity);
     const endpoint = connector && connectorEndpoints(entity).find(candidate => normalizedName(candidate.socket.name) === normalizedName(socketName));
     if (!connector || !endpoint) {
@@ -339,7 +339,7 @@ function inversePoint(matrix: Matrix, world: { x: number; y: number; }) {
     return inverseVector(matrix, world.x - matrix.tx, world.y - matrix.ty);
 }
 
-function connectorEndpointPatch(entity: NixieExperimentalComponentEntitySnapshotV1, role: 'start' | 'end', world: WorldSocket, matrix: Matrix, projection?: ReturnType<typeof createFoxholeSpatialProjection>): NixieExperimentalComponentJsonObjectV1 | null {
+function connectorEndpointPatch(entity: NixieComponentEntitySnapshotV1, role: 'start' | 'end', world: WorldSocket, matrix: Matrix, projection?: ReturnType<typeof createFoxholeSpatialProjection>): NixieComponentJsonObjectV1 | null {
     const connector = connectorComponent(entity)!;
     const local = projection?.toLocal(entity, world.world);
     const position = local ? { x: local[0], y: local[1] } : inversePoint(matrix, world);
@@ -362,10 +362,10 @@ function connectorEndpointPatch(entity: NixieExperimentalComponentEntitySnapshot
     return { [`${role}X`]: position.x, [`${role}Y`]: position.y, [`${role}Rotation`]: Math.atan2(Math.sin(angle), Math.cos(angle)) };
 }
 
-function carriedConnectorPatches(moved: NixieExperimentalComponentEntitySnapshotV1,
-    entities: readonly NixieExperimentalComponentEntitySnapshotV1[], matrices: ReadonlyMap<string, Matrix>,
-    movedSockets: readonly WorldSocket[]): Map<string, NixieExperimentalComponentJsonObjectV1> {
-    const patches = new Map<string, NixieExperimentalComponentJsonObjectV1>();
+function carriedConnectorPatches(moved: NixieComponentEntitySnapshotV1,
+    entities: readonly NixieComponentEntitySnapshotV1[], matrices: ReadonlyMap<string, Matrix>,
+    movedSockets: readonly WorldSocket[]): Map<string, NixieComponentJsonObjectV1> {
+    const patches = new Map<string, NixieComponentJsonObjectV1>();
     for (const attachment of readAttachments(moved)) {
         const entity = entities.find(candidate => candidate.entityId === attachment.targetEntityId);
         if (!entity || entity.entityId === moved.entityId || !connectorComponent(entity)) {
@@ -394,7 +394,7 @@ function carriedConnectorPatches(moved: NixieExperimentalComponentEntitySnapshot
     return patches;
 }
 
-function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1, moved: NixieExperimentalComponentEntitySnapshotV1): NixieExperimentalTransformFinalizeResultV1 {
+function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: NixieComponentEntitySnapshotV1): NixieTransformFinalizeResultV1 {
     const entities = request.context.entities;
     const connector = connectorComponent(moved)!;
     const gesture = request.geometryGesture;
@@ -427,8 +427,8 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
         !(item.targetEntityId === moved.entityId && !movingIds.has(entity.entityId)
             && (!gesture || normalizedName(item.targetSocketName) === normalizedName(dragged!.socket.name)))
         && !(gesture && entity.entityId === moved.entityId && normalizedName(item.localSocketName) === normalizedName(dragged!.socket.name)))]));
-    const operations: NixieExperimentalComponentOperationV1[] = [];
-    const set: Record<string, import('@nixiejs/extension-sdk/scene-v2').NixieExperimentalComponentJsonValueV1> = {};
+    const operations: NixieComponentOperationV1[] = [];
+    const set: Record<string, import('@nixiejs/extension-sdk/scene-v2').NixieComponentJsonValueV1> = {};
     const unset: string[] = [];
     const claimed = new Set<string>();
     const movingSockets = sockets(moved, matrix, projection);
@@ -489,7 +489,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
                 eligible.push({ entityId: target.entityId, id: target.socket.name, position: power ? [target.world[0], target.world[1], 0] : target.world, target });
             }
         }
-        const selected = !gesture || gesture.snappingEnabled ? selectNixieExperimentalConnectionTargetV1({
+        const selected = !gesture || gesture.snappingEnabled ? selectNixieConnectionTargetV1({
             point: gesture ? [gesture.worldPoint.x, gesture.worldPoint.y, power ? 0 : gesture.worldPoint.z ?? moving.world[2]] : [moving.world[0] + (rigidTranslation?.[0] ?? 0), moving.world[1] + (rigidTranslation?.[1] ?? 0), power ? 0 : moving.world[2] + (rigidTranslation?.[2] ?? 0)],
             targets: eligible, maximumDistance: rigidTranslation ? 1 : SNAP_DISTANCE,
             ...(power && gesture ? { hoveredEntityIds: gesture.hoveredEntityIds } : {}),
@@ -595,8 +595,8 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
 }
 
 function finalizeFoxholeSceneV2TransformCore(
-    request: NixieExperimentalTransformFinalizeRequestV1,
-): NixieExperimentalTransformFinalizeResultV1 {
+    request: NixieTransformFinalizeRequestV1,
+): NixieTransformFinalizeResultV1 {
     const entities = request.context.entities;
     const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId
         ? entity : withFoxholeSceneV2TransformProposal(entity, request.transform)));
@@ -722,7 +722,7 @@ function finalizeFoxholeSceneV2TransformCore(
         }
     }
 
-    const operations: NixieExperimentalComponentOperationV1[] = [];
+    const operations: NixieComponentOperationV1[] = [];
     const finalizedEntities = entities.map(entity => {
         if (!movingIds.has(entity.entityId)) return entity;
         const parent = entities.find(candidate => candidate.entityId === parentId(entity));
@@ -732,7 +732,7 @@ function finalizeFoxholeSceneV2TransformCore(
         return withFoxholeSceneV2TransformProposal(entity, { x: local[0], y: local[1] }, local[2]);
     });
     const finalizedMatrices = worldMatrices(finalizedEntities, moved.entityId, { ...request.transform, x, y });
-    const connectorPatches = new Map<string, NixieExperimentalComponentJsonObjectV1>();
+    const connectorPatches = new Map<string, NixieComponentJsonObjectV1>();
     for (const member of finalizedEntities.filter(entity => movingIds.has(entity.entityId))) {
         for (const [id, patch] of carriedConnectorPatches(member, finalizedEntities, finalizedMatrices, sockets(member, finalizedMatrices.get(member.entityId)!))) {
             // Selected connectors already share the rigid movement.
@@ -777,7 +777,7 @@ function finalizeFoxholeSceneV2TransformCore(
 }
 
 /** A changed asset/modification can retire sockets while its entity identity remains stable. */
-function reconcileStructureAttachments(request: NixieExperimentalTransformFinalizeRequestV1) {
+function reconcileStructureAttachments(request: NixieTransformFinalizeRequestV1) {
     const entities = request.context.entities;
     const worldSockets = new Map(entities.map(entity => [entity.entityId, sockets(entity, localMatrix(entity))]));
     const knownMetadata = new Set(entities.filter(entity => assetMetadata(entity) !== null).map(entity => entity.entityId));
@@ -790,7 +790,7 @@ function reconcileStructureAttachments(request: NixieExperimentalTransformFinali
         // Missing context/catalog data cannot prove a relationship invalid.
         return !source || !target || compatible(source, target) > 0;
     };
-    const operations: NixieExperimentalComponentOperationV1[] = [];
+    const operations: NixieComponentOperationV1[] = [];
     const cleaned = entities.map(entity => ({ ...entity, components: entity.components.map(candidate => {
         if (candidate.ownerId !== FOXHOLE_OWNER_ID) {
             return candidate;
@@ -830,8 +830,8 @@ function reconcileStructureAttachments(request: NixieExperimentalTransformFinali
 }
 
 export function finalizeFoxholeSceneV2Transform(
-    request: NixieExperimentalTransformFinalizeRequestV1,
-): NixieExperimentalTransformFinalizeResultV1 {
+    request: NixieTransformFinalizeRequestV1,
+): NixieTransformFinalizeResultV1 {
     const moved = request.context.entities.find(entity => entity.entityId === request.entityId);
     if (!moved || connectorComponent(moved) || !assetMetadata(moved)) {
         return finalizeFoxholeSceneV2TransformCore(request);

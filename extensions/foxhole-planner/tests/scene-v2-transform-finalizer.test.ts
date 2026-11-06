@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
 import { isFoxholePowerSocketConnectionAvailable } from '../src/power-socket-capacity.ts';
 
@@ -14,7 +14,7 @@ test('power capacity counts endpoint records rather than distinct connector IDs 
     assert.equal(isFoxholePowerSocketConnectionAvailable({ ...options, movingConnectorNodeId: 'line-a' }), true);
 });
 
-function pipe(id: string, startX: number): NixieExperimentalComponentEntitySnapshotV1 {
+function pipe(id: string, startX: number): NixieComponentEntitySnapshotV1 {
     const entity = structure(id, 0);
     entity.components.splice(1, 2, { ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true,
         data: { foxholeKey: 'facilitypipe', startX, startY: 0, startRotation: 0, endX: 300, endY: 0, endRotation: Math.PI,
@@ -276,7 +276,7 @@ test('moving a structure preserves its attached connector and carries the endpoi
     assert.equal(result.transaction!.operations.some(operation => operation.entityId === 'target'), false);
 });
 
-function structure(entityId: string, x: number): NixieExperimentalComponentEntitySnapshotV1 {
+function structure(entityId: string, x: number): NixieComponentEntitySnapshotV1 {
     return {
         entityId,
         revision: 0,

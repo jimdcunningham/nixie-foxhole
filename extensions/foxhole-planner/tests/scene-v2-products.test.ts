@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../src/scene-v2-products.ts';
 import foxholeSceneV2Assets from '../src/scene-v2-assets-node.ts';
-import { parseNixieExperimentalProductResultV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieProductResultV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { createFoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';
@@ -95,7 +95,7 @@ test('every provider page is bounded and all published items create portable ico
     const items = [];
     let total = 1;
     for (let offset = 0; offset < total; offset += 50) {
-        const result = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({
+        const result = parseNixieProductResultV1(listFoxholeSceneV2Products({
             contractVersion: 1, query: '', offset, limit: 50,
         }));
         total = result.total;
@@ -158,7 +158,7 @@ test('published names retain code-name search aliases and production capability 
 test('upgrade filtering exposes owner-local modification products without duplicating recipe bodies', () => {
     const query = { contractVersion: 1 as const, query: 'tripod factory', offset: 0, limit: 50,
         settings: { 'foxhole.assets.filter.upgrades': true, 'foxhole.assets.filter.showPreviousTiers': true } };
-    const result = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products(query));
+    const result = parseNixieProductResultV1(listFoxholeSceneV2Products(query));
     const upgrade = result.items.find(item => item.product.id.startsWith('upgrade.facilityfactoryammo.'));
     assert.ok(upgrade);
     const selections = upgrade.product.components.find(component => component.componentId === 'modification')?.data.selections;
@@ -173,10 +173,10 @@ test('3D-ready filtering pages every product with a packaged model binding', () 
     const query = { contractVersion: 1 as const, query: '', offset: 0, limit: 100,
         settings: { 'foxhole.assets.filter.3dReady': true, 'foxhole.assets.filter.showPreviousTiers': true,
             'foxhole.assets.filter.upgrades': true } };
-    const first = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products(query));
+    const first = parseNixieProductResultV1(listFoxholeSceneV2Products(query));
     const items = [...first.items];
     for (let offset = first.items.length; offset < first.total!; offset += query.limit) {
-        const page = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ ...query, offset }));
+        const page = parseNixieProductResultV1(listFoxholeSceneV2Products({ ...query, offset }));
         assert.ok(page.items.length > 0 && page.items.length <= query.limit);
         items.push(...page.items);
     }

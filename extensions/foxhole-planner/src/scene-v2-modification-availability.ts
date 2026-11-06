@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalInspectorRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieInspectorRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2ModificationSlotMetadata, FoxholeSceneV2ModificationVariantMetadata } from './scene-v2-asset-metadata.ts';
 import { computeModificationSlotConnectionMask, isSocketConnectionMaskSatisfied, toSocketConnectionMask } from './modification-connection-mask.ts';
 import { isFoxholeModificationSlotTierEligible } from './modification-tier.ts';
@@ -6,11 +6,11 @@ import { resolveConnectorEndpointSocketNames } from './connector-behavior.ts';
 
 const OWNER = 'nixie.foxhole-planner';
 
-function data(entity: NixieExperimentalComponentEntitySnapshotV1, id: string) {
+function data(entity: NixieComponentEntitySnapshotV1, id: string) {
     return entity.components.find(component => component.ownerId === OWNER && component.componentId === id)?.data;
 }
 
-function socketNode(entity: NixieExperimentalComponentEntitySnapshotV1, assets: Readonly<Record<string, FoxholeSceneV2AssetMetadata>>) {
+function socketNode(entity: NixieComponentEntitySnapshotV1, assets: Readonly<Record<string, FoxholeSceneV2AssetMetadata>>) {
     const spline = data(entity, 'spline-connector');
     const key = data(entity, 'asset')?.assetId ?? spline?.foxholeKey;
     if (typeof key !== 'string' || !Object.hasOwn(assets, key)) {
@@ -38,7 +38,7 @@ function socketNode(entity: NixieExperimentalComponentEntitySnapshotV1, assets: 
     return { nodeId: entity.entityId, buildSockets: asset.overlaySockets ?? asset.buildSockets, socketAttachments, asset };
 }
 
-export function buildFoxholeInspectorModificationAvailability(request: NixieExperimentalInspectorRequestV1,
+export function buildFoxholeInspectorModificationAvailability(request: NixieInspectorRequestV1,
     assets: Readonly<Record<string, FoxholeSceneV2AssetMetadata>>) {
     const subject = socketNode(request.subject, assets);
     const related = (request.related?.entities ?? []).flatMap(entity => {

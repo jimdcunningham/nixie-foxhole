@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalSpatialNodeV1, NixieExperimentalSpatialPlanV1, NixieExperimentalSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieSpatialNodeV1, NixieSpatialPlanV1, NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { trenchLayerQuad } from './trench-connector.ts';
@@ -6,11 +6,11 @@ import type { TrenchEndpoint } from './trench-connector.ts';
 import { trenchWallPieces, trenchFloorPolygon, clipPiece, intervalPieces, nativePiece, offsetEndpoint, pieceFrame, stripPieces, trenchRoofPolygon } from './trench-connector-pieces.ts';
 import type { TrenchPiece, TrenchPieceFrame } from './trench-connector-pieces.ts';
 /** Native V1 pieces and independently rotated handles, with the actual source mesh/materials. */
-export function renderSpatialTrench(entity: NixieExperimentalComponentEntitySnapshotV1, data: FoxholeSceneV2SplineConnectorData & {
+export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data: FoxholeSceneV2SplineConnectorData & {
     startZ?: number;
     endZ?: number;
-    endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1;
-}, asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, unknown>> = {}): NixieExperimentalSpatialPlanV1 | undefined {
+    endpointBindings?: NixieSpatialEndpointBindingsV1;
+}, asset: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string, unknown>> = {}): NixieSpatialPlanV1 | undefined {
     const profile = asset.model?.pathProfile;
     if (!asset.model || !profile)
         return undefined;
@@ -107,7 +107,7 @@ export function renderSpatialTrench(entity: NixieExperimentalComponentEntitySnap
         group.instances.push({ distance: t * length3, rotation: heading - angle, offset: [ox * c + oy * s, -ox * s + oy * c, 0] });
     }
     const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points: [start.x, start.y, data.startZ ?? 0, end.x, end.y, data.endZ ?? 0], ...(data.endpointBindings ? { endpointBindings: data.endpointBindings } : {}) };
-    const nodes: NixieExperimentalSpatialNodeV1[] = [];
+    const nodes: NixieSpatialNodeV1[] = [];
     for (const group of groups.values())
         for (const meshIndex of profile.parts[group.frame.id]!.meshIndices ?? [profile.parts[group.frame.id]!.meshIndex]) {
             nodes.push({ ...common, id: 'trench-piece-' + nodes.length, meshIndex, sourceOrigin: [0, 0, 0], instances: group.instances,

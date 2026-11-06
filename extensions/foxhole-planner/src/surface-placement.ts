@@ -1,5 +1,5 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalTransformFinalizeRequestV1 as Request,
-    NixieExperimentalTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
+    NixieTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { parseNixieExperimentalProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieSceneV2ComponentHost } from '../../../../nixie/desktop-extensions/scene-v2-component-host.ts';
 import { NIXIE_SCENE_V2_CORE_COMPONENTS, NIXIE_SCENE_V2_CORE_OWNER_ID } from '../../../../nixie/desktop-extensions/scene-v2-core-components.ts';
 import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
@@ -74,7 +74,7 @@ test('all filtered upgrade products satisfy the real core/owner schemas and keep
     let total = 1;
     let upgrades = 0;
     for (let offset = 0; offset < total; offset += 50) {
-        const page = parseNixieExperimentalProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query: '', offset, limit: 50, settings }));
+        const page = parseNixieProductResultV1(listFoxholeSceneV2Products({ contractVersion: 1, query: '', offset, limit: 50, settings }));
         total = page.total;
         for (const item of page.items) {
             assert.equal(ids.has(item.product.id), false, item.product.id);

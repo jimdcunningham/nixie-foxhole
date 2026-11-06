@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '../src/scene-v2-assets-node.ts';
 import { isFoxholeBunkerSpotlightLayer, resolveFoxholeBunkerSpotlightLights } from '../src/bunker-spotlights.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
@@ -11,7 +11,7 @@ import { resolveFoxholeStructureRenderLane, shouldShowFoxholeStructureRenderLaye
 const poweredNight = { 'foxhole.ranges.nighttime': true, 'foxhole.ranges.poweredSpotlights': true };
 const eligible = ['rifleait2', 'rifleait3', 'mgait2', 'mgait3', 'atgunait2', 'atgunait3'];
 const render = (assetId: string, settings: Record<string, boolean>, appearance: { destroyed?: boolean; packaged?: boolean; blueprint?: boolean; } = {}) => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: assetId, revision: 1, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: assetId, revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true, data: appearance },

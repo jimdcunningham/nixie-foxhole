@@ -31,8 +31,8 @@ import { renderFoxholeConnectorGuides } from './scene-v2-connector-guides.ts';
 import { renderFoxholeConnectorSocketOverlays, renderFoxholeConnectorSpatialMarkers } from './scene-v2-connector-socket-overlays.ts';
 import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers } from './scene-v2-socket-overlays.ts';
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalEntityRendererContextV1,
+    NixieComponentEntitySnapshotV1,
+    NixieEntityRendererContextV1,
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderPlanV1,
 } from '@nixiejs/extension-sdk/scene-v2';
@@ -114,7 +114,7 @@ interface FoxholeSceneV2Appearance {
 }
 
 function readFoxholeSceneV2Appearance(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
 ): FoxholeSceneV2Appearance {
     const appearance = entity.components.find(component => (
         component.ownerId === 'nixie.foxhole-planner'
@@ -199,7 +199,7 @@ function applyFoxholeSceneV2Appearance(
 }
 
 function selectedFoxholeSceneV2Modifications(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     assetMetadata: FoxholeSceneV2AssetMetadata,
 ): ResolvedFoxholeSceneV2Modification[] {
     const modification = entity.components.find(component => (
@@ -224,7 +224,7 @@ function selectedFoxholeSceneV2Modifications(
     return filterFoxholeSameWallInfrastructureSelections(assetMetadata.modifications, validSelections);
 }
 
-export function resolveFoxholeSceneV2HitboxFrame(entity: NixieExperimentalComponentEntitySnapshotV1, assetId: string,
+export function resolveFoxholeSceneV2HitboxFrame(entity: NixieComponentEntitySnapshotV1, assetId: string,
     asset: FoxholeSceneV2AssetMetadata) {
     const appearance = readFoxholeSceneV2Appearance(entity);
     const visual = resolveFoxholeSceneV2Visual(assetId, asset, appearance);
@@ -240,11 +240,11 @@ export function resolveFoxholeSceneV2HitboxFrame(entity: NixieExperimentalCompon
 }
 
 function renderFoxholeSceneV2Asset(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     assetId: string,
     assetMetadata: FoxholeSceneV2AssetMetadata,
     settings: Record<string, boolean> = {},
-    entities: readonly NixieExperimentalComponentEntitySnapshotV1[] = [],
+    entities: readonly NixieComponentEntitySnapshotV1[] = [],
 ): NixieExtensionRenderNodeV1[] {
     const appearance = readFoxholeSceneV2Appearance(entity);
     const modifications = selectedFoxholeSceneV2Modifications(entity, assetMetadata);
@@ -388,8 +388,8 @@ function renderFoxholeSceneV2Asset(
     return renderFoxholeContactShadows([...poleLamp, ...(useLayers && !shouldCompositeFoxholeStructureBaseTexture(layers) ? [] : [base]), ...pallet, ...bodyLayers, ...overlays, ...glow], assetMetadata.contactShadows);
 }
 
-function renderBreachIndicators(entity: NixieExperimentalComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,
-    context: NixieExperimentalEntityRendererContextV1): NixieExtensionRenderNodeV1[] {
+function renderBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,
+    context: NixieEntityRendererContextV1): NixieExtensionRenderNodeV1[] {
     const appearance = readFoxholeSceneV2Appearance(entity);
     if (context.settings?.['foxhole.structure.breachIndicators'] !== true || appearance.destroyed || appearance.packaged) {
         return [];
@@ -420,7 +420,7 @@ function renderBreachIndicators(entity: NixieExperimentalComponentEntitySnapshot
     });
 }
 
-export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieExperimentalComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata) {
+export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata) {
     const appearance = readFoxholeSceneV2Appearance(entity);
     const modifications = !appearance.destroyed && !appearance.packaged ? selectedFoxholeSceneV2Modifications(entity, assetMetadata) : [];
     const replacement = !appearance.destroyed && !appearance.packaged ? modifications.find(entry => entry.variant.isUpgrade)?.variant : undefined;
@@ -457,8 +457,8 @@ export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieExp
 }
 
 export function renderFoxholeSceneV2Entity(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
-    context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
+    entity: NixieComponentEntitySnapshotV1,
+    context: NixieEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
     const hoverEnabled = context.settings?.['foxhole.structure.hideRoofsOnHover'] === true
         && context.settings?.['foxhole.structure.hideRoofs'] !== true;
@@ -529,8 +529,8 @@ export function renderFoxholeSceneV2Entity(
 }
 
 function renderFoxholeSceneV2EntityPlan(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
-    context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
+    entity: NixieComponentEntitySnapshotV1,
+    context: NixieEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
     const settings: Record<string, boolean> = Object.fromEntries(Object.entries(context.settings ?? {}).flatMap(([id, value]) => typeof value === 'boolean' ? [[id, value]] : []));
     const renderScale = context.viewport?.renderScale ?? 1;
@@ -833,7 +833,7 @@ function renderFoxholeSceneV2EntityPlan(
     };
 }
 
-function resolveStructureOccupiedTags(entity: NixieExperimentalComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata, entities: readonly NixieExperimentalComponentEntitySnapshotV1[]) {
+function resolveStructureOccupiedTags(entity: NixieComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata, entities: readonly NixieComponentEntitySnapshotV1[]) {
     const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
     const occupiedKeys = new Set<string>();

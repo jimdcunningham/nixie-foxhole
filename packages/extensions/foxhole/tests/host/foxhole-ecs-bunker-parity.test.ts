@@ -9,10 +9,10 @@ import { isFoxholeBunkerUnionMember } from '../../app/plugins/foxhole/nixie/stru
 import { buildFoxholeBunkerHealthSummary } from '../../app/plugins/foxhole/nixie/bunker-health.ts';
 import { buildFoxholeBunkerDestructionSummary } from '../../app/plugins/foxhole/nixie/bunker-destruction.ts';
 import { deduplicateFoxholeBuildSockets as nativeSockets } from '../../app/plugins/foxhole/nixie/structure-socket-resolution.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
-const entity = (entityId: string, assetId: string, attachments: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }> = []): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId, revision: 1,
+const entity = (entityId: string, assetId: string, attachments: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }> = []): NixieComponentEntitySnapshotV1 => ({ entityId, revision: 1,
     components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1, definitionAvailable: true, data: { attachments } }] });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatNixieExperimentalPanelReportV1 } from '@nixiejs/extension-sdk';
+import { formatNixiePanelReportV1 } from '@nixiejs/extension-sdk';
 import { buildFoxholeStatsExportCsvRows, buildFoxholeStatsExportListText,
     FOXHOLE_STATS_EXPORT_SECTION_IDS, FOXHOLE_STATS_EXPORT_SECTION_LABELS } from '../../../../../extensions/foxhole-planner/src/statistics-export-formats.ts';
 import type { FoxholeStatsExportScopePayload } from '../../../../../extensions/foxhole-planner/src/statistics-export-formats.ts';
@@ -26,7 +26,7 @@ test('host list/CSV report formatting preserves the bundled seven-section export
                 rows: buildFoxholeStatsExportCsvRows({ ...options, sectionIds: [id] }).slice(1),
             })) };
         for (const sectionIds of [FOXHOLE_STATS_EXPORT_SECTION_IDS, ['production', 'bunkerDestruction'] as const, ['cost'] as const]) {
-            const formatted = formatNixieExperimentalPanelReportV1(report, sectionIds);
+            const formatted = formatNixiePanelReportV1(report, sectionIds);
             assert.equal(formatted.listText, nativeList({ ...options, sectionIds }));
             assert.equal(formatted.csvText, nativeCsv({ ...options, sectionIds }));
         }

@@ -1,6 +1,6 @@
 import type { SceneSnapshotV1, SelectionSnapshotV1 } from '@nixiejs/extension-sdk';
-import { decodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { decodeNixieSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets, { productionRecipesById, bunkerDestructionWeapons } from '#foxhole-scene-v2-assets';
 import { aggregateFoxholeEcsProduction, FOXHOLE_STATISTICS_INTERVALS } from './production-statistics.ts';
 import { aggregateFoxholeEcsResources } from './resource-statistics.ts';
@@ -40,7 +40,7 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
         throw new Error('Complete scene statistics are unavailable.');
     }
     const entities = scene.nodes.map(node => {
-        const entity = decodeNixieExperimentalSceneV2SnapshotNodeV1(node);
+        const entity = decodeNixieSceneV2SnapshotNodeV1(node);
         if (!entity) {
             throw new Error('This scene does not provide supported entity data.');
         }
@@ -68,7 +68,7 @@ export function readSceneStatistics(scene: SceneSnapshotV1, selection: Selection
         }
         return false;
     };
-    const data = (entity: NixieExperimentalComponentEntitySnapshotV1, componentId: string) => entity.components.find(component =>
+    const data = (entity: NixieComponentEntitySnapshotV1, componentId: string) => entity.components.find(component =>
         component.ownerId === ownerId && component.componentId === componentId && component.definitionAvailable)?.data;
     const hasSelectedStructure = selectionEnabled && selected.size > 0 && entities.some(entity => {
         const assetId = data(entity, 'asset')?.assetId;

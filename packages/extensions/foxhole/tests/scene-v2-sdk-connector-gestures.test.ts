@@ -14,7 +14,7 @@ import { finalizeFoxholeSceneV2Transform } from '../../../../extensions/foxhole-
 import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
 import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
-import type { NixieExperimentalGeometryGestureV1 } from '@nixiejs/extension-sdk';
+import type { NixieGeometryGestureV1 } from '@nixiejs/extension-sdk';
 
 test('Planner placement and endpoint gestures run through the SDK without the Nuxt integration', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
@@ -72,7 +72,7 @@ test('Planner placement and endpoint gestures run through the SDK without the Nu
     for (const id of ['plant', 'pole']) assert.ok(runtime.entities.find(e => e.entityId === id)!.components.find(c => c.componentId === 'socket-attachments')?.data.attachments?.length);
     const originalTransform = line.components.find(c => c.componentId === 'transform')!.data;
     const updates = buildNixieSceneV2EditableHandleUpdates(line, 'end', { x: 600, y: 50 }, false, definitions)!;
-    const gesture: NixieExperimentalGeometryGestureV1 = { phase: 'preview', handleId: 'end', snappingEnabled: true,
+    const gesture: NixieGeometryGestureV1 = { phase: 'preview', handleId: 'end', snappingEnabled: true,
         worldPoint: { x: 650, y: 100, z: 0 }, hoveredEntityIds: ['other'] };
     const before = runtime.exportDocument();
     const dragged = await runtime.previewEntityComponentsFinalized(updates.map(u => ({ ...u, entityId: 'line' })), 'line', 'transform', gesture);

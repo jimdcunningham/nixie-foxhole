@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
 import * as PIXI from 'pixi.js';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1, NixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import {
     registerNixieSceneV2RenderPresentationAdapter,
     prepareNixieSceneV2RenderPresentation,
@@ -54,7 +54,7 @@ test('presentation annotations stay visible without enlarging authored bounds', 
 });
 
 test('older structure range plans retain Native fallback drawing and visibility', async () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'artillery', revision: 0, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'artillery', revision: 0, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'artilleryait1' } },
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true, data: { rotation: 0.4 } },
@@ -98,7 +98,7 @@ test('older structure range plans retain Native fallback drawing and visibility'
 });
 
 test('private presentation is owner-qualified, resolves extension nodes and awaits its drawing', async () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'shape', revision: 4, components: [] };
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'shape', revision: 4, components: [] };
     const plan: NixieExtensionRenderPlanV1 = { schemaVersion: 1, root: { id: 'root', kind: 'group', children: [{ id: 'label', kind: 'group', children: [] }] } };
     let release!: () => void;
     const ready = new Promise<void>(resolve => {
@@ -138,7 +138,7 @@ test('private presentation is owner-qualified, resolves extension nodes and awai
 });
 
 test('spline presentation owns Native selection guides and refreshes their colors without rewriting geometry', async () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'wall', revision: 2, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'wall', revision: 2, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true,
             data: { foxholeKey: 'wallsplinet1', startX: -224, startY: -192, startRotation: 0,
                 endX: -64, endY: -192, endRotation: 0, minLength: 96, maxLength: 320, minRadius: 1, maxRadius: 1, maxBuffer: 0.32, curveT: 0 } },
@@ -168,7 +168,7 @@ test('spline presentation owns Native selection guides and refreshes their color
 
 test('connected pipeline retains free side indicators and all-socket occupancy without altering authored geometry', async context => {
     context.mock.method(PIXI.CanvasTextMetrics, 'measureText', () => ({ width: 80, height: 16 }));
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'pipe', revision: 3, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'pipe', revision: 3, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true,
             data: { foxholeKey: 'facilitypipe', startX: 0, startY: 0, startRotation: -Math.PI / 2,
                 endX: 0, endY: -200.08, endRotation: Math.PI / 2, startSocketName: 'BackSocket', endSocketName: 'FrontSocket',
@@ -202,7 +202,7 @@ test('connected pipeline retains free side indicators and all-socket occupancy w
 
 test('Scene V2 Range uses SDK presentation, geometry, and inspector state in Studio', () => {
     const range = { ...DEFAULT_FOXHOLE_RANGE_STATE, points: [0, 0, 60, 0], rotation: 0.25 };
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'range', revision: 7, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'range', revision: 7, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'range', version: 1, definitionAvailable: true, data: { ...range } },
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true,
             data: { x: 140, y: 150, rotation: 0.25, scaleX: 1, scaleY: 1 } },
@@ -221,7 +221,7 @@ test('Scene V2 Range uses SDK presentation, geometry, and inspector state in Stu
 test('tactical presentation retains Native cap order and full-world scaling without materializing duplicate decorations', async () => {
     const data = { ...DEFAULT_FOXHOLE_TACTICAL_LINE_STATE, points: [0, 0, 192, 0], curveMode: 'polyline' as const,
         decoratorMode: 'none' as const, startCap: 'none' as const, endCap: 'arrow' as const, strokeWidth: 3 };
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'tactical', revision: 0, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'tactical', revision: 0, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'tactical-line', version: 1, definitionAvailable: true, data: { ...data } },
     ] };
     const plan: NixieExtensionRenderPlanV1 = { schemaVersion: 1,
@@ -248,7 +248,7 @@ test('tactical presentation retains Native cap order and full-world scaling with
 test('structure all-socket labels retain Native names, occupancy and upright rotation', async context => {
     context.mock.method(PIXI.CanvasTextMetrics, 'measureText', () => ({ width: 90, height: 16 }));
     const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === 'facilitypowerdiesel')!;
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'diesel', revision: 2, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'diesel', revision: 2, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: structure.id } },
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true, data: { rotation: Math.PI } },
@@ -281,7 +281,7 @@ test('structure presentation retains native socket placement, occupancy, setting
         return this;
     });
     const structure = getFoxholeManifest('/foxhole/assets/').assets.find(asset => asset.id === 'facilitypowerdiesel')!;
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'diesel', revision: 5, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'diesel', revision: 5, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: structure.id } },
         { ownerId: 'nixie.core', componentId: 'transform', version: 1, definitionAvailable: true,
@@ -330,7 +330,7 @@ test('structure presentation retains native socket placement, occupancy, setting
 });
 
 test('SDK ground range groups survive the Native compatibility adapter', () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'garrison', revision: 0, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'garrison', revision: 0, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'mgait2' } },
     ] };
@@ -359,7 +359,7 @@ test('SDK structure sockets and connector guides survive private compatibility w
     for (const all of [false, true]) for (const key of ['facilitypowerdiesel', 'facilitypipe', 'facilitypipeunderground', 'powerline', 'railtrackspline', 'waterwallsplinet1']) {
         const data = key === 'facilitypowerdiesel' ? { catalogId: 'foxhole.structures', assetId: key }
             : createFoxholeSceneV2SplineProductData(key, assets[key]!.connector!);
-        const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: key, revision: 0, components: [
+        const entity: NixieComponentEntitySnapshotV1 = { entityId: key, revision: 0, components: [
             { ownerId, componentId: key === 'facilitypowerdiesel' ? 'asset' : 'spline-connector', version: 1, definitionAvailable: true, data },
         ] };
         const settings = { 'foxhole.debug.structure.allSockets': all, 'foxhole.debug.structure.powerSockets': all,

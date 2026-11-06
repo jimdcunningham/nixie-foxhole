@@ -1,11 +1,11 @@
 import {
-    parseNixieExperimentalComponentProductV1,
-    validateNixieExperimentalComponentDataV1,
+    parseNixieComponentProductV1,
+    validateNixieComponentDataV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 
-type NixieExperimentalComponentJsonObjectV1 = import('@nixiejs/extension-sdk/scene-v2').NixieExperimentalComponentJsonObjectV1;
-type NixieExperimentalComponentProductV1 = import('@nixiejs/extension-sdk/scene-v2').NixieExperimentalComponentProductV1;
+type NixieComponentJsonObjectV1 = import('@nixiejs/extension-sdk/scene-v2').NixieComponentJsonObjectV1;
+type NixieComponentProductV1 = import('@nixiejs/extension-sdk/scene-v2').NixieComponentProductV1;
 type NixieExtensionManifestV1 = import('@nixiejs/extension-sdk').NixieExtensionManifestV1;
 
 export const FOXHOLE_COMPONENT_OWNER_ID = 'nixie.foxhole-planner';
@@ -41,7 +41,7 @@ function requireFoxholeManifest(value: unknown): NixieExtensionManifestV1 {
 /** Resolves the canonical facility template from the extension manifest. */
 export function getFoxholeFacilityProductV1(
     manifestValue: unknown,
-): NixieExperimentalComponentProductV1 {
+): NixieComponentProductV1 {
     const manifest = requireFoxholeManifest(manifestValue);
     const product = manifest.contributes.experimentalProducts?.find(candidate => (
         candidate.id === FOXHOLE_FACILITY_PRODUCT_ID
@@ -49,7 +49,7 @@ export function getFoxholeFacilityProductV1(
     if (!product) {
         throw new Error(`The extension manifest does not declare ${FOXHOLE_FACILITY_PRODUCT_ID}.`);
     }
-    return parseNixieExperimentalComponentProductV1(product);
+    return parseNixieComponentProductV1(product);
 }
 
 /**
@@ -60,20 +60,20 @@ export function getFoxholeFacilityProductV1(
 export function createFoxholeFacilityProductionProductV1(
     manifestValue: unknown,
     input: FoxholeFacilityProductionInputV1,
-): NixieExperimentalComponentProductV1 {
+): NixieComponentProductV1 {
     const manifest = requireFoxholeManifest(manifestValue);
     const product = getFoxholeFacilityProductV1(manifest);
     const definitions = new Map(
         (manifest.contributes.experimentalComponents?.components ?? []).map(definition => [definition.id, definition]),
     );
-    const dataByComponent = new Map<string, NixieExperimentalComponentJsonObjectV1>([
+    const dataByComponent = new Map<string, NixieComponentJsonObjectV1>([
         [FOXHOLE_MODIFICATION_COMPONENT_ID, { selections: input.selections ?? [] }],
         [FOXHOLE_PRODUCTION_ORDER_COMPONENT_ID, {
             orders: input.orders ?? [],
             ...(input.disabled === undefined ? {} : { disabled: input.disabled }),
         }],
     ]);
-    return parseNixieExperimentalComponentProductV1({
+    return parseNixieComponentProductV1({
         ...product,
         components: product.components.map(component => {
             const nextData = dataByComponent.get(component.componentId) ?? component.data;
@@ -83,7 +83,7 @@ export function createFoxholeFacilityProductionProductV1(
             }
             return {
                 ...component,
-                data: validateNixieExperimentalComponentDataV1(definition.schema, nextData),
+                data: validateNixieComponentDataV1(definition.schema, nextData),
             };
         }),
     });

@@ -2,11 +2,11 @@ import { localizedFoxholeCatalog, foxholeLocalization } from './catalog-localiza
 import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters } from './maintenance-supply.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import type {
-    NixieExperimentalComponentProductTemplateV1,
-    NixieExperimentalProductQueryV1,
-    NixieExperimentalProductResultV1,
-    NixieExperimentalProductPresentationV1,
-    NixieExperimentalProductDetailCellV1,
+    NixieComponentProductTemplateV1,
+    NixieProductQueryV1,
+    NixieProductResultV1,
+    NixieProductPresentationV1,
+    NixieProductDetailCellV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import { productionRecipesById } from '#foxhole-scene-v2-assets';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
@@ -68,7 +68,7 @@ function formatDuration(seconds: number): string {
     return minutes ? `${minutes}m${remainder ? ` ${remainder}s` : ''}` : `${remainder}s`;
 }
 
-function productDetails(assetId: string, selections: AssetProductEntry['selections'], dictionary: Record<string, FoxholeSceneV2AssetMetadata>): Pick<NixieExperimentalProductPresentationV1, 'details'> {
+function productDetails(assetId: string, selections: AssetProductEntry['selections'], dictionary: Record<string, FoxholeSceneV2AssetMetadata>): Pick<NixieProductPresentationV1, 'details'> {
     const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     const recipes = Object.values(productionRecipesById).filter(recipe => recipe.sourceStructureId === assetId
         && (selections?.length ? selections.some(selection => selection.variantId === recipe.sourceVariantId) : recipe.sourceVariantId === null));
@@ -98,7 +98,7 @@ function productDetails(assetId: string, selections: AssetProductEntry['selectio
     }
     const hasPower = rows.some(row => row.power !== 0);
     const hasDuration = rows.some(row => row.duration != null && row.duration > 0);
-    const resourceCell = (entries: ReturnType<typeof resources>, showLabels: boolean): NixieExperimentalProductDetailCellV1 => entries.length
+    const resourceCell = (entries: ReturnType<typeof resources>, showLabels: boolean): NixieProductDetailCellV1 => entries.length
         ? { resources: entries, showLabels, tone: showLabels ? 'success' : 'danger' } : { text: 'â€”', tone: 'muted' };
     return { details: { title: 'Production', columns: [{ label: 'Inputs', compact: true }, 'Outputs',
         ...(hasPower ? [{ label: 'Power', compact: true, align: 'center' as const }] : []),
@@ -158,8 +158,8 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
 }
 
 export function listFoxholeSceneV2Products(
-    query: NixieExperimentalProductQueryV1,
-): NixieExperimentalProductResultV1 {
+    query: NixieProductQueryV1,
+): NixieProductResultV1 {
     const { assets, upgrades, dictionary } = catalogForQuery(query.settings, query.locale);
     const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     const needle = query.query.toLocaleLowerCase();
@@ -173,7 +173,7 @@ export function listFoxholeSceneV2Products(
         contractVersion: 1,
         total: filtered.length,
         items: filtered.slice(query.offset, query.offset + query.limit).map(({ assetId, metadata, productId, selections }) => {
-            const product: NixieExperimentalProductResultV1['items'][number]['product'] = metadata.isItem
+            const product: NixieProductResultV1['items'][number]['product'] = metadata.isItem
                 ? {
                     contractVersion: 1,
                     id: productId ?? `asset.${assetId}`,
@@ -216,28 +216,28 @@ export function listFoxholeSceneV2Products(
                             componentId: 'maintenance-supply',
                             version: 1,
                             data: { ...normalizeFoxholeMaintenanceFilters(undefined) },
-                        } satisfies NixieExperimentalComponentProductTemplateV1]
+                        } satisfies NixieComponentProductTemplateV1]
                         : []), ...(metadata.buildSockets.length
                         ? [{
                             ownerId: 'nixie.foxhole-planner',
                             componentId: 'socket-attachments',
                             version: 1,
                             data: { attachments: [] },
-                        } satisfies NixieExperimentalComponentProductTemplateV1]
+                        } satisfies NixieComponentProductTemplateV1]
                         : []), ...(metadata.cargo
                         ? [{
                             ownerId: 'nixie.foxhole-planner',
                             componentId: 'cargo',
                             version: 1,
                             data: { items: [] },
-                        } satisfies NixieExperimentalComponentProductTemplateV1]
+                        } satisfies NixieComponentProductTemplateV1]
                         : []), ...(metadata.supportsProduction
                         ? [{
                             ownerId: 'nixie.foxhole-planner',
                             componentId: 'production-order',
                             version: 1,
                             data: { orders: [] },
-                        } satisfies NixieExperimentalComponentProductTemplateV1]
+                        } satisfies NixieComponentProductTemplateV1]
                         : [])],
                 };
             product.exchange = { ownerId: 'nixie.foxhole-planner', componentId: 'asset',

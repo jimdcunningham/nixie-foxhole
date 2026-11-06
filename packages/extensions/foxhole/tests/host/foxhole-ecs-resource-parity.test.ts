@@ -6,7 +6,7 @@ import { getFoxholeStructureCatalog } from '../../app/plugins/foxhole/nixie/cata
 import { resolveFoxholeStructureLiquidCapacity, resolveFoxholeLiquidCapacityKind, accumulateFoxholeLiquidCapacity, createEmptyFoxholeLiquidCapacityBreakdown } from '../../app/plugins/foxhole/nixie/liquid-capacity.ts';
 import { resolveFoxholePowerDeltaMw, accumulateFoxholeFacilityPower, createEmptyFoxholeFacilityPowerBreakdown } from '../../app/plugins/foxhole/nixie/facility-power.ts';
 import { resolveFoxholeMaintenanceSupplyDrain, resolveFoxholeMaintenanceSuppliesForInterval } from '../../app/plugins/foxhole/nixie/maintenance-supplies.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 
 const catalog = getFoxholeStructureCatalog('/foxhole/assets/');
 const quantities = (source: Record<string, { quantity: number; }>) => Object.fromEntries(Object.entries(source).map(([id, resource]) => [id, resource.quantity]));
@@ -25,7 +25,7 @@ test('SDK structure and modification costs match the bundled resolved catalog', 
 });
 
 test('ECS liquid, power, maintenance and construction totals match bundled scope rules', () => {
-    const entities: NixieExperimentalComponentEntitySnapshotV1[] = catalog.assets.map(asset => ({ entityId: asset.foxholeKey, revision: 1,
+    const entities: NixieComponentEntitySnapshotV1[] = catalog.assets.map(asset => ({ entityId: asset.foxholeKey, revision: 1,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId: asset.foxholeKey } },
             { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,
                 data: { selections: asset.modificationSlots.flatMap(slot => slot.variants[0] ? [{ slotId: slot.id, variantId: slot.variants[0].id }] : []) } }] }));

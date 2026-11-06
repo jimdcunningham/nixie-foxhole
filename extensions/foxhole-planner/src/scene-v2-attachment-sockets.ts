@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2BuildSocketMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
@@ -6,7 +6,7 @@ import { resolveFoxholeEntityStructureSockets } from './effective-structure-sock
 import { resolveFoxholeConnectorDisplaySockets } from './scene-v2-connector-socket-overlays.ts';
 
 /** Attached connectors target the same deformed sockets as their visible endpoint/side markers. */
-export function resolveFoxholeEntityAttachmentSockets(entity: NixieExperimentalComponentEntitySnapshotV1,
+export function resolveFoxholeEntityAttachmentSockets(entity: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata | null | undefined): FoxholeSceneV2BuildSocketMetadata[] {
     const templates = resolveFoxholeEntityStructureSockets(entity, asset);
     const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'

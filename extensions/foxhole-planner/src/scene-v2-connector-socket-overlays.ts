@@ -1,4 +1,4 @@
-import type { NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieExtensionRenderNodeV1, NixieSpatialMarkerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveConnectorBehavior, requiresStraightConnectorSocketAlignment } from './connector-behavior.ts';
@@ -88,7 +88,7 @@ function visibleConnectorSockets(data: FoxholeSceneV2SplineConnectorData, asset:
 }
 
 export function renderFoxholeConnectorSpatialMarkers(data: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number; },
-    asset: FoxholeSceneV2AssetMetadata | undefined, attachments: unknown, settings: Readonly<Record<string, boolean>>): NixieExperimentalSpatialMarkerV1[] {
+    asset: FoxholeSceneV2AssetMetadata | undefined, attachments: unknown, settings: Readonly<Record<string, boolean>>): NixieSpatialMarkerV1[] {
     return visibleConnectorSockets(data, asset, attachments, settings).slice(0, 128).map((entry, index) => ({
         id: `connector-socket-${index}`, point: [entry.x, entry.y, entry.endpoint === 'start' ? data.startZ ?? 0
             : entry.endpoint === 'end' ? data.endZ ?? 0 : ((data.startZ ?? 0) + (data.endZ ?? 0)) / 2],

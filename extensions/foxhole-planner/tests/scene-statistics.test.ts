@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeNixieExperimentalSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { encodeNixieSceneV2SnapshotNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { readSceneStatistics, readStatisticsPreferences } from '../src/scene-statistics.ts';
 
 test('Planner summary counts typed owned assets and configured orders from complete ECS snapshots', () => {
     const ownerId = 'nixie.foxhole-planner';
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'factory', revision: 3, components: [
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'factory', revision: 3, components: [
         { ownerId, componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId: 'facilityfactoryammo' } },
         { ownerId, componentId: 'production-order', version: 1, definitionAvailable: true, data: { orders: [{ id: 'one', recipeId: 'ammo', cycles: 2 }] } },
     ] };
-    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: 1, truncated: false, nodes: [encodeNixieExperimentalSceneV2SnapshotNodeV1(entity)] };
+    const scene = { protocolVersion: 1 as const, surface: 'scene-v2' as const, totalCount: 1, truncated: false, nodes: [encodeNixieSceneV2SnapshotNodeV1(entity)] };
     const selection = { protocolVersion: 1 as const, totalCount: 0, truncated: false, nodes: [] };
     assert.equal(readSceneStatistics(scene, selection, 'selection').scope, 'scene');
     assert.equal(readSceneStatistics(scene, selection, 'auto').scope, 'layer');
@@ -19,7 +19,7 @@ test('Planner summary counts typed owned assets and configured orders from compl
     assert.deepEqual(readSceneStatistics(scene, selection, 'scene').metrics, { 'Entities': 1, 'Assets': 1, 'Connectors': 0, 'Planning Shapes': 0, 'Configured Orders': 1 });
     assert.throws(() => readSceneStatistics({ ...scene, totalCount: 2 }, selection), /Complete scene/);
     entity.components[1]!.definitionAvailable = false;
-    assert.throws(() => readSceneStatistics({ ...scene, nodes: [encodeNixieExperimentalSceneV2SnapshotNodeV1(entity)] }, selection, 'scene'), /unresolved/);
+    assert.throws(() => readSceneStatistics({ ...scene, nodes: [encodeNixieSceneV2SnapshotNodeV1(entity)] }, selection, 'scene'), /unresolved/);
 });
 
 test('statistics consume only declared owner-local saved panel preferences', () => {

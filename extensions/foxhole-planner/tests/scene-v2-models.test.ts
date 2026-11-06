@@ -9,7 +9,7 @@ import { bindFoxholeSceneV2Models, getFoxholeSceneV2PackagedModelPath, isFoxhole
 import spatialPolicy from '../src/scene-v2-model-policy.json' with { type: 'json' };
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { validateNixieExperimentalComponentDataV1 } from '@nixiejs/extension-sdk';
+import { validateNixieComponentDataV1 } from '@nixiejs/extension-sdk';
 import fullModelBundle from '../../../packages/extensions/foxhole/public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
 import catalog from '../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json' with { type: 'json' };
 import { modelArtifactBounds, readModelArtifact } from './helpers/model-artifact-bounds.ts';
@@ -39,7 +39,7 @@ for (const assetId of spatialAssetIds) {
         const model = item.product.components.find(component => component.componentId === 'model')!;
         const manifest = createCatalogRuntimeManifest(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')), productCatalog, catalogPin);
         const definition = manifest.contributes.experimentalComponents!.components.find((component: { id: string; }) => component.id === 'model')!;
-        validateNixieExperimentalComponentDataV1(definition.schema, model.data);
+        validateNixieComponentDataV1(definition.schema, model.data);
         assert.equal(model.ownerId, 'nixie.foxhole-planner');
         assert.equal(model.data.resourceId, `foxhole.model.${assetId}`);
         assert.deepEqual(item.product.components.find(component => component.componentId === 'asset')!.data,

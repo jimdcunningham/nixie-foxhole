@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { parseNixieExtensionManifestV1, resolveNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
+import { parseNixieExtensionManifestV1, resolveNixieResourceV1 } from '@nixiejs/extension-sdk';
 import maps from '../src/scene-v2-map-data-node.ts';
 import {catalog} from '../build/catalog-node.ts';
 const foxholeMapResources = catalog.sharedResources.filter(row => row.id.startsWith('map.')).map(row => ({...row, id: 'foxhole.map.' + row.id.slice(4)}));
@@ -16,7 +16,7 @@ test('all catalog map resources resolve through the declared texture template', 
     assert.equal(maps.regions.reduce((total, region) => total + region.staticIcons.length, 0), 135);
     assert.equal(new Set(foxholeMapResources.map(resource => resource.path)).size, foxholeMapResources.length);
     for (const resource of foxholeMapResources) {
-        assert.equal(resolveNixieExperimentalResourceV1(manifest.contributes.experimentalResources ?? [],
+        assert.equal(resolveNixieResourceV1(manifest.contributes.experimentalResources ?? [],
             manifest.contributes.experimentalResourceTemplates ?? [], resource.id)?.path, resource.path, resource.id);
         assert.match(resource.path, /^maps\/[a-z0-9/._-]+\.webp$/);
         assert.match(resource.sha256, /^[a-f0-9]{64}$/);

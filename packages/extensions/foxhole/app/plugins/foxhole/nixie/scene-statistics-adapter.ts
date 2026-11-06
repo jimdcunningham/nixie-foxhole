@@ -1,10 +1,10 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { BoardNodeSnapshot } from '#nixie/plugins/nixie/board/types/node.ts';
 import { foxholeSceneV2StateAdapter } from './scene-v2-state-adapter.ts';
 
 /** Detached inputs for the existing Statistics UI. No live V1 board is created. */
 export function projectFoxholeSceneStatistics(
-    entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
+    entities: readonly NixieComponentEntitySnapshotV1[],
     selectedIds: readonly string[],
     activeLayerId: string | null,
 ): { scene: BoardNodeSnapshot[]; selection: BoardNodeSnapshot[]; layer: BoardNodeSnapshot[]; } {

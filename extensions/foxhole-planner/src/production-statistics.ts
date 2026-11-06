@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieComponentJsonObjectV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 export interface FoxholePublishedProductionEntry {
     duration?: number | null; d?: number | null;
@@ -62,7 +62,7 @@ export function resolveFoxholeSdkProductionOrderLimit(assetId: string, configure
         : singleOrderStructures.has(assetId.toLowerCase()) ? 1 : 5;
 }
 
-export function aggregateFoxholeEcsProduction(entities: readonly NixieExperimentalComponentEntitySnapshotV1[],
+export function aggregateFoxholeEcsProduction(entities: readonly NixieComponentEntitySnapshotV1[],
     assets: Readonly<Record<string, { production?: FoxholeStatisticsStructure; }>>, recipes: Readonly<Record<string, FoxholeStatisticsRecipe>>, intervalSeconds: number) {
     if (!Number.isFinite(intervalSeconds) || intervalSeconds < 0) {
         throw new Error('The production interval is invalid.');
@@ -106,7 +106,7 @@ export function aggregateFoxholeEcsProduction(entities: readonly NixieExperiment
                 : [])
             : [];
         const configured = Array.isArray(production?.orders)
-            ? production.orders.filter((value): value is NixieExperimentalComponentJsonObjectV1 =>
+            ? production.orders.filter((value): value is NixieComponentJsonObjectV1 =>
                 value !== null && typeof value === 'object' && !Array.isArray(value) && typeof value.recipeId === 'string' && !!value.recipeId.trim()).slice(0, limit)
             : [];
         let structurePower: number | null = null;

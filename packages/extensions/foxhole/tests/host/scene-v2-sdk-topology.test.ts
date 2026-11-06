@@ -4,7 +4,7 @@ import type { TestContext } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { hostSourceUrl } from '../host-source-url.mjs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
 import { NixieSceneV2ViewSession } from '../../../../nixie/app/utils/nixie-scene-v2-view-session.ts';
 import { configureNixieSceneV2AuthoringIsolation, isNixieSceneV2AuthoringIsolated } from '../../../../nixie/app/utils/nixie-scene-v2-authoring-isolation.ts';
@@ -108,9 +108,9 @@ function fixture(context: TestContext, snapping = true) {
     }
     function inspect(id: string) {
         const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
-        const request = projectNixieExperimentalInspectorSubjectV1(entity(id), ownerId, provider);
+        const request = projectNixieInspectorSubjectV1(entity(id), ownerId, provider);
         const result = inspectFoxholeSceneV2Structure(request);
-        validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
         return result;
     }
     function pauseFinalizers() {

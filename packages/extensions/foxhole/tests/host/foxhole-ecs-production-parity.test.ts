@@ -5,7 +5,7 @@ import assets, { productionRecipesById } from '../../../../../extensions/foxhole
 import { getFoxholeManifest } from '../../app/plugins/foxhole/nixie/manifest.ts';
 import { getFoxholeProductionIndex } from '../../app/plugins/foxhole/nixie/production/index.ts';
 import { aggregateFoxholeProduction } from '../../app/plugins/foxhole/nixie/production/aggregation.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExperimentalComponentJsonObjectV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1, NixieComponentJsonObjectV1 } from '@nixiejs/extension-sdk';
 
 const manifest = getFoxholeManifest('/foxhole/assets/');
 const index = getFoxholeProductionIndex('/foxhole/assets/');
@@ -28,13 +28,13 @@ test('ECS production totals match bundled calculations across the complete catal
         productionOrders: Object.values(index.recipeById).filter(recipe => recipe.sourceStructureId === asset.id && !recipe.id.startsWith('build:'))
             .map((recipe, position) => ({ recipeId: recipe.id, cycles: position % 2 === 0 ? 3 : null, parent: false })),
         modificationVariantIds: Object.fromEntries(Object.values(asset.modifications).flatMap(slot => Object.keys(slot.variants).map((variantId, position) => [`${slot.name}:${position}`, variantId]))) } }));
-    const entities: NixieExperimentalComponentEntitySnapshotV1[] = nativeNodes.map(node => ({ entityId: node.nodeId, revision: 1, components: [
+    const entities: NixieComponentEntitySnapshotV1[] = nativeNodes.map(node => ({ entityId: node.nodeId, revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true, data: { assetId: node.state.foxholeKey } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'production-order', version: 1, definitionAvailable: true,
             data: { orders: node.state.productionOrders.map((order, position) => ({ id: String(position), recipeId: order.recipeId, parent: order.parent,
                 ...(order.cycles === null ? {} : { cycles: order.cycles }) })) } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,
-            data: { selections: Object.entries(node.state.modificationVariantIds).map(([slotId, variantId]) => ({ slotId, variantId })) } as NixieExperimentalComponentJsonObjectV1 },
+            data: { selections: Object.entries(node.state.modificationVariantIds).map(([slotId, variantId]) => ({ slotId, variantId })) } as NixieComponentJsonObjectV1 },
     ] }));
     const before = structuredClone(entities);
     for (const intervalSeconds of [30, 900, 3600, 259200]) {

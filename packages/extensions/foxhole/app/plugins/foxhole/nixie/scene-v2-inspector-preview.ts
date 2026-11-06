@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2RenderPreview, NixieSceneV2StateAdapter } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { previewNixieSceneV2EditableHandleUpdates } from '#nixie/utils/nixie-scene-v2-editable-handles.ts';
 import { activeNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
@@ -12,7 +12,7 @@ import type { FoxholeSceneV2AssetMetadata } from '../../../../../../../extension
 import { readFoxholePreviewAsset } from '../../../utils/scene-v2-preview-assets.ts';
 
 const OWNER = 'nixie.foxhole-planner';
-export function buildFoxholeSceneV2RenderPreview(entity: NixieExperimentalComponentEntitySnapshotV1,
+export function buildFoxholeSceneV2RenderPreview(entity: NixieComponentEntitySnapshotV1,
     hover: FoxholeModificationHoverPreviewState | null, settings: Readonly<Record<string, boolean>>,
     metadata: FoxholeSceneV2AssetMetadata | undefined, adapter: Pick<NixieSceneV2StateAdapter, 'project' | 'patch'>): NixieSceneV2RenderPreview | null {
     if (!hover || !metadata || !isStructureModificationHoverPreviewTarget(hover, entity.entityId)) {
@@ -78,8 +78,8 @@ export function buildFoxholeSceneV2RenderPreview(entity: NixieExperimentalCompon
 
 let lastHover: FoxholeModificationHoverPreviewState | null = null;
 let lastSettings: Readonly<Record<string, boolean>> | undefined;
-let cache = new WeakMap<NixieExperimentalComponentEntitySnapshotV1, { metadata: unknown; preview: NixieSceneV2RenderPreview | null; }>();
-export function resolveFoxholeSceneV2RenderPreview(entity: NixieExperimentalComponentEntitySnapshotV1,
+let cache = new WeakMap<NixieComponentEntitySnapshotV1, { metadata: unknown; preview: NixieSceneV2RenderPreview | null; }>();
+export function resolveFoxholeSceneV2RenderPreview(entity: NixieComponentEntitySnapshotV1,
     settings: Readonly<Record<string, boolean>>, adapter: Pick<NixieSceneV2StateAdapter, 'project' | 'patch'>): NixieSceneV2RenderPreview | null {
     const hover = activeNixieStructureModificationHoverPreview.value;
     if (!isStructureModificationHoverPreviewTarget(hover, entity.entityId)) {

@@ -1,5 +1,5 @@
-import type { NixieExperimentalSpatialNodeV1, NixieExperimentalSpatialPlanV1,
-    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieSpatialNodeV1, NixieSpatialPlanV1,
+    NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { resolveMeshConfigIntervalMarkerDistances } from './interval-marker-distances.ts';
 import { resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';
@@ -8,7 +8,7 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 
 /** The same authored path and interval rules as the planar presentation, using actual mesh prototypes. */
 export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number;
-    endpointBindings?: NixieExperimentalSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata): NixieExperimentalSpatialPlanV1 | undefined {
+    endpointBindings?: NixieSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata): NixieSpatialPlanV1 | undefined {
     const profile = asset?.model?.pathProfile;
     if (!asset?.model || !profile) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
@@ -19,7 +19,7 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     const distance3D = (distance: number) => Math.max(0, Math.min(length, distance / path.totalLength * length));
     const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points,
         ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) };
-    const nodes: NixieExperimentalSpatialNodeV1[] = [];
+    const nodes: NixieSpatialNodeV1[] = [];
     const span = (id: string, role: string, extra = {}) => {
         const part = profile.parts[role];
         if (part) nodes.push({ ...common, id, meshIndex: part.meshIndex, ...extra });

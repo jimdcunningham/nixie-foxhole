@@ -1,8 +1,8 @@
-import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieDocumentRenderRequestV1, NixieDocumentRenderResultV1, NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
 
 const CELL = 125 * 32;
-export function renderFoxholePlanningGrid(request: NixieExperimentalDocumentRenderRequestV1): NixieExperimentalDocumentRenderResultV1 {
+export function renderFoxholePlanningGrid(request: NixieDocumentRenderRequestV1): NixieDocumentRenderResultV1 {
     const root = { id: 'planning-grid', kind: 'group' as const, children: [] as NixieExtensionRenderNodeV1[] };
     const settings = request.settings, scale = request.viewport.renderScale;
     if (settings['foxhole.map.enabled'] !== true || settings['foxhole.map.grid'] !== true || scale >= 100) {

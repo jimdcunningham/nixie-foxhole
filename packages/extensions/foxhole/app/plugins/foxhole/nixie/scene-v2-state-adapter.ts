@@ -1,7 +1,7 @@
 import { activeNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
 import { readFoxholePreviewAssetsVersion } from '../../../utils/scene-v2-preview-assets.ts';
 import { resolveFoxholeSceneV2RenderPreview } from './scene-v2-inspector-preview.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk';
 import type { NixieSceneV2StateAdapter, NixieSceneV2PlacementContext } from '#nixie/utils/nixie-scene-v2-state-adapter-registry.ts';
 import { convertFoxholeSceneV1NodeToV2 } from './scene-v2-conversion.ts';
 import { getPolylineEditableLocalHandles, movePolylineLocalVertex } from '#nixie/plugins/nixie/board/utils/polyline-editing.ts';
@@ -44,11 +44,11 @@ const NODE_COMPONENTS = {
     'spline-connector': 'foxholeSplineConnector',
 } as const;
 
-function data(entity: NixieExperimentalComponentEntitySnapshotV1, id: string) {
+function data(entity: NixieComponentEntitySnapshotV1, id: string) {
     return entity.components.find(component => component.ownerId === OWNER && component.componentId === id && component.definitionAvailable)?.data;
 }
 
-function editablePoints(entity: NixieExperimentalComponentEntitySnapshotV1) {
+function editablePoints(entity: NixieComponentEntitySnapshotV1) {
     for (const id of ['tactical-line', 'binocular-line']) {
         const line = data(entity, id);
         if (line && Array.isArray(line.points)) {
@@ -69,7 +69,7 @@ function attachment(value: Record<string, unknown>, prefix: 'start' | 'end') {
     return typeof nodeId === 'string' ? { nodeId, socketName: value[`${prefix}AttachmentSocketName`] } : null;
 }
 
-function editableSpline(entity: NixieExperimentalComponentEntitySnapshotV1) {
+function editableSpline(entity: NixieComponentEntitySnapshotV1) {
     if (!data(entity, 'spline-connector')) {
         return null;
     }
@@ -80,7 +80,7 @@ function editableSpline(entity: NixieExperimentalComponentEntitySnapshotV1) {
         maxArcAngleDeg: Number.isFinite(state.maxArcAngleDeg) ? state.maxArcAngleDeg : connector?.maxArcAngleDeg };
 }
 
-function project(entity: NixieExperimentalComponentEntitySnapshotV1) {
+function project(entity: NixieComponentEntitySnapshotV1) {
     const asset = data(entity, 'asset');
     const drawing = Object.entries(NODE_COMPONENTS).find(([id]) => data(entity, id));
     if (!asset && !drawing) {
@@ -141,7 +141,7 @@ function project(entity: NixieExperimentalComponentEntitySnapshotV1) {
     return { type, state };
 }
 
-function structureGeometry(entity: NixieExperimentalComponentEntitySnapshotV1) {
+function structureGeometry(entity: NixieComponentEntitySnapshotV1) {
     const asset = data(entity, 'asset');
     if (asset?.catalogId !== 'foxhole.structures' || typeof asset.assetId !== 'string') {
         return null;
@@ -164,7 +164,7 @@ function structureGeometry(entity: NixieExperimentalComponentEntitySnapshotV1) {
         manifest: catalog.structureByKey[destroyed && structure.destroyedStructureId ? structure.destroyedStructureId : asset.assetId] };
 }
 
-function resolveEndpointSocketSnap(entity: NixieExperimentalComponentEntitySnapshotV1,
+function resolveEndpointSocketSnap(entity: NixieComponentEntitySnapshotV1,
     state: ReturnType<typeof normalizeFoxholeSplineConnectorState>, role: 'start' | 'end',
     point: { x: number; y: number; }, context?: NixieSceneV2PlacementContext) {
     const matrix = context?.worldTransforms.get(entity.entityId);

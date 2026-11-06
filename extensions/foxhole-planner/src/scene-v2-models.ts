@@ -1,6 +1,6 @@
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import spatialPolicy from './scene-v2-model-policy.json' with { type: 'json' };
-import { parseNixieExperimentalModelPartsV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieModelPartsV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 export function readFoxholeSpatialPathProfile(value: unknown): FoxholeSpatialPathProfile | undefined {
     if (value === undefined) return undefined;
@@ -73,7 +73,7 @@ const sharedModelId = /^shared\.[a-f0-9]{64}$/;
 
 function modelDependencies(value: unknown): string[] {
     if (value === undefined) return [];
-    return [...new Set(parseNixieExperimentalModelPartsV1(value).parts.map(part => {
+    return [...new Set(parseNixieModelPartsV1(value).parts.map(part => {
         const id = part.resourceId.replace(/^foxhole\.model\./, '');
         if (!sharedModelId.test(id) || part.resourceId !== `foxhole.model.${id}`) {
             throw new Error('Invalid Foxhole shared model dependency.');

@@ -1,7 +1,7 @@
 import { getNixieExtensionProductCatalog } from '#nixie/utils/nixie-extension-product-catalog.ts';
 import { FOXHOLE_COMPLETE_CATALOG_SETTINGS as allSettings } from './sdk-catalog-settings.ts';
 import { createNixieIconAssetSnapshot } from '#nixie/plugins/nixie/contributions/assets/shared/icon-asset.ts';
-import type { NixieExperimentalComponentProductV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentProductV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { createFoxholeAssetIdentityResolver } from '../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
 import { getFoxholeManifest } from '../plugins/foxhole/nixie/manifest.ts';
 import { foxholeSceneV2StateAdapter } from '../plugins/foxhole/nixie/scene-v2-state-adapter.ts';
@@ -33,7 +33,7 @@ export async function lookupFoxholeSdkCatalogReference(sourceId: string, assetId
     if (!canonical) {
         return null;
     }
-    const matches = (product: NixieExperimentalComponentProductV1) => {
+    const matches = (product: NixieComponentProductV1) => {
         const asset = product.components.find(component => component.ownerId === OWNER && component.componentId === 'asset');
         if (asset?.data.assetId !== canonical) {
             return false;
@@ -47,7 +47,7 @@ export async function lookupFoxholeSdkCatalogReference(sourceId: string, assetId
             : product.id === `asset.${canonical}`;
     };
     return { query: canonical, settings: allSettings, matches,
-        ...(destroyed ? { adapt: (product: NixieExperimentalComponentProductV1) => {
+        ...(destroyed ? { adapt: (product: NixieComponentProductV1) => {
             const next = structuredClone(product);
             const appearance = next.components.find(component => component.ownerId === OWNER && component.componentId === 'appearance');
             if (appearance) {
@@ -59,7 +59,7 @@ export async function lookupFoxholeSdkCatalogReference(sourceId: string, assetId
         } } : {}) };
 }
 
-export async function createFoxholeSdkCatalogSnapshot(product: NixieExperimentalComponentProductV1, label: string,
+export async function createFoxholeSdkCatalogSnapshot(product: NixieComponentProductV1, label: string,
     position: { x: number; y: number; z?: number; }) {
     const entity = { entityId: crypto.randomUUID(), revision: 1,
         components: product.components.map(component => ({ ...component, definitionAvailable: true })) };

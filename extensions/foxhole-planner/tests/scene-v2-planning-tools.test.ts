@@ -1,22 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { parseNixieExtensionManifestV1, validateNixieExperimentalComponentDataV1 } from '@nixiejs/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExtensionRenderNodeV1, NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieExtensionManifestV1, validateNixieComponentDataV1 } from '@nixiejs/extension-sdk';
+import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieExtensionRenderNodeV1, NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { inspectFoxholeSceneV2PlanningPath } from '../src/scene-v2-inspector.ts';
 import { FOXHOLE_TACTICAL_PRESET_CHOICES, FOXHOLE_TACTICAL_PRESET_FIELDS } from '../src/tactical-line-presets.ts';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
-function subject(id: string, points: number[]): NixieExperimentalComponentEntitySnapshotV1 {
+function subject(id: string, points: number[]): NixieComponentEntitySnapshotV1 {
     const tool = manifest.contributes.experimentalProductTools!.find(entry => entry.id === `planning.${id}`)!;
     const product = manifest.contributes.experimentalProducts!.find(entry => entry.id === tool.productId)!;
     const definition = manifest.contributes.experimentalComponents!.components.find(entry => entry.id === id)!;
     const components = product.components.map(component => ({ ...component, definitionAvailable: true,
         data: { ...component.data, [definition.geometryPropertyId ?? 'points']: points } }));
     for (const component of components) {
-        validateNixieExperimentalComponentDataV1(definition.schema, component.data);
+        validateNixieComponentDataV1(definition.schema, component.data);
     }
     return { entityId: 'planning-fixture', revision: 1, components };
 }
@@ -45,9 +45,9 @@ test('planning Inspectors hide fixed measurement scale and internal preset ident
     for (const id of ['range', 'binocular-line', 'tactical-line', 'triangulation']) {
         const entity = subject(id, id === 'triangulation' ? [0, 0, 320, 0, 0, 320] : [0, 0, 320, 0]);
         const provider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === id)!;
-        const request = projectNixieExperimentalInspectorSubjectV1(entity, manifest.id, provider);
+        const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
         const result = inspectFoxholeSceneV2PlanningPath(request);
-        validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
         assert.deepEqual(result.components[0]!.fields.find(field => field.path[0] === (id === 'tactical-line' ? 'presetId' : 'meterPixels')),
             { path: [id === 'tactical-line' ? 'presetId' : 'meterPixels'], hidden: true });
         assert.equal(result.components[0]!.fields.some(field => field.path[0] === 'strokeColor'), false);
@@ -57,9 +57,9 @@ test('planning Inspectors hide fixed measurement scale and internal preset ident
 test('tactical preset choices reset all styling fields together and preserve authored vertices', () => {
     const entity = subject('tactical-line', [0, 0, 160, -80, 320, 0]);
     const provider = manifest.contributes.experimentalInspectorProviders!.find(entry => entry.id === 'tactical-line')!;
-    const request = projectNixieExperimentalInspectorSubjectV1(entity, manifest.id, provider);
+    const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
     const result = inspectFoxholeSceneV2PlanningPath(request);
-    validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
     const choices = result.components[0]!.fields.find(field => field.path.length === 0)!.choices!;
     assert.deepEqual(choices.valuePropertyIds, FOXHOLE_TACTICAL_PRESET_FIELDS);
     assert.equal(choices.options.length, 5);
@@ -68,7 +68,7 @@ test('tactical preset choices reset all styling fields together and preserve aut
         assert.deepEqual(Object.keys(preset.value), FOXHOLE_TACTICAL_PRESET_FIELDS);
         assert.equal(typeof preset.value.strokeDashLength, 'number');
         assert.equal(typeof preset.value.strokeDashGap, 'number');
-        const styled: NixieExperimentalComponentEntitySnapshotV1 = { ...entity,
+        const styled: NixieComponentEntitySnapshotV1 = { ...entity,
             components: entity.components.map(component => ({ ...component, data: { ...component.data, ...preset.value } })) };
         assert.deepEqual(styled.components[0]!.data.points, entity.components[0]!.data.points);
         assert.ok(nodes(renderFoxholeSceneV2Entity(styled).root).some(node => node.kind === 'graphics' && node.commands.length > 3));

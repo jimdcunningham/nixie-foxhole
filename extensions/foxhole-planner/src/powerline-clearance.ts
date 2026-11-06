@@ -1,6 +1,6 @@
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalEntityRendererContextV1,
+    NixieComponentEntitySnapshotV1,
+    NixieEntityRendererContextV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import {
     resolveFoxholeSceneV2WorldMatrices,
@@ -12,16 +12,16 @@ import { foxholeFootprintPolygons, foxholeLineTouchesPolygon } from './scene-v2-
 
 const DEFAULT_POWERLINE_CLEARANCE = 3.2;
 
-function componentData(entity: NixieExperimentalComponentEntitySnapshotV1, ownerId: string, componentId: string) {
+function componentData(entity: NixieComponentEntitySnapshotV1, ownerId: string, componentId: string) {
     return entity.components.find(component => component.ownerId === ownerId && component.componentId === componentId
         && component.definitionAvailable)?.data;
 }
 
 /** Find authored building footprints touched by the power line outside its two attached hosts. */
 export function findFoxholePowerlineObstructions(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     data: FoxholeSceneV2SplineConnectorData,
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
     metadata: Record<string, FoxholeSceneV2AssetMetadata>,
 ): string[] {
     if (data.foxholeKey !== 'powerline') {

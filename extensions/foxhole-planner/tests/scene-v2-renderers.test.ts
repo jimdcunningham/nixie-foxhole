@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { FOXHOLE_STRUCTURE_RENDER_LANES } from '../src/render-lanes.ts';
 import { renderFoxholeSceneV2TacticalLine } from '../src/scene-v2-tactical-lines.ts';
@@ -59,7 +59,7 @@ test('Bowhead grouped cargo renders exact vehicle, structure and resource icons 
 test('intersection socket sides render approach pieces and retain concrete corner transitions', () => {
     for (const tier of [1, 2, 3]) {
         for (const side of ['Back', 'Front', 'Left', 'Right']) {
-            const subject: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'intersection', revision: 1, components: [
+            const subject: NixieComponentEntitySnapshotV1 = { entityId: 'intersection', revision: 1, components: [
                 { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
                     definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: `trenchintt${tier}` } },
                 { ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1,
@@ -89,7 +89,7 @@ test('intersection mods render all four sides and T3 roof respects Hide Roofs', 
             const selections = ['BackDefenseModSlot', 'FrontDefenseModSlot',
                 'LeftMiddleDefenseModSlot', 'RightMiddleDefenseModSlot'].map(slotId => ({ slotId, variantId }));
             if (tier === 3) selections.push({ slotId: 'BPTrenchRoofModSlot', variantId: 'trenchroof' });
-            const subject: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'intersection', revision: 1, components: [
+            const subject: NixieComponentEntitySnapshotV1 = { entityId: 'intersection', revision: 1, components: [
                 { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
                     definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: `trenchintt${tier}` } },
                 { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1,
@@ -195,7 +195,7 @@ test('Foxhole renderer respects layer settings and V1 breach classification', ()
 });
 
 test('ladder renders in the roof lane and disappears with Hide Roofs', () => {
-    const subject: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'bunker', revision: 1, components: [
+    const subject: NixieComponentEntitySnapshotV1 = { entityId: 'bunker', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
             definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: 'fortt3' } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1,
@@ -209,7 +209,7 @@ test('ladder renders in the roof lane and disappears with Hide Roofs', () => {
 
 test('trench berms and barbed wire render above other trench visuals in Scene V2', () => {
     for (const variantId of ['sandbags', 'barbedwire']) {
-        const subject: NixieExperimentalComponentEntitySnapshotV1 = { entityId: `trench-${variantId}`, revision: 1, components: [
+        const subject: NixieComponentEntitySnapshotV1 = { entityId: `trench-${variantId}`, revision: 1, components: [
             { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
                 definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: 'trencht2' } },
             { ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1,

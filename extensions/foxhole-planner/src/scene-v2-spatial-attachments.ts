@@ -1,5 +1,5 @@
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity, NixieExperimentalEntityRendererContextV1 as Context,
-    NixieExperimentalSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity, NixieEntityRendererContextV1 as Context,
+    NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
@@ -14,7 +14,7 @@ export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: F
     context: Context, metadata: Record<string, FoxholeSceneV2AssetMetadata>) {
     const entities = new Map(context.entities.map(entity => [entity.entityId, entity]));
     const projection = createFoxholeSpatialProjection(context.entities);
-    const endpointBindings: NixieExperimentalSpatialEndpointBindingsV1 = {};
+    const endpointBindings: NixieSpatialEndpointBindingsV1 = {};
     const result = { ...spline, startZ: 0, endZ: 0, endpointBindings };
     for (const prefix of ['start', 'end'] as const) {
         const subject = entities.get(String(spline[`${prefix}AttachmentNodeId`] ?? ''));

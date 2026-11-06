@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalEntityRendererContextV1,
+    NixieComponentEntitySnapshotV1,
+    NixieEntityRendererContextV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import {
     resolveFoxholeSceneV2ConnectorAttachments,
@@ -29,7 +29,7 @@ const metadata = {
     },
 };
 
-const connector: NixieExperimentalComponentEntitySnapshotV1 = {
+const connector: NixieComponentEntitySnapshotV1 = {
     entityId: 'connector',
     revision: 0,
     components: [{
@@ -41,7 +41,7 @@ const connector: NixieExperimentalComponentEntitySnapshotV1 = {
     }],
 };
 
-const target: NixieExperimentalComponentEntitySnapshotV1 = {
+const target: NixieComponentEntitySnapshotV1 = {
     entityId: 'target',
     revision: 0,
     components: [{
@@ -59,7 +59,7 @@ const target: NixieExperimentalComponentEntitySnapshotV1 = {
     }],
 };
 
-const context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [connector, target] };
+const context: NixieEntityRendererContextV1 = { contractVersion: 1, entities: [connector, target] };
 
 test('straight connector endpoints follow a linked target socket in connector-local space', () => {
     const resolved = resolveFoxholeSceneV2ConnectorAttachments(connector, {

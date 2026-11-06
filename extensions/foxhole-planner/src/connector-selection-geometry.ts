@@ -1,4 +1,4 @@
-import type { NixieExperimentalSelectionGeometryV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieSelectionGeometryV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveConnectorBehavior, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import { FOXHOLE_POWERLINE_CORE_WIDTH } from './powerline-stroke.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
@@ -32,8 +32,8 @@ function renderedPoints(nodes: readonly NixieExtensionRenderNodeV1[], asset?: Fo
 }
 
 export function resolveFoxholeConnectorSelectionGeometry(data: FoxholeSceneV2SplineConnectorData,
-    asset?: FoxholeSceneV2AssetMetadata, content: readonly NixieExtensionRenderNodeV1[] = []): NixieExperimentalSelectionGeometryV1 {
-    const geometry: NixieExperimentalSelectionGeometryV1 = { contractVersion: 1,
+    asset?: FoxholeSceneV2AssetMetadata, content: readonly NixieExtensionRenderNodeV1[] = []): NixieSelectionGeometryV1 {
+    const geometry: NixieSelectionGeometryV1 = { contractVersion: 1,
         transformOrigin: { x: (data.startX + data.endX) / 2, y: (data.startY + data.endY) / 2 } };
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
     const style = resolveConnectorVisualPathStyle(asset?.connector?.pathStyle, data.foxholeKey);

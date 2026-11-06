@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExperimentalDocumentRenderResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieDocumentRenderResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import maps from '../src/scene-v2-map-data-node.ts';
 import { renderFoxholePlanningMapIcons } from '../src/scene-v2-map-icons.ts';
 import { renderFoxholePlanningMap } from '../src/scene-v2-map-renderer.ts';
@@ -23,7 +23,7 @@ test('published static markers respect local categories/blacklists and settled z
         assert.ok(iconIndex >= 0 && labelIndex > iconIndex && nameIndex > labelIndex);
     }
     for (const scale of [0.5, 80, 349, 350, 2000]) {
-        assert.doesNotThrow(() => parseNixieExperimentalDocumentRenderResultV1(renderFoxholePlanningMap({
+        assert.doesNotThrow(() => parseNixieDocumentRenderResultV1(renderFoxholePlanningMap({
             contractVersion: 1, settings: { 'foxhole.map.enabled': true }, viewport: { renderScale: scale }, theme: 'dark' })));
     }
 });

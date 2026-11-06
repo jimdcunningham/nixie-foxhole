@@ -1,5 +1,5 @@
-import type { NixieExperimentalSpatialNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { parseNixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieSpatialNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSpatialConnector } from '../src/scene-v2-spatial-connectors.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -8,7 +8,7 @@ import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from '../src/scene-v2-spatial-attachments.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 import { FOXHOLE_POWERLINE_INVALID_COLOR } from '../src/powerline-stroke.ts';
 
@@ -98,9 +98,9 @@ test('underground pipe renders both rigid terminals at their authored endpoints 
     assert.ok(plan, 'a static single-model fallback cannot display the second terminal');
     assert.equal(plan.supplementModel, undefined, 'the static fallback must be replaced');
     assert.equal(plan.nodes.length, 2);
-    assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan), plan);
+    assert.deepEqual(parseNixieSpatialPlanV1(plan), plan);
     for (const [i, prefix] of ['start', 'end'].entries()) {
-        const node: NixieExperimentalSpatialNodeV1 = plan.nodes[i]!;
+        const node: NixieSpatialNodeV1 = plan.nodes[i]!;
         assert.equal(node.kind, 'model-path');
         if (node.kind !== 'model-path') continue;
         assert.equal(node.resourceId, assets.facilitypipeunderground!.model!.resourceId);
@@ -126,9 +126,9 @@ test('underground terminals keep independent heights, upright poses and endpoint
         endX: 500, endY: 230, endZ: 96, endRotation: -.5, endpointBindings: bindings };
     const before = structuredClone(resolved);
     const plan = renderFoxholeSpatialConnector(pipe, resolved, assets.facilitypipeunderground)!;
-    assert.deepEqual(parseNixieExperimentalSpatialPlanV1(plan), plan);
+    assert.deepEqual(parseNixieSpatialPlanV1(plan), plan);
     for (const [i, endpoint] of (['start', 'end'] as const).entries()) {
-        const node: NixieExperimentalSpatialNodeV1 = plan.nodes[i]!;
+        const node: NixieSpatialNodeV1 = plan.nodes[i]!;
         assert.ok(node.kind === 'model-path');
         assert.deepEqual(node.points.slice(0,3), [resolved[`${endpoint}X`], resolved[`${endpoint}Y`], resolved[`${endpoint}Z`]]);
         assert.equal(node.points[2], node.points[5], 'terminal pose must not tilt along the buried route');

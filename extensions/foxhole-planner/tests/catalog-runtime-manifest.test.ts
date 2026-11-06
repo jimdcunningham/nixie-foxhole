@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {createCatalogRuntimeManifest} from '../build/catalog-runtime-manifest.ts';
 test('generated catalogs bind stable base, variant, and shared model IDs without changing authored bytes', async () => {
     const original = await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8');
     const authored = parseNixieExtensionManifestV1(JSON.parse(original)), before = JSON.stringify(authored);
     const receipt = {sha256: 'a'.repeat(64), byteLength: 123};
-    const catalog = parseNixieExperimentalProductCatalogV1({catalogSchemaVersion: 1, assetRelease: 'v1', releaseRoot: 'planner/releases/v1/',
+    const catalog = parseNixieProductCatalogV1({catalogSchemaVersion: 1, assetRelease: 'v1', releaseRoot: 'planner/releases/v1/',
         resourceDefaults: {model: {pathTemplate: 'types/{assetGroup}/{id}/{id}.{variant}.glb', resourcePathTemplate: 'models/{id}.{variant}.glb', variant: 'base', mediaType: 'model/gltf-binary'}},
         products: [{id: 'powerpole', assetGroup: 'structures', resources: {model: [{...receipt, dependencies: ['shared.connector']}, {...receipt, variant: 'upgrade.coal'}]}}],
         sharedResources: [{id: 'shared.connector', path: 'shared/models/connector.glb', ...receipt, mediaType: 'model/gltf-binary'}]});

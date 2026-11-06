@@ -1,5 +1,5 @@
 import { resolveLegacyPlanSocketId } from './legacy-plan-socket-id-map.ts';
-import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieExperimentalSpatialMarkerV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1, NixieSpatialMarkerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveFoxholeEffectiveStructureSocketSources } from './effective-structure-sockets.ts';
 import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2ModificationVariantMetadata } from './scene-v2-asset-metadata.ts';
@@ -35,12 +35,12 @@ function resolveOccupiedSockets(asset: FoxholeSceneV2AssetMetadata,
 /** Use the same effective socket sources and visibility rules as the flat view, retaining authored height. */
 export function renderFoxholeSpatialSocketMarkers(asset: FoxholeSceneV2AssetMetadata,
     variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown,
-    settings: Readonly<Record<string, boolean>>, appearance: { destroyed: boolean; packaged: boolean; }): NixieExperimentalSpatialMarkerV1[] {
+    settings: Readonly<Record<string, boolean>>, appearance: { destroyed: boolean; packaged: boolean; }): NixieSpatialMarkerV1[] {
     if (appearance.destroyed || appearance.packaged) {
         return [];
     }
     const occupied = resolveOccupiedSockets(asset, variants, attachments);
-    const markers: NixieExperimentalSpatialMarkerV1[] = resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings).slice(0, 128).map((entry, index) => ({
+    const markers: NixieSpatialMarkerV1[] = resolveFoxholeStructureDisplaySockets(asset, variants, occupied, settings).slice(0, 128).map((entry, index) => ({
         id: `socket-${index}`, point: [entry.x, entry.y, Number(entry.socket.z ?? 0) * 0.32],
         color: entry.kind === 'power' ? FOXHOLE_POWER_SOCKET_COLOR : FOXHOLE_PIPE_SOCKET_COLORS[entry.flow], label: entry.socket.name.slice(0, 128),
     }));

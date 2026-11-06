@@ -6,7 +6,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { hostSourceUrl } from '../host-source-url.mjs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
-import { projectNixieExperimentalInspectorSubjectV1, validateNixieExperimentalInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
 import { configureNixieSceneV2AuthoringIsolation } from '../../../../nixie/app/utils/nixie-scene-v2-authoring-isolation.ts';
 import { registerNixieSceneV2StateAdapter } from '../../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
@@ -42,9 +42,9 @@ test('real Planner structures expose SDK inspection, edit, render and reload wit
     const inspection = buildNixieSceneV2ExtensionInspection(controller, entity.entityId)!;
     assert.ok(inspection.components.some(component => component.instance.componentId === 'appearance'));
     const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
-    const request = projectNixieExperimentalInspectorSubjectV1(entity, manifest.id, provider);
+    const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
     const result = inspectFoxholeSceneV2Structure(request);
-    validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
     const choice = result.components.find(component => component.componentId === 'appearance')!.fields.find(field => field.path.length === 0)!.choices!.options.find(option => typeof option.value === 'object' && option.value !== null && option.value.blueprint === true)!;
     assert.ok(choice, 'the SDK must supply the Blueprint workflow');
     const edited = controller.updateEntityComponents([{ entityId: entity.entityId, ownerId: manifest.id, componentId: 'appearance', set: choice.value as Record<string, boolean> }]);
@@ -85,9 +85,9 @@ test('isolated Planner appearance, supply, cargo and production edits persist th
     const provider = manifest.contributes.experimentalInspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
     const inspect = (id: string) => {
         const entity = controller.entities.find(candidate => candidate.entityId === id)!;
-        const request = projectNixieExperimentalInspectorSubjectV1(entity, manifest.id, provider);
+        const request = projectNixieInspectorSubjectV1(entity, manifest.id, provider);
         const result = inspectFoxholeSceneV2Structure(request);
-        validateNixieExperimentalInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
+        validateNixieInspectorResultV1(result, provider, manifest.contributes.experimentalComponents!.components, request);
         return result;
     };
     function edit(id: string, componentId: string, set: Record<string, unknown>, createIfMissing = false) {

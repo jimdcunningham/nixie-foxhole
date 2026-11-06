@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync, brotliDecompressSync, gunzipSync, constants} from 'node:zlib';
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 import {validateTarget, portablePath, fileHash} from '../scripts/asset-pack-publication.mjs';
 import {createBrowserAtlas} from './browser-atlas-images.ts';
 import {readCatalogSources} from './read-catalog-sources.mjs';
@@ -159,7 +159,7 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
         catalog.data = {...catalog.data, world: {indexResourcePath: worldIndex.path, contentRoot: target.prefix + '/world/', contentResources}};
     }
     catalog.data = {...catalog.data, privateFiles: Object.fromEntries(Object.entries(privateFiles).sort(([a], [b]) => a.localeCompare(b, 'en')))};
-    const normalized = parseNixieExperimentalProductCatalogV1(JSON.parse(JSON.stringify(catalog)));
+    const normalized = parseNixieProductCatalogV1(JSON.parse(JSON.stringify(catalog)));
     const decoded = Buffer.from(JSON.stringify(normalized));
     const documentReceipt = await snapshot('catalog.v1.json', decoded, 'application/json', 'indexes');
     const document = {url: new URL(objectPath(documentReceipt, 'application/json'), target.publicBaseUrl).href, ...documentReceipt};
@@ -174,5 +174,5 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
     const pin = {schemaVersion: 1, baseUrl: target.publicBaseUrl, catalog: document, completion: release};
     await fs.writeFile(path.join(directory, 'extension-pin.json'), JSON.stringify(pin, null, 2) + '\n', {flag: 'wx'});
     return {directory, planPath: path.join(directory, 'plan.json'), pin, products: normalized.products.length,
-        resources: resolveNixieExperimentalProductCatalogResourcesV1(normalized).assets.length, catalogBytes: decoded.length, omittedOptionalIcons: sources.omittedOptionalIcons ?? []};
+        resources: resolveNixieProductCatalogResourcesV1(normalized).assets.length, catalogBytes: decoded.length, omittedOptionalIcons: sources.omittedOptionalIcons ?? []};
 }

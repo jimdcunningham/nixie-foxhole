@@ -4,9 +4,9 @@ import assets from '../src/scene-v2-assets-node.ts';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { isFoxholeRoofRenderLayer } from '../src/structure-render-layer-visibility.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 
-const entity = (assetId: string): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: 'bunker', revision: 1, components: [
+const entity = (assetId: string): NixieComponentEntitySnapshotV1 => ({ entityId: 'bunker', revision: 1, components: [
     { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
         data: { catalogId: 'foxhole.structures', assetId } },
 ] });
@@ -100,7 +100,7 @@ test('roof hover resolves unqualified and generated bunker socket names across c
     middle.entityId = 'middle';
     last.entityId = 'last';
     foundation.entityId = 'foundation';
-    const attachments = (subject: NixieExperimentalComponentEntitySnapshotV1, links: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }>) => {
+    const attachments = (subject: NixieComponentEntitySnapshotV1, links: Array<{ localSocketName: string; targetEntityId: string; targetSocketName: string; }>) => {
         subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1,
             definitionAvailable: true, data: { attachments: links } });
     };

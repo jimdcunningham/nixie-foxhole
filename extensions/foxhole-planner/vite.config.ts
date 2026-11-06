@@ -3,7 +3,7 @@ import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {defineConfig, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieExperimentalProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
 import {publishCompletedBuild} from './build/completed-build-publisher.ts';
@@ -22,7 +22,7 @@ function catalogPlugin(): Plugin {
             const pin = await readCatalogPin();
             bytes = await readFile(inputFile);
             verifyCatalogInput(bytes, pin.catalog);
-            const catalog = parseNixieExperimentalProductCatalogV1(JSON.parse(bytes.toString('utf8')));
+            const catalog = parseNixieProductCatalogV1(JSON.parse(bytes.toString('utf8')));
             if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', pin.baseUrl).href !== pin.catalog.url) throw new Error('Catalog differs from its pinned asset release.');
             const authored = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('./nixie.extension.json', import.meta.url), 'utf8')));
             manifest = JSON.stringify(parseNixieExtensionManifestV1(createCatalogRuntimeManifest(authored, catalog, pin))) + '\n';

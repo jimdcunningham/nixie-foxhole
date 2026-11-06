@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '../src/scene-v2-assets-node.ts';
 import { resolveFoxholeEntityStructureSockets } from '../src/effective-structure-sockets.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const positions = { BackModSlot: [-299.42903, -147.27136, 180], FrontModSlot: [299.42903, 147.27136, 0],
     LeftModSlot: [147.27136, -299.42903, -90], RightModSlot: [-147.27136, 299.42903, 90] };
-function entity(selections: Array<{slotId: string; variantId: string}>): NixieExperimentalComponentEntitySnapshotV1 {
+function entity(selections: Array<{slotId: string; variantId: string}>): NixieComponentEntitySnapshotV1 {
     return { entityId: 'engine', revision: 1, components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'modification',
         version: 1, definitionAvailable: true, data: { selections } }] };
 }

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 
 test('Scene V2 opens each emplacement wall independently and retains its floor and corner posts', () => {
     for (const tier of [1, 2, 3]) {
         for (const direction of ['Front', 'FrontRight', 'Right', 'BackRight', 'Back', 'BackLeft', 'Left', 'FrontLeft']) {
-            const subject: NixieExperimentalComponentEntitySnapshotV1 = {
+            const subject: NixieComponentEntitySnapshotV1 = {
                 entityId: 'emplacement', revision: 1, components: [
                     { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
                         definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId: `trenchempt${tier}` } },

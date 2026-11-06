@@ -1,4 +1,4 @@
-import type { NixieExperimentalComponentEntitySnapshotV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2ModificationVariantMetadata } from './scene-v2-asset-metadata.ts';
 import { FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane } from './render-lanes.ts';
 
@@ -16,9 +16,9 @@ export function resolveFoxholeDefaultHitboxPolygons(asset: FoxholeSceneV2AssetMe
 }
 
 /** Match Scene V1: authored children supersede modification and base extracted polygons. */
-export function renderFoxholeHitboxOverlays(subject: NixieExperimentalComponentEntitySnapshotV1,
+export function renderFoxholeHitboxOverlays(subject: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata, variants: FoxholeSceneV2ModificationVariantMetadata[],
-    entities: readonly NixieExperimentalComponentEntitySnapshotV1[], settings: Readonly<Record<string, boolean>>): NixieExtensionRenderNodeV1[] {
+    entities: readonly NixieComponentEntitySnapshotV1[], settings: Readonly<Record<string, boolean>>): NixieExtensionRenderNodeV1[] {
     if (settings[FOXHOLE_HITBOX_SETTING_ID] !== true) return [];
     const authored = entities.flatMap(child => {
         const hierarchy = child.components.find(c => c.ownerId === 'nixie.core' && c.componentId === 'hierarchy' && c.definitionAvailable);

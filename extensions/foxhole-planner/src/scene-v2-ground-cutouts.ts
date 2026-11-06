@@ -1,10 +1,10 @@
-import type { NixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeStructureFloorMaskPoints, createFoxholeTrenchEmplacementMaskPolygons, isFoxholeTrenchEmplacementCodeName } from './structure-floor-mask.ts';
 import { triangulateStructureRegion } from './scene-v2-structural-clips.ts';
 
 /** Match authored floor footprints, never the padded projection's image bounds. */
-export function structuralGroundCutouts(asset: FoxholeSceneV2AssetMetadata, occupied: ReadonlySet<string>): NonNullable<NixieExperimentalSpatialPlanV1['groundCutouts']> {
+export function structuralGroundCutouts(asset: FoxholeSceneV2AssetMetadata, occupied: ReadonlySet<string>): NonNullable<NixieSpatialPlanV1['groundCutouts']> {
     const floor = asset.renderLayers.floor ?? asset.renderLayers.floormesh ?? {width:160,height:160,offsetX:0,offsetY:0};
     if (!asset.bunker || !asset.model?.structuralProfile) return [];
     const id = asset.codeName.toLowerCase();

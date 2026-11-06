@@ -1,7 +1,7 @@
 import type {
-    NixieExperimentalComponentEntitySnapshotV1,
-    NixieExperimentalEntityRendererContextV1,
-    NixieExperimentalSpatialPlanV1,
+    NixieComponentEntitySnapshotV1,
+    NixieEntityRendererContextV1,
+    NixieSpatialPlanV1,
     NixieExtensionRenderNodeV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import { resolveFoxholeSceneV2WorldMatrices } from './scene-v2-attachments.ts';
@@ -27,20 +27,20 @@ export interface FoxholeStructurePlacementState {
     foundationSupported: boolean;
 }
 
-function componentData(entity: NixieExperimentalComponentEntitySnapshotV1, ownerId: string, componentId: string) {
+function componentData(entity: NixieComponentEntitySnapshotV1, ownerId: string, componentId: string) {
     return entity.components.find(component => component.ownerId === ownerId && component.componentId === componentId
         && component.definitionAvailable)?.data;
 }
 
 function entityAsset(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     metadata: Record<string, FoxholeSceneV2AssetMetadata>,
 ): FoxholeSceneV2AssetMetadata | undefined {
     const assetId = componentData(entity, 'nixie.foxhole-planner', 'asset')?.assetId;
     return typeof assetId === 'string' ? metadata[assetId] : undefined;
 }
 
-function isSpline(entity: NixieExperimentalComponentEntitySnapshotV1): boolean {
+function isSpline(entity: NixieComponentEntitySnapshotV1): boolean {
     return Boolean(componentData(entity, 'nixie.foxhole-planner', 'spline-connector'));
 }
 
@@ -81,7 +81,7 @@ function largestPolygon(polygons: FoxholeSceneV2Point[][]): FoxholeSceneV2Point[
 }
 
 interface FoxholePlacementSceneEntry {
-    entity: NixieExperimentalComponentEntitySnapshotV1;
+    entity: NixieComponentEntitySnapshotV1;
     asset?: FoxholeSceneV2AssetMetadata;
     footprints: FoxholeSceneV2Point[][];
     foundationSurface?: FoxholeSceneV2Point[];
@@ -117,12 +117,12 @@ function boundsOverlap(left: FoxholePlacementBounds | undefined, right: FoxholeP
         && left.minY < right.maxY && left.maxY > right.minY);
 }
 
-function placementSceneKey(context: NixieExperimentalEntityRendererContextV1): string {
+function placementSceneKey(context: NixieEntityRendererContextV1): string {
     return context.entities.map(entity => `${entity.entityId.length}:${entity.entityId}:${entity.revision}`).join('|');
 }
 
 function resolvePlacementScene(
-    context: NixieExperimentalEntityRendererContextV1,
+    context: NixieEntityRendererContextV1,
     metadata: Record<string, FoxholeSceneV2AssetMetadata>,
 ): Map<string, FoxholeStructurePlacementState> {
     const key = placementSceneKey(context);
@@ -181,8 +181,8 @@ function resolvePlacementScene(
 
 /** Derive placement validity from authored build footprints without persisting planner-only state. */
 export function resolveFoxholeStructurePlacement(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
-    context: NixieExperimentalEntityRendererContextV1,
+    entity: NixieComponentEntitySnapshotV1,
+    context: NixieEntityRendererContextV1,
     metadata: Record<string, FoxholeSceneV2AssetMetadata>,
 ): FoxholeStructurePlacementState {
     const asset = entityAsset(entity, metadata);
@@ -211,10 +211,10 @@ export function renderFoxholeStructurePlacementOverlay(
 }
 
 export function renderFoxholeStructurePlacementSpatialOverlay(
-    entity: NixieExperimentalComponentEntitySnapshotV1,
+    entity: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata,
     state: FoxholeStructurePlacementState,
-): NixieExperimentalSpatialPlanV1 | undefined {
+): NixieSpatialPlanV1 | undefined {
     const hasModel = entity.components.some(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'model' && component.definitionAvailable);
     const invalid = state.overlapEntityIds.length > 0 || !state.foundationSupported;

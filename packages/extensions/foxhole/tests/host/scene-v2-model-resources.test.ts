@@ -4,7 +4,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { nixieSceneV2ModelPosition, prepareNixieSceneV2ModelGlb, registerNixieSceneV2ModelAnchor } from '../../../../nixie/app/plugins/nixie/scene-v2/spatial-model-resource.ts';
 import { readNixieSceneV2Model } from '../../../../nixie/desktop-extensions/scene-v2-spatial.ts';
-import { parseNixieExperimentalResourceV1 } from '@nixiejs/extension-sdk';
+import { parseNixieResourceV1 } from '@nixiejs/extension-sdk';
 import { registerNixieSceneV2ModelAssembly, resolveNixieSceneV2ModelParts } from '../../../../nixie/app/plugins/nixie/scene-v2/spatial-model-assembly.ts';
 
 const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url);
@@ -12,10 +12,10 @@ const modelBundle = JSON.parse(readFileSync(new URL('models/manifest.v1.json', a
 const readGeneratedModel = (id: string): Buffer => readFileSync(new URL(modelBundle.assets[id].path, assetsRoot));
 
 test('a neutral architectural model uses owner-local identity and a declared GLB resource', () => {
-    const resource = parseNixieExperimentalResourceV1({ contractVersion: 1, id: 'furniture.table', kind: 'model', path: 'models/table.glb' });
+    const resource = parseNixieResourceV1({ contractVersion: 1, id: 'furniture.table', kind: 'model', path: 'models/table.glb' });
     assert.equal(resource.kind, 'model');
-    assert.throws(() => parseNixieExperimentalResourceV1({ ...resource, path: '../../../../nixie/tests/table.glb' }));
-    assert.throws(() => parseNixieExperimentalResourceV1({ ...resource, path: 'models/table.gltf' }));
+    assert.throws(() => parseNixieResourceV1({ ...resource, path: '../../../../nixie/tests/table.glb' }));
+    assert.throws(() => parseNixieResourceV1({ ...resource, path: 'models/table.gltf' }));
     const entity = { entityId: 'table', revision: 1, components: [{ ownerId: 'example.architecture', componentId: 'model', version: 1,
         definitionAvailable: true, data: { resourceId: 'furniture.table', width: 160, height: 80, depth: 90, offsetX: 2, offsetY: 0 } }] };
     assert.equal(readNixieSceneV2Model(entity)?.ownerId, 'example.architecture');

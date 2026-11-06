@@ -1,4 +1,4 @@
-import type { NixieExperimentalSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeCornerWallMaskPoints, createFoxholeStructureFloorMaskPoints, createFoxholeTrenchEmplacementMaskPolygons, isFoxholeTrenchEmplacementCodeName } from './structure-floor-mask.ts';
 import { isFoxholeFloorRenderLayer } from './structure-render-layer-visibility.ts';
@@ -39,7 +39,7 @@ export function triangulateStructureRegion(input: readonly Point[]): Point[][] {
         result.push([...points]);
     return result;
 }
-export function structuralModelClips(asset: FoxholeSceneV2AssetMetadata, occupied: ReadonlySet<string>): NonNullable<NixieExperimentalSpatialPlanV1['modelClips']> {
+export function structuralModelClips(asset: FoxholeSceneV2AssetMetadata, occupied: ReadonlySet<string>): NonNullable<NixieSpatialPlanV1['modelClips']> {
     const model = asset.model, profile = model?.structuralProfile;
     if (!model || !profile)
         return [];

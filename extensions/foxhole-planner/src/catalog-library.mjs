@@ -1,4 +1,4 @@
-import {parseNixieExperimentalProductCatalogV1, resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 
 const MAX_DOCUMENT = 16 * 1024 ** 2;
 const MAX_RESOURCE = 512 * 1024 ** 2;
@@ -48,9 +48,9 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         if (url.origin !== namespace.origin || !url.pathname.startsWith(namespace.pathname)) throw Error('Catalog source escapes Foxhole namespace');
         return url.href;
     };
-    const catalog = parseNixieExperimentalProductCatalogV1(value);
+    const catalog = parseNixieProductCatalogV1(value);
     if (catalog.releaseRoot) throw Error('Private tools require the canonical shared-content catalog');
-    const entries = resolveNixieExperimentalProductCatalogResourcesV1(catalog).assets;
+    const entries = resolveNixieProductCatalogResourcesV1(catalog).assets;
     const byPath = new Map(entries.map(row => [row.path, row])), files = new Map();
     const aliases = catalog.data?.privateFiles;
     if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases) || Object.keys(aliases).length > 65536) throw Error('Missing private catalog file associations');

@@ -1,5 +1,5 @@
 import { filterFoxholeSameWallInfrastructureSelections } from './modification-wall-conflicts.ts';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { deduplicateFoxholeBuildSockets, normalizeFoxholeBuildSocketName, resolveFoxholeBuildSocketPosition } from './bunker-statistics-sockets.ts';
 import type { FoxholeBunkerStatisticsSocket } from './bunker-statistics-sockets.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2BuildSocketMetadata, FoxholeSceneV2ModificationVariantMetadata } from './scene-v2-asset-metadata.ts';
@@ -35,7 +35,7 @@ export function resolveFoxholeEffectiveStructureSocketSources(asset: FoxholeScen
     return deduplicateFoxholeBuildSockets(resolved);
 }
 
-export function resolveFoxholeSelectedSocketVariants(entity: NixieExperimentalComponentEntitySnapshotV1,
+export function resolveFoxholeSelectedSocketVariants(entity: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata): FoxholeSceneV2ModificationVariantMetadata[] {
     const selections = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'modification' && component.version === 1 && component.definitionAvailable)?.data.selections;
@@ -51,7 +51,7 @@ export function resolveFoxholeSelectedSocketVariants(entity: NixieExperimentalCo
 }
 
 /** Same effective sockets as display, projected into the attachment/snapping coordinate basis. */
-export function resolveFoxholeEntityStructureSockets(entity: NixieExperimentalComponentEntitySnapshotV1,
+export function resolveFoxholeEntityStructureSockets(entity: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata | null | undefined): FoxholeSceneV2BuildSocketMetadata[] {
     if (!asset) {
         return [];

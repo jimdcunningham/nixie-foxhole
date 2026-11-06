@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {prepareCatalogInput, readCatalogReceipt, verifyCatalogInput} from './prepare-catalog-input.mjs';
-import {resolveNixieExperimentalProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 const INPUTS = ['manifest.v1.json','models/manifest.v1.json','maps/map-data.v1.json', ...['de','fr','pt','ru','zh'].map(locale => 'localizations/' + locale + '.json')];
 
 /** Source/geometry fixtures are CI-only and never participate in client initialization. */
@@ -28,7 +28,7 @@ export async function preparePublicationCatalogInputs({pin, output, fetcher = fe
             downloadedBytes += bytes.length;
         }
     }
-    const index = resolveNixieExperimentalProductCatalogResourcesV1(catalog), byPath = new Map(index.assets.map(row => [row.path,row]));
+    const index = resolveNixieProductCatalogResourcesV1(catalog), byPath = new Map(index.assets.map(row => [row.path,row]));
     const models = new Map();
     for (const product of catalog.products) for (const row of product.resources.model ?? []) {
         const variant = row.variant ?? catalog.resourceDefaults.model.variant;

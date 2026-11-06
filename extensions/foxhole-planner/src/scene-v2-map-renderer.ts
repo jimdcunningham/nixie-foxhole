@@ -1,9 +1,9 @@
-import type { NixieExperimentalDocumentRenderRequestV1, NixieExperimentalDocumentRenderResultV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieDocumentRenderRequestV1, NixieDocumentRenderResultV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
 import { foxholeSceneV2MapBounds, FOXHOLE_MAP_TEXTURE_DIRECTORIES } from './scene-v2-map-metadata.ts';
 import { renderFoxholePlanningMapIcons } from './scene-v2-map-icons.ts';
 
-export function renderFoxholePlanningMap(request: NixieExperimentalDocumentRenderRequestV1): NixieExperimentalDocumentRenderResultV1 {
+export function renderFoxholePlanningMap(request: NixieDocumentRenderRequestV1): NixieDocumentRenderResultV1 {
     const settings = request.settings;
     const enabled = (key: string, fallback = false) => typeof settings[`foxhole.map.${key}`] === 'boolean' ? settings[`foxhole.map.${key}`] === true : fallback;
     const root: NixieExtensionRenderNodeV1 = { id: 'planning-map', kind: 'group', children: [] };

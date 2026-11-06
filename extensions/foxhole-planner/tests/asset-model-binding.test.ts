@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { getFoxholeSceneV2ModelComponentData } from '../src/scene-v2-models.ts';
 import metadata from '../src/scene-v2-assets-node.ts';
 
-function entity(assetId: string, destroyed = false): NixieExperimentalComponentEntitySnapshotV1 {
+function entity(assetId: string, destroyed = false): NixieComponentEntitySnapshotV1 {
     return { entityId: 'upgraded-bunker', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId } },

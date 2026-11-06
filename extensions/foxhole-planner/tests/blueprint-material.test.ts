@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
-import type { NixieExperimentalComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import metadata from '../src/scene-v2-assets-node.ts';
 
 test('model blueprints request solid lit materials while flat artwork keeps its established blue tint', () => {
-    const entity = (blueprint: boolean): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: 'blue-refinery', revision: 1,
+    const entity = (blueprint: boolean): NixieComponentEntitySnapshotV1 => ({ entityId: 'blue-refinery', revision: 1,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'facilityrefinery1' } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
@@ -30,7 +30,7 @@ test('model blueprints request solid lit materials while flat artwork keeps its 
 });
 
 test('pipeline blueprint materials preserve the model-path geometry recipe', () => {
-    const entity = (blueprint: boolean): NixieExperimentalComponentEntitySnapshotV1 => ({ entityId: 'blue-pipe', revision: 1,
+    const entity = (blueprint: boolean): NixieComponentEntitySnapshotV1 => ({ entityId: 'blue-pipe', revision: 1,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1, definitionAvailable: true,
             data: { foxholeKey: 'facilitypipeoverhead', startX: 0, startY: 0, startRotation: 0,
                 endX: 240, endY: 0, endRotation: 0, minLength: 32, maxLength: 800, minRadius: 16,
@@ -43,7 +43,7 @@ test('pipeline blueprint materials preserve the model-path geometry recipe', () 
 });
 
 test('previously saved demolished blueprints render only their demolished appearance', () => {
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'old-conflicting-state', revision: 1,
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'old-conflicting-state', revision: 1,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: 'facilityrefinery1' } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
@@ -60,7 +60,7 @@ test('previously saved demolished blueprints render only their demolished appear
 test('standalone wreck identities cannot render blueprint materials or tint', () => {
     const wreck = Object.entries(metadata).find(([, asset]) => asset.isDestroyed && asset.canBlueprint);
     assert.ok(wreck);
-    const entity: NixieExperimentalComponentEntitySnapshotV1 = { entityId: 'standalone-wreck', revision: 1,
+    const entity: NixieComponentEntitySnapshotV1 = { entityId: 'standalone-wreck', revision: 1,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
             data: { catalogId: 'foxhole.structures', assetId: wreck[0] } },
         { ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, definitionAvailable: true,
