@@ -42,7 +42,8 @@ import { createFoxholeStructureFloorMaskPoints, createFoxholeCornerWallMaskPoint
     createFoxholeTrenchEmplacementMaskPolygons, isFoxholeTrenchEmplacementCodeName } from './structure-floor-mask.ts';
 import { isFoxholeBunkerSocketUnbreachable, isFoxholeBreachIndicatorSocket } from './breach-indicators.ts';
 import { buildFoxholeModelLightOverrides, shouldEnableFoxholePoweredModelLights } from './model-light-presentation.ts';
-import foxholeSceneV2Assets, { productionOutputsByRecipeId, modelLightHintsByResourceId } from '#foxhole-scene-v2-assets';
+import {buildFoxholeModelTextureTransforms, FOXHOLE_SCENE_FACTION_SETTING_ID} from './model-texture-presentation.ts';
+import foxholeSceneV2Assets, { productionOutputsByRecipeId, modelLightHintsByResourceId, flagAtlasesByResourceId } from '#foxhole-scene-v2-assets';
 import type {
     FoxholeSceneV2AssetMetadata,
     FoxholeSceneV2ModificationSlotMetadata,
@@ -519,7 +520,9 @@ export function renderFoxholeSceneV2Entity(
         plan.experimentalSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.experimentalSpatial,
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
             modelLightOverrides: buildFoxholeModelLightOverrides(plan.experimentalSpatial?.model === null ? undefined : plan.experimentalSpatial?.model?.resourceId ?? metadata.model.resourceId,
-                modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)) };
+                modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)),
+            modelTextureTransforms: buildFoxholeModelTextureTransforms(plan.experimentalSpatial?.model === null ? undefined : plan.experimentalSpatial?.model?.resourceId ?? metadata.model.resourceId,
+                flagAtlasesByResourceId, context.settings?.[FOXHOLE_SCENE_FACTION_SETTING_ID]) };
     }
     return plan;
 }
@@ -528,6 +531,7 @@ function renderFoxholeSceneV2EntityPlan(
     entity: NixieExperimentalComponentEntitySnapshotV1,
     context: NixieExperimentalEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
+    const settings: Record<string, boolean> = Object.fromEntries(Object.entries(context.settings ?? {}).flatMap(([id, value]) => typeof value === 'boolean' ? [[id, value]] : []));
     const renderScale = context.viewport?.renderScale ?? 1;
     const tacticalLine = entity.components.find(component => (
         component.ownerId === 'nixie.foxhole-planner'
@@ -593,9 +597,9 @@ function renderFoxholeSceneV2EntityPlan(
         const powerlineObstructions = findFoxholePowerlineObstructions(entity, resolved, context, assetMetadataById);
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
-        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, context.settings ?? {}, context.entities) : undefined;
+        const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, settings ?? {}, context.entities) : undefined;
         if (spatial) {
-            spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, context.settings ?? {});
+            spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, settings ?? {});
         }
         const wheel = foxholeConnectorGeometryWheel(resolved, splineAsset);
         const content = renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered, splineAsset, destroyedAsset);
@@ -606,7 +610,7 @@ function renderFoxholeSceneV2EntityPlan(
             ...(spatial ? { experimentalSpatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')]), ...renderFoxholeConnectorSocketOverlays(resolved,
-                assetMetadataById[String(splineConnector.data.foxholeKey ?? '')], attachments, context.settings ?? {})] },
+                assetMetadataById[String(splineConnector.data.foxholeKey ?? '')], attachments, settings ?? {})] },
         };
     }
 
@@ -728,16 +732,16 @@ function renderFoxholeSceneV2EntityPlan(
     }
     const selectionGeometry = resolveFoxholeSceneV2StructureSelectionGeometry(entity, assetMetadata);
     const appearance = readFoxholeSceneV2Appearance(entity);
-    const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, context.settings, context.entities);
+    const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, settings, context.entities);
     const structural = assetMetadata.model?.structuralProfile;
     const spatialRendered = structural ? renderFoxholeSceneV2Asset(entity, assetId, assetMetadata,
-        {...context.settings, 'foxhole.structure.useStaticRender': false}, context.entities) : rendered;
+        {...settings, 'foxhole.structure.useStaticRender': false}, context.entities) : rendered;
     const renderedLayers = new Set(spatialRendered.map(node => node.id));
     const hiddenModelNodes = !structural && renderedLayers.has('building-texture') ? [] : Object.entries((assetMetadata as FoxholeModelLayerMetadata).modelLayerNodes ?? {})
         .flatMap(([layerId, names]) => renderedLayers.has(`structure-layer-${layerId}`) ? [] : names);
     if (structural?.modifications) {
         const active = !appearance.destroyed && !appearance.packaged ? selectedFoxholeSceneV2Modifications(entity,assetMetadata)
-            .filter(entry=>!entry.variant.isUpgrade && (context.settings?.['foxhole.structure.hideRoofs']!==true || !isFoxholeRoofModification(entry.variant))) : [];
+            .filter(entry=>!entry.variant.isUpgrade && (settings?.['foxhole.structure.hideRoofs']!==true || !isFoxholeRoofModification(entry.variant))) : [];
         for (const part of structural.modifications) {
             const selected=active.some(entry=>entry.slotId===part.slotId&&entry.variantId===part.variantId);
             const blocked=part.replacesLayers.some(id=>!renderedLayers.has('structure-layer-'+id));
@@ -746,18 +750,18 @@ function renderFoxholeSceneV2EntityPlan(
         }
     }
     const visualState = applyFoxholeSceneV2Appearance(rendered, appearance, assetMetadata.canBlueprint && !assetMetadata.isDestroyed);
-    const placement = context.settings?.[FOXHOLE_PLACEMENT_WARNING_SETTING_ID] === true
+    const placement = settings?.[FOXHOLE_PLACEMENT_WARNING_SETTING_ID] === true
         ? resolveFoxholeStructurePlacement(entity, context, assetMetadataById)
         : null;
     let placementSpatial = placement ? renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement) : undefined;
     if (placement) visualState.nodes.push(...renderFoxholeStructurePlacementOverlay(assetMetadata, placement));
     visualState.nodes.push(...renderBreachIndicators(entity, assetMetadata, context));
-    visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, context.settings ?? {}, appearance, entity.components.find(component =>
+    visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, settings ?? {}, appearance, entity.components.find(component =>
         component.ownerId === 'nixie.foxhole-planner' && component.componentId === 'maintenance-supply' && component.definitionAvailable)?.data));
     const socketAttachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
     const markers = renderFoxholeSpatialSocketMarkers(assetMetadata,
-        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance);
+        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, settings ?? {}, appearance);
     if (markers.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [], markers };
     }
@@ -782,18 +786,18 @@ function renderFoxholeSceneV2EntityPlan(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [],
             model: destroyedModel ? getFoxholeSceneV2ModelComponentData(destroyedModel) : null };
     }
-    const firingVolumes = renderFoxholeStructureFiringVolumes(assetMetadata, context.settings ?? {}, appearance);
+    const firingVolumes = renderFoxholeStructureFiringVolumes(assetMetadata, settings ?? {}, appearance);
     if (firingVolumes.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, volumes: firingVolumes };
     }
-    visualState.nodes.push(...renderFoxholeModificationSlotOverlays(assetMetadata, context.settings ?? {}, appearance));
-    visualState.nodes.push(...renderFoxholeStructureVolumeOverlays(assetMetadata, context.settings ?? {}, appearance));
+    visualState.nodes.push(...renderFoxholeModificationSlotOverlays(assetMetadata, settings ?? {}, appearance));
+    visualState.nodes.push(...renderFoxholeStructureVolumeOverlays(assetMetadata, settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeHitboxOverlays(entity, assetMetadata,
-        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), context.entities ?? [], context.settings ?? {}));
-    visualState.nodes.push(...renderFoxholeVehicleSeatOverlays(assetMetadata, context.settings ?? {}, appearance));
-    visualState.nodes.push(...renderFoxholeDebugSpotlightOverlays(assetMetadata, context.settings ?? {}, appearance));
+        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), context.entities ?? [], settings ?? {}));
+    visualState.nodes.push(...renderFoxholeVehicleSeatOverlays(assetMetadata, settings ?? {}, appearance));
+    visualState.nodes.push(...renderFoxholeDebugSpotlightOverlays(assetMetadata, settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
-        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, context.settings ?? {}, appearance, assetId));
+        selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, settings ?? {}, appearance, assetId));
     const rotation = entity.components.find(component => (
         component.ownerId === 'nixie.core'
         && component.componentId === 'transform'
@@ -809,7 +813,7 @@ function renderFoxholeSceneV2EntityPlan(
         && component.componentId === 'production-order'
         && component.definitionAvailable
     ));
-    const cargoNode = context.settings?.['foxhole.structure.markedCargo'] === false
+    const cargoNode = settings?.['foxhole.structure.markedCargo'] === false
         ? null
         : renderFoxholeSceneV2Cargo({
             cargoData: cargo?.data,

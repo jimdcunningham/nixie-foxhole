@@ -12,6 +12,6 @@ const bytes = readFileSync(input);
 if (bytes.length > 16 * 1024 * 1024) throw new Error('Catalog input exceeds 16 MiB');
 export const catalog = parseNixieExperimentalProductCatalogV1(JSON.parse(bytes.toString('utf8')));
 export const assets = Object.fromEntries(catalog.products.map(product => [product.id, product.data])) as Record<string, FoxholeSceneV2AssetMetadata>;
-export const data = catalog.data as {modelLightHintsByResourceId?: import('../src/model-light-presentation.ts').FoxholeModelLightCatalog; catalogLocalizations: Record<string, Record<string, string>>;
+export const data = catalog.data as {flagAtlasesByResourceId?: import('../src/model-texture-presentation.ts').FoxholeFlagAtlasCatalog; modelLightHintsByResourceId?: import('../src/model-light-presentation.ts').FoxholeModelLightCatalog; catalogLocalizations: Record<string, Record<string, string>>;
     productionOutputsByRecipeId: Generated['productionOutputsByRecipeId']; productionRecipesById: Generated['productionRecipesById'];
     bunkerDestructionWeapons: Generated['bunkerDestructionWeapons']; maps: FoxholeSceneV2MapMetadata};

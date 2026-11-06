@@ -8,6 +8,7 @@ import {createFoxholeSceneV2AssetMetadata} from './product-metadata.ts';
 import {createFoxholeSceneV2MapMetadata, createFoxholeMapTooltipAssets} from './map-metadata.ts';
 import {bindFoxholeSceneV2Models} from '../../../extensions/foxhole-planner/src/scene-v2-models.ts';
 import {bindFoxholeModelLayerNodes} from './model-layer-nodes.ts';
+import {createFoxholeFlagAtlasCatalog} from '../../../extensions/foxhole-planner/build/model-flag-metadata.ts';
 import {createFoxholeModelLightCatalog} from '../../../extensions/foxhole-planner/build/model-light-metadata.ts';
 
 /** All extraction interpretation happens before Planner builds or clients run. */
@@ -59,7 +60,7 @@ export async function readCatalogSources(assetsRoot) {
         modifications: generated.modificationResources.map(row => ({id: row.id, sourcePath: source(row.sourceUrl)})),
         visuals: generated.visualResources.map(row => ({id: row.id, sourcePath: source(row.sourceUrl)})), maps,
         metadata: generated.assets,
-        data: {modelLightHintsByResourceId: await createFoxholeModelLightCatalog(models, name => fs.readFile(path.join(assetsRoot,name))), catalogLocalizations: Object.fromEntries(await Promise.all(['de','fr','pt','ru','zh'].map(async locale => [locale, await read('localizations/' + locale + '.json')]))),
+        data: {flagAtlasesByResourceId: await createFoxholeFlagAtlasCatalog(models, name => fs.readFile(path.join(assetsRoot,name))), modelLightHintsByResourceId: await createFoxholeModelLightCatalog(models, name => fs.readFile(path.join(assetsRoot,name))), catalogLocalizations: Object.fromEntries(await Promise.all(['de','fr','pt','ru','zh'].map(async locale => [locale, await read('localizations/' + locale + '.json')]))),
             productionOutputsByRecipeId: generated.productionOutputsByRecipeId, productionRecipesById: generated.productionRecipesById,
             bunkerDestructionWeapons: generated.bunkerDestructionWeapons, maps: maps.metadata}};
 }
