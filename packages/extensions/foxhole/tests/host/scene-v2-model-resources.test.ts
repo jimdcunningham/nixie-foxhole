@@ -11,14 +11,6 @@ const assetsRoot = hostSourceUrl('../../public/foxhole/assets/', import.meta.url
 const modelBundle = JSON.parse(readFileSync(new URL('models/manifest.v1.json', assetsRoot), 'utf8'));
 const readGeneratedModel = (id: string): Buffer => readFileSync(new URL(modelBundle.assets[id].path, assetsRoot));
 
-test('the saved station preview identity resolves the canonical asset-repository model', () => {
-    const plugin = readFileSync(new URL('../../app/plugins/foxhole-host-adapters.client.ts', import.meta.url), 'utf8');
-    const registration = /registerNixieInternalModelResource\('nixie\.core\/resource-transfer-station-preview', assetDelivery\.resolve\('([^']+)'\)\)/.exec(plugin);
-    assert.ok(registration, 'old development documents retain their preview identity');
-    assert.equal(registration[1], modelBundle.assets.facilitytransferresource.path);
-    assert.equal(readGeneratedModel('facilitytransferresource').readUInt32LE(0), 0x46546c67);
-});
-
 test('a neutral architectural model uses owner-local identity and a declared GLB resource', () => {
     const resource = parseNixieExperimentalResourceV1({ contractVersion: 1, id: 'furniture.table', kind: 'model', path: 'models/table.glb' });
     assert.equal(resource.kind, 'model');

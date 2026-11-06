@@ -1,10 +1,9 @@
 import { prepareFoxholePreviewAssets } from '#foxhole/utils/scene-v2-preview-assets.ts';
 import { parseLegacySettings } from '#foxhole/utils/nixie-legacy-settings.ts';
-import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration, resolveSelectedFoxholeAsset } from '#foxhole/utils/asset-delivery.ts';
+import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration } from '#foxhole/utils/asset-delivery.ts';
 import { defineNuxtPlugin } from '#app';
 import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
 
-import { registerNixieInternalModelResource } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import { createFoxholeRetainedSceneV2Ui } from '#foxhole/plugins/foxhole/nixie/scene-v2-retained-ui.ts';
 import { registerFoxholeSceneV2HostPolicy } from '#foxhole/utils/scene-v2-host-policy.ts';
 
@@ -20,15 +19,12 @@ export default defineNuxtPlugin({
     dependsOn: ['nixie-registry'],
     async setup(nuxtApp) {
         initializeFoxholeAssetDelivery();
-        let stopPreview = () => {};
         registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport, text => {
             parseLegacySettings(text, []);
             return true;
         });
         registerNixieAssistantIntegration('nixie.foxhole-planner', normalizeFoxholeAssistantAction, foxholeAssistantNodeLabel);
         const stopPolicy = registerFoxholeSceneV2HostPolicy();
-        // Keep the saved preview identity, but resolve bytes only from separately supplied assets.
-
         const stopAdapter = registerNixieInternalExtensionAdapter({
             ownerId: 'nixie.foxhole-planner',
             aliases: ['foxhole'],
@@ -38,9 +34,6 @@ export default defineNuxtPlugin({
                 return () => {
                     activate();
                     activatePreviews();
-                    stopPreview();
-                    const url = generation ? resolveSelectedFoxholeAsset('types/structures/facilitytransferresource/facilitytransferresource.glb') : undefined;
-                    stopPreview = url ? registerNixieInternalModelResource('nixie.core/resource-transfer-station-preview', url) : () => {};
                 };
             },
             replacesSdkUi: true,
@@ -53,7 +46,6 @@ export default defineNuxtPlugin({
             },
         });
         nuxtApp.vueApp.onUnmount(() => {
-            stopPreview();
             stopAdapter();
             stopPolicy();
         });
