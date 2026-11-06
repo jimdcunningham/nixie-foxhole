@@ -13,6 +13,7 @@ test('Planner declares model-light visibility through renderer RPC without chang
     const setting = manifest.contributes.settings.find(entry => entry.id === settingId)!;
     assert.equal(setting.defaultValue, false);
     assert.equal(setting.scope, 'user');
+    assert.equal(manifest.contributes.settings.find(entry => entry.id === 'foxhole.ranges.poweredSpotlights')?.visible, true, 'the retained SDK spotlight preference must be reachable in Settings');
     assert.ok(manifest.contributes.experimentalRenderers!.find(renderer => renderer.id === 'foxhole-assets')!.settingIds!.includes(settingId));
     const [assetId] = Object.entries(assets).find(([, metadata]) => metadata.model && !metadata.isItem && !metadata.isDestroyed)!;
     const entity = { entityId: 'lit-structure', revision: 1, components: [{ ownerId: manifest.id, componentId: 'asset', version: 1,
