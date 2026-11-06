@@ -1,3 +1,4 @@
+import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
 import { renderFoxholeHitboxOverlays } from './scene-v2-hitbox-overlays.ts';
 import { renderFoxholeVehicleSeatOverlays } from './scene-v2-vehicle-seat-overlays.ts';
@@ -539,11 +540,7 @@ function renderFoxholeSceneV2EntityPlan(
         && component.definitionAvailable
     ));
     if (tacticalLine) {
-        const rotation = entity.components.find(component => (
-            component.ownerId === 'nixie.core'
-            && component.componentId === 'transform'
-            && component.definitionAvailable
-        ))?.data.rotation;
+        const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
             root: {
@@ -620,11 +617,7 @@ function renderFoxholeSceneV2EntityPlan(
         && component.definitionAvailable
     ));
     if (range) {
-        const rotation = entity.components.find(component => (
-            component.ownerId === 'nixie.core'
-            && component.componentId === 'transform'
-            && component.definitionAvailable
-        ))?.data.rotation;
+        const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
             experimentalSelectionGeometry: resolveFoxholeRangeSelectionGeometry(range.data as unknown as FoxholeSceneV2RangeData),
@@ -645,11 +638,7 @@ function renderFoxholeSceneV2EntityPlan(
         && component.definitionAvailable
     ));
     if (binocularLine) {
-        const rotation = entity.components.find(component => (
-            component.ownerId === 'nixie.core'
-            && component.componentId === 'transform'
-            && component.definitionAvailable
-        ))?.data.rotation;
+        const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
             root: {
@@ -669,11 +658,7 @@ function renderFoxholeSceneV2EntityPlan(
         && component.definitionAvailable
     ));
     if (triangulation) {
-        const rotation = entity.components.find(component => (
-            component.ownerId === 'nixie.core'
-            && component.componentId === 'transform'
-            && component.definitionAvailable
-        ))?.data.rotation;
+        const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
         return {
             schemaVersion: 1,
             experimentalSelectionGeometry: resolveFoxholeTriangulationSelectionGeometry(triangulation.data as unknown as FoxholeSceneV2TriangulationData, renderScale),
@@ -798,11 +783,7 @@ function renderFoxholeSceneV2EntityPlan(
     visualState.nodes.push(...renderFoxholeDebugSpotlightOverlays(assetMetadata, settings ?? {}, appearance));
     visualState.nodes.push(...renderFoxholeStructureSocketOverlays(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, settings ?? {}, appearance, assetId));
-    const rotation = entity.components.find(component => (
-        component.ownerId === 'nixie.core'
-        && component.componentId === 'transform'
-        && component.definitionAvailable
-    ))?.data.rotation;
+    const rotation = readFoxholeSceneV2CoreTransform(entity)?.rotation.z;
     const cargo = entity.components.find(component => (
         component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'cargo'

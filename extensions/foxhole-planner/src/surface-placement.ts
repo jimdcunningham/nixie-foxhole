@@ -5,6 +5,7 @@ import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { foxholeFootprintPolygons, foxholePointInPolygon } from './scene-v2-footprints.ts';
 import { foxholeAquaticWaterline } from './aquatic-placement.ts';
+import { withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 
 const data = (entity: Entity, owner: string, id: string) => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
@@ -34,8 +35,7 @@ export function finalizeFoxholeSurfacePlacement(request: Request, metadata = ass
     const foundationSubject = asset && (asset.category === 'foundation' || /^Foundation/i.test(asset.codeName));
     if (!asset || asset.isItem || ((asset.isVehicle || foundationSubject) && request.groundElevation === undefined) || asset.connector
         || data(original, 'nixie.foxhole-planner', 'spline-connector') || data(original, 'nixie.foxhole-planner', 'connector')) return result;
-    const subject = { ...original, components: original.components.map(component => component.ownerId === 'nixie.core'
-        && component.componentId === 'transform' ? { ...component, data: { ...request.transform } } : component) };
+    const subject = withFoxholeSceneV2TransformProposal(original, request.transform);
     const entities = request.context.entities.map(entity => entity.entityId === subject.entityId ? subject : entity);
     const projection = createFoxholeSpatialProjection(entities);
     const origin = projection.toWorld(subject, [0, 0, 0]);

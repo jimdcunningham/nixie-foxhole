@@ -1,4 +1,5 @@
 import type { NixieExperimentalComponentEntitySnapshotV1 as Entity } from '@nixiejs/extension-sdk/experimental/scene-v2';
+import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 
 export type FoxholeSpatialPoint = [number, number, number];
 const number = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -25,10 +26,10 @@ export function createFoxholeSpatialProjection(entities: readonly Entity[]) {
         return result;
     };
     const transform = (subject: Entity, input: FoxholeSpatialPoint, invert: boolean): FoxholeSpatialPoint => {
-        const planar = data(subject, 'transform'), spatial = data(subject, 'spatial-transform');
-        const position = [number(planar?.x), -number(planar?.y), number(spatial?.elevation)];
-        const scale = [number(planar?.scaleX, 1), number(planar?.scaleY, 1), number(spatial?.scaleZ, 1)];
-        const rotation = [number(spatial?.rotationX), number(spatial?.rotationY), -number(planar?.rotation)];
+        const pose = readFoxholeSceneV2CoreTransform(subject);
+        const position = [number(pose?.position.x), -number(pose?.position.y), number(pose?.position.z)];
+        const scale = [number(pose?.scale.x, 1), number(pose?.scale.y, 1), number(pose?.scale.z, 1)];
+        const rotation = [number(pose?.rotation.x), number(pose?.rotation.y), -number(pose?.rotation.z)];
         let point = input;
         if (invert) {
             point = point.map((value, axis) => value - position[axis]!) as FoxholeSpatialPoint;

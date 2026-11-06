@@ -6,6 +6,7 @@ import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
+import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 
 export interface FoxholeSceneV2Matrix {
     a: number;
@@ -59,10 +60,10 @@ function multiply(left: FoxholeSceneV2Matrix, right: FoxholeSceneV2Matrix): Foxh
 }
 
 function localMatrix(entity: NixieExperimentalComponentEntitySnapshotV1): FoxholeSceneV2Matrix {
-    const transform = componentData(entity, CORE_OWNER_ID, 'transform');
-    const rotation = finite(transform?.rotation, 0);
-    const scaleX = finite(transform?.scaleX, 1);
-    const scaleY = finite(transform?.scaleY, 1);
+    const transform = readFoxholeSceneV2CoreTransform(entity);
+    const rotation = finite(transform?.rotation.z, 0);
+    const scaleX = finite(transform?.scale.x, 1);
+    const scaleY = finite(transform?.scale.y, 1);
     const cosine = Math.cos(rotation);
     const sine = Math.sin(rotation);
     return {
@@ -70,8 +71,8 @@ function localMatrix(entity: NixieExperimentalComponentEntitySnapshotV1): Foxhol
         b: sine * scaleX,
         c: -sine * scaleY,
         d: cosine * scaleY,
-        tx: finite(transform?.x, 0),
-        ty: finite(transform?.y, 0),
+        tx: finite(transform?.position.x, 0),
+        ty: finite(transform?.position.y, 0),
     };
 }
 

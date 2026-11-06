@@ -13,6 +13,7 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import { resolveFacilityPipeSideSocketsFromPath } from './connector-side-sockets.ts';
 import { isFoxholePowerSocketConnectionAvailable } from './power-socket-capacity.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
+import { readFoxholeSceneV2CoreTransform, withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 import type { FoxholePowerSocketConnection } from './power-socket-capacity.ts';
 import type {
     FoxholeSceneV2AssetMetadata,
@@ -88,10 +89,10 @@ function localMatrix(
     entity: NixieExperimentalComponentEntitySnapshotV1,
     override?: NixieExperimentalTransformFinalizeRequestV1['transform'],
 ): Matrix {
-    const data = component(entity, CORE_OWNER_ID, 'transform')?.data;
-    const rotation = override?.rotation ?? finite(data?.rotation, 0);
-    const scaleX = override?.scaleX ?? finite(data?.scaleX, 1);
-    const scaleY = override?.scaleY ?? finite(data?.scaleY, 1);
+    const data = readFoxholeSceneV2CoreTransform(entity);
+    const rotation = override?.rotation ?? finite(data?.rotation.z, 0);
+    const scaleX = override?.scaleX ?? finite(data?.scale.x, 1);
+    const scaleY = override?.scaleY ?? finite(data?.scale.y, 1);
     const cosine = Math.cos(rotation);
     const sine = Math.sin(rotation);
     return {
@@ -99,8 +100,8 @@ function localMatrix(
         b: sine * scaleX,
         c: -sine * scaleY,
         d: cosine * scaleY,
-        tx: override?.x ?? finite(data?.x, 0),
-        ty: override?.y ?? finite(data?.y, 0),
+        tx: override?.x ?? finite(data?.position.x, 0),
+        ty: override?.y ?? finite(data?.position.y, 0),
     };
 }
 
@@ -405,9 +406,8 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
     let finalizedTransform: { x: number; y: number; elevation?: number } = { x: request.transform.x, y: request.transform.y };
     const role = gesture?.handleId === 'start' || gesture?.handleId === 'polyline-vertex-0' ? 'start'
         : gesture?.handleId === 'end' || gesture?.handleId === 'polyline-vertex-' + (Array.isArray(connector.data.points) ? connector.data.points.length / 2 - 1 : -1) ? 'end' : null;
-    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== moved.entityId ? entity : ({ ...entity,
-        components: entity.components.map(entry => entry.ownerId === CORE_OWNER_ID && entry.componentId === 'transform'
-            ? { ...entry, data: { ...entry.data, ...request.transform } } : entry) })));
+    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== moved.entityId
+        ? entity : withFoxholeSceneV2TransformProposal(entity, request.transform)));
     if (gesture && !role) {
         const tangentRole = gesture.handleId === 'start-rotation' ? 'start' : gesture.handleId === 'end-rotation' ? 'end' : null;
         if (!tangentRole || connector.componentId !== 'spline-connector') return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
@@ -536,7 +536,7 @@ function finalizeConnector(request: NixieExperimentalTransformFinalizeRequestV1,
                 if (!local.every(Number.isFinite)) {
                     return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
                 }
-                const elevation = finite(component(moved, CORE_OWNER_ID, 'spatial-transform')?.data.elevation, 0);
+                const elevation = readFoxholeSceneV2CoreTransform(moved)?.position.z ?? 0;
                 finalizedTransform = { x: local[0], y: local[1], ...(Math.abs(local[2] - elevation) > 1e-6 ? { elevation: local[2] } : {}) };
             }
         } else {
@@ -598,9 +598,8 @@ function finalizeFoxholeSceneV2TransformCore(
     request: NixieExperimentalTransformFinalizeRequestV1,
 ): NixieExperimentalTransformFinalizeResultV1 {
     const entities = request.context.entities;
-    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId ? entity : ({ ...entity,
-        components: entity.components.map(entry => entry.ownerId === CORE_OWNER_ID && entry.componentId === 'transform'
-            ? { ...entry, data: { ...entry.data, ...request.transform } } : entry) })));
+    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId
+        ? entity : withFoxholeSceneV2TransformProposal(entity, request.transform)));
     const moved = entities.find(entity => entity.entityId === request.entityId);
     if (moved && connectorComponent(moved)) {
         return finalizeConnector(request, moved);
@@ -690,7 +689,7 @@ function finalizeFoxholeSceneV2TransformCore(
         if (local.every(Number.isFinite)) {
             x = local[0];
             y = local[1];
-            const oldElevation = finite(component(moved, CORE_OWNER_ID, 'spatial-transform')?.data.elevation, 0);
+            const oldElevation = readFoxholeSceneV2CoreTransform(moved)?.position.z ?? 0;
             if (Math.abs(local[2] - oldElevation) > 1e-6) elevation = local[2];
             // One pair determines the pose; every compatible pair aligned at that
             // pose owns a reciprocal link, including both sockets on a foundation edge.
@@ -730,11 +729,7 @@ function finalizeFoxholeSceneV2TransformCore(
         const origin = projection.toWorld(entity, [0, 0, 0]);
         const desired = origin.map((value, axis) => value + translation[axis]!) as [number, number, number];
         const local = parent ? projection.toLocal(parent, desired) : desired;
-        const spatial = component(entity, CORE_OWNER_ID, 'spatial-transform');
-        return { ...entity, components: [...entity.components.map(entry => entry.ownerId === CORE_OWNER_ID && entry.componentId === 'transform'
-            ? { ...entry, data: { ...entry.data, x: local[0], y: local[1] } } : entry.ownerId === CORE_OWNER_ID && entry.componentId === 'spatial-transform'
-                ? { ...entry, data: { ...entry.data, elevation: local[2] } } : entry),
-            ...(spatial ? [] : [{ ownerId: CORE_OWNER_ID, componentId: 'spatial-transform', version: 1, definitionAvailable: true, data: { elevation: local[2] } }])] };
+        return withFoxholeSceneV2TransformProposal(entity, { x: local[0], y: local[1] }, local[2]);
     });
     const finalizedMatrices = worldMatrices(finalizedEntities, moved.entityId, { ...request.transform, x, y });
     const connectorPatches = new Map<string, NixieExperimentalComponentJsonObjectV1>();
