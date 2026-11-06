@@ -38,7 +38,7 @@ function catalogPlugin(): Plugin {
             if (id !== '\0' + ASSETS && id !== '\0' + MAPS) return;
             const prefix = 'import catalog from "../catalog.v1.json" with {type:"json"};';
             if (id === '\0' + MAPS) return prefix + 'export default catalog.data.maps;';
-            return prefix + 'export const catalogLocalizations=catalog.data.catalogLocalizations;'
+            return prefix + 'export const modelLightHintsByResourceId=catalog.data.modelLightHintsByResourceId;export const catalogLocalizations=catalog.data.catalogLocalizations;'
                 + 'export const productionOutputsByRecipeId=catalog.data.productionOutputsByRecipeId;'
                 + 'export const productionRecipesById=catalog.data.productionRecipesById;'
                 + 'export const bunkerDestructionWeapons=catalog.data.bunkerDestructionWeapons;'

@@ -41,7 +41,8 @@ import { filterFoxholeSameWallInfrastructureSelections } from './modification-wa
 import { createFoxholeStructureFloorMaskPoints, createFoxholeCornerWallMaskPoints,
     createFoxholeTrenchEmplacementMaskPolygons, isFoxholeTrenchEmplacementCodeName } from './structure-floor-mask.ts';
 import { isFoxholeBunkerSocketUnbreachable, isFoxholeBreachIndicatorSocket } from './breach-indicators.ts';
-import foxholeSceneV2Assets, { productionOutputsByRecipeId } from '#foxhole-scene-v2-assets';
+import { buildFoxholeModelLightOverrides } from './model-light-presentation.ts';
+import foxholeSceneV2Assets, { productionOutputsByRecipeId, modelLightHintsByResourceId } from '#foxhole-scene-v2-assets';
 import type {
     FoxholeSceneV2AssetMetadata,
     FoxholeSceneV2ModificationSlotMetadata,
@@ -516,7 +517,9 @@ export function renderFoxholeSceneV2Entity(
     }
     if (metadata?.model && (!plan.experimentalSpatial || plan.experimentalSpatial.supplementModel === true)) {
         plan.experimentalSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.experimentalSpatial,
-            modelLights: context.settings?.['foxhole.structure.modelLights'] === true };
+            modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
+            modelLightOverrides: buildFoxholeModelLightOverrides(plan.experimentalSpatial?.model === null ? undefined : plan.experimentalSpatial?.model?.resourceId ?? metadata.model.resourceId,
+                modelLightHintsByResourceId, context.settings?.['foxhole.ranges.poweredSpotlights'] === true) };
     }
     return plan;
 }
