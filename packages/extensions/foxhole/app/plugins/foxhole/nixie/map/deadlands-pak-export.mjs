@@ -3,7 +3,13 @@ const height = 1776;
 const texturePath = 'War/Content/Textures/UI/HexMaps/Processed/MapDeadlandsHex.uasset';
 // Pin the tested Deadlands header from the Foxhole map exporter's texture template.
 const headerHash = 'c993458f322dd75e91d28a6ec8a577689ed3c4a8fb5e1bccb000fadf46ed7a59';
-const textureFooter = Uint8Array.from([0, 8, 0, 0, 240, 6, 0, 0, 1, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 193, 131, 42, 158]);
+const textureFooter = new Uint8Array(28);
+const footerFields = new DataView(textureFooter.buffer);
+footerFields.setUint32(0, width, true);
+footerFields.setUint32(4, height, true);
+footerFields.setUint32(8, 1, true); // One mip.
+footerFields.setUint32(16, 15, true);
+footerFields.setUint32(24, 0x9e2a83c1, true); // Unreal package magic.
 const weights = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 
 function encodeBc7(rgba) {
