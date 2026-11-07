@@ -247,10 +247,20 @@ Regression coverage: `tests/orthographic-reflections.test.mjs` checks descriptor
 The two Home Region maps use rotated landscape components. Their paint weights
 need to be placed in world space before the shared terrain shader can sample
 them. After the targeted FoxWatch extraction (terrain, paint, scene, roads and
-water) for both regions, build the local compact entries with:
+water) for both regions, resolve the model material slots and decode their
+textures. The native model export contains geometry and slot names only.
 
 ```sh
-node packages/foxhole-world/prepare-home-regions.mjs <native-root> <scratch-dir> <compact-output> <shared-compact-world>
+node packages/foxhole-world/prepare-home-regions.mjs --model-requests <native-root> <material-dir>
+dotnet <Importer.dll> <game-pak-dir> materials <material-dir>
+node packages/foxhole-world/prepare-home-regions.mjs --model-requests <native-root> <material-dir>
+dotnet <Importer.dll> <game-pak-dir> material-textures <material-dir>
+```
+
+Then build the local compact entries:
+
+```sh
+node packages/foxhole-world/prepare-home-regions.mjs <native-root> <scratch-dir> <compact-output> <shared-compact-world> <material-dir>
 ```
 
 The native root contains the `homeregionc` and `homeregionw` extraction folders.

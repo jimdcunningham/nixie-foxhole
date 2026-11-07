@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync, brotliDecompressSync, constants} from 'node:zlib';
+import {prepareHomeModelWriter, writeHomeModelRequests} from './prepare-home-models.mjs';
 import {prepareHomeRoads} from './prepare-home-roads.mjs';
 import {addHomeMaterials} from './prepare-home-materials.mjs';
 import {makeGlb} from './authoring/mesh.mjs';
@@ -42,7 +43,7 @@ async function readShared(root) {
     return {water, resources};
 }
 
-export async function prepareHomeRegions({nativeRoot, scratch, target, sharedRoot = target}) {
+export async function prepareHomeRegions({nativeRoot, scratch, target, sharedRoot = target, modelRoot = path.join(nativeRoot, 'model-materials')}) {
     const shared = await readShared(sharedRoot);
     await fs.mkdir(scratch, {recursive:true});
     const prepared = await fs.mkdtemp(path.join(scratch, 'home-regions-'));
@@ -74,14 +75,15 @@ export async function prepareHomeRegions({nativeRoot, scratch, target, sharedRoo
         await add('terrain.json', terrainJson, true);
         await add('terrain.bin', vertices, true);
         const models = [];
+        const prepareModel = await prepareHomeModelWriter(native, modelRoot, add);
         for (const file of ['scene-full.json', 'scene-extra.json', 'scene-bridges.json']) {
             const data = await readJson(path.join(native, file));
             for (const model of data.prototypes) {
-                if (!model.file || model.category === 'utility') continue;
+                if (!model.file || model.category === 'utility' || model.name.startsWith('BPBoundaryHex_C/')
+                    || model.materials?.length && model.materials.every(slot => /^(WorldGridMaterial|WaterMeasurement|StencilOnly)$/.test(slot.name))) continue;
                 const placements = model.placements.filter(row => !row.spline);
                 if (!placements.length) continue;
-                if (!resources[region + '/' + model.file]) await add(model.file, await fs.readFile(path.join(native, model.file)));
-                models.push({...model, placements});
+                models.push({...model, file: await prepareModel(model), placements});
             }
         }
         await add('native-roads.glb', await prepareHomeRoads(native));
@@ -104,7 +106,11 @@ export async function prepareHomeRegions({nativeRoot, scratch, target, sharedRoo
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.join(import.meta.dirname, 'prepare-home-regions.mjs')) {
-    const [nativeRoot, scratch, target, sharedRoot] = process.argv.slice(2);
-    if (!nativeRoot || !scratch || !target) throw Error('Usage: prepare-home-regions.mjs <native root> <scratch directory> <local world directory>');
-    await prepareHomeRegions({nativeRoot, scratch, target, sharedRoot});
+    const [nativeRoot, scratch, target, sharedRoot, modelRoot] = process.argv.slice(2);
+    if (nativeRoot === '--model-requests') {
+        await writeHomeModelRequests(scratch, target);
+    } else {
+        if (!nativeRoot || !scratch || !target) throw Error('Usage: prepare-home-regions.mjs <native root> <scratch directory> <compact world directory> [shared world directory] [model material directory]');
+        await prepareHomeRegions({nativeRoot, scratch, target, sharedRoot, modelRoot});
+    }
 }
