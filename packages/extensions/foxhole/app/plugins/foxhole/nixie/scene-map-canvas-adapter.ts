@@ -236,7 +236,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         },
     });
     let bakeController: AbortController | null = null;
-    const bake = async (scale: 1 | 2) => {
+    const bake = async (scale: 1 | 2, supersample = false) => {
         const settings = mapSettings.value;
         const region = spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
         if (destroyed || bakeController || context.viewMode() === 'flat' || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
@@ -256,7 +256,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             if (!selected) throw new Error('No selected world catalog.');
             const png = await bakeFoxholeRegion(context.app.renderer, {
                 ...worldOptions(), baseUrl: selected.baseUrl, indexLoader: selected.loadIndex,
-            }, settings, source, controller.signal, scale);
+            }, settings, source, controller.signal, scale, supersample);
             controller.signal.throwIfAborted();
             return { png, filename: region.textureKey + (scale === 2 ? '-4096x3552.png' : '.png') };
         } finally {

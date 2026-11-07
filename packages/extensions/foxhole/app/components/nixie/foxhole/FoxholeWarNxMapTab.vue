@@ -463,7 +463,7 @@ async function exportDeadlandsPak(event: Event): Promise<void> {
     if (!header || !bake || !canExportDeadlandsPak.value || deadlandsPakExporting.value || regionBakePending.value) return;
     deadlandsPakExporting.value = true;
     try {
-        const { png } = await bake(1);
+        const { png } = await bake(1, true);
         const bitmap = await createImageBitmap(png);
         const canvas = document.createElement('canvas');
         canvas.width = 2048;

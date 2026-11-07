@@ -6,7 +6,7 @@ import { shallowRef } from 'vue';
 import { FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT } from './constants.ts';
 import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
 
-export const regionBakeAction = shallowRef<((scale: 1 | 2) => Promise<{ png: Blob; filename: string }>) | null>(null);
+export const regionBakeAction = shallowRef<((scale: 1 | 2, supersample?: boolean) => Promise<{ png: Blob; filename: string }>) | null>(null);
 
 type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
 type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];
@@ -18,16 +18,19 @@ export async function bakeFoxholeRegion(
     region: NonNullable<SyncOptions['regions']>[number],
     signal: AbortSignal,
     scale: 1 | 2,
+    supersample = false,
 ): Promise<Blob> {
     const width = 2048 * scale;
     const height = 1776 * scale;
+    const renderWidth = supersample ? width * 2 : width;
+    const renderHeight = supersample ? height * 2 : height;
     const camera = new Camera3D({ near: 1, far: FOXHOLE_REGION_WIDTH * 4 });
     camera.mode = 'orthographic';
     camera.orthographicSize = Math.max(FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT * width / height) / 2;
     camera.position.set(region.position.x, -region.position.y, FOXHOLE_REGION_WIDTH);
     camera.lookAt({ x: region.position.x, y: -region.position.y, z: 0 }, { x: 0, y: 1, z: 0 });
     const view = new View3D({
-        width, height: width, autoResize: false, camera,
+        width: renderWidth, height: renderWidth, autoResize: false, camera,
         environment: {
             skyColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.skyColor,
             groundColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.groundColor,
@@ -89,7 +92,7 @@ export async function bakeFoxholeRegion(
         // a square backing texture for this region, so render the square first.
         const square = renderer.extract.canvas({
             target: view,
-            frame: new Rectangle(0, 0, width, width),
+            frame: new Rectangle(0, 0, renderWidth, renderWidth),
             resolution: 1,
             antialias: false,
             clearColor: 'transparent',
@@ -99,8 +102,9 @@ export async function bakeFoxholeRegion(
         canvas.height = height;
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Could not crop the region PNG.');
-        context.imageSmoothingEnabled = false;
-        context.drawImage(square, 0, (width - height) / 2, width, height, 0, 0, width, height);
+        context.imageSmoothingEnabled = supersample;
+        context.imageSmoothingQuality = 'high';
+        context.drawImage(square, 0, (renderWidth - renderHeight) / 2, renderWidth, renderHeight, 0, 0, width, height);
         const image = context.getImageData(0, 0, width, height);
         // Clip at pixel centers so the PNG keeps the same hard hex edge at either size.
         for (let y = 0; y < height; y++) {
