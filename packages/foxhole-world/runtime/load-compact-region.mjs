@@ -2,6 +2,7 @@ import {createFireStaticResolver,createFireStaticMaterial} from './fire-static.m
 import {createContainedWaterResolver} from './contained-water.mjs';
 import {createTerrainMapImageSource} from './terrain-map-image.mjs';
 import {prepareAtlasRetirement} from './atlas-retirement.mjs';
+import {solidMapColors} from './solid-map-materials.mjs';
 import {nativeSmokeCloudTexture} from './native-smoke-texture.mjs';
 import {prepareWaterSurfaceDepth} from './water-surface-depth.mjs';
 import {prepareVegetationWindShadows} from './vegetation-wind-shadows.mjs';
@@ -208,11 +209,11 @@ async function loadRoads(seamsReady,ctx){
   const verts=cached?null:new Float32Array(vb),ix=cached?null:new Uint32Array(ib),materials=new Map();
   for(const[key,d]of Object.entries(meta.materials)){
    const [t,n]=await Promise.all([d.file?texture(region+'/'+d.file,true):undefined,d.normalFile?texture(region+'/'+d.normalFile,true):undefined]);
-   materials.set(key,mat(weatherMaterial(new Material3D({baseColorTexture:t,normalTexture:n,normalScale:1,baseColor:t?0xffffff:0x827365,roughness:1,metallic:0,doubleSided:true,extraBits:[hexBit,weatherSurfaceBit,excavationMask.bit]}))));
+   materials.set(key,mat(weatherMaterial(new Material3D({baseColorTexture:t,normalTexture:n,normalScale:1,baseColor:solidMap?solidMapColors.road:t?0xffffff:0x827365,roughness:1,metallic:0,doubleSided:true,extraBits:[hexBit,weatherSurfaceBit,excavationMask.bit]}))));
   }
   await roadShoulders.prepare({region,json,zipped,terrain:sample});
   roadTransitions=await createRoadTransitions({region,json,texture,geo,mat,hexBit,weatherSurfaceBit,weatherMaterial,groundBit:excavationMask.bit,materials:meta.materials,enabled:!solidMap,solidMap});
-  const decorations=loadRailGeometry({region,json,zipped,texture,geo,mat,root:roads,hexBit,weatherSurfaceBit,weatherMaterial});
+  const decorations=loadRailGeometry({region,json,zipped,texture,solidMap,geo,mat,root:roads,hexBit,weatherSurfaceBit,weatherMaterial});
   const assemble=async()=>{
    const snapshot={version:1,chunks:[]};
    if(cached){
@@ -268,7 +269,7 @@ async function loadRoads(seamsReady,ctx){
   }
   const tasks={
    terrain:{needed:f=>enabled(f,'terrain'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Terrain Loading');try{const geometry=await geometryReady();taskSignal.throwIfAborted();const options={surface:terrainSurface,mapTexture:terrainMapImage.read,texture:ctx.texture,json:ctx.json,zipped:ctx.zipped,status,prepareTerrain,signal:taskSignal,onTerrainObservation:provider.observeTerrain,terrainDescriptor:adaptiveTextures?provider.terrainDescriptor:undefined,texturePool:adaptiveTextures&&provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined};const showTerrain=()=>{if(terrainPreview){terrainPreview.removeFromParent();terrainPreview.destroy();terrainPreview=null;targets.terrain=[];}framePreparation?.prepare();refresh();};if(progressive&&!adaptiveTextures&&typeof liveTerrainPass.loadProgressive==='function')await liveTerrainPass.loadProgressive(region,geometry,options,{terrainDescriptor:provider.terrainDescriptor,texturePool:provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined,onPreview:showTerrain});else await liveTerrainPass.load(region,geometry,options);taskSignal.throwIfAborted();showTerrain();}catch(error){liveTerrainPass.clear?.();ctx.rollback();throw error;}}},
-   water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const material=solidMap?new Material3D({baseColor:0x4d8799,roughness:1,metallic:0,doubleSided:true,extraBits:[hexBit]}):(await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit,extraBits:[liveTerrainPass.planning.waterBit]})).material;waterMat=ctx.mat(material);if(!solidMap){liveTerrainPass.planning.bindWater(waterMat);waterMat.data.waterReflectionStrength=waterReflections?1:0;}targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
+   water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const material=solidMap?new Material3D({baseColor:solidMapColors.water,roughness:1,metallic:0,doubleSided:true,extraBits:[hexBit]}):(await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit,extraBits:[liveTerrainPass.planning.waterBit]})).material;waterMat=ctx.mat(material);if(!solidMap){liveTerrainPass.planning.bindWater(waterMat);waterMat.data.waterReflectionStrength=waterReflections?1:0;}targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
    weather:{needed:()=>false,load:solidMap?async()=>{}:weather},
    bridges:{needed:()=>false,load:taskSignal=>models('bridges',taskSignal,true),unload:()=>modelGroups.get('bridges')?.dispose?.()},
    ...Object.fromEntries(worldModelLayers.map(key=>[key,{needed:f=>enabled(f,key),load:taskSignal=>streamModels(key,taskSignal),unload:()=>retireModels(key)}])),
