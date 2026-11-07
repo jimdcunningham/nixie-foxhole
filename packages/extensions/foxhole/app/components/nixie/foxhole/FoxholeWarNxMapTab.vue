@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
+import { downloadNxBlob } from '#nixie/utils/nx-download.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
 import NxButton from '#nixie/components/NxButton.vue';
@@ -424,6 +425,55 @@ async function confirmReplaceMapMod(): Promise<boolean> {
     });
 }
 
+const deadlandsPakHeaderInput = ref<HTMLInputElement | null>(null);
+const deadlandsPakExporting = ref(false);
+const canExportDeadlandsPak = computed(() => import.meta.dev
+    && mapSettings.value.regionKeys.length === 1
+    && mapSettings.value.regionKeys[0] === 'DeadLandsHex');
+
+async function exportDeadlandsPak(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const header = input.files?.[0];
+    input.value = '';
+    if (!header || !canExportDeadlandsPak.value || deadlandsPakExporting.value) return;
+    deadlandsPakExporting.value = true;
+    try {
+        const settings = mapSettings.value;
+        const textureKey = 'MapDeadlandsHex';
+        const importedUrl = settings.modded ? mapModStore.getTextureUrl(textureKey) : null;
+        const mapPath = settings.baseMap ? 'IMM/BaseMap'
+            : settings.colors ? 'IMM/BaseMapTopo'
+            : settings.baseMapFull ? 'IMM/BaseMapFull' : 'HexMaps/Processed';
+        const url = importedUrl ?? resolveFoxholeAssetUrl(
+            `${assetsBaseUrl}maps/${mapPath}/${textureKey}.webp`, assetsBaseUrl,
+        );
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Could not load the Deadlands map image.');
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048;
+        canvas.height = 1776;
+        const context = canvas.getContext('2d');
+        try {
+            if (!context) throw new Error('Could not render the Deadlands map image.');
+            context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        } finally {
+            bitmap.close();
+        }
+        const { buildDeadlandsPak } = await import('#foxhole/plugins/foxhole/nixie/map/deadlands-pak-export.mjs');
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+        downloadNxBlob(await buildDeadlandsPak(pixels.data, await header.arrayBuffer()), 'War-WindowsNoEditor_NixieDeadlands.pak');
+    } catch (error) {
+        showNxToast({
+            title: 'Deadlands Export Failed',
+            message: error instanceof Error ? error.message : 'Could not export the Deadlands map.',
+            kind: 'error',
+        });
+    } finally {
+        deadlandsPakExporting.value = false;
+    }
+}
+
 async function importMapModPakFile(file: File): Promise<void> {
     const importFileName = file.name || 'mod.pak';
     mapModStore.setPakImportStatus({
@@ -822,6 +872,17 @@ const mapModVisibilityDisabled = computed(() => (
             </template>
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
+                <template v-if="canExportDeadlandsPak">
+                    <NxButton
+                        variant="secondary"
+                        size="sm"
+                        label="Export Deadlands Pak"
+                        :disabled="deadlandsPakExporting"
+                        @click="deadlandsPakHeaderInput?.click()"
+                    />
+                    <p class="text-muted text-sm">Choose the cooked Deadlands texture header to export the current base map.</p>
+                    <input ref="deadlandsPakHeaderInput" type="file" hidden @change="exportDeadlandsPak" />
+                </template>
                 <div
                     v-if="!isPakImportActive"
                     class="nx-toggle-grid foxhole-war-nx-map-tab__mod-actions"
