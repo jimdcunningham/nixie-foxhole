@@ -189,7 +189,7 @@ public sealed class FoxWatchMapDataGenerator
             var homeGridCoordinate = mapKey switch
             {
                 "HomeRegionW" => new JObject { ["X"] = 4, ["Y"] = -5 },
-                "HomeRegionC" => new JObject { ["X"] = -4, ["Y"] = 5 },
+                "HomeRegionC" => new JObject { ["X"] = -5, ["Y"] = 5 },
                 _ => null,
             };
             var standalone = homeGridCoordinate != null;
