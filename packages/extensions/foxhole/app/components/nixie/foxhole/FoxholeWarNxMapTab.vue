@@ -427,12 +427,12 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 }
 
 const regionBakePending = ref(false);
-async function downloadRegionBake() {
+async function downloadRegionBake(scale: 1 | 2) {
     const bake = regionBakeAction.value;
     if (!bake || regionBakePending.value) return;
     regionBakePending.value = true;
     try {
-        const { png, filename } = await bake();
+        const { png, filename } = await bake(scale);
         downloadNxBlob(png, filename);
     } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -900,7 +900,15 @@ const mapModVisibilityDisabled = computed(() => (
                     size="sm"
                     :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
                     :disabled="regionBakePending"
-                    @click="downloadRegionBake"
+                    @click="downloadRegionBake(1)"
+                />
+                <NxButton
+                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    variant="secondary"
+                    size="sm"
+                    label="Bake High-Resolution PNG"
+                    :disabled="regionBakePending"
+                    @click="downloadRegionBake(2)"
                 />
                 <template v-if="canExportDeadlandsPak">
                     <NxButton

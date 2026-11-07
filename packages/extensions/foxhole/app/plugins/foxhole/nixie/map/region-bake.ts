@@ -6,7 +6,7 @@ import { shallowRef } from 'vue';
 import { FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT } from './constants.ts';
 import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
 
-export const regionBakeAction = shallowRef<(() => Promise<{ png: Blob; filename: string }>) | null>(null);
+export const regionBakeAction = shallowRef<((scale: 1 | 2) => Promise<{ png: Blob; filename: string }>) | null>(null);
 
 type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
 type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];
@@ -17,9 +17,10 @@ export async function bakeFoxholeRegion(
     settings: SyncOptions['settings'],
     region: NonNullable<SyncOptions['regions']>[number],
     signal: AbortSignal,
+    scale: 1 | 2,
 ): Promise<Blob> {
-    const width = 2048;
-    const height = 1776;
+    const width = 2048 * scale;
+    const height = 1776 * scale;
     const camera = new Camera3D({ near: 1, far: FOXHOLE_REGION_WIDTH * 4 });
     camera.mode = 'orthographic';
     camera.orthographicSize = Math.max(FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT * width / height) / 2;
@@ -80,6 +81,7 @@ export async function bakeFoxholeRegion(
             target: view,
             frame: new Rectangle(0, 0, width, width),
             resolution: 1,
+            antialias: false,
             clearColor: 'transparent',
         }) as HTMLCanvasElement;
         const canvas = document.createElement('canvas');
@@ -87,6 +89,7 @@ export async function bakeFoxholeRegion(
         canvas.height = height;
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Could not crop the region PNG.');
+        context.imageSmoothingEnabled = false;
         context.drawImage(square, 0, (width - height) / 2, width, height, 0, 0, width, height);
         const pixels = context.getImageData(0, 0, width, height).data;
         if (!pixels.some((value, index) => index % 4 === 3 && value !== 0)) {
