@@ -17,7 +17,7 @@
     "publish:extension": "nixie-extension publish artifacts/extension.nxext"
   },
   "dependencies": {
-    "@nixiejs/extension-sdk": "0.1.0-preview.3"
+    "@nixiejs/extension-sdk": "0.1.0-preview.4"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
