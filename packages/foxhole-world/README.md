@@ -241,3 +241,21 @@ The `tests/browser/smoke-mask.mjs` fixture checks actual native texture animatio
 Framed Nixie region PBR materials share one reflection policy for imported world models, puddle decals, utility puddles, coastline and water. Orthographic reflections fade smoothly between approximately 49 and 12 degrees from vertical and are removed near straight down. Perspective keeps the authored appearance. Orthographic lighting uses parallel view rays instead of eye-to-fragment vectors, avoiding false grazing reflections at close zoom. Diffuse light, shadows, surface colour and opacity remain; metals become diffuse at the overhead limit so they stay readable. Water's screen-space reflections and reflected sky light consume the same fade. Reflected wave highlights return when the camera tilts. The standalone native viewer retains its existing water treatment.
 
 Regression coverage: `tests/orthographic-reflections.test.mjs` checks descriptor routing and shader composition. Bundle `tests/browser/orthographic-reflections.mjs` or `tests/browser/water-specular.mjs` with esbuild beside an HTML page containing a `pre` element, then run with `?backend=webgl` and `?backend=webgpu`. The water fixture uses `frame=host` for Nixie's shared policy and `frame=native` for the original standalone appearance.
+
+### Prepare Home Region materials
+
+The two Home Region maps use rotated landscape components. Their paint weights
+need to be placed in world space before the shared terrain shader can sample
+them. After the targeted FoxWatch extraction (terrain, paint, scene, roads and
+water) for both regions, build the local compact entries with:
+
+```sh
+node packages/foxhole-world/prepare-home-regions.mjs <native-root> <scratch-dir> <compact-output> <shared-compact-world>
+```
+
+The native root contains the `homeregionc` and `homeregionw` extraction folders.
+The shared compact world supplies the common sky and water shader textures.
+Preparation uses each map's own paint layers, model and road textures, and
+the Home Regions' Water2 ocean material. The output uses the compact world
+format and can be merged into the local world index without rebuilding the
+other regions.

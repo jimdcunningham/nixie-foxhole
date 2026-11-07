@@ -360,7 +360,7 @@ export async function publishCompactWorld({input,target,regions,catalog,terrainT
 
   const metadata=await store(brotliCompressSync(Buffer.from(JSON.stringify(out)),{params:{[constants.BROTLI_PARAM_QUALITY]:6}}),'.json','br');
   selected.set(metadata.path,metadata);
-  index.regions[id]={id,manifest:metadata,downloadBytes:[...selected.values()].reduce((n,r)=>n+r.bytes,0),...(out.catalogResources?{catalogBytes:out.catalogResources.reduce((n,r)=>n+(r.bytes||0),0)}:{})};
+  index.regions[id]={id,manifest:metadata,...(['home-solid-v1','home-native-v1'].includes(manifest.profile)?{profile:manifest.profile}:{}),downloadBytes:[...selected.values()].reduce((n,r)=>n+r.bytes,0),...(out.catalogResources?{catalogBytes:out.catalogResources.reduce((n,r)=>n+(r.bytes||0),0)}:{})};
   onProgress({region:id,downloadBytes:index.regions[id].downloadBytes});
  }
  await fs.mkdir(target,{recursive:true});const temp=path.join(target,`index.${process.pid}.tmp`);await fs.writeFile(temp,JSON.stringify(index));await fs.rename(temp,path.join(target,'index.json'));

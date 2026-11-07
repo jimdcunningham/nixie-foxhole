@@ -53,6 +53,11 @@ function properties(value){const keys=new Set();for(let p=value;p&&p!==Object.pr
 export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},solidMap=false,terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask}){
  prepareAtlasRetirement(renderer);
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
+ const homePreview=entry.profile==='home-solid-v1';
+ const homeRegion=homePreview||entry.profile==='home-native-v1';
+ const availableLayers=flags=>homeRegion?{...flags,shell:false,roads:false,decals:false,puddles:false,effects:false}:flags;
+ if(homeRegion){layers=availableLayers(layers);adaptiveTextures=false;}
+ if(homePreview)solidMap=true;
  if(solidMap)terrainSurface='plain';
  const provider=await createCompactProvider({baseUrl,entry,solidMap,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
  // Map assets own their authored LOD; host placed-object simplification must not replace it.
@@ -127,7 +132,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   setVegetationShadows(enabled){vegetationShadows=enabled!==false;for(const group of modelGroups.values())group.world?.setVegetationShadows?.(vegetationShadows);},
   setAmbientOcclusion(enabled){ambientOcclusion=enabled;passes[3].enabled=enabled;passes[4].enabled=!enabled;scene.metrics.ambientOcclusion=enabled;},
   setFrustumCulling(enabled){if(frustumCulling===enabled)return;frustumCulling=enabled;setRegionFrustumCulling(root,enabled);if(terrainChunks)terrainChunks.frustumCulling=enabled;scene.metrics.frustumCulling=enabled;},
-  setLayers(layers={}){for(const key in layers)if(layers[key]!==layerFlags[key]){catalogLights.invalidate();break;}layerFlags=layers;applyLayers(layers);if(adaptiveStreaming)demand?.setLayers(layers);else if(progressive){let changed=false;for(const key in residentFlags)if(!residentFlags[key]&&layers[key]!==false){residentFlags[key]=true;changed=true;}if(changed)demand?.setLayers(residentFlags);}},
+  setLayers(layers={}){layers=availableLayers(layers);for(const key in layers)if(layers[key]!==layerFlags[key]){catalogLights.invalidate();break;}layerFlags=layers;applyLayers(layers);if(adaptiveStreaming)demand?.setLayers(layers);else if(progressive){let changed=false;for(const key in residentFlags)if(!residentFlags[key]&&layers[key]!==false){residentFlags[key]=true;changed=true;}if(changed)demand?.setLayers(residentFlags);}},
   async whenLayersReady(){await demand?.whenIdle();},
   setGroundCutouts(volumes){const native=frame?volumes.map(v=>v.map(p=>[(p[0]-frame.x)/frame.scale,p[2]/frame.scale,(p[1]+frame.y)/frame.scale])):volumes;excavationMask.set(native,sourceMaxHeight);},
   sampleWater(x,y){if(disposed||!sampleWater||layerFlags.water===false)return null;const nx=frame?(x-frame.x)/frame.scale:x,nz=frame?-(y-frame.y)/frame.scale:y;if(Math.abs(nz)>945||Math.abs(nx)+Math.abs(nz)*.577777778>1092)return null;const height=sampleWater(nx,nz);return height===null?null:height*(frame?.scale||1);},
