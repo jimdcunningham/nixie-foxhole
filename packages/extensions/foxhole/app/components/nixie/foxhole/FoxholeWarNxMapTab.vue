@@ -895,7 +895,7 @@ const mapModVisibilityDisabled = computed(() => (
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
                 <NxButton
-                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
                     :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"

@@ -239,8 +239,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const bake = async () => {
         const settings = mapSettings.value;
         const region = spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
-        if (destroyed || bakeController || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
-            throw new Error('Select one 3D map region to bake.');
+        if (destroyed || bakeController || context.viewMode() === 'flat' || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
+            throw new Error('Select one map region in 2.5D or 3D to bake.');
         }
         const controller = new AbortController();
         bakeController = controller;
@@ -250,7 +250,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 position: getFoxholeRegionPosition(region),
                 terrainMapImage: !settings.solidMap && settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null,
                 warState: plugin.getSpatialWarState(region.key),
-                planningOverlays: { ...plugin.getSpatialPlanningOverlays?.(region.key), solidWater: settings.solidWaterOverlays },
+                planningOverlays: { solidWater: settings.solidWaterOverlays },
             };
             const selected = foxholeWorldAssetDelivery();
             if (!selected) throw new Error('No selected world catalog.');
