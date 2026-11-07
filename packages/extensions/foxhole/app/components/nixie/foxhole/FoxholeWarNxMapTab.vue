@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
+import { regionBakeAction } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
 import { downloadNxBlob } from '#nixie/utils/nx-download.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
@@ -423,6 +424,27 @@ async function confirmReplaceMapMod(): Promise<boolean> {
         cancelLabel: 'Cancel',
         destructive: true,
     });
+}
+
+const regionBakePending = ref(false);
+async function downloadRegionBake() {
+    const bake = regionBakeAction.value;
+    if (!bake || regionBakePending.value) return;
+    regionBakePending.value = true;
+    try {
+        const { png, filename } = await bake();
+        downloadNxBlob(png, filename);
+    } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+            showNxToast({
+                kind: 'error',
+                title: 'Region Bake Failed',
+                message: error instanceof Error ? error.message : 'Could not bake the region.',
+            });
+        }
+    } finally {
+        regionBakePending.value = false;
+    }
 }
 
 const deadlandsPakHeaderInput = ref<HTMLInputElement | null>(null);
@@ -872,6 +894,14 @@ const mapModVisibilityDisabled = computed(() => (
             </template>
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
+                <NxButton
+                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    variant="secondary"
+                    size="sm"
+                    :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
+                    :disabled="regionBakePending"
+                    @click="downloadRegionBake"
+                />
                 <template v-if="canExportDeadlandsPak">
                     <NxButton
                         variant="secondary"

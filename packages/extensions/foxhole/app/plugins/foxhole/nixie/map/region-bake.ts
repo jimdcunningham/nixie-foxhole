@@ -1,0 +1,83 @@
+import { NIXIE_SPATIAL_DEFAULT_LIGHTING, NixieSpatialSceneLighting } from '#nixie/plugins/nixie/scene-v2/spatial-scene-lighting.ts';
+import { Camera3D, View3D } from '@pixi/3d';
+import { Rectangle } from 'pixi.js';
+import type { Renderer } from 'pixi.js';
+import { shallowRef } from 'vue';
+import { FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT } from './constants.ts';
+import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
+
+export const regionBakeAction = shallowRef<(() => Promise<{ png: Blob; filename: string }>) | null>(null);
+
+type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
+type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];
+
+export async function bakeFoxholeRegion(
+    renderer: Renderer,
+    worldOptions: WorldOptions,
+    settings: SyncOptions['settings'],
+    region: NonNullable<SyncOptions['regions']>[number],
+    signal: AbortSignal,
+): Promise<Blob> {
+    const width = 2048;
+    const height = 1776;
+    const camera = new Camera3D({ near: 1, far: FOXHOLE_REGION_WIDTH * 4 });
+    camera.mode = 'orthographic';
+    camera.orthographicSize = Math.max(FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT * width / height) / 2;
+    camera.position.set(region.position.x, -region.position.y, FOXHOLE_REGION_WIDTH);
+    camera.lookAt({ x: region.position.x, y: -region.position.y, z: 0 }, { x: 0, y: 1, z: 0 });
+    const view = new View3D({
+        width, height, autoResize: false, camera,
+        environment: {
+            skyColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.skyColor,
+            groundColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.groundColor,
+            intensity: NIXIE_SPATIAL_DEFAULT_LIGHTING.environmentIntensity,
+            up: { x: 0, y: 0, z: 1 },
+        },
+    });
+    const lighting = new NixieSpatialSceneLighting(view);
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const abort = () => reject(signal.reason);
+    const world = new FoxholeRegionSceneController({
+        ...worldOptions,
+        onStatus(status) {
+            if (status.phase === 'Ready') resolve();
+            else if (status.phase === 'error') reject(new Error(status.error ?? 'Could not prepare the region.'));
+        },
+    });
+    const sync = () => world.sync({
+        view,
+        mode: '3d',
+        settings: {
+            ...settings,
+            adaptiveStreaming: false,
+            vegetationDensity: 'full',
+            frustumCulling: false,
+            ambientOcclusion: false,
+        },
+        regions: [region],
+        deltaMS: 0,
+    });
+    try {
+        signal.throwIfAborted();
+        signal.addEventListener('abort', abort, { once: true });
+        sync();
+        await promise;
+        signal.throwIfAborted();
+        sync();
+        lighting.sync();
+        const canvas = renderer.extract.canvas({
+            target: view,
+            frame: new Rectangle(0, 0, width, height),
+            resolution: 1,
+            clearColor: 'transparent',
+        }) as HTMLCanvasElement;
+        return await new Promise<Blob>((done, fail) => {
+            canvas.toBlob(blob => blob ? done(blob) : fail(new Error('Could not encode the region PNG.')), 'image/png');
+        });
+    } finally {
+        signal.removeEventListener('abort', abort);
+        world.destroy();
+        await world.whenDisposed();
+        view.destroy({ children: true });
+    }
+}

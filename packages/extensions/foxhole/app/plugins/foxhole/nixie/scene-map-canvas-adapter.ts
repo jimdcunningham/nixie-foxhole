@@ -8,6 +8,7 @@ import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
 import { foxholeWorldAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
 import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
 import { FoxholeRegionSceneController, regionIdForKey } from './map/region-scene-controller.mjs';
+import { bakeFoxholeRegion, regionBakeAction } from './map/region-bake.ts';
 import { computed, shallowRef } from 'vue';
 import type { NixieSceneV2CanvasContributionContext, NixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
 import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from './map-settings.ts';
@@ -183,7 +184,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         scheduleWorldProgressWait();
     };
     let delivery = foxholeWorldAssetDelivery();
-    const createWorld = () => new FoxholeRegionSceneController({
+    const worldOptions = () => ({
         // Scene time of day owns the shared sky; a region must not install Noon Sky.
         manageEnvironment: false,
         onStatus: reportWorldProgress,
@@ -191,6 +192,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         indexLoader: delivery?.loadIndex ?? (async () => {throw new Error('No selected world catalog.');}),
         loadRegion: async (options: Parameters<typeof import('@nixiejs/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixiejs/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });
+    const createWorld = () => new FoxholeRegionSceneController(worldOptions());
     world = createWorld();
     const roadTour = import.meta.dev && context.cameraPose && context.setCameraPose ? createPlannerRoadTour({
         canvas: context.app.canvas,
@@ -233,6 +235,35 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             },
         },
     });
+    let bakeController: AbortController | null = null;
+    const bake = async () => {
+        const settings = mapSettings.value;
+        const region = spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
+        if (destroyed || bakeController || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
+            throw new Error('Select one 3D map region to bake.');
+        }
+        const controller = new AbortController();
+        bakeController = controller;
+        try {
+            const source = {
+                id: regionIdForKey(region.key),
+                position: getFoxholeRegionPosition(region),
+                terrainMapImage: !settings.solidMap && settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null,
+                warState: plugin.getSpatialWarState(region.key),
+                planningOverlays: { ...plugin.getSpatialPlanningOverlays?.(region.key), solidWater: settings.solidWaterOverlays },
+            };
+            const selected = foxholeWorldAssetDelivery();
+            if (!selected) throw new Error('No selected world catalog.');
+            const png = await bakeFoxholeRegion(context.app.renderer, {
+                ...worldOptions(), baseUrl: selected.baseUrl, indexLoader: selected.loadIndex,
+            }, settings, source, controller.signal);
+            controller.signal.throwIfAborted();
+            return { png, filename: region.textureKey + '.png' };
+        } finally {
+            bakeController = null;
+        }
+    };
+    if (import.meta.dev) regionBakeAction.value = bake;
     return {
         documentRendererIds: ['planning-map', 'planning-grid'],
         ownsViewportConstraints: true,
@@ -342,6 +373,8 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             ];
         },
         destroy() {
+            bakeController?.abort();
+            if (import.meta.dev && regionBakeAction.value === bake) regionBakeAction.value = null;
             unsubscribeViewpoints();
             roadTour?.destroy();
             if (plannerRoadTourActions.value === roadTour) {
