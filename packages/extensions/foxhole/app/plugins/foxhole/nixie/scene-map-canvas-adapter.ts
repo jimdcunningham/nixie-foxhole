@@ -287,7 +287,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             }
             worldRetirementStatus = null;
             world.sync({ view, mode, deltaMS, wind: context.wind?.(), settings: { ...settings, regionKeys: regions.map(region => region.key) }, regions: regions.map(region => ({
-                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key), planningOverlays: plugin.getSpatialPlanningOverlays?.(region.key),
+                id: regionIdForKey(region.key), position: getFoxholeRegionPosition(region), terrainMapImage: !settings.solidMap && settings.terrainSurface === 'map' ? plugin.getSpatialMapImage?.(region.key) : null, warState: plugin.getSpatialWarState(region.key), planningOverlays: settings.solidMap ? undefined : plugin.getSpatialPlanningOverlays?.(region.key),
             })) });
             roadTour?.update(deltaMS);
         },
@@ -305,6 +305,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const root = plugin.presentationRoot;
             if (!root?.visible || root.destroyed) return [];
             const settings = mapSettings.value;
+            const hideMapArt = settings.solidMap && context.viewMode() !== 'flat';
             const clip = settings.cropEnabled && settings.cropWidth > 0 && settings.cropHeight > 0
                 ? { minX: settings.cropX, minY: settings.cropY, maxX: settings.cropX + settings.cropWidth, maxY: settings.cropY + settings.cropHeight }
                 : undefined;
@@ -312,7 +313,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels', 'foxhole-map-grid']);
             const pixelScale = context.zoom();
             const summaries = new Set(['foxhole-map-victory-base-badges', 'foxhole-map-casualty-labels']);
-            return root.children.filter(child => child !== root.mask && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders', 'foxhole-map-frontlines', 'foxhole-map-subregions'].includes(child.label))).map(content => ({
+            return root.children.filter(child => child !== root.mask && (!hideMapArt || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-live-icons', 'foxhole-map-victory-base-badges'].includes(child.label)) && (context.viewMode() === 'flat' || child.label !== 'foxhole-map-background') && (!world.active || !['foxhole-map-regions', 'foxhole-map-background', 'foxhole-map-borders', 'foxhole-map-frontlines', 'foxhole-map-subregions'].includes(child.label))).map(content => ({
                 content, liveGraphics: content.label === 'foxhole-map-borders', billboard: billboardLabels.has(content.label), billboardElevation: context.viewMode() === '3d' && billboardLabels.has(content.label) ? (x: number, y: number) => Math.max(0, world.sampleGround(x, y) ?? 0) : undefined, screenSizedBillboards: context.viewMode() === '3d' && billboardLabels.has(content.label) && !summaries.has(content.label), hoverable: content.label === 'foxhole-map-live-icons', pixelScale, clip,
                 // Warm 2.5D keeps the layout ready for the first 3D display frame.
                 billboardGroups: context.viewMode() !== 'flat' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,

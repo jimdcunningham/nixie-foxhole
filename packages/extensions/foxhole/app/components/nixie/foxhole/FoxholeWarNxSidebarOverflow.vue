@@ -60,6 +60,12 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.modelLod, !mapSettings.value.modelLod, { reason: 'foxhole-war-nx:model-lod' }),
     },
     {
+        type: 'checkbox', label: 'Solid Map', icon: 'ph:cube',
+        checked: mapSettings.value.solidMap, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.solidMap, !mapSettings.value.solidMap, { reason: 'foxhole-war-nx:solid-map' }),
+    },
+    {
         type: 'submenu', label: 'Terrain Surface', icon: 'ph:mountains',
         badge: { plain: 'Plain', map: 'Map', native: 'Detailed' }[mapSettings.value.terrainSurface],
         adminOnly: false, disabled: false, visible: true,

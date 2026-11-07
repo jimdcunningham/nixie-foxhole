@@ -673,7 +673,7 @@ export class FoxholeMapRenderer {
         if (!showWorldContent) {
             this.clearHoveredIcon();
         }
-        this.background.visible = settings.background;
+        this.background.visible = settings.background && !(settings.solidMap && settings.spatialWorldData);
         this.grid.visible = showGrid;
         this.gridBackground.visible = showGrid && !settings.spatialWorldData;
         this.gridLines.visible = !settings.spatialWorldData;
@@ -1299,6 +1299,8 @@ export class FoxholeMapRenderer {
     }
 
     private async loadBackgroundTexture(variant: 'dark' | 'light' = 'dark'): Promise<void> {
+        const settings = this.context.readMapSettings();
+        if (settings.solidMap && settings.spatialWorldData) return;
         if (this.backgroundVariant === variant && this.background.texture && !this.background.texture.destroyed) {
             return;
         }
@@ -1700,6 +1702,7 @@ export class FoxholeMapRenderer {
     }
 
     private getTextureSettingsSignature(settings: FoxholeMapSettingsSnapshot): string {
+        if (settings.solidMap && settings.spatialWorldData) return 'solid-map';
         return JSON.stringify({
             colors: settings.colors,
             baseMap: settings.baseMap,
@@ -1799,6 +1802,7 @@ export class FoxholeMapRenderer {
         settings: FoxholeMapSettingsSnapshot,
         textureSignature: string,
     ): Promise<void> {
+        if (settings.solidMap && settings.spatialWorldData) return;
         const baseTexturePath = this.resolveBaseRegionTexturePath(view.region, settings);
         const currentBasePath = String(view.sprite.label ?? '');
         if (currentBasePath !== baseTexturePath) {
