@@ -159,11 +159,12 @@ public sealed class FoxWatchMapDataGenerator
         var publishedMaps = new JsonObject();
         var mapDatabaseEntries = LoadMapDatabaseEntries();
         var eligibleEntries = mapDatabaseEntries
-            .Where(entry => entry.Value?.Value<bool?>("bIsInHexGrid") == true)
+            .Where(entry => entry.Value?.Value<bool?>("bIsInHexGrid") == true
+                || entry.Key is "HomeRegionC" or "HomeRegionW")
             .ToArray();
         var totalStaticIconCount = 0;
 
-        _logger.LogInformation("Loaded {MapDatabaseEntryCount} map database entries; {EligibleMapCount} are in the hex grid", mapDatabaseEntries.Count, eligibleEntries.Length);
+        _logger.LogInformation("Loaded {MapDatabaseEntryCount} map database entries; {EligibleMapCount} are war-grid or home regions", mapDatabaseEntries.Count, eligibleEntries.Length);
 
         for (var index = 0; index < eligibleEntries.Length; index++)
         {
@@ -183,6 +184,7 @@ public sealed class FoxWatchMapDataGenerator
                 continue;
             }
 
+            var standalone = mapKey is "HomeRegionC" or "HomeRegionW";
             var overrideMap = overrideMaps[mapKey] as JsonObject;
             var displayName = mapValue["DisplayName"]?["LocalizedString"]?.Value<string>()
                 ?? mapValue["DisplayName"]?["SourceString"]?.Value<string>()
@@ -196,9 +198,10 @@ public sealed class FoxWatchMapDataGenerator
                 ["showForResistance"] = CloneNode(overrideMap?["showForResistance"]),
                 ["regionId"] = CloneNode(overrideMap?["regionId"]),
                 ["gridCoord"] = SanitizeGridCoordinate(mapValue["GridCoord"] as JObject),
+                ["standalone"] = standalone ? JsonValue.Create(true) : null,
             };
 
-            var staticIcons = LoadStaticIconsForMap(mapKey);
+            var staticIcons = standalone ? new JsonArray() : LoadStaticIconsForMap(mapKey);
             if (staticIcons.Count == 0)
             {
                 var existingStaticIcons = CloneArray(overrideMap?["static"]?["icons"] as JsonArray);
@@ -827,7 +830,10 @@ public sealed class FoxWatchMapDataGenerator
 
     private async Task<JsonObject> FetchWarApiFallbackForMapsAsync(JsonObject publishedMaps, JsonObject? previousFallbackMaps, CancellationToken cancellationToken)
     {
-        var mapKeyList = publishedMaps.Select(entry => entry.Key).ToArray();
+        var mapKeyList = publishedMaps
+            .Where(entry => entry.Value?["standalone"]?.GetValue<bool>() != true)
+            .Select(entry => entry.Key)
+            .ToArray();
         using var httpClient = new HttpClient();
         var fetchedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         _logger.LogInformation("Starting War API fallback fetch for {MapCount} maps", mapKeyList.Length);

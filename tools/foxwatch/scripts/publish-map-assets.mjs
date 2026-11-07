@@ -21,7 +21,7 @@ const immImportDirectory = resolve(currentDir, 'IMM');
 const tmpMapIconsDirectory = resolve(repositoryRoot, 'tools', 'foxwatch', 'tmp', 'map-icons', 'raw');
 const publishedMapIconsDirectory = resolve(publishedMapRoot, 'MapIcons');
 
-const skippedMaps = new Set(['FoxholeFestivalMap', 'MapHomeRegionC', 'MapHomeRegionW']);
+const skippedMaps = new Set(['FoxholeFestivalMap']);
 const immLossyDirectories = new Set(['BaseMap', 'BaseMapFull', 'BaseMapFullNoPeaks', 'BaseMapTopo']);
 const immSkippedDirectories = new Set(['Wells', 'UnderwaterRocksMask']);
 const teamColors = {
@@ -229,17 +229,21 @@ async function publishCuratedMapIcons(mapIconsOverride) {
     }
 }
 
-async function publishProcessedMapImages(publishedMapData) {
+async function publishProcessedMapImages(publishedMapData, { preserveExisting = false } = {}) {
     const knownTextureKeys = new Set(
         Object.values(publishedMapData?.maps ?? {})
             .map(map => String(map?.textureKey ?? '').trim())
             .filter(Boolean),
     );
+    const standaloneTextureKeys = new Set(Object.values(publishedMapData.maps ?? {})
+        .filter(map => map.standalone === true)
+        .map(map => map.textureKey));
     const iconDirectory = resolve(publishedMapRoot, 'HexMaps', 'Icons');
     const processedDirectory = resolve(publishedMapRoot, 'HexMaps', 'Processed');
 
     for (const directory of [iconDirectory, processedDirectory]) {
-        await clearDirectory(directory);
+        if (preserveExisting) await ensureDir(directory);
+        else await clearDirectory(directory);
     }
 
     console.info(`publishing processed map images for ${knownTextureKeys.size} known texture keys`);
@@ -266,6 +270,14 @@ async function publishProcessedMapImages(publishedMapData) {
             .resize({ width: 128, height: 111 })
             .webp({ quality: 90 })
             .toFile(resolve(iconDirectory, `${textureKey}.webp`));
+
+        if (standaloneTextureKeys.has(textureKey)) {
+            await sharp(sourcePath)
+                .resize({ width: 2048, height: 1776, fit: 'inside', withoutEnlargement: true })
+                .webp({ quality: 90 })
+                .toFile(resolve(processedDirectory, `${textureKey}.webp`));
+            continue;
+        }
 
         const processedBuffer = await sharp(sourcePath)
             .median(8)
@@ -392,9 +404,23 @@ async function publishMapData(publishedMapData) {
     await writeJsonFile(fixtureMapDataPath, publishedMapData);
 }
 
-export async function main() {
-    console.info(`loading published map-data input from ${rawFoxWatchMapDataPath}`);
-    const publishedMapData = await loadJsonFile(rawFoxWatchMapDataPath);
+export async function main({ homeRegionsOnly = false, mapDataPath = rawFoxWatchMapDataPath } = {}) {
+    console.info(`loading published map-data input from ${mapDataPath}`);
+    const publishedMapData = await loadJsonFile(mapDataPath);
+    if (homeRegionsOnly) {
+        const maps = Object.fromEntries(['HomeRegionC', 'HomeRegionW'].map(key => {
+            const region = publishedMapData.maps?.[key];
+            if (!region?.standalone || !region.textureKey) throw new Error(`Missing generated home map: ${key}`);
+            return [key, region];
+        }));
+        for (const region of Object.values(maps)) {
+            await stat(resolve(processedMapsDirectory, `${region.textureKey}.png`));
+        }
+        const existing = await loadJsonFile(publishedMapDataPath);
+        await publishProcessedMapImages({ maps }, { preserveExisting: true });
+        await writeJsonFile(publishedMapDataPath, { ...existing, maps: { ...existing.maps, ...maps } });
+        return;
+    }
     console.info(`loading map icon overrides from ${mapIconsOverridePath}`);
     const mapIconsOverride = await loadJsonFile(mapIconsOverridePath);
 
@@ -411,7 +437,7 @@ export async function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    main().catch(error => {
+    main({ homeRegionsOnly: process.argv.includes('--home-regions-only') }).catch(error => {
         console.error('failed to publish foxhole map assets:', error);
         process.exitCode = 1;
     });
