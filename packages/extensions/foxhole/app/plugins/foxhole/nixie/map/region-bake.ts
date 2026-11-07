@@ -26,7 +26,7 @@ export async function bakeFoxholeRegion(
     camera.position.set(region.position.x, -region.position.y, FOXHOLE_REGION_WIDTH);
     camera.lookAt({ x: region.position.x, y: -region.position.y, z: 0 }, { x: 0, y: 1, z: 0 });
     const view = new View3D({
-        width, height, autoResize: false, camera,
+        width, height: width, autoResize: false, camera,
         environment: {
             skyColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.skyColor,
             groundColor: NIXIE_SPATIAL_DEFAULT_LIGHTING.groundColor,
@@ -65,12 +65,24 @@ export async function bakeFoxholeRegion(
         signal.throwIfAborted();
         sync();
         lighting.sync();
-        const canvas = renderer.extract.canvas({
+        // WebGPU depth copies must cover the full attachment. Pixi can allocate
+        // a square backing texture for this region, so render the square first.
+        const square = renderer.extract.canvas({
             target: view,
-            frame: new Rectangle(0, 0, width, height),
+            frame: new Rectangle(0, 0, width, width),
             resolution: 1,
             clearColor: 'transparent',
         }) as HTMLCanvasElement;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Could not crop the region PNG.');
+        context.drawImage(square, 0, (width - height) / 2, width, height, 0, 0, width, height);
+        const pixels = context.getImageData(0, 0, width, height).data;
+        if (!pixels.some((value, index) => index % 4 === 3 && value !== 0)) {
+            throw new Error('The renderer produced an empty region image.');
+        }
         return await new Promise<Blob>((done, fail) => {
             canvas.toBlob(blob => blob ? done(blob) : fail(new Error('Could not encode the region PNG.')), 'image/png');
         });
