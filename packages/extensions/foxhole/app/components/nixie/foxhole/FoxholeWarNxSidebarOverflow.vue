@@ -63,13 +63,20 @@ const items = computed<ResolvedMenuItem[]>(() => [
         type: 'checkbox', label: 'Solid Map', icon: 'ph:cube',
         checked: mapSettings.value.solidMap, closeOnClick: false,
         adminOnly: false, disabled: false, visible: true,
-        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.solidMap, !mapSettings.value.solidMap, { reason: 'foxhole-war-nx:solid-map' }),
+        onClick: () => {
+            const enabled = !mapSettings.value.solidMap;
+            const options = { reason: 'foxhole-war-nx:solid-map' };
+            settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.solidMap, enabled, options);
+            if (settingsStore.getValueOr(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, '') === 'map') {
+                settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'native', options);
+            }
+        },
     },
     {
         type: 'submenu', label: 'Terrain Surface', icon: 'ph:mountains',
-        badge: { plain: 'Plain', map: 'Map', native: 'Detailed' }[mapSettings.value.terrainSurface],
+        badge: { plain: 'Plain', native: 'Detailed' }[mapSettings.value.terrainSurface],
         adminOnly: false, disabled: false, visible: true,
-        children: ([['plain', 'Plain'], ['map', 'Map'], ['native', 'Detailed']] as const).map(([value, label]) => ({
+        children: ([['plain', 'Plain'], ['native', 'Detailed']] as const).map(([value, label]) => ({
             type: 'checkbox', label, checked: mapSettings.value.terrainSurface === value,
             closeOnClick: false, adminOnly: false, disabled: false, visible: true,
             onClick: () => { if (mapSettings.value.terrainSurface !== value) settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, value, { reason: 'foxhole-war-nx:terrain-surface' }); },

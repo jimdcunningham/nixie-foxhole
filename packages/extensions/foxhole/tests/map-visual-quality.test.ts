@@ -17,3 +17,13 @@ test('asset quality values validate independently of host rendering preferences'
  const local=readFoxholeMapSettings({[keys.vegetationDensity]:'minimal',[keys.ambientOcclusion]:true},id=>id===keys.vegetationDensity?'reduced':id===keys.ambientOcclusion?false:undefined);
  assert.equal(local.vegetationDensity,'reduced');assert.equal(local.ambientOcclusion,false);assert.equal(local.modelLod,false);assert.equal(local.terrainLod,false);assert.equal(local.adaptiveStreaming,false);
 });
+
+test('the retired terrain Map choice enables Solid Map with a Detailed fallback', () => {
+    const keys = FOXHOLE_MAP_SETTING_KEYS;
+    const legacy = readFoxholeMapSettings({}, id => id === keys.terrainSurface ? 'map' : undefined);
+    assert.equal(legacy.solidMap, true);
+    assert.equal(legacy.terrainSurface, 'native');
+    const plain = readFoxholeMapSettings({}, id => id === keys.terrainSurface ? 'plain' : undefined);
+    assert.equal(plain.solidMap, false);
+    assert.equal(plain.terrainSurface, 'plain');
+});
