@@ -119,7 +119,7 @@ export function getFoxholeMapActiveBounds(
     settings: ReturnType<typeof readFoxholeMapSettings>,
 ): FoxholeMapActiveBounds {
     const regions = resolveFoxholeMapActiveRegions(settings.regionKeys);
-    if (settings.background && !regions.some(region => region.standalone)) {
+    if (settings.background && (settings.regionKeys.length === 0 || !regions.some(region => region.standalone))) {
         const halfWidth = FOXHOLE_WORLD_BACKGROUND_SIZE.width / 2;
         const halfHeight = FOXHOLE_WORLD_BACKGROUND_SIZE.height / 2;
         return {

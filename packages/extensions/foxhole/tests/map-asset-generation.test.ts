@@ -35,7 +35,7 @@ test('map metadata, reactive picker indexes and tooltip URLs follow A/B/back fro
     assert.equal(resolveFoxholeMapIconUrl('/local/',{iconName:''}),null);
 });
 
-test('home regions are selectable but stay out of the all-regions war map', () => {
+test('home regions appear in the overview and can be selected individually', () => {
     const catalog = fixture('a');
     installFoxholeMapData({
         ...catalog,
@@ -46,7 +46,7 @@ test('home regions are selectable but stay out of the all-regions war map', () =
         },
     });
     try {
-        assert.deepEqual(resolveFoxholeMapActiveRegions([]).map(region => region.key), ['FixtureHex']);
+        assert.deepEqual(resolveFoxholeMapActiveRegions([]).map(region => region.key).sort(), ['FixtureHex', 'HomeRegionC', 'HomeRegionW']);
         for (const key of ['HomeRegionC', 'HomeRegionW']) {
             assert.deepEqual(resolveFoxholeMapActiveRegions([key]).map(region => region.key), [key]);
         }

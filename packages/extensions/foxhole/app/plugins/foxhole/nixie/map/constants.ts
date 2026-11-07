@@ -96,7 +96,7 @@ export function resolveFoxholeMapActiveRegions(
     const selectedRegions = new Set(regionKeys);
     return selectedRegions.size > 0
         ? FOXHOLE_MAP_REGIONS.filter(region => selectedRegions.has(region.key))
-        : FOXHOLE_MAP_REGIONS.filter(region => !region.standalone);
+        : FOXHOLE_MAP_REGIONS;
 }
 
 function createMapIcons(): Record<string, FoxholeMapIconRecord> {return Object.fromEntries(

@@ -690,7 +690,7 @@ export class FoxholeMapRenderer {
         void this.loadBackgroundTexture(settings.darkBackground === false ? 'light' : 'dark');
 
         for (const view of this.regionViews) {
-            const regionVisible = selectedRegions.size === 0 ? !view.region.standalone : selectedRegions.has(view.region.key);
+            const regionVisible = selectedRegions.size === 0 || selectedRegions.has(view.region.key);
             const canDisplayResistanceRegionData = this.canDisplayResistanceRegionData(view.region);
             this.syncRegionCasualtyLabel(view, this.liveData[view.region.key]?.reports, settings);
             view.container.visible = regionVisible;
