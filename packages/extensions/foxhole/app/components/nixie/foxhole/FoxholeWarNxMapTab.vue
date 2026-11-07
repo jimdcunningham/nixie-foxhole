@@ -728,7 +728,9 @@ const mapModVisibilityDisabled = computed(() => (
                 collapsible
                 :defaultOpen="true"
             >
-                <p v-if="isSpatialView && mapSettings.regionKeys.length !== 1" class="text-muted text-sm">Select one region to show the 3D map.</p>
+                <p v-if="isSpatialView && (!mapSettings.regionKeys.length || (!mapSettings.devMultiRegion3d && mapSettings.regionKeys.length !== 1))" class="text-muted text-sm">
+                    {{ mapSettings.devMultiRegion3d ? 'Select regions to show the 3D map.' : 'Select one region to show the 3D map.' }}
+                </p>
                 <div class="foxhole-war-nx-map-tab__layer-controls">
                     <NxToggleGrid
                         class="foxhole-war-nx-map-tab__world-layers"

@@ -60,6 +60,13 @@ const items = computed<ResolvedMenuItem[]>(() => [
         onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.modelLod, !mapSettings.value.modelLod, { reason: 'foxhole-war-nx:model-lod' }),
     },
     {
+        type: 'checkbox', label: 'Multi-Region 3D', icon: 'ph:map-trifold',
+        checked: mapSettings.value.devMultiRegion3d, closeOnClick: false,
+        adminOnly: false, disabled: false,
+        visible: import.meta.dev && documentSession?.isSceneV2Active.value === true,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.devMultiRegion3d, !mapSettings.value.devMultiRegion3d, { reason: 'foxhole-war-nx:multi-region-3d' }),
+    },
+    {
         type: 'checkbox', label: 'Solid Map', icon: 'ph:cube',
         checked: mapSettings.value.solidMap, closeOnClick: false,
         adminOnly: false, disabled: false, visible: true,

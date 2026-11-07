@@ -7,7 +7,7 @@ import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus }
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
 import { foxholeWorldAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
 import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
-import { FoxholeRegionSceneController, regionIdForKey, selectedSpatialRegions } from './map/region-scene-controller.mjs';
+import { FoxholeRegionSceneController, regionIdForKey } from './map/region-scene-controller.mjs';
 import { computed, shallowRef } from 'vue';
 import type { NixieSceneV2CanvasContributionContext, NixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
 import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from './map-settings.ts';
@@ -22,6 +22,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const settingsStore = useNixieSettingsStore();
     // Frame callbacks share one reactive snapshot; Pinia action reads allocate.
     const mapSettings = computed(() => readFoxholeMapSettings(context.runtime.projectStore.settings, id => settingsStore.getValueOr(id, undefined)));
+    const spatialRegions = computed(() => {
+        const { regionKeys, devMultiRegion3d } = mapSettings.value;
+        if (!regionKeys.length || (!devMultiRegion3d && regionKeys.length !== 1)) return [];
+        return FOXHOLE_MAP_REGIONS.filter(region => regionKeys.includes(region.key));
+    });
     let worldProgressJobId: string | null = null;
     let worldProgressErrorToastId: string | null = null;
     let worldProgressErrorKey: string | null = null;
@@ -209,7 +214,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         resolveMapIconAsset: point => world.mapAssetAt(point.x, point.y),
         manualPresentation: true,
         isSpatialView: () => context.viewMode() !== 'flat',
-        needsSpatialWorldData: () => context.viewMode() !== 'flat' && mapSettings.value.regionKeys.length === 1,
+        needsSpatialWorldData: () => context.viewMode() !== 'flat' && spatialRegions.value.length > 0,
         session: {
             appRef: shallowRef(context.app),
             sceneLayerRef: shallowRef(context.before),
@@ -245,8 +250,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             // Fit once before either can be displayed; catalog readiness must not
             // replace a camera the user already moved while the map was loading.
             const settings = mapSettings.value;
-            // A spatial world is intentionally limited to one explicit region.
-            const regions = settings.regionKeys.length === 1 ? FOXHOLE_MAP_REGIONS.filter(region => settings.regionKeys.includes(region.key)) : [];
+            const regions = spatialRegions.value;
             const selection = regions.map(region => region.key).sort().join('|');
             const viewpointCamera = consumeViewpointRegionCamera(context.runtime, selection);
             if (settings.enabled && regions.length && mode !== 'flat' && selection !== lastSpatialRegion) {
@@ -295,7 +299,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const settings = mapSettings.value;
             // Selected regions own the ground even while loading or hidden.
             // Disabling Terrain must not reveal the editor's camera-following floor.
-            return settings.regionKeys.length !== 1 || selectedSpatialRegions({ ...settings, mode: context.viewMode() }).length === 0;
+            return !settings.enabled || context.viewMode() === 'flat' || spatialRegions.value.length === 0;
         },
         groundAvailable: () => world.active,
         groundElevation: (x, y) => world.sampleGround(x, y),
