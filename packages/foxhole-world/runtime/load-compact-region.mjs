@@ -103,7 +103,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const reveal=progressive?createRegionRevealQueue({signal}):null;
  const targets={roads:[],water:[],shell:[],decals:[]};
  const applyLayers=createRegionLayerVisibility({targets,details:{syncLayers:flags=>{for(const detail of detailGroups.values())detail.syncLayers(flags);}},terrain:liveTerrainPass,shoulders:roadShoulders});
- function syncPlanningOverlays(){if(!solidMap&&liveTerrainPass.setPlanningOverlays(terrainOverlays,warState)&&waterMat)liveTerrainPass.planning.bindWater(waterMat);}
+ function syncPlanningOverlays(){if(liveTerrainPass.setPlanningOverlays(terrainOverlays,warState)&&waterMat&&!solidMap)liveTerrainPass.planning.bindWater(waterMat);}
  function applyWarState(force=false){sharedActorVisibility?.setWarState(warState);for(const group of modelGroups.values()){const world=group.world;if(!world)continue;const changed=world.setWarState(warState);if(changed||force){group.cranes?.setActorVisibility?.(world.actorVisible);group.catalog?.setWarState(warState,world.actorVisible);}}const visible=actor=>sharedActorVisibility?sharedActorVisibility.visible(actor):[...modelGroups.values()].every(group=>!group.world||group.world.actorVisible(actor));for(const detail of detailGroups.values())detail.setActorVisibility(visible);}
 
  function refresh(){applyWarState(true);applyLayers(layerFlags,true);}
