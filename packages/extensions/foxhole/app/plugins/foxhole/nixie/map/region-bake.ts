@@ -36,12 +36,18 @@ export async function bakeFoxholeRegion(
         },
     });
     const lighting = new NixieSpatialSceneLighting(view);
-    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    type LoadedRegion = Awaited<ReturnType<WorldOptions['loadRegion']>>;
+    let loaded: LoadedRegion | undefined;
+    const { promise, resolve, reject } = Promise.withResolvers<LoadedRegion>();
     const abort = () => reject(signal.reason);
     const world = new FoxholeRegionSceneController({
         ...worldOptions,
+        async loadRegion(options) {
+            loaded = await worldOptions.loadRegion(options);
+            return loaded;
+        },
         onStatus(status) {
-            if (status.phase === 'Ready') resolve();
+            if (status.phase === 'Ready' && loaded) resolve(loaded);
             else if (status.phase === 'error') reject(new Error(status.error ?? 'Could not prepare the region.'));
         },
     });
@@ -51,9 +57,12 @@ export async function bakeFoxholeRegion(
         settings: {
             ...settings,
             adaptiveStreaming: false,
+            terrainLod: false,
+            adaptiveTextures: false,
             vegetationDensity: 'full',
             frustumCulling: false,
             ambientOcclusion: false,
+            worldLayers: { ...settings.worldLayers, shell: false },
             // RDZ stays enabled when selected. Planning graphics belong to the editor.
             terrainTopo: false,
             borders: false,
@@ -71,7 +80,8 @@ export async function bakeFoxholeRegion(
         signal.throwIfAborted();
         signal.addEventListener('abort', abort, { once: true });
         sync();
-        await promise;
+        const scene = await promise;
+        await scene.whenLayersReady?.();
         signal.throwIfAborted();
         sync();
         lighting.sync();
@@ -91,10 +101,18 @@ export async function bakeFoxholeRegion(
         if (!context) throw new Error('Could not crop the region PNG.');
         context.imageSmoothingEnabled = false;
         context.drawImage(square, 0, (width - height) / 2, width, height, 0, 0, width, height);
-        const pixels = context.getImageData(0, 0, width, height).data;
-        if (!pixels.some((value, index) => index % 4 === 3 && value !== 0)) {
+        const image = context.getImageData(0, 0, width, height);
+        // Clip at pixel centers so the PNG keeps the same hard hex edge at either size.
+        for (let y = 0; y < height; y++) {
+            const inset = Math.floor(Math.abs(y + 0.5 - height / 2) * width / (2 * height) + 0.5);
+            const row = y * width * 4;
+            image.data.fill(0, row, row + inset * 4);
+            image.data.fill(0, row + (width - inset) * 4, row + width * 4);
+        }
+        if (!image.data.some((value, index) => index % 4 === 3 && value !== 0)) {
             throw new Error('The renderer produced an empty region image.');
         }
+        context.putImageData(image, 0, 0);
         return await new Promise<Blob>((done, fail) => {
             canvas.toBlob(blob => blob ? done(blob) : fail(new Error('Could not encode the region PNG.')), 'image/png');
         });
