@@ -429,7 +429,7 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 const regionBakePending = ref(false);
 async function downloadRegionBake(scale: 1 | 2) {
     const bake = regionBakeAction.value;
-    if (!bake || regionBakePending.value) return;
+    if (!bake || regionBakePending.value || deadlandsPakExporting.value) return;
     regionBakePending.value = true;
     try {
         const { png, filename } = await bake(scale);
@@ -449,7 +449,9 @@ async function downloadRegionBake(scale: 1 | 2) {
 
 const deadlandsPakHeaderInput = ref<HTMLInputElement | null>(null);
 const deadlandsPakExporting = ref(false);
-const canExportDeadlandsPak = computed(() => import.meta.dev
+const canExportDeadlandsPak = computed(() => isSpatialView.value
+    && !!regionBakeAction.value
+    && mapSettings.value.enabled
     && mapSettings.value.regionKeys.length === 1
     && mapSettings.value.regionKeys[0] === 'DeadLandsHex');
 
@@ -457,28 +459,22 @@ async function exportDeadlandsPak(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const header = input.files?.[0];
     input.value = '';
-    if (!header || !canExportDeadlandsPak.value || deadlandsPakExporting.value) return;
+    const bake = regionBakeAction.value;
+    if (!header || !bake || !canExportDeadlandsPak.value || deadlandsPakExporting.value || regionBakePending.value) return;
     deadlandsPakExporting.value = true;
     try {
-        const settings = mapSettings.value;
-        const textureKey = 'MapDeadlandsHex';
-        const importedUrl = settings.modded ? mapModStore.getTextureUrl(textureKey) : null;
-        const mapPath = settings.baseMap ? 'IMM/BaseMap'
-            : settings.colors ? 'IMM/BaseMapTopo'
-            : settings.baseMapFull ? 'IMM/BaseMapFull' : 'HexMaps/Processed';
-        const url = importedUrl ?? resolveFoxholeAssetUrl(
-            `${assetsBaseUrl}maps/${mapPath}/${textureKey}.webp`, assetsBaseUrl,
-        );
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Could not load the Deadlands map image.');
-        const bitmap = await createImageBitmap(await response.blob());
+        const { png } = await bake(1);
+        const bitmap = await createImageBitmap(png);
         const canvas = document.createElement('canvas');
         canvas.width = 2048;
         canvas.height = 1776;
         const context = canvas.getContext('2d');
         try {
             if (!context) throw new Error('Could not render the Deadlands map image.');
-            context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            if (bitmap.width !== canvas.width || bitmap.height !== canvas.height) {
+                throw new Error('Expected a 2048 × 1776 Deadlands bake.');
+            }
+            context.drawImage(bitmap, 0, 0);
         } finally {
             bitmap.close();
         }
@@ -899,7 +895,7 @@ const mapModVisibilityDisabled = computed(() => (
                     variant="secondary"
                     size="sm"
                     :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
-                    :disabled="regionBakePending"
+                    :disabled="regionBakePending || deadlandsPakExporting"
                     @click="downloadRegionBake(1)"
                 />
                 <NxButton
@@ -907,18 +903,18 @@ const mapModVisibilityDisabled = computed(() => (
                     variant="secondary"
                     size="sm"
                     label="Bake High-Resolution PNG"
-                    :disabled="regionBakePending"
+                    :disabled="regionBakePending || deadlandsPakExporting"
                     @click="downloadRegionBake(2)"
                 />
                 <template v-if="canExportDeadlandsPak">
                     <NxButton
                         variant="secondary"
                         size="sm"
-                        label="Export Deadlands Pak"
-                        :disabled="deadlandsPakExporting"
+                        :label="deadlandsPakExporting ? 'Exporting Deadlands Pak…' : 'Export Deadlands Pak'"
+                        :disabled="deadlandsPakExporting || regionBakePending"
                         @click="deadlandsPakHeaderInput?.click()"
                     />
-                    <p class="text-muted text-sm">Choose the cooked Deadlands texture header to export the current base map.</p>
+                    <p class="text-muted text-sm">Choose the cooked Deadlands texture header to bake and export the region at 2048 × 1776.</p>
                     <input ref="deadlandsPakHeaderInput" type="file" hidden @change="exportDeadlandsPak" />
                 </template>
                 <div
