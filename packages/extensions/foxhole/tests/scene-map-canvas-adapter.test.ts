@@ -21,7 +21,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
     const world = { sync(value: any) { spatialSyncs.push(value); }, active: false, sampleGround: () => null, setGroundCutouts() {}, destroy() {} };
     let settingsReads = 0;
-    const settings = reactive({ regionKeys: ['WestgateHex'], worldLayers: { terrain: true }, enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 });
+    const settings = reactive({ solidMap: false, regionKeys: ['WestgateHex'], worldLayers: { terrain: true }, enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 });
     const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, summaries, borders, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
     const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
         getFoxholeMapRegionBillboardGroups: (content: unknown) => {
@@ -31,7 +31,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         FoxholeRegionSceneController: class { constructor(options: { manageEnvironment?: boolean; }) { assert.equal(options.manageEnvironment, false); return world; } },
         selectedSpatialRegions, regionIdForKey,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
-        FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"}],
+        FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"},{key:"HomeRegionC",standalone:true}],
         getFoxholeRegionPosition: (region: any) => ({x:region.key === "WestgateHex" ? 10 : 20,y:0}),
         useRuntimeConfig: () => ({ app: { baseURL: '/' } }),
         foxholeWorldAssetDelivery: () => ({ baseUrl: '/foxhole/assets/world/', loadIndex: () => Promise.resolve({}) }),
@@ -128,6 +128,12 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     adapter.updateSpatialPresentation({view:{},mode:'3d',deltaMS:16});
     assert.equal(spatialSyncs.at(-1).regions.length, 1);
     assert.equal(context.needsSpatialWorldData(), true);
+    settings.regionKeys = ["HomeRegionC"];
+    settings.solidMap = true;
+    adapter.updateSpatialPresentation({view:{},mode:"3d",deltaMS:16});
+    assert.equal(spatialSyncs.at(-1).regions.length, 0);
+    assert.equal(context.needsSpatialWorldData(), false);
+    assert.ok(adapter.spatialLayers().some((layer: any) => layer.content === terrain));
     adapter.destroy();
     assert.equal(context.session.sceneViewActive.value, false);
     assert.equal(destroyed, 1);

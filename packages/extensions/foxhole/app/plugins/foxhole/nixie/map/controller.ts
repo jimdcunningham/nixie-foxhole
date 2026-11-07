@@ -27,6 +27,7 @@ import { resolveFoxholeRealtimeSocketEndpoint } from './realtime-origin.ts';
 import type { NixieViewportPluginContext } from '#nixie/plugins/nixie/registry/types.ts';
 import {
     FOXHOLE_MAP_REGIONS,
+    resolveFoxholeMapActiveRegions,
     FOXHOLE_REGION_HEIGHT,
     FOXHOLE_REGION_WIDTH,
     FOXHOLE_WORLD_BACKGROUND_SIZE,
@@ -117,7 +118,8 @@ export interface FoxholeMapActiveBounds {
 export function getFoxholeMapActiveBounds(
     settings: ReturnType<typeof readFoxholeMapSettings>,
 ): FoxholeMapActiveBounds {
-    if (settings.background) {
+    const regions = resolveFoxholeMapActiveRegions(settings.regionKeys);
+    if (settings.background && !regions.some(region => region.standalone)) {
         const halfWidth = FOXHOLE_WORLD_BACKGROUND_SIZE.width / 2;
         const halfHeight = FOXHOLE_WORLD_BACKGROUND_SIZE.height / 2;
         return {
@@ -129,11 +131,6 @@ export function getFoxholeMapActiveBounds(
             height: FOXHOLE_WORLD_BACKGROUND_SIZE.height,
         };
     }
-
-    const selectedRegions = new Set(settings.regionKeys);
-    const regions = selectedRegions.size > 0
-        ? FOXHOLE_MAP_REGIONS.filter(region => selectedRegions.has(region.key))
-        : [...FOXHOLE_MAP_REGIONS];
 
     if (!regions.length) {
         const halfWidth = FOXHOLE_REGION_WIDTH / 2;

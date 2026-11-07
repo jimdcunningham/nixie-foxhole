@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {computed} from 'vue';
 import {installFoxholeMapData, getFoxholeMapDataRevision, buildFoxholePublishedMapFallbackCache} from '../app/plugins/foxhole/nixie/map/data.ts';
-import {FOXHOLE_MAP_REGIONS, FOXHOLE_MAP_ICONS, resolveFoxholeMapIconUrl} from '../app/plugins/foxhole/nixie/map/constants.ts';
+import {FOXHOLE_MAP_REGIONS, FOXHOLE_MAP_ICONS, resolveFoxholeMapActiveRegions, resolveFoxholeMapIconUrl} from '../app/plugins/foxhole/nixie/map/constants.ts';
 import {installFoxholeAssetLocations} from '../app/plugins/foxhole/nixie/asset-locations.ts';
 function fixture(version: string) {
     return {schemaVersion:'1.0.0',source:{kind:'fixture'},
@@ -33,4 +33,24 @@ test('map metadata, reactive picker indexes and tooltip URLs follow A/B/back fro
     assert.equal(FOXHOLE_MAP_REGIONS.length,initial);
     assert.equal(resolveFoxholeMapIconUrl('/local/',{iconName:'MapIcon'}),'/local/maps/MapIcons/MapIcon.webp');
     assert.equal(resolveFoxholeMapIconUrl('/local/',{iconName:''}),null);
+});
+
+test('home regions are selectable but stay out of the all-regions war map', () => {
+    const catalog = fixture('a');
+    installFoxholeMapData({
+        ...catalog,
+        maps: {
+            ...catalog.maps,
+            HomeRegionC: { textureKey: 'MapHomeRegionC', standalone: true },
+            HomeRegionW: { textureKey: 'MapHomeRegionW', standalone: true },
+        },
+    });
+    try {
+        assert.deepEqual(resolveFoxholeMapActiveRegions([]).map(region => region.key), ['FixtureHex']);
+        for (const key of ['HomeRegionC', 'HomeRegionW']) {
+            assert.deepEqual(resolveFoxholeMapActiveRegions([key]).map(region => region.key), [key]);
+        }
+    } finally {
+        installFoxholeMapData(null);
+    }
 });

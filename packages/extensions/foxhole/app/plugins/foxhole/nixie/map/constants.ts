@@ -10,6 +10,7 @@ export interface FoxholeMapRegionRecord {
     key: string;
     name: string;
     textureKey: string;
+    standalone?: boolean;
     showForResistance: boolean;
     gridCoord: {
         x: number;
@@ -57,6 +58,7 @@ function createMapRegions(): FoxholeMapRegionRecord[] {return Object.entries(raw
         key,
         name: String(region?.name ?? key).trim() || key,
         textureKey: String(region?.textureKey ?? '').trim(),
+        standalone: region?.standalone === true,
         showForResistance: region?.showForResistance === true,
         gridCoord: {
             x: Number(region?.gridCoord?.x ?? 0),
@@ -94,7 +96,7 @@ export function resolveFoxholeMapActiveRegions(
     const selectedRegions = new Set(regionKeys);
     return selectedRegions.size > 0
         ? FOXHOLE_MAP_REGIONS.filter(region => selectedRegions.has(region.key))
-        : FOXHOLE_MAP_REGIONS;
+        : FOXHOLE_MAP_REGIONS.filter(region => !region.standalone);
 }
 
 function createMapIcons(): Record<string, FoxholeMapIconRecord> {return Object.fromEntries(

@@ -111,6 +111,11 @@ function patchSettings(patch: Record<string, boolean | number | string>, reason:
 
 function onRegionKeysChange(nextRegionKeys: string[]): void {
     const currentRegionKeys = mapSettings.value.regionKeys;
+    const standaloneKeys = new Set(FOXHOLE_MAP_REGIONS.filter(region => region.standalone).map(region => region.key));
+    const addedKeys = nextRegionKeys.filter(key => !currentRegionKeys.includes(key));
+    const standaloneKey = addedKeys.findLast(key => standaloneKeys.has(key));
+    if (standaloneKey) nextRegionKeys = [standaloneKey];
+    else if (addedKeys.length > 0) nextRegionKeys = nextRegionKeys.filter(key => !standaloneKeys.has(key));
     if (nextRegionKeys.length === currentRegionKeys.length
         && nextRegionKeys.every(key => currentRegionKeys.includes(key))) {
         return;

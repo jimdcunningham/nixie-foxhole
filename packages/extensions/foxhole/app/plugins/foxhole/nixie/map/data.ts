@@ -13,6 +13,7 @@ export interface FoxholePublishedMapRegion {
     name?: string;
     icon?: string;
     textureKey?: string;
+    standalone?: boolean;
     gridCoord?: {
         x?: number;
         y?: number;

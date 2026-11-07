@@ -690,7 +690,7 @@ export class FoxholeMapRenderer {
         void this.loadBackgroundTexture(settings.darkBackground === false ? 'light' : 'dark');
 
         for (const view of this.regionViews) {
-            const regionVisible = selectedRegions.size === 0 || selectedRegions.has(view.region.key);
+            const regionVisible = selectedRegions.size === 0 ? !view.region.standalone : selectedRegions.has(view.region.key);
             const canDisplayResistanceRegionData = this.canDisplayResistanceRegionData(view.region);
             this.syncRegionCasualtyLabel(view, this.liveData[view.region.key]?.reports, settings);
             view.container.visible = regionVisible;
@@ -1350,7 +1350,9 @@ export class FoxholeMapRenderer {
 
         const border = new PIXI.Graphics();
         border.position.set(position.x, position.y);
-        border.poly([...FOXHOLE_REGION_POLYGON]).stroke({ width: 500, color: 0x000000 });
+        if (!region.standalone) {
+            border.poly([...FOXHOLE_REGION_POLYGON]).stroke({ width: 500, color: 0x000000 });
+        }
         this.borders.addChild(border);
 
         const label = new PIXI.Text({
@@ -1739,6 +1741,7 @@ export class FoxholeMapRenderer {
         if (settings.modded && this.mapModStore.hasTexture(region.textureKey)) {
             return `mapmod:${this.mapModRevision}:${region.textureKey}`;
         }
+        if (region.standalone) return `maps/HexMaps/Processed/${region.textureKey}.webp`;
         if (settings.baseMap) {
             return `maps/IMM/BaseMap/${region.textureKey}.webp`;
         }
@@ -1819,7 +1822,7 @@ export class FoxholeMapRenderer {
     }
 
     private queueOverlayTextureSync(view: FoxholeMapRegionView, overlaySignature: string): void {
-        if (view.overlaySignature === overlaySignature) {
+        if (view.region.standalone || view.overlaySignature === overlaySignature) {
             return;
         }
 

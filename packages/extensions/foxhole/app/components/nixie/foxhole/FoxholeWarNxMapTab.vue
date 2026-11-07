@@ -25,6 +25,7 @@ import {
 } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
 import type { FoxholeMapIconCategoryKey, FoxholeMapLayerKey } from '#foxhole/plugins/foxhole/nixie/map-settings.ts';
 import { FOXHOLE_WORLD_LAYER_GROUPS, activeWorldLayerGroups, worldLayerGroupPatch } from '#foxhole/plugins/foxhole/nixie/map/world-layer-groups.ts';
+import { FOXHOLE_MAP_REGIONS } from '#foxhole/plugins/foxhole/nixie/map/constants.ts';
 import { rawFoxholePublishedMapIcons } from '#foxhole/plugins/foxhole/nixie/map/data.ts';
 import { createFoxholeAssetsBaseUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 import {
@@ -61,6 +62,7 @@ const isSpatialView = computed(() => {
     return Boolean(controls && controls.mode !== 'flat');
 });
 const settingsStore = useNixieSettingsStore();
+const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && mapSettings.value.regionKeys.includes(region.key)));
 const runtimeConfig = useRuntimeConfig();
 const assetsBaseUrl = createFoxholeAssetsBaseUrl(runtimeConfig.app.baseURL);
 const mapModStore = getFoxholeMapModStore();
@@ -728,7 +730,8 @@ const mapModVisibilityDisabled = computed(() => (
                 collapsible
                 :defaultOpen="true"
             >
-                <p v-if="isSpatialView && (!mapSettings.regionKeys.length || (!mapSettings.devMultiRegion3d && mapSettings.regionKeys.length !== 1))" class="text-muted text-sm">
+                <p v-if="isSpatialView && standalonePreview" class="text-muted text-sm">Home regions are available as map previews.</p>
+                <p v-else-if="isSpatialView && (!mapSettings.regionKeys.length || (!mapSettings.devMultiRegion3d && mapSettings.regionKeys.length !== 1))" class="text-muted text-sm">
                     {{ mapSettings.devMultiRegion3d ? 'Select regions to show the 3D map.' : 'Select one region to show the 3D map.' }}
                 </p>
                 <div class="foxhole-war-nx-map-tab__layer-controls">
@@ -753,7 +756,7 @@ const mapModVisibilityDisabled = computed(() => (
 
             </NixieSidebarFormSection>
             <NixieSidebarFormSection
-                v-if="group.heading !== 'Improved Map Mod' || !isSpatialView"
+                v-if="group.heading !== 'Improved Map Mod' || !isSpatialView || standalonePreview"
                 :title="getLayerGroupTitle(group)"
                 :sectionKey="getLayerGroupSectionKey(group)"
                 collapsible

@@ -25,8 +25,9 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const spatialRegions = computed(() => {
         const { regionKeys, devMultiRegion3d } = mapSettings.value;
         if (!regionKeys.length || (!devMultiRegion3d && regionKeys.length !== 1)) return [];
-        return FOXHOLE_MAP_REGIONS.filter(region => regionKeys.includes(region.key));
+        return FOXHOLE_MAP_REGIONS.filter(region => !region.standalone && regionKeys.includes(region.key));
     });
+    const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && mapSettings.value.regionKeys.includes(region.key)));
     let worldProgressJobId: string | null = null;
     let worldProgressErrorToastId: string | null = null;
     let worldProgressErrorKey: string | null = null;
@@ -309,7 +310,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const root = plugin.presentationRoot;
             if (!root?.visible || root.destroyed) return [];
             const settings = mapSettings.value;
-            const hideMapArt = settings.solidMap && context.viewMode() !== 'flat';
+            const hideMapArt = settings.solidMap && !standalonePreview.value && context.viewMode() !== 'flat';
             const clip = settings.cropEnabled && settings.cropWidth > 0 && settings.cropHeight > 0
                 ? { minX: settings.cropX, minY: settings.cropY, maxX: settings.cropX + settings.cropWidth, maxY: settings.cropY + settings.cropHeight }
                 : undefined;
