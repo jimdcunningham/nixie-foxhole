@@ -184,7 +184,15 @@ public sealed class FoxWatchMapDataGenerator
                 continue;
             }
 
-            var standalone = mapKey is "HomeRegionC" or "HomeRegionW";
+            // Both home maps use (0, 0) in the game because they are off the war grid.
+            // The preview slots share board row -4 (gridY + gridX / 2).
+            var homeGridCoordinate = mapKey switch
+            {
+                "HomeRegionW" => new JObject { ["X"] = -2, ["Y"] = -3 },
+                "HomeRegionC" => new JObject { ["X"] = 2, ["Y"] = -5 },
+                _ => null,
+            };
+            var standalone = homeGridCoordinate != null;
             var overrideMap = overrideMaps[mapKey] as JsonObject;
             var displayName = mapValue["DisplayName"]?["LocalizedString"]?.Value<string>()
                 ?? mapValue["DisplayName"]?["SourceString"]?.Value<string>()
@@ -197,7 +205,7 @@ public sealed class FoxWatchMapDataGenerator
                 ["textureKey"] = BuildTextureKey(imageObjectPath),
                 ["showForResistance"] = CloneNode(overrideMap?["showForResistance"]),
                 ["regionId"] = CloneNode(overrideMap?["regionId"]),
-                ["gridCoord"] = SanitizeGridCoordinate(mapValue["GridCoord"] as JObject),
+                ["gridCoord"] = SanitizeGridCoordinate(homeGridCoordinate ?? mapValue["GridCoord"] as JObject),
                 ["standalone"] = standalone ? JsonValue.Create(true) : null,
             };
 
