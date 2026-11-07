@@ -50,7 +50,7 @@ import {buildRegionShell,shellDepthBit,REGION_SHELL_COLOR} from '../authoring/re
 import {framedMaterialBits,createRegionFramePreparation} from './spatial-frame.mjs';
 
 function properties(value){const keys=new Set();for(let p=value;p&&p!==Object.prototype;p=Object.getPrototypeOf(p))for(const key of Object.getOwnPropertyNames(p))if(!key.startsWith('_')&&key!=='constructor')keys.add(key);return keys;}
-export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},solidMap=false,terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask}){
+export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},solidMap=false,terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask,retainCompactAssets=true}){
  prepareAtlasRetirement(renderer);
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  const homePreview=entry.profile==='home-solid-v1';
@@ -59,7 +59,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  if(homeRegion){layers=availableLayers(layers);adaptiveTextures=false;}
  if(homePreview)solidMap=true;
  if(solidMap)terrainSurface='plain';
- const provider=await createCompactProvider({baseUrl,entry,solidMap,signal,onProgress,scheduleModelTask}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
+ const provider=await createCompactProvider({baseUrl,entry,solidMap,signal,onProgress,scheduleModelTask,retainCompactAssets}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
  // Map assets own their authored LOD; host placed-object simplification must not replace it.
  Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
  let roads,roadTransitions,waterMat,weatherTextures={},packedWeather,disposed=false,cleaned=false,loading=true,terrainLoaded=false,terrainPreview,terrainChunks,sourceMaxHeight=256,environment,warState=null,sharedActorVisibility,layerFlags=layers,revealedBatches=0;

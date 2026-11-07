@@ -14,14 +14,14 @@ import {cachedRecipe,writeCachedRoadAssembly,recipeKey,roadKey} from './recipe-c
 import {fetchCompactResource,compactResourceCacheKey} from './compact-cache.mjs';
 import {stripMapTextures} from './solid-map-materials.mjs';
 
-export async function createCompactProvider({baseUrl,entry,solidMap=false,signal:externalSignal,onProgress=()=>{},scheduleModelTask=task=>task()}){
+export async function createCompactProvider({baseUrl,entry,solidMap=false,signal:externalSignal,onProgress=()=>{},scheduleModelTask=task=>task(),retainCompactAssets=true}){
  const lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  performance.setResourceTimingBufferSize(30000);
  const externalAssets=new Set(),workerTimings=[];const start=performance.now(),base=new URL(baseUrl,location.href),metrics={downloadBytes:0,cacheHits:0,cacheMisses:0,cacheWriteFailures:0,decodeMs:0};
  const terrainLedger=createTransferLedger(),terrainTransfers={events:[],...terrainLedger.summary()};metrics.terrainTransfers=terrainTransfers;
  const observeTerrain=event=>{terrainLedger.add(event);terrainTransfers.events=terrainLedger.values();Object.assign(terrainTransfers,terrainLedger.summary());};
  const usage=createWorldCacheLease();
- let workerRead;const read=async(ref,{signal:consumerSignal}={})=>{signal.throwIfAborted();consumerSignal?.throwIfAborted();await usage.use('foxhole-world-compact-v1',compactResourceCacheKey(ref));signal.throwIfAborted();consumerSignal?.throwIfAborted();return workerRead?workerRead(ref,{signal:consumerSignal}):fetchCompactResource(base,ref,{signal:consumerSignal&&signal?AbortSignal.any([consumerSignal,signal]):consumerSignal||signal,metrics});};
+ let workerRead;const read=async(ref,{signal:consumerSignal}={})=>{signal.throwIfAborted();consumerSignal?.throwIfAborted();if(retainCompactAssets)await usage.use('foxhole-world-compact-v1',compactResourceCacheKey(ref));signal.throwIfAborted();consumerSignal?.throwIfAborted();return workerRead?workerRead(ref,{signal:consumerSignal}):fetchCompactResource(base,ref,{signal:consumerSignal&&signal?AbortSignal.any([consumerSignal,signal]):consumerSignal||signal,metrics,cachesApi:retainCompactAssets?undefined:null});};
  const stages={};let stageStart=performance.now(),stageName='manifest';
  async function measure(name,fn){const begin=performance.now();try{return await fn();}finally{const end=performance.now();stages[name]=end-begin;performance.measure('foxhole:'+entry.id+':'+name,{start:begin,end});}}
  function stage(name){const now=performance.now();stages[stageName]=(stages[stageName]||0)+now-stageStart;performance.measure('foxhole:'+entry.id+':'+stageName,{start:stageStart,end:now});stageName=name;stageStart=now;}
@@ -30,7 +30,7 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
  if(manifest.version!==1||manifest.format!=='compact-recipes-v1'||manifest.region!==entry.id)throw Error('Unsupported compact region');
  if(manifest.bundles)attachCompactBundles(manifest);
  let reportedPercent=-1;
- await usage.use('foxhole-world-compact-v1',(manifest.physicalResources||entry.resources||[]).map(compactResourceCacheKey),{onProgress:({completed,total})=>{
+ if(retainCompactAssets)await usage.use('foxhole-world-compact-v1',(manifest.physicalResources||entry.resources||[]).map(compactResourceCacheKey),{onProgress:({completed,total})=>{
   const percent=total?Math.floor(completed*100/total):100;
   if(!signal?.aborted&&percent!==reportedPercent){reportedPercent=percent;onProgress({phase:'Preparing region cache',progress:{completed,total,unit:'asset records'},...metrics});}
  }});}catch(error){usage.dispose();throw error;}
@@ -71,7 +71,7 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
   const complete=()=>{jobSignal?.removeEventListener('abort',cancel);completed();};
   const job={resolve,reject,complete,target,sent:false,onProgress:onWorkerProgress};
   const cancel=()=>{if(!job.sent){if(pending.get(id)!==job)return;pending.delete(id);reject(jobSignal?.reason||signal.reason||new DOMException('Region disposed','AbortError'));complete();return;}if(cancellationSent||worker!==2||!data.ref)return;cancellationSent=true;try{target.postMessage({kind:'cancel-resource',id});}catch{}};
-  job.cancel=cancel;job.dispatch=()=>{if(pending.get(id)!==job||job.sent)return;if(signal.aborted||jobSignal?.aborted){cancel();return;}job.sent=true;try{target.postMessage({...data,id});}catch(error){pending.delete(id);reject(error);complete();}};
+  job.cancel=cancel;job.dispatch=()=>{if(pending.get(id)!==job||job.sent)return;if(signal.aborted||jobSignal?.aborted){cancel();return;}job.sent=true;try{target.postMessage({...data,id,retainCompactAssets});}catch(error){pending.delete(id);reject(error);complete();}};
   pending.set(id,job);jobSignal?.addEventListener('abort',cancel,{once:true});
   if(signal.aborted||jobSignal?.aborted){cancel();return;}if(readySet.has(target))job.dispatch();
  }));};
