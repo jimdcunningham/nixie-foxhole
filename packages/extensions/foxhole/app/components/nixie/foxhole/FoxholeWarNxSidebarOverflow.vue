@@ -67,16 +67,16 @@ const items = computed<ResolvedMenuItem[]>(() => [
             const enabled = !mapSettings.value.solidMap;
             const options = { reason: 'foxhole-war-nx:solid-map' };
             settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.solidMap, enabled, options);
-            if (settingsStore.getValueOr(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, '') === 'map') {
+            if (settingsStore.getValueOr(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, '') === 'plain') {
                 settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'native', options);
             }
         },
     },
     {
         type: 'submenu', label: 'Terrain Surface', icon: 'ph:mountains',
-        badge: { plain: 'Plain', native: 'Detailed' }[mapSettings.value.terrainSurface],
+        badge: { map: 'Map', native: 'Detailed' }[mapSettings.value.terrainSurface],
         adminOnly: false, disabled: false, visible: true,
-        children: ([['plain', 'Plain'], ['native', 'Detailed']] as const).map(([value, label]) => ({
+        children: ([['map', 'Map'], ['native', 'Detailed']] as const).map(([value, label]) => ({
             type: 'checkbox', label, checked: mapSettings.value.terrainSurface === value,
             closeOnClick: false, adminOnly: false, disabled: false, visible: true,
             onClick: () => { if (mapSettings.value.terrainSurface !== value) settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, value, { reason: 'foxhole-war-nx:terrain-surface' }); },

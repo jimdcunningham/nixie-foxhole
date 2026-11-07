@@ -271,7 +271,7 @@ export interface FoxholeMapSettings {
     terrainRdz: boolean;
     terrainTopo: boolean;
     solidMap: boolean;
-    terrainSurface: 'native' | 'plain';
+    terrainSurface: 'native' | 'map';
     enabled: boolean;
     shardId: string;
     regionKeys: string[];
@@ -874,7 +874,7 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.shadowStrength, 'Map Shadow Strength', 'Choose how strongly cast shadows darken surfaces. Changes apply without reloading regions.', 'ph:circle-half-tilt', 249, 'light'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'light', label: 'Light' }, { value: 'medium', label: 'Medium' }, { value: 'strong', label: 'Strong' }] },
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.vegetationDensity, 'Vegetation Density', 'Keep all small foliage, about half, or about 15 percent. Trees, rocks and climbing vines remain. Changing this reloads selected regions.', 'ph:plant', 244, 'full'), type: 'select', control: 'select', persist: 'local', options: [{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }, { value: 'minimal', label: 'Minimal' }] },
     { ...createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.solidMap, 'Solid Map', 'Show the 3D map without map textures.', 'ph:cube', 237, false), persist: 'local' },
-    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'Terrain Surface', 'Choose plain or detailed terrain. Changing the surface mode reloads selected regions.', 'ph:mountains', 238, 'native'), persist: 'local' },
+    { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'Terrain Surface', 'Choose map-image or detailed terrain. Map images follow the enabled custom map mod, with processed maps for missing regions. Changing the surface mode reloads selected regions.', 'ph:mountains', 238, 'native'), persist: 'local' },
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, 'Terrain RDZ', 'Shade the 150 m rapid decay zone on terrain, with known 50 m resource and world-base exemptions. Conditional border-base protection is not included.', 'ph:warning-circle', 256, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, 'Terrain Contours', 'Draw elevation contours every 10 m, with stronger lines every 50 m, on 2.5D and 3D terrain.', 'ph:mountains', 257, false, { persist: 'local' }),
     ...FOXHOLE_WORLD_LAYER_DEFINITIONS.map((layer, index) => createBooleanUserSetting(
@@ -962,8 +962,8 @@ export function readFoxholeMapSettings(
     return {
         terrainRdz: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, false),
         terrainTopo: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, false),
-        solidMap: savedTerrainSurface === 'map' || readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.solidMap, false),
-        terrainSurface: savedTerrainSurface === 'plain' ? 'plain' : 'native',
+        solidMap: savedTerrainSurface === 'plain' || readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.solidMap, false),
+        terrainSurface: savedTerrainSurface === 'map' ? 'map' : 'native',
         modelLod: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.modelLod, false),
         terrainLod: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainLod, false),
         adaptiveTextures: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.adaptiveTextures, false),
