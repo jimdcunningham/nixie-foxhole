@@ -14,7 +14,7 @@ public static class DesktopImport {
   var timings=new List<object>();
   void Stage(string name,Action action){Console.WriteLine("@stage "+name);Console.Out.Flush();var t=Stopwatch.StartNew();action();timings.Add(new{name,seconds=t.Elapsed.TotalSeconds,workingSetMiB=Environment.WorkingSet/1048576.0});File.WriteAllText(Path.Combine(root,"extract-timings.json"),JsonSerializer.Serialize(timings));}
   UObject[] objects=[];
-  Stage("Read installed Deadlands map",()=>objects=provider.LoadPackage(RegionConfig.MapPath).GetExports().ToArray());
+  Stage($"Read installed {RegionConfig.Map} map",()=>objects=provider.LoadPackage(RegionConfig.MapPath).GetExports().ToArray());
   Stage("Extract full terrain",()=>Terrain(objects,output));
   Stage("Extract placed scenery",()=>SceneProbe.Run(objects,output,"full"));
   File.WriteAllText(Path.Combine(output,"catalog-full.json"),"{\"prototypes\":[]}");
