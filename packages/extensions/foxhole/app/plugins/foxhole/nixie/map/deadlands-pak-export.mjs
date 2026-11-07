@@ -12,11 +12,84 @@ footerFields.setUint32(16, 15, true);
 footerFields.setUint32(24, 0x9e2a83c1, true); // Unreal package magic.
 const weights = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 
+/**
+ * Fit opaque BC7 mode 6 blocks by alternating between index assignment and
+ * least-squares RGB endpoints. Keep the original candidate unless error falls.
+ */
+function refineOpaqueBlock(rgba, offsets, endpoints, indices, candidate, candidateIndices) {
+    const error = (colors, assignments) => {
+        let total = 0;
+        for (let pixel = 0; pixel < 16; pixel++) {
+            const weight = weights[assignments[pixel]];
+            for (let c = 0; c < 3; c++) {
+                const decoded = ((64 - weight) * colors[c] + weight * colors[c + 4] + 32) >> 6;
+                total += (decoded - rgba[offsets[pixel] + c]) ** 2;
+            }
+        }
+        return total;
+    };
+    let best = error(endpoints, indices);
+    if (best === 0) return;
+    candidateIndices.set(indices);
+    for (let pass = 0; pass < 4; pass++) {
+        let aa = 0;
+        let ab = 0;
+        let bb = 0;
+        for (const index of candidateIndices) {
+            const b = weights[index];
+            const a = 64 - b;
+            aa += a * a;
+            ab += a * b;
+            bb += b * b;
+        }
+        const determinant = aa * bb - ab * ab;
+        if (!determinant) break;
+
+        let lengthSquared = 0;
+        for (let c = 0; c < 3; c++) {
+            let ap = 0;
+            let bp = 0;
+            for (let pixel = 0; pixel < 16; pixel++) {
+                const b = weights[candidateIndices[pixel]];
+                const value = rgba[offsets[pixel] + c];
+                ap += (64 - b) * value;
+                bp += b * value;
+            }
+            // Both endpoint parity bits are odd so decoded alpha stays 255.
+            const first = 64 * (bb * ap - ab * bp) / determinant;
+            const last = 64 * (aa * bp - ab * ap) / determinant;
+            candidate[c] = 2 * Math.max(0, Math.min(127, Math.round((first - 1) / 2))) + 1;
+            candidate[c + 4] = 2 * Math.max(0, Math.min(127, Math.round((last - 1) / 2))) + 1;
+            lengthSquared += (candidate[c + 4] - candidate[c]) ** 2;
+        }
+        for (let pixel = 0; pixel < 16; pixel++) {
+            let dot = 0;
+            for (let c = 0; c < 3; c++) {
+                dot += (rgba[offsets[pixel] + c] - candidate[c]) * (candidate[c + 4] - candidate[c]);
+            }
+            const weight = lengthSquared ? 64 * dot / lengthSquared : 0;
+            let index = 0;
+            while (index < 15 && weight > (weights[index] + weights[index + 1]) / 2) index++;
+            candidateIndices[pixel] = index;
+        }
+        const next = error(candidate, candidateIndices);
+        if (next >= best) break;
+        best = next;
+        for (let c = 0; c < 3; c++) {
+            endpoints[c] = candidate[c];
+            endpoints[c + 4] = candidate[c + 4];
+        }
+        indices.set(candidateIndices);
+    }
+}
+
 function encodeBc7(rgba) {
     const output = new Uint8Array(width * height);
     const offsets = new Uint32Array(16);
     const indices = new Uint8Array(16);
     const endpoints = new Uint8Array(8);
+    const candidate = new Uint8Array(8);
+    const candidateIndices = new Uint8Array(16);
     let block = 0;
     let bit = 0;
 
@@ -30,6 +103,7 @@ function encodeBc7(rgba) {
 
     for (let y = 0; y < height; y += 4) {
         for (let x = 0; x < width; x += 4) {
+            let opaque = true;
             let low = Infinity;
             let high = -Infinity;
             let start = 0;
@@ -37,6 +111,7 @@ function encodeBc7(rgba) {
             for (let pixel = 0; pixel < 16; pixel++) {
                 const offset = ((y + (pixel >> 2)) * width + x + (pixel & 3)) * 4;
                 offsets[pixel] = offset;
+                opaque &&= rgba[offset + 3] === 255;
                 const score = rgba[offset] + rgba[offset + 1] + rgba[offset + 2] + 4 * rgba[offset + 3];
                 if (score < low) { low = score; start = offset; }
                 if (score > high) { high = score; end = offset; }
@@ -62,6 +137,8 @@ function encodeBc7(rgba) {
                 while (index < 15 && weight > (weights[index] + weights[index + 1]) / 2) index++;
                 indices[pixel] = index;
             }
+            // Keep the established encoding for transparent and hex boundary blocks.
+            if (opaque) refineOpaqueBlock(rgba, offsets, endpoints, indices, candidate, candidateIndices);
             // Mode 6 omits the high bit of the first index. Swap endpoints if needed.
             const swap = indices[0] >= 8;
             bit = 0;
@@ -132,3 +209,5 @@ export async function buildDeadlandsPak(rgba, cookedHeader) {
     footer.set(new Uint8Array(await crypto.subtle.digest('SHA-1', index)), 24);
     return new Blob([record, cooked, index, footer], { type: 'application/octet-stream' });
 }
+
+export { encodeBc7 };
