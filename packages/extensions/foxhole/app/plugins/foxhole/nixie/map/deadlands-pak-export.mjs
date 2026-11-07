@@ -191,23 +191,45 @@ export async function buildDeadlandsPak(rgba, cookedHeader) {
     cooked.set(encodeBc7(rgba), cookedHeader.byteLength);
     cooked.set(textureFooter, cooked.length - textureFooter.length);
 
-    const record = await storedPakEntry(cooked);
-    const mount = pakString('../../../');
-    const path = pakString(texturePath);
-    const index = new Uint8Array(mount.length + 4 + path.length + record.length);
-    index.set(mount);
-    new DataView(index.buffer).setUint32(mount.length, 1, true);
-    index.set(path, mount.length + 4);
-    index.set(record, index.length - record.length);
+    return buildMapPak([{ path: texturePath, data: cooked }]);
+}
 
+/** Build a UE version 3 Pak from independently cooked map textures. */
+export async function buildMapPak(entries) {
+    if (!entries.length) throw new Error('The Pak needs at least one map texture.');
+    const mount = pakString('../../../');
+    const count = new Uint8Array(4);
+    new DataView(count.buffer).setUint32(0, entries.length, true);
+    const records = [];
+    const indexParts = [mount, count];
+    const paths = new Set();
+    let offset = 0;
+    for (const { path, data } of entries) {
+        if (!/^War\/Content\/Textures\/UI\/HexMaps\/Processed\/[a-z0-9]+\.uasset$/i.test(path)
+            || paths.has(path.toLowerCase())) throw new Error('Invalid or duplicate map path: ' + path);
+        paths.add(path.toLowerCase());
+        const record = await storedPakEntry(data);
+        const indexedRecord = record.slice();
+        new DataView(indexedRecord.buffer).setBigUint64(0, BigInt(offset), true);
+        indexParts.push(pakString(path), indexedRecord);
+        records.push(record, data);
+        offset += record.length + data.length;
+    }
+
+    const index = new Uint8Array(indexParts.reduce((sum, part) => sum + part.length, 0));
+    let indexOffset = 0;
+    for (const part of indexParts) {
+        index.set(part, indexOffset);
+        indexOffset += part.length;
+    }
     const footer = new Uint8Array(44);
     const view = new DataView(footer.buffer);
     view.setUint32(0, 0x5a6f12e1, true);
     view.setUint32(4, 3, true);
-    view.setBigUint64(8, BigInt(record.length + cooked.length), true);
+    view.setBigUint64(8, BigInt(offset), true);
     view.setBigUint64(16, BigInt(index.length), true);
     footer.set(new Uint8Array(await crypto.subtle.digest('SHA-1', index)), 24);
-    return new Blob([record, cooked, index, footer], { type: 'application/octet-stream' });
+    return new Blob([...records, index, footer], { type: 'application/octet-stream' });
 }
 
 export { encodeBc7 };

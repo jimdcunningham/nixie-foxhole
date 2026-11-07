@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
-import { regionBakeAction } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
+import { foxholeWorldAssetDelivery, hasLocalFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
+import { regionBakeAction, type FoxholeRegionBakeScale } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
 import { downloadNxBlob } from '#nixie/utils/nx-download.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
@@ -64,7 +65,7 @@ const isSpatialView = computed(() => {
     return Boolean(controls && controls.mode !== 'flat');
 });
 const settingsStore = useNixieSettingsStore();
-const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && mapSettings.value.regionKeys.includes(region.key)));
+const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasLocalFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
 const runtimeConfig = useRuntimeConfig();
 const assetsBaseUrl = createFoxholeAssetsBaseUrl(runtimeConfig.app.baseURL);
 const mapModStore = getFoxholeMapModStore();
@@ -427,12 +428,54 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 }
 
 const regionBakePending = ref(false);
-async function downloadRegionBake(scale: 1 | 2) {
+const fullMapReferenceInput = ref<HTMLInputElement | null>(null);
+const fullMapProgress = ref('');
+let fullMapController: AbortController | null = null;
+
+async function exportFullMap(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const reference = input.files?.[0];
+    input.value = '';
+    const bake = regionBakeAction.value;
+    if (!reference || !bake || !isSpatialView.value || regionBakePending.value || deadlandsPakExporting.value) return;
+    const controller = new AbortController();
+    fullMapController = controller;
+    regionBakePending.value = true;
+    fullMapProgress.value = 'Checking region textures…';
+    try {
+        const delivery = foxholeWorldAssetDelivery();
+        if (!delivery) throw new Error('No world assets are available.');
+        const { regionIdForKey } = await import('#foxhole/plugins/foxhole/nixie/map/region-scene-controller.mjs');
+        const index = await delivery.loadIndex(controller.signal);
+        const regions = [...FOXHOLE_MAP_REGIONS];
+        const unavailable = regions.filter(region => {
+            const entry = index.regions[regionIdForKey(region.key)];
+            return !entry || (region.standalone && entry.profile !== 'home-native-v1');
+        });
+        if (unavailable.length) throw new Error('Full map materials are unavailable for: ' + unavailable.map(region => region.name).join(', '));
+        const { exportFoxholeFullMap } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
+        const { pak, archive } = await exportFoxholeFullMap(reference, regions,
+            (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal, message => { fullMapProgress.value = message; });
+        downloadNxBlob(pak, 'War-WindowsNoEditor_NixieFullMap.pak');
+        downloadNxBlob(archive, 'Nixie-Foxhole-Region-PNGs.zip');
+    } catch (error) {
+        if (!controller.signal.aborted) showNxToast({
+            title: 'Full Map Export Failed',
+            message: error instanceof Error ? error.message : 'Could not export the full map.',
+            kind: 'error',
+        });
+    } finally {
+        fullMapController = null;
+        fullMapProgress.value = '';
+        regionBakePending.value = false;
+    }
+}
+async function downloadRegionBake(scale: FoxholeRegionBakeScale) {
     const bake = regionBakeAction.value;
     if (!bake || regionBakePending.value || deadlandsPakExporting.value) return;
     regionBakePending.value = true;
     try {
-        const { png, filename } = await bake(scale);
+        const { png, filename } = await bake(scale, scale === 0.5);
         downloadNxBlob(png, filename);
     } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -906,6 +949,29 @@ const mapModVisibilityDisabled = computed(() => (
                     :disabled="regionBakePending || deadlandsPakExporting"
                     @click="downloadRegionBake(2)"
                 />
+                <NxButton
+                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    variant="secondary"
+                    size="sm"
+                    label="Bake 1024 × 888 PNG"
+                    :disabled="regionBakePending || deadlandsPakExporting"
+                    @click="downloadRegionBake(0.5)"
+                />
+                <template v-if="isSpatialView && regionBakeAction && mapSettings.enabled">
+                    <NxButton
+                        v-if="!fullMapProgress"
+                        variant="secondary"
+                        size="sm"
+                        label="Export Full Map Pak + PNGs"
+                        :disabled="regionBakePending || deadlandsPakExporting"
+                        @click="fullMapReferenceInput?.click()"
+                    />
+                    <template v-else>
+                        <p role="status">{{ fullMapProgress }}</p>
+                        <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
+                    </template>
+                    <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
+                </template>
                 <template v-if="canExportDeadlandsPak">
                     <NxButton
                         variant="secondary"

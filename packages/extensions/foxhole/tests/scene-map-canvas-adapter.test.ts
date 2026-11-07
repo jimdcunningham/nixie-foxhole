@@ -30,6 +30,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         },
         FoxholeRegionSceneController: class { constructor(options: { manageEnvironment?: boolean; }) { assert.equal(options.manageEnvironment, false); return world; } },
         selectedSpatialRegions, regionIdForKey,
+        hasLocalFoxholeSpatialRegion: () => false,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
         FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"},{key:"HomeRegionC",standalone:true}],
         getFoxholeRegionPosition: (region: any) => ({x:region.key === "WestgateHex" ? 10 : 20,y:0}),
@@ -152,7 +153,8 @@ test('mounted spatial worlds retire on catalog revision, clear on disable, and r
             }
         },
         FoxholeMapViewportPlugin: class {updatePresentation() {} getSpatialWarState() {return null;} destroy() {}},
-        selectedSpatialRegions, regionIdForKey, computed, shallowRef, setTimeout: () => 1, clearTimeout: () => {},
+        selectedSpatialRegions, regionIdForKey,
+        hasLocalFoxholeSpatialRegion: () => false, computed, shallowRef, setTimeout: () => 1, clearTimeout: () => {},
         foxholeWorldAssetDelivery: () => selected,
         subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => true,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
@@ -283,7 +285,8 @@ test('switching a positioned region from 2D to spatial views preserves the camer
     const factory = runInNewContext(stripTypeScriptTypes(source.replaceAll('import.meta.dev', 'false').replace(/^import .*;\r?\n/gm, '').replace('export function', 'function') + '\ncreateFoxholeSceneMapCanvas;'), {
         FoxholeRegionSceneController: class { sync() {} destroy() {} whenDisposed() { return Promise.resolve(); } },
         FoxholeMapViewportPlugin: class { destroy() {} getSpatialWarState() { return null; } },
-        selectedSpatialRegions, regionIdForKey, computed, shallowRef,
+        selectedSpatialRegions, regionIdForKey,
+        hasLocalFoxholeSpatialRegion: () => false, computed, shallowRef,
         beginShellProgressJob: () => 'job', updateShellProgressJob() {}, finishShellProgressJob() {}, setTimeout: () => 1, clearTimeout() {},
         foxholeWorldAssetDelivery: () => delivery,
         subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => false,

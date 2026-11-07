@@ -13,6 +13,7 @@ import { shouldUseFoxholeLocalAssetDelivery } from '../plugins/foxhole/nixie/map
 let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = null;
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
 const revision = shallowRef(0);
+const localSpatialRegions = shallowRef<ReadonlySet<string>>(new Set());
 const cache = new NixiePersistentExtensionResourceCache();
 const residentUsage = new NixieExtensionResourceUsage(async (_owner, _generation, hashes) => {await cache.markUsed(hashes);});
 const metadataCache = new NixiePersistentExtensionResourceCache(
@@ -24,7 +25,14 @@ async function read<T>(receipt: CatalogReceipt): Promise<T> {
 }
 export function initializeFoxholeAssetDelivery(): void {
     if (shouldUseFoxholeLocalAssetDelivery(import.meta.dev, useRuntimeConfig().public.foxholeAssetMode, typeof window === 'undefined' ? undefined : window)) {
-        localDelivery ??= createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', globalThis.location.href).href);
+        if (!localDelivery) {
+            localDelivery = createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', globalThis.location.href).href);
+            void localDelivery.world.loadIndex().then(index => {
+                localSpatialRegions.value = new Set(Object.keys(index.regions ?? {}));
+            }).catch(() => {
+                // The 2D previews remain available when there is no local spatial index.
+            });
+        }
         installFoxholeAssetLocations(localDelivery.resolve);
         configureWorldAssetLocations(localDelivery);
     }
@@ -68,6 +76,7 @@ export function prepareFoxholeAssetGeneration(generation: FoxholeAssetGeneration
 export function resolveSelectedFoxholeAsset(path: string): string | undefined {
     return localDelivery?.resolve(path) ?? publishedLibrary?.resolve(path);
 }
+export function hasLocalFoxholeSpatialRegion(key: string): boolean { return localSpatialRegions.value.has(key.toLowerCase()); }
 export function foxholeWorldAssetDelivery() {
     void revision.value;
     if (localDelivery) return { ...localDelivery.world, revision: revision.value };

@@ -6,7 +6,8 @@ import { shallowRef } from 'vue';
 import { FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT } from './constants.ts';
 import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
 
-export const regionBakeAction = shallowRef<((scale: 1 | 2, supersample?: boolean) => Promise<{ png: Blob; filename: string }>) | null>(null);
+export type FoxholeRegionBakeScale = 0.5 | 1 | 2;
+export const regionBakeAction = shallowRef<((scale: FoxholeRegionBakeScale, supersample?: boolean, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => Promise<{ png: Blob; filename: string }>) | null>(null);
 
 type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
 type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];
@@ -17,8 +18,9 @@ export async function bakeFoxholeRegion(
     settings: SyncOptions['settings'],
     region: NonNullable<SyncOptions['regions']>[number],
     signal: AbortSignal,
-    scale: 1 | 2,
+    scale: FoxholeRegionBakeScale,
     supersample = false,
+    onStage?: (stage: string) => void,
 ): Promise<Blob> {
     const width = 2048 * scale;
     const height = 1776 * scale;
@@ -50,6 +52,7 @@ export async function bakeFoxholeRegion(
             return loaded;
         },
         onStatus(status) {
+            onStage?.(status.phase + (status.progress ? ' ' + status.progress.completed + '/' + status.progress.total : ''));
             if (status.phase === 'Ready' && loaded) resolve(loaded);
             else if (status.phase === 'error') reject(new Error(status.error ?? 'Could not prepare the region.'));
         },
@@ -59,6 +62,7 @@ export async function bakeFoxholeRegion(
         mode: '3d',
         settings: {
             ...settings,
+            regionKeys: [region.id],
             adaptiveStreaming: false,
             terrainLod: false,
             adaptiveTextures: false,
@@ -85,6 +89,7 @@ export async function bakeFoxholeRegion(
         sync();
         const scene = await promise;
         await scene.whenLayersReady?.();
+        onStage?.('Rendering');
         signal.throwIfAborted();
         sync();
         lighting.sync();
@@ -107,8 +112,24 @@ export async function bakeFoxholeRegion(
         context.drawImage(square, 0, (renderWidth - renderHeight) / 2, renderWidth, renderHeight, 0, 0, width, height);
         const image = context.getImageData(0, 0, width, height);
         // Clip at pixel centers so the PNG keeps the same hard hex edge at either size.
+        const insetAt = (y: number) => Math.floor(Math.abs(y + 0.5 - height / 2) * width / (2 * height) + 0.5);
         for (let y = 0; y < height; y++) {
-            const inset = Math.floor(Math.abs(y + 0.5 - height / 2) * width / (2 * height) + 0.5);
+            const inset = insetAt(y);
+            if (supersample) {
+                // Use opaque interior pixels to remove the resampling fringe
+                // at the mask boundary while leaving interior transparency alone.
+                const sampleY = Math.max(1, Math.min(height - 2, y));
+                const innerInset = insetAt(sampleY) + 1;
+                const lastX = width - inset - 1;
+                const step = y === sampleY ? lastX - inset : 1;
+                for (let x = inset; x <= lastX; x += step) {
+                    const to = (y * width + x) * 4;
+                    if (image.data[to + 3] === 255) continue;
+                    const sampleX = Math.max(innerInset, Math.min(width - innerInset - 1, x));
+                    const from = (sampleY * width + sampleX) * 4;
+                    if (image.data[from + 3] === 255) image.data.copyWithin(to, from, from + 4);
+                }
+            }
             const row = y * width * 4;
             image.data.fill(0, row, row + inset * 4);
             image.data.fill(0, row + (width - inset) * 4, row + width * 4);
@@ -117,11 +138,13 @@ export async function bakeFoxholeRegion(
             throw new Error('The renderer produced an empty region image.');
         }
         context.putImageData(image, 0, 0);
+        onStage?.('Writing PNG');
         return await new Promise<Blob>((done, fail) => {
             canvas.toBlob(blob => blob ? done(blob) : fail(new Error('Could not encode the region PNG.')), 'image/png');
         });
     } finally {
         signal.removeEventListener('abort', abort);
+        onStage?.('Releasing renderer resources');
         world.destroy();
         await world.whenDisposed();
         view.destroy({ children: true });

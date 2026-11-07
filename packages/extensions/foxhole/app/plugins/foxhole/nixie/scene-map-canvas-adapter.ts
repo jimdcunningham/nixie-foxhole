@@ -5,10 +5,10 @@ import { preserveViewpointRegionCamera, consumeViewpointRegionCamera } from './m
 import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
-import { foxholeWorldAssetDelivery } from '#foxhole/utils/asset-delivery.ts';
+import { foxholeWorldAssetDelivery, hasLocalFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
 import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
 import { FoxholeRegionSceneController, regionIdForKey } from './map/region-scene-controller.mjs';
-import { bakeFoxholeRegion, regionBakeAction } from './map/region-bake.ts';
+import { bakeFoxholeRegion, regionBakeAction, type FoxholeRegionBakeScale } from './map/region-bake.ts';
 import { computed, shallowRef } from 'vue';
 import type { NixieSceneV2CanvasContributionContext, NixieSceneV2CanvasContribution } from '#nixie/plugins/nixie/scene-v2/canvas-contributions.ts';
 import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from './map-settings.ts';
@@ -26,9 +26,9 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const spatialRegions = computed(() => {
         const { regionKeys, devMultiRegion3d } = mapSettings.value;
         if (!regionKeys.length || (!devMultiRegion3d && regionKeys.length !== 1)) return [];
-        return FOXHOLE_MAP_REGIONS.filter(region => !region.standalone && regionKeys.includes(region.key));
+        return FOXHOLE_MAP_REGIONS.filter(region => (!region.standalone || hasLocalFoxholeSpatialRegion(region.key)) && regionKeys.includes(region.key));
     });
-    const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && mapSettings.value.regionKeys.includes(region.key)));
+    const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasLocalFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
     let worldProgressJobId: string | null = null;
     let worldProgressErrorToastId: string | null = null;
     let worldProgressErrorKey: string | null = null;
@@ -236,9 +236,13 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         },
     });
     let bakeController: AbortController | null = null;
-    const bake = async (scale: 1 | 2, supersample = false) => {
-        const settings = mapSettings.value;
-        const region = spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
+    const bake = async (scale: FoxholeRegionBakeScale, supersample = false, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => {
+        const preferences = mapSettings.value;
+        const settings = regionKey ? { ...preferences, solidMap: false, terrainSurface: 'native' as const, modelLod: false,
+            worldLayers: Object.fromEntries(Object.keys(preferences.worldLayers).map(key => [key, true])) as typeof preferences.worldLayers } : preferences;
+        const region = regionKey
+            ? FOXHOLE_MAP_REGIONS.find(candidate => candidate.key === regionKey)
+            : spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
         if (destroyed || bakeController || context.viewMode() === 'flat' || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
             throw new Error('Select one map region in 2.5D or 3D to bake.');
         }
@@ -256,9 +260,9 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             if (!selected) throw new Error('No selected world catalog.');
             const png = await bakeFoxholeRegion(context.app.renderer, {
                 ...worldOptions(), baseUrl: selected.baseUrl, indexLoader: selected.loadIndex,
-            }, settings, source, controller.signal, scale, supersample);
+            }, settings, source, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, scale, supersample, onStage);
             controller.signal.throwIfAborted();
-            return { png, filename: region.textureKey + (scale === 2 ? '-4096x3552.png' : '.png') };
+            return { png, filename: region.textureKey + (scale === 0.5 ? '-1024x888.png' : scale === 2 ? '-4096x3552.png' : '.png') };
         } finally {
             bakeController = null;
         }
