@@ -1527,8 +1527,7 @@ export class FoxholeMapRenderer {
         // The shared loader also selects the texture parser for extensionless blob URLs.
         const promise = this.context.loadTexture(cacheKey).then(texture => {
             if (texture?.source) {
-                // Preserve the baked edge smoothing when a map mod is viewed above native resolution.
-                texture.source.scaleMode = relativePath.startsWith('mapmod:') ? 'linear' : 'nearest';
+                texture.source.scaleMode = 'nearest';
             }
             return texture;
         });
