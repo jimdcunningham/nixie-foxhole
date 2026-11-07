@@ -73,6 +73,12 @@ const items = computed<ResolvedMenuItem[]>(() => [
         },
     },
     {
+        type: 'checkbox', label: 'Water Overlays', icon: 'ph:drop',
+        checked: mapSettings.value.solidWaterOverlays, closeOnClick: false,
+        adminOnly: false, disabled: false, visible: mapSettings.value.solidMap,
+        onClick: () => settingsStore.setValue(FOXHOLE_MAP_SETTING_KEYS.solidWaterOverlays, !mapSettings.value.solidWaterOverlays, { reason: 'foxhole-war-nx:solid-water-overlays' }),
+    },
+    {
         type: 'submenu', label: 'Terrain Surface', icon: 'ph:mountains',
         badge: { map: 'Map', native: 'Detailed' }[mapSettings.value.terrainSurface],
         adminOnly: false, disabled: false, visible: true,

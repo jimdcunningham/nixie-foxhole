@@ -5,7 +5,7 @@ import {rdzExemptions,CONTOUR_INTERVAL} from './terrain-overlay-policy.mjs';
 // RGBA8 carries exact float bytes, as in the existing excavation mask. No float
 // texture filtering feature or extra render pass is needed. The optional 512²
 // territory field shares this texture and costs about 1 MiB per selected region.
-export function terrainPlanningOverlayBit({water=false}={}){
+export function terrainPlanningOverlayBit({water=false,solidWater=false}={}){
  // Native water supplies its own body/foam albedo, leaving the PBR base-color
  // sampler free for the shared mask. Keep water within WebGL's eight packed
  // material samplers; adding a ninth aliases the first slot's four-bit index.
@@ -86,16 +86,17 @@ if(borderDistance>=0.0&&terrainMapOverlayInfo.w>256.0){
   .replaceAll('vec3(','vec3<f32>(').replaceAll('vec2(','vec2<f32>(')
   .replace(/\bvec4 (\w+)=/g,'let $1=').replace(/\bfloat (\w+)=/g,'var $1=').replace(/\bvec3 (\w+)=/g,'var $1=').replace(/\bvec2 (\w+)=/g,'let $1=')
   .replace('bool exempt=false','var exempt=false').replace(`for(int i=0;i<int(${water?'material':'terrain'}.terrainOverlayInfo.z);i++)`,`for(var i=0;i<i32(${water?'material':'terrain'}.terrainOverlayInfo.z);i++)`);
- return {name:water?'waterPlanningOverlays':'terrainPlanningOverlays',bindings:{[water?'material':'terrain']:{terrainOverlayInfo:'vec4<f32>',terrainMapOverlayInfo:'vec4<f32>',terrainGridOverlayInfo:'vec4<f32>',terrainActivityOverlayInfo:'vec4<f32>',...(water?{}:{uTerrainExemptions:'texture_2d<f32>'})}},
-  gpu:{header:gpu,fragment:{end:wgsl}},gl:{header:gl,fragment:{end:water?fragment.replaceAll('terrainOverlayInfo','material.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo','material.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo','material.terrainGridOverlayInfo').replaceAll('terrainActivityOverlayInfo','material.terrainActivityOverlayInfo'):fragment}}};
+ return {name:solidWater?'solidWaterPlanningOverlays':water?'waterPlanningOverlays':'terrainPlanningOverlays',bindings:{[water?'material':'terrain']:{terrainOverlayInfo:'vec4<f32>',terrainMapOverlayInfo:'vec4<f32>',terrainGridOverlayInfo:'vec4<f32>',terrainActivityOverlayInfo:'vec4<f32>',...(water?{}:{uTerrainExemptions:'texture_2d<f32>'})}},
+  gpu:{header:gpu,fragment:{...(solidWater?{material:'albedo = material.baseColor.rgb; alpha = material.baseColor.a;'}:{}),end:wgsl}},gl:{header:gl,fragment:{...(solidWater?{material:'albedo = material.baseColor.rgb; alpha = material.baseColor.a;'}:{}),end:water?fragment.replaceAll('terrainOverlayInfo','material.terrainOverlayInfo').replaceAll('terrainMapOverlayInfo','material.terrainMapOverlayInfo').replaceAll('terrainGridOverlayInfo','material.terrainGridOverlayInfo').replaceAll('terrainActivityOverlayInfo','material.terrainActivityOverlayInfo'):fragment}}};
 }
 
 export function createTerrainPlanningOverlays(){
  const info=new Float32Array([0,0,0,CONTOUR_INTERVAL]),mapInfo=new Float32Array([0,0,0,256]),gridInfo=new Float32Array(4),activityInfo=new Float32Array([0,0,1,0]);
  const source=new BufferImageSource({resource:new Uint8Array(256*4),width:256,height:1,format:'rgba8unorm',autoGenerateMipmaps:false,scaleMode:'nearest',alphaMode:'no-premultiply-alpha'});
  const texture=new Texture({source});
+ const disabled=new Float32Array(4);
  let lastItems,lastLabels,lastStyle,lastMinute,lastKey='',territoryKey='',circles=[],raster=null,frontPixels=null,heatPixels=null,disposed=false;
- return {info,mapInfo,gridInfo,activityInfo,source,bit:terrainPlanningOverlayBit(),waterBit:terrainPlanningOverlayBit({water:true}),bindWater(material){material.data.terrainOverlayInfo=info;material.data.terrainMapOverlayInfo=mapInfo;material.data.terrainGridOverlayInfo=gridInfo;material.data.terrainActivityOverlayInfo=activityInfo;material.textures.baseColor=texture;},get enabled(){return !!(info[0]||info[1]||mapInfo[0]||mapInfo[1]||mapInfo[2]||gridInfo[0]||activityInfo[0]||activityInfo[1]);},get key(){return Number(this.enabled);},
+ return {info,mapInfo,gridInfo,activityInfo,source,bit:terrainPlanningOverlayBit(),waterBit:terrainPlanningOverlayBit({water:true}),solidWaterBit:terrainPlanningOverlayBit({water:true,solidWater:true}),bindWater(material,enabled=true){material.data.terrainOverlayInfo=enabled?info:disabled;material.data.terrainMapOverlayInfo=enabled?mapInfo:disabled;material.data.terrainGridOverlayInfo=enabled?gridInfo:disabled;material.data.terrainActivityOverlayInfo=enabled?activityInfo:disabled;material.textures.baseColor=texture;},get enabled(){return !!(info[0]||info[1]||mapInfo[0]||mapInfo[1]||mapInfo[2]||gridInfo[0]||activityInfo[0]||activityInfo[1]);},get key(){return Number(this.enabled);},
   set({rdz=false,topo=false,borders=false,divisions=false,faction=false,grid=false,gridCell=null,front=false,hotspots=false,frontImage=null,heatImage=null,heatAlpha=1}={},state){
    if(disposed)return false;
    let changed=info[0]!==Number(rdz)||info[1]!==Number(topo)||mapInfo[0]!==Number(borders)||mapInfo[1]!==Number(divisions)||mapInfo[2]!==Number(faction),upload=false;
