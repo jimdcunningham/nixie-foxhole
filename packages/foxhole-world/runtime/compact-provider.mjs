@@ -175,13 +175,16 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
   for(const url of modelImageUrls){if(textureUrls.has(url))continue;const pending=texturePromises.get(url);texturePromises.delete(url);if(pending)track(pending.then(texture=>{const source=texture.source;imageSources.delete(source);if(source&&!source.destroyed){source.resource?.close?.();texture.destroy(true);}}).catch(()=>{}));}modelImageUrls.clear();
  }
  if(signal.aborted)destroy();
- async function ensureFullManifest(){
+ let fullManifestLoad;
+ function ensureFullManifest(){
   if(!previewResources)return;
-  const full=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
-  if(full.version!==1||full.format!=='compact-recipes-v1'||full.region!==entry.id)throw Error('Unsupported compact region');
-  if(full.bundles)attachCompactBundles(full);
-  manifest=full;
-  for(const ref of full.physicalResources||entry.resources||[])refs.set(new URL(ref.path,base).href,ref);
+  return fullManifestLoad??=track((async()=>{
+   const full=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
+   if(full.version!==1||full.format!=='compact-recipes-v1'||full.region!==entry.id)throw Error('Unsupported compact region');
+   if(full.bundles)attachCompactBundles(full);
+   manifest=full;
+   for(const ref of full.physicalResources||entry.resources||[])refs.set(new URL(ref.path,base).href,ref);
+  })()).catch(error=>{fullManifestLoad=null;throw error;});
  }
  return {profile,loadProfile,ensureFullManifest,previewTerrain:entry.terrainPreview?()=>read(entry.terrainPreview).catch(error=>{if(error instanceof WorldResourceError)return null;throw error;}):undefined,createModelLease,releaseModels,observeTerrain,terrainDescriptor:(id,kind,dimensions={})=>({baseUrl:base.href,entry:resource(id),kind,...dimensions}),trackExternalAsset:url=>externalAssets.add(new URL(url,base).href),readRoadAssembly:()=>track((async()=>{signal.throwIfAborted();await usage.use('foxhole-world-recipes-v1',roadKey(base,entry.manifest.hash));signal.throwIfAborted();return run(2,{kind:'road-assembly-read',baseUrl:base.href,hash:entry.manifest.hash});})()),writeRoadAssembly:bytes=>{signal.throwIfAborted();return track(writeCachedRoadAssembly(base,entry.manifest.hash,bytes,{metrics}));},json,binary,zipped,metrics,model,environment,stage,measure,url:id=>new URL(resource(id).resource.path,base).href,texture:(id,repeat=false)=>track((async()=>{signal.throwIfAborted();const url=new URL(resource(id).resource.path,base).href;textureUrls.add(url);const t=await image(url);if(repeat)t.source.style.addressMode='repeat';return t;})()),report:(phase,progress)=>onProgress({phase,...metrics,...(progress?{progress}:{})}),finish(){stage('ready');metrics.stages=stages;metrics.readyMs=performance.now()-start;metrics.preparedFetchBytes=metrics.downloadBytes;const entries=[...performance.getEntriesByType('resource').filter(e=>e.startTime>=start&&(e.name.startsWith(base.href)||externalAssets.has(e.name))),...workerTimings.filter(e=>e.name.startsWith(base.href))];const unique=[...new Map(entries.map(e=>[[e.name,e.startTime,e.duration].join('|'),e])).values()];metrics.downloadBytes=unique.filter(e=>e.transferSize>0).reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.requestedEncodedBytes=unique.reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.httpCacheResponses=unique.filter(e=>e.transferSize===0&&e.encodedBodySize>0).length;binaryEpoch++;resolvedBinary.clear();memo.clear();if(!pending.size)destroyWorkers();return metrics;},destroy,whenDisposed:()=>disposedPromise,textureUrls};
 }

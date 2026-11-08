@@ -344,3 +344,23 @@ test('Home Region terrain previews keep all six outer walls without a boundary a
  scene.destroy();
  await scene.whenDisposed();
 });
+test('deferred terrain retains its geometry while Water and Rocks load or hide',async()=>{
+ const layers={...terrainWater,water:false};
+ const f=fixture(true,layers,{prebuiltMap:true,deferTerrainDetail:true,waterGeometry:true,adaptiveStreaming:false});
+ f.surface.resolve();f.models.resolve();
+ const scene=await f.pending;
+ const terrain=f.terrainPass.current.geometry;
+ scene.setLayers({...layers,water:true});
+ await scene.whenLayersReady();
+ const water=scene.root.children.find(child=>child.label==='Water')?.children.find(child=>child.label==='Native Water');
+ assert.equal(water?.visible,true);
+ scene.setLayers(layers);
+ assert.equal(water.visible,false);
+ scene.setLayers({...layers,rocks:true});
+ await scene.whenLayersReady();
+ assert.ok(f.modelRequests.some(categories=>categories.includes('rocks')));
+ assert.equal(f.terrainPass.current.geometry,terrain);
+ assert.ok(!f.requests.includes('fixture/terrain.bin'));
+ scene.destroy();
+ await scene.whenDisposed();
+});
