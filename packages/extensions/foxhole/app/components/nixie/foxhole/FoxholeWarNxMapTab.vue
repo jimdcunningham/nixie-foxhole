@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
-import { foxholeWorldAssetDelivery, hasLocalFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
+import { foxholeWorldAssetDelivery, hasSelectedFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
 import { regionBakeAction } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
 import { downloadNxBlob } from '#nixie/utils/nx-download.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
@@ -65,7 +65,7 @@ const isSpatialView = computed(() => {
     return Boolean(controls && controls.mode !== 'flat');
 });
 const settingsStore = useNixieSettingsStore();
-const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasLocalFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
+const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasSelectedFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
 const runtimeConfig = useRuntimeConfig();
 const assetsBaseUrl = createFoxholeAssetsBaseUrl(runtimeConfig.app.baseURL);
 const mapModStore = getFoxholeMapModStore();

@@ -60,6 +60,25 @@ test('stale catalog receipts fail publication, refresh preserves map objects, an
     await fs.unlink(path.join(f.root, modelPath)); assert.ok((await f.inventory()).issues.some(e => e.code === 'missing-file' && e.path === modelPath));
 });
 
+test('world inventory validates terrain previews referenced only by the index', async t => {
+    const f = await fixture(t);
+    await f.region('homeregionc', []);
+    const preview = await f.content(Buffer.from('glTFpreview'), '.glb', true);
+    const geometry = await f.content(Buffer.from('geometry'), '.bin', true);
+    Object.assign(f.index.regions.homeregionc, {
+        terrainPreview: preview,
+        terrainPreviewResources: {'homeregionc/terrain.bin': {resource: geometry, codec: 'brotli'}},
+    });
+    await f.write('world/index.json', json(f.index));
+    const inventory = await f.inventory({worldOnly: true});
+    assert.equal(inventory.valid, true);
+    for (const ref of [preview, geometry]) {
+        const row = inventory.objects.find(item => item.path === 'world/' + ref.path);
+        assert.deepEqual(row.groups, ['region:homeregionc']);
+        assert.equal(row.decodedSha256, ref.decodedHash);
+    }
+});
+
 test('runtime roots protect repair textures outside region manifests and leave old files untouched', async t => {
     const f = await fixture(t), repair = await f.content(Buffer.from('repair pixels'), '.webp'), obsolete = await f.content(Buffer.from('old map payload'));
     await f.region('a', []); await f.write('shared/flags/flag.webp', Buffer.from('flag pixels'));

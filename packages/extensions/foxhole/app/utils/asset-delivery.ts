@@ -14,7 +14,9 @@ let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = n
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
 let publishedCatalogHash: string | undefined;
 const revision = shallowRef(0);
-const localSpatialRegions = shallowRef<ReadonlySet<string>>(new Set());
+type FoxholeWorldIndex = {regions?: Record<string, unknown>};
+let publishedWorldIndex: FoxholeWorldIndex | null = null;
+const selectedSpatialRegions = shallowRef<ReadonlySet<string>>(new Set());
 const cache = new NixiePersistentExtensionResourceCache();
 const residentUsage = new NixieExtensionResourceUsage(async (_owner, _generation, hashes) => {await cache.markUsed(hashes);});
 const metadataCache = new NixiePersistentExtensionResourceCache(
@@ -29,7 +31,7 @@ export function initializeFoxholeAssetDelivery(): void {
         if (!localDelivery) {
             localDelivery = createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', globalThis.location.href).href);
             void localDelivery.world.loadIndex().then(index => {
-                localSpatialRegions.value = new Set(Object.keys(index.regions ?? {}));
+                selectedSpatialRegions.value = new Set(Object.keys(index.regions ?? {}));
             }).catch(() => {
                 // The 2D previews remain available when there is no local spatial index.
             });
@@ -50,10 +52,13 @@ const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async ge
     const mapData = parseFoxholePublishedMapData(await read({url:mapLocation.url, ...mapLocation.entry}));
     const catalogDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document.text));
     const catalogHash = Array.from(new Uint8Array(catalogDigest), byte => byte.toString(16).padStart(2, '0')).join('');
-    return {library, manifest, mapData, catalogHash};
+    const worldIndex = library.worldIndex ? await read<FoxholeWorldIndex>(library.worldIndex) : null;
+    return {library, manifest, mapData, catalogHash, worldIndex};
 }, (prepared, generation) => {
     publishedLibrary = prepared?.library ?? null;
     publishedCatalogHash = prepared?.catalogHash;
+    publishedWorldIndex = prepared?.worldIndex ?? null;
+    selectedSpatialRegions.value = new Set(Object.keys(publishedWorldIndex?.regions ?? {}));
     const library = prepared?.library;
     installFoxholeAssetLocations(library ? path => library.resolve(path) : null);
     installFoxholeManifest(prepared?.manifest ?? null);
@@ -80,11 +85,12 @@ export function prepareFoxholeAssetGeneration(generation: FoxholeAssetGeneration
 export function resolveSelectedFoxholeAsset(path: string): string | undefined {
     return localDelivery?.resolve(path) ?? publishedLibrary?.resolve(path);
 }
-export function hasLocalFoxholeSpatialRegion(key: string): boolean { return localSpatialRegions.value.has(key.toLowerCase()); }
+export function hasSelectedFoxholeSpatialRegion(key: string): boolean { return selectedSpatialRegions.value.has(key.toLowerCase()); }
 export function foxholeWorldAssetDelivery() {
     void revision.value;
     if (localDelivery) return { ...localDelivery.world, revision: revision.value, catalogHash: undefined };
     const library = publishedLibrary;
-    if (!library?.worldBaseUrl || !library.worldIndex) return null;
-    return {baseUrl: library.worldBaseUrl, revision: revision.value, catalogHash: publishedCatalogHash, loadIndex: () => read(library.worldIndex!)};
+    const index = publishedWorldIndex;
+    if (!library?.worldBaseUrl || !index) return null;
+    return {baseUrl: library.worldBaseUrl, revision: revision.value, catalogHash: publishedCatalogHash, loadIndex: async () => index};
 }

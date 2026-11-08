@@ -5,7 +5,7 @@ import { preserveViewpointRegionCamera, consumeViewpointRegionCamera } from './m
 import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
-import { foxholeWorldAssetDelivery, hasLocalFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
+import { foxholeWorldAssetDelivery, hasSelectedFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
 import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
 import { FoxholeRegionSceneController, regionIdForKey } from './map/region-scene-controller.mjs';
 import { bakeFoxholeRegion, regionBakeAction, type FoxholeRegionBakeScale } from './map/region-bake.ts';
@@ -26,9 +26,9 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
     const spatialRegions = computed(() => {
         const { regionKeys, devMultiRegion3d } = mapSettings.value;
         if (!regionKeys.length || (!devMultiRegion3d && regionKeys.length !== 1)) return [];
-        return FOXHOLE_MAP_REGIONS.filter(region => (!region.standalone || hasLocalFoxholeSpatialRegion(region.key)) && regionKeys.includes(region.key));
+        return FOXHOLE_MAP_REGIONS.filter(region => (!region.standalone || hasSelectedFoxholeSpatialRegion(region.key)) && regionKeys.includes(region.key));
     });
-    const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasLocalFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
+    const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasSelectedFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
     let worldProgressJobId: string | null = null;
     let worldProgressErrorToastId: string | null = null;
     let worldProgressErrorKey: string | null = null;
@@ -242,7 +242,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             worldLayers: Object.fromEntries(Object.keys(preferences.worldLayers).map(key => [key, true])) as typeof preferences.worldLayers } : preferences;
         const selectedKey = regionKey ?? (settings.regionKeys.length === 1 ? settings.regionKeys[0] : null);
         const region = FOXHOLE_MAP_REGIONS.find(candidate => candidate.key === selectedKey
-            && (regionKey || !candidate.standalone || hasLocalFoxholeSpatialRegion(candidate.key)));
+            && (regionKey || !candidate.standalone || hasSelectedFoxholeSpatialRegion(candidate.key)));
         if (destroyed || bakeController || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
             throw new Error('Select one map region with world assets to bake.');
         }

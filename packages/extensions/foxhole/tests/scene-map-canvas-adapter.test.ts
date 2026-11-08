@@ -14,6 +14,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     const spatialSyncs: any[] = [];
     const moves: unknown[] = [], suppression: boolean[] = [];
     let mode = '2d';
+    const homeAvailable = shallowRef(false);
     const background = { label: 'foxhole-map-background' };
     const summaries = { label: 'foxhole-map-casualty-labels' };
     const summaryGroups = [{ content: {}, anchor: { x: 10, y: 20 }, offset: 30, anchorHalfHeight: 10 }];
@@ -30,7 +31,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         },
         FoxholeRegionSceneController: class { constructor(options: { manageEnvironment?: boolean; }) { assert.equal(options.manageEnvironment, false); return world; } },
         selectedSpatialRegions, regionIdForKey,
-        hasLocalFoxholeSpatialRegion: () => false,
+        hasSelectedFoxholeSpatialRegion: (key: string) => key === 'HomeRegionC' && homeAvailable.value,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
         FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"},{key:"HomeRegionC",standalone:true}],
         getFoxholeRegionPosition: (region: any) => ({x:region.key === "WestgateHex" ? 10 : 20,y:0}),
@@ -146,6 +147,10 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(spatialSyncs.at(-1).regions.length, 0);
     assert.equal(context.needsSpatialWorldData(), false);
     assert.ok(adapter.spatialLayers().some((layer: any) => layer.content === terrain));
+    homeAvailable.value = true;
+    adapter.updateSpatialPresentation({view:{},mode:'3d',deltaMS:16});
+    assert.equal(spatialSyncs.at(-1).regions[0]?.id, 'homeregionc');
+    assert.equal(context.needsSpatialWorldData(), true);
     adapter.destroy();
     assert.equal(context.session.sceneViewActive.value, false);
     assert.equal(destroyed, 1);
@@ -165,7 +170,7 @@ test('mounted spatial worlds retire on catalog revision, clear on disable, and r
         },
         FoxholeMapViewportPlugin: class {updatePresentation() {} getSpatialWarState() {return null;} destroy() {}},
         selectedSpatialRegions, regionIdForKey,
-        hasLocalFoxholeSpatialRegion: () => false, computed, shallowRef, setTimeout: () => 1, clearTimeout: () => {},
+        hasSelectedFoxholeSpatialRegion: () => false, computed, shallowRef, setTimeout: () => 1, clearTimeout: () => {},
         foxholeWorldAssetDelivery: () => selected,
         subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => true,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
@@ -297,7 +302,7 @@ test('switching a positioned region from 2D to spatial views preserves the camer
         FoxholeRegionSceneController: class { sync() {} destroy() {} whenDisposed() { return Promise.resolve(); } },
         FoxholeMapViewportPlugin: class { destroy() {} getSpatialWarState() { return null; } },
         selectedSpatialRegions, regionIdForKey,
-        hasLocalFoxholeSpatialRegion: () => false, computed, shallowRef,
+        hasSelectedFoxholeSpatialRegion: () => false, computed, shallowRef,
         beginShellProgressJob: () => 'job', updateShellProgressJob() {}, finishShellProgressJob() {}, setTimeout: () => 1, clearTimeout() {},
         foxholeWorldAssetDelivery: () => delivery,
         subscribeSceneViewpointRestore: () => () => {}, consumeViewpointRegionCamera: () => false,

@@ -132,7 +132,9 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
             try {
                 const doc = await readJSON(file, ref);
                 if (doc.region !== id || doc.version !== 1 || doc.format !== index.format) throw new Error('Region manifest identity mismatch');
-                for (const r of [...doc.physicalResources, ref]) {
+                const previews = entry.terrainPreview ? [entry.terrainPreview] : [];
+                for (const {resource} of Object.values(entry.terrainPreviewResources ?? {})) previews.push(resource);
+                for (const r of [...doc.physicalResources, ref, ...previews]) {
                     const match = contentPath.exec(r.path || '');
                     if (!match || r.hash !== match[2] || (match[1] === 'br' ? r.encoding !== 'br' : !!r.encoding)) throw new Error('Invalid content receipt or encoding');
                     const p = `world/${r.path}`; activeContent.add(p); add(p, group, r);
