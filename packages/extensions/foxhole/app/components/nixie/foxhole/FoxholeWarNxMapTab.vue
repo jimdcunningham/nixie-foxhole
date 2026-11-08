@@ -868,7 +868,7 @@ const mapModVisibilityDisabled = computed(() => (
                     v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
-                    :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
+                    :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG (2048 × 1776)'"
                     :disabled="regionBakePending"
                     @click="downloadRegionBake(1)"
                 />
@@ -876,7 +876,7 @@ const mapModVisibilityDisabled = computed(() => (
                     v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
-                    label="Bake High-Resolution PNG"
+                    label="Bake Region PNG (4096 × 3552)"
                     :disabled="regionBakePending"
                     @click="downloadRegionBake(2)"
                 />
@@ -885,12 +885,12 @@ const mapModVisibilityDisabled = computed(() => (
                         v-if="!fullMapProgress"
                         variant="secondary"
                         size="sm"
-                        label="Export Full Map Pak + PNGs"
-                        preserveLabelCase
+                        label="Export Full Map Mod"
                         :disabled="regionBakePending"
                         @click="fullMapReferenceInput?.click()"
                     />
-                    <template v-else>
+                    <p v-if="!fullMapProgress" class="text-muted text-sm">Includes a Foxhole Pak and a ZIP of all region PNGs.</p>
+                    <template v-if="fullMapProgress">
                         <p role="status">{{ fullMapProgress }}</p>
                         <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
                     </template>
