@@ -1,6 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
 import { buildMapPak, encodeBc7 } from './deadlands-pak-export.mjs';
-import textureTemplates from './full-map-texture-templates.json';
 import type { RegionBakeLoadProfile } from './region-bake.ts';
 
 const width = 2048;
@@ -38,10 +37,21 @@ async function readRecoveredTile(cache: Cache, key: string, signature: string) {
 }
 
 const templateFooterSize = 28;
-// Cooked 2K texture headers and footers from the verified Nixie full map export.
-// The bundled metadata contains no BC7 payloads.
-const templates = new Map(Object.entries(textureTemplates).map(([key, metadata]) =>
-    [key.toLowerCase(), { key, metadata }] as const));
+// Immutable R2 object containing only the cooked texture headers and footers.
+const templateSha256 = 'a4878c46d319ca4cb629a4494c9890cddf7b4fdf591c2d5e086b19be478b05b1';
+const templateByteLength = 83523;
+const templateUrl = 'https://assets.nixiejs.com/foxhole-planner/map-export/templates/' + templateSha256 + '.json';
+
+async function loadTextureTemplates(signal: AbortSignal) {
+    const response = await fetch(templateUrl, { signal, credentials: 'omit' });
+    if (!response.ok) throw new Error('Could not download the 2K map texture templates (' + response.status + ').');
+    const json = await response.text();
+    if (json.length !== templateByteLength || await hashInputs(json) !== templateSha256) {
+        throw new Error('The downloaded 2K map texture templates failed verification.');
+    }
+    return new Map(Object.entries(JSON.parse(json) as Record<string, string>).map(([key, metadata]) =>
+        [key.toLowerCase(), { key, metadata }] as const));
+}
 
 function buildTextureEntry(template: { key: string; metadata: string }, bc7: Uint8Array) {
     const metadata = Uint8Array.from(atob(template.metadata), char => char.charCodeAt(0));
@@ -63,8 +73,10 @@ export async function exportFoxholeFullMap(
 ) {
     if (!regions.length) throw new Error('The world has no map regions.');
     const started = performance.now();
+    const templates = await loadTextureTemplates(signal);
+    signal.throwIfAborted();
     const missing = regions.filter(region => !templates.has(region.textureKey.toLowerCase()));
-    if (missing.length) throw new Error('Missing bundled 2K texture templates for: ' + missing.map(region => region.name).join(', '));
+    if (missing.length) throw new Error('Missing 2K texture templates for: ' + missing.map(region => region.name).join(', '));
 
     const canvas = document.createElement('canvas');
     canvas.width = width;

@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 
+const templateJson = JSON.stringify({ a: btoa('a'.repeat(40)), b: btoa('b'.repeat(40)) });
+const templateDigest = createHash('sha256').update(templateJson).digest('hex');
 const source = readFileSync(new URL('../app/plugins/foxhole/nixie/map/full-map-export.ts', import.meta.url), 'utf8')
     .replace(/^import .*$/gm, '')
-    .replaceAll('export async function', 'async function');
+    .replaceAll('export async function', 'async function')
+    .replace(/const templateSha256 = '[a-f0-9]+';/, "const templateSha256 = '" + templateDigest + "';")
+    .replace(/const templateByteLength = \d+;/, 'const templateByteLength = ' + templateJson.length + ';');
 
 test('full map export recovers only completed tiles with matching inputs', async () => {
     const tiles = new Map<string, Response>();
@@ -16,6 +21,7 @@ test('full map export recovers only completed tiles with matching inputs', async
     };
     let encoded = 0;
     let blank = false;
+    let tamperTemplates = false;
     const exportMap = runInNewContext(stripTypeScriptTypes(source) + '\nexportFoxholeFullMap;', {
         caches: { open: async () => cache }, crypto, TextEncoder, Uint8Array, Blob, Response, URL, performance, setTimeout,
         location: { href: 'https://studio.example/' },
@@ -26,7 +32,7 @@ test('full map export recovers only completed tiles with matching inputs', async
         createImageBitmap: async () => ({ width: 2048, height: 1776, close() {} }),
         encodeBc7: () => { encoded++; return new Uint8Array(2048 * 1776); },
         atob,
-        textureTemplates: { a: btoa('a'.repeat(40)), b: btoa('b'.repeat(40)) },
+        fetch: async () => new Response(tamperTemplates ? templateJson.replace('a', 'x') : templateJson),
         buildMapPak: async () => new Blob(),
         zipSync: () => new Uint8Array(),
         strToU8: (value: string) => new TextEncoder().encode(value),
@@ -47,6 +53,10 @@ test('full map export recovers only completed tiles with matching inputs', async
     assert.equal(encoded, 2);
     await run(bake);
     assert.equal(encoded, 2);
+
+    tamperTemplates = true;
+    await assert.rejects(run(bake), /templates failed verification/);
+    tamperTemplates = false;
 
     blank = true;
     await assert.rejects(run(bake, 'changed settings'), /Empty region bake/);
