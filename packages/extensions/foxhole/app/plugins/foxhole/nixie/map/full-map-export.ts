@@ -50,7 +50,7 @@ export async function exportFoxholeFullMap(
     regions: readonly { key: string; textureKey: string; name: string }[],
     bake: (key: string, onStage: (stage: string) => void) => Promise<{ png: Blob; loadProfile?: RegionBakeLoadProfile }>,
     signal: AbortSignal,
-    onProgress: (message: string) => void,
+    onProgress: (message: string, processed: number, total: number, region?: string) => void,
     cacheInputs: (key: string) => string | undefined,
     catalogInputs: string,
 ) {
@@ -73,7 +73,6 @@ export async function exportFoxholeFullMap(
     const timings = [];
     for (const [index, region] of regions.entries()) {
         signal.throwIfAborted();
-        const label = `${index + 1}/${regions.length} · ${region.name}`;
         const regionStarted = performance.now();
         const template = templates.get(region.textureKey.toLowerCase())!;
         const inputs = cache ? cacheInputs(region.key) : undefined;
@@ -82,7 +81,7 @@ export async function exportFoxholeFullMap(
         const recovered = cache && signature ? await readRecoveredTile(cache, cacheKey, signature) : null;
         signal.throwIfAborted();
         if (recovered && cacheInputs(region.key) === inputs) {
-            onProgress(label + ' · Reusing saved bake');
+            onProgress('Reusing saved bake', index + 1, regions.length, region.name);
             template.data.set(recovered.bc7, template.offset);
             entries.push(template);
             pngs[region.textureKey + '.png'] = recovered.png;
@@ -102,10 +101,10 @@ export async function exportFoxholeFullMap(
             if (stage === 'Rendering') enterPhase('render');
             if (stage === 'Writing PNG') enterPhase('png');
             if (stage === 'Releasing renderer resources') enterPhase('release');
-            onProgress(label + ' · ' + stage);
+            onProgress(stage, index, regions.length, region.name);
         });
         enterPhase('bc7');
-        onProgress(`${label} · Encoding BC7`);
+        onProgress('Encoding BC7', index, regions.length, region.name);
         signal.throwIfAborted();
         const bitmap = await createImageBitmap(png);
         try {
@@ -136,7 +135,7 @@ export async function exportFoxholeFullMap(
         await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     signal.throwIfAborted();
-    onProgress('Packaging Pak and PNGs…');
+    onProgress('Packaging Pak and PNGs…', regions.length, regions.length);
     const packagingStarted = performance.now();
     const pak = await buildMapPak(entries);
     signal.throwIfAborted();

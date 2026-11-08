@@ -84,6 +84,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    fullMapController?.abort();
     unsubscribeMapMod?.();
     unsubscribeMapMod = null;
 });
@@ -432,7 +433,27 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 
 const regionBakePending = ref(false);
 const fullMapReferenceInput = ref<HTMLInputElement | null>(null);
-const fullMapProgress = ref('');
+const fullMapProgress = ref<{ message: string; processed: number; total: number; region?: string } | null>(null);
+const modProgress = computed(() => {
+    if (isPakImportActive.value) {
+        return {
+            title: `Importing ${pakImportDisplayFile.value}`,
+            detail: pakImportCurrentFile.value,
+            processed: pakImportStatus.value.processed,
+            total: pakImportStatus.value.total,
+            percent: pakImportPercent.value,
+        };
+    }
+    const progress = fullMapProgress.value;
+    if (!progress) return null;
+    return {
+        title: progress.region ? `Exporting ${progress.region}` : 'Exporting Full Map Mod',
+        detail: progress.message,
+        processed: progress.processed,
+        total: progress.total,
+        percent: progress.total ? Math.round(100 * progress.processed / progress.total) : 0,
+    };
+});
 const fullMapResult = shallowRef<{ pak: Blob; archive: Blob; elapsedMs: number } | null>(null);
 let fullMapController: AbortController | null = null;
 
@@ -446,7 +467,7 @@ async function exportFullMap(event: Event): Promise<void> {
     fullMapController = controller;
     regionBakePending.value = true;
     fullMapResult.value = null;
-    fullMapProgress.value = 'Checking region textures…';
+    fullMapProgress.value = { message: 'Checking region textures…', processed: 0, total: 0 };
     try {
         const delivery = foxholeWorldAssetDelivery();
         if (!delivery) throw new Error('No world assets are available.');
@@ -461,7 +482,7 @@ async function exportFullMap(event: Event): Promise<void> {
         const { exportFoxholeFullMap } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
         fullMapResult.value = await exportFoxholeFullMap(reference, regions,
             (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal,
-            message => { fullMapProgress.value = message; },
+            (message, processed, total, region) => { fullMapProgress.value = { message, processed, total, region }; },
             key => foxholeWorldAssetDelivery()?.revision === delivery.revision ? bake.cacheInputs?.(key) : undefined,
             JSON.stringify([delivery.baseUrl, delivery.catalogHash, index]));
     } catch (error) {
@@ -472,7 +493,7 @@ async function exportFullMap(event: Event): Promise<void> {
         });
     } finally {
         fullMapController = null;
-        fullMapProgress.value = '';
+        fullMapProgress.value = null;
         regionBakePending.value = false;
     }
 }
@@ -867,7 +888,7 @@ const mapModVisibilityDisabled = computed(() => (
             </template>
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
-                <template v-if="!isPakImportActive && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview">
+                <template v-if="!modProgress && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview">
                     <NxButton
                         variant="secondary"
                         size="sm"
@@ -885,7 +906,7 @@ const mapModVisibilityDisabled = computed(() => (
                     <NxDivider />
                 </template>
                 <div
-                    v-if="!isPakImportActive"
+                    v-if="!modProgress"
                     class="nx-toggle-grid foxhole-war-nx-map-tab__mod-actions"
                     role="group"
                     aria-label="Custom Map Mod Actions"
@@ -914,40 +935,37 @@ const mapModVisibilityDisabled = computed(() => (
                 >
                     <div
                         class="foxhole-war-nx-map-tab__mod-progress-title"
-                        :title="`Importing ${pakImportDisplayFile}`"
+                        :title="modProgress.title"
                     >
-                        Importing {{ pakImportDisplayFile }}
+                        {{ modProgress.title }}
                     </div>
                     <div
                         class="foxhole-war-nx-map-tab__mod-progress-file"
-                        :title="pakImportCurrentFile"
+                        :title="modProgress.detail"
                     >
-                        {{ pakImportCurrentFile }}
+                        {{ modProgress.detail }}
                     </div>
                     <NxProgress
-                        :value="pakImportPercent"
+                        :value="modProgress.percent"
                         size="sm"
                         variant="accent"
-                        :label="`Importing ${pakImportDisplayFile}`"
+                        :label="modProgress.title"
                     />
-                    <div class="foxhole-war-nx-map-tab__mod-progress-stats">
-                        {{ pakImportStatus.processed }}/{{ pakImportStatus.total }} ({{ pakImportPercent }}%)
+                    <div v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-stats">
+                        {{ modProgress.processed }}/{{ modProgress.total }} ({{ modProgress.percent }}%)
                     </div>
                 </div>
 
-                <template v-if="!isPakImportActive && regionBakeAction && mapSettings.enabled">
+                <NxButton v-if="fullMapProgress && !isPakImportActive" label="Cancel Full Map Export" variant="danger" size="sm" @click="fullMapController?.abort()" />
+
+                <template v-if="!modProgress && regionBakeAction && mapSettings.enabled">
                     <NxButton
-                        v-if="!fullMapProgress"
                         variant="secondary"
                         size="sm"
                         label="Export Full Map Mod"
                         :disabled="regionBakePending"
                         @click="fullMapReferenceInput?.click()"
                     />
-                    <template v-else>
-                        <p role="status">{{ fullMapProgress }}</p>
-                        <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
-                    </template>
                     <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
                         <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                         <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
