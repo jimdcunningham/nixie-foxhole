@@ -1,4 +1,4 @@
-import { zipSync } from 'fflate';
+import { strToU8, zipSync } from 'fflate';
 import { buildMapPak, encodeBc7 } from './deadlands-pak-export.mjs';
 import { PakImporter } from './mod-pak.js';
 
@@ -32,6 +32,7 @@ export async function exportFoxholeFullMap(
     onProgress: (message: string) => void,
 ) {
     if (!regions.length) throw new Error('The world has no map regions.');
+    const started = performance.now();
     const templates = readTemplates(await reference.arrayBuffer());
     const missing = regions.filter(region => !templates.has(region.textureKey.toLowerCase()));
     if (missing.length) throw new Error('The reference Pak is missing 2K textures for: ' + missing.map(region => region.name).join(', '));
@@ -43,10 +44,28 @@ export async function exportFoxholeFullMap(
     if (!context) throw new Error('Could not read the baked map pixels.');
     const entries = [];
     const pngs: Record<string, Uint8Array<ArrayBuffer>> = {};
+    const setupMs = Math.round(performance.now() - started);
+    const timings = [];
     for (const [index, region] of regions.entries()) {
         signal.throwIfAborted();
         const label = `${index + 1}/${regions.length} · ${region.name}`;
-        const { png } = await bake(region.key, stage => onProgress(`${label} · ${stage}`));
+        const regionStarted = performance.now();
+        let phaseStarted = regionStarted;
+        let phase = 'load';
+        const stagesMs: Record<string, number> = {};
+        function enterPhase(next: string) {
+            const now = performance.now();
+            stagesMs[phase] = Math.round(now - phaseStarted);
+            phase = next;
+            phaseStarted = now;
+        }
+        const { png } = await bake(region.key, stage => {
+            if (stage === 'Rendering') enterPhase('render');
+            if (stage === 'Writing PNG') enterPhase('png');
+            if (stage === 'Releasing renderer resources') enterPhase('release');
+            onProgress(label + ' · ' + stage);
+        });
+        enterPhase('bc7');
         onProgress(`${label} · Encoding BC7`);
         signal.throwIfAborted();
         const bitmap = await createImageBitmap(png);
@@ -61,13 +80,18 @@ export async function exportFoxholeFullMap(
         template.data.set(encodeBc7(context.getImageData(0, 0, width, height).data), template.offset);
         entries.push(template);
         pngs[region.textureKey + '.png'] = new Uint8Array(await png.arrayBuffer());
+        enterPhase('done');
+        timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), stagesMs });
         await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     signal.throwIfAborted();
     onProgress('Packaging Pak and PNGs…');
+    const packagingStarted = performance.now();
     const pak = await buildMapPak(entries);
     signal.throwIfAborted();
     // PNG data is already compressed.
+    const report = { width, height, supersampling: 2, setupMs, pakPackagingMs: Math.round(performance.now() - packagingStarted), regions: timings };
+    pngs['bake-timings.json'] = strToU8(JSON.stringify(report, null, 2));
     const archive = new Blob([Uint8Array.from(zipSync(pngs, { level: 0 }))], { type: 'application/zip' });
-    return { pak, archive };
+    return { pak, archive, elapsedMs: Math.round(performance.now() - started) };
 }

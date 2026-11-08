@@ -430,6 +430,7 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 const regionBakePending = ref(false);
 const fullMapReferenceInput = ref<HTMLInputElement | null>(null);
 const fullMapProgress = ref('');
+const fullMapResult = shallowRef<{ pak: Blob; archive: Blob; elapsedMs: number } | null>(null);
 let fullMapController: AbortController | null = null;
 
 async function exportFullMap(event: Event): Promise<void> {
@@ -441,6 +442,7 @@ async function exportFullMap(event: Event): Promise<void> {
     const controller = new AbortController();
     fullMapController = controller;
     regionBakePending.value = true;
+    fullMapResult.value = null;
     fullMapProgress.value = 'Checking region textures…';
     try {
         const delivery = foxholeWorldAssetDelivery();
@@ -454,10 +456,8 @@ async function exportFullMap(event: Event): Promise<void> {
         });
         if (unavailable.length) throw new Error('Full map materials are unavailable for: ' + unavailable.map(region => region.name).join(', '));
         const { exportFoxholeFullMap } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
-        const { pak, archive } = await exportFoxholeFullMap(reference, regions,
+        fullMapResult.value = await exportFoxholeFullMap(reference, regions,
             (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal, message => { fullMapProgress.value = message; });
-        downloadNxBlob(pak, 'War-WindowsNoEditor_NixieFullMap.pak');
-        downloadNxBlob(archive, 'Nixie-Foxhole-Region-PNGs.zip');
     } catch (error) {
         if (!controller.signal.aborted) showNxToast({
             title: 'Full Map Export Failed',
@@ -970,6 +970,11 @@ const mapModVisibilityDisabled = computed(() => (
                         <p role="status">{{ fullMapProgress }}</p>
                         <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
                     </template>
+                    <div v-if="fullMapResult">
+                        <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
+                        <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
+                        <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
+                    </div>
                     <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
                 </template>
                 <template v-if="canExportDeadlandsPak">
