@@ -181,26 +181,6 @@ export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginConte
     };
 }
 
-class FoxholeWorldBackgroundClamp extends Plugin {
-    constructor(parent: Viewport, private readonly bounds: FoxholeMapActiveBounds) {
-        super(parent);
-    }
-
-    override update(): void {
-        const viewport = this.parent;
-        const { left, right, top, bottom } = this.bounds;
-        const clampAxis = (position: number, screen: number, scale: number, start: number, end: number) => {
-            const min = screen - end * scale;
-            const max = -start * scale;
-            return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, position));
-        };
-        viewport.position.set(
-            clampAxis(viewport.x, viewport.screenWidth, viewport.scale.x, left, right),
-            clampAxis(viewport.y, viewport.screenHeight, viewport.scale.y, top, bottom),
-        );
-    }
-}
-
 export class FoxholeMapViewportPlugin extends Plugin {
     private static readonly DEFAULT_MIN_SCALE = 0.0025;
     private static readonly DEFAULT_MAX_SCALE = 2;
@@ -961,10 +941,12 @@ export class FoxholeMapViewportPlugin extends Plugin {
 
     private refreshViewportConstraints(force = false): void {
         const settings = this.readMapSettings();
+        const spatialView = this.pluginContext.isSpatialView?.() === true;
+        const backgroundVisible = settings.background && !spatialView;
         const signature = JSON.stringify({
             enabled: settings.enabled,
             sceneViewActive: this.pluginContext.session.sceneViewActive.value,
-            background: settings.background,
+            backgroundVisible,
             regionKeys: settings.regionKeys,
             lockCameraToMap: settings.lockCameraToMap,
             screenWidth: this.parent.screenWidth,
@@ -987,39 +969,22 @@ export class FoxholeMapViewportPlugin extends Plugin {
             return;
         }
 
-        const activeBounds = this.getActiveBounds(settings);
-        const zoomConstraintActiveBounds = settings.background
-            ? this.getActiveBounds({
-                ...settings,
-                background: false,
-            })
-            : activeBounds;
-        const zoomConstraintBounds = this.getNoBackgroundFitBounds(zoomConstraintActiveBounds);
+        const regionBounds = this.getActiveBounds({ ...settings, background: false });
+        const fitBounds = this.getNoBackgroundFitBounds(regionBounds);
         const viewportWidth = Math.max(1, this.parent.screenWidth);
         const viewportHeight = Math.max(1, this.parent.screenHeight);
-        const fitScaleX = viewportWidth / Math.max(1, zoomConstraintBounds.width);
-        const fitScaleY = viewportHeight / Math.max(1, zoomConstraintBounds.height);
-        const noBackgroundMinScale = Math.min(fitScaleX, fitScaleY);
-        const backgroundFillMinScale = settings.background
-            ? Math.max(
-                viewportWidth / Math.max(1, activeBounds.width),
-                viewportHeight / Math.max(1, activeBounds.height),
-            ) * FoxholeMapViewportPlugin.BACKGROUND_FILL_OVERSCAN_FACTOR
-            : noBackgroundMinScale;
-        const fitWorldBackground = settings.background && this.pluginContext.manualPresentation && !this.pluginContext.isSpatialView?.();
-        const backgroundBounds = fitWorldBackground ? this.getActiveBounds({ ...settings, regionKeys: [] }) : null;
-        const worldBounds = backgroundBounds ? (() => {
-            const left = Math.min(activeBounds.left, backgroundBounds.left);
-            const right = Math.max(activeBounds.right, backgroundBounds.right);
-            const top = Math.min(activeBounds.top, backgroundBounds.top);
-            const bottom = Math.max(activeBounds.bottom, backgroundBounds.bottom);
-            return { left, right, top, bottom, width: right - left, height: bottom - top };
-        })() : null;
-        const minScale = worldBounds
-            ? Math.min(noBackgroundMinScale, viewportWidth / worldBounds.width, viewportHeight / worldBounds.height)
-            : settings.background
-                ? Math.max(noBackgroundMinScale, backgroundFillMinScale)
-                : noBackgroundMinScale;
+        const regionFitScale = Math.min(viewportWidth / fitBounds.width, viewportHeight / fitBounds.height);
+        const backgroundBounds = backgroundVisible
+            ? this.getActiveBounds(this.pluginContext.manualPresentation ? { ...settings, regionKeys: [] } : settings)
+            : null;
+        // Cover both axes of the viewport with the actual World image.
+        const backgroundFillScale = backgroundBounds
+            ? Math.max(viewportWidth / backgroundBounds.width, viewportHeight / backgroundBounds.height)
+                * FoxholeMapViewportPlugin.BACKGROUND_FILL_OVERSCAN_FACTOR
+            : 0;
+        const minScale = backgroundBounds && this.pluginContext.manualPresentation
+            ? backgroundFillScale
+            : Math.max(regionFitScale, backgroundFillScale);
         const maxScale = Math.max(FoxholeMapViewportPlugin.DEFAULT_MAX_SCALE, minScale);
 
         this.minimumMapScale = minScale;
@@ -1028,16 +993,12 @@ export class FoxholeMapViewportPlugin extends Plugin {
             maxScale,
         });
 
-        if (settings.lockCameraToMap && worldBounds) {
-            // Pixi's built-in clamp anchors to an edge when custom bounds
-            // underflow, even when those bounds are centered at world origin.
-            this.parent.plugins.add('clamp', new FoxholeWorldBackgroundClamp(this.parent, worldBounds));
-        } else if (settings.lockCameraToMap && settings.background) {
+        if (settings.lockCameraToMap && backgroundBounds) {
             this.parent.clamp({
-                left: activeBounds.left,
-                right: activeBounds.right,
-                top: activeBounds.top,
-                bottom: activeBounds.bottom,
+                left: backgroundBounds.left,
+                right: backgroundBounds.right,
+                top: backgroundBounds.top,
+                bottom: backgroundBounds.bottom,
                 underflow: 'none',
             });
         } else if (this.constraintsApplied) {
