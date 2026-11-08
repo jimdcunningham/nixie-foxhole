@@ -38,3 +38,27 @@ test('post-ready failure advertises retry and waits for disposal',async()=>{
   release();await until(()=>loads===2);
  }finally{release();controller.destroy();await tick();}
 });
+
+test('terrain-only map loads nearest first and refines only near a zoomed-in camera',async()=>{
+ const loads=[],refined=[];
+ const view={passes:[],root:{addChild(){}},camera:{position:{x:0,y:0,z:32000}},height:600,width:800};
+ const controller=new FoxholeRegionSceneController({
+  baseUrl:'https://fixture.invalid/',concurrency:1,deferTerrainDetail:true,
+  indexLoader:async()=>({version:1,regions:{a:{id:'a'},b:{id:'b'}}}),
+  loadRegion:async options=>{
+   assert.equal(options.deferTerrainDetail,true);
+   const id=options.entry.id;loads.push(id);
+   return {root:{removeFromParent(){}},passes:[],metrics:{},destroy(){},async refineTerrain(){refined.push(id);}};
+  },
+ });
+ const sync=()=>controller.sync({view,mode:'3d',settings:{enabled:true,regionKeys:['aHex','bHex'],terrainSurface:'map',worldLayers:{terrain:true,shell:true}},regions:[
+  {id:'a',position:{x:90000,y:0}},{id:'b',position:{x:0,y:0}},
+ ]});
+ try{
+  sync();await until(()=>loads.length===2&&!controller.loading.size);
+  assert.deepEqual(loads,['b','a']);
+  sync();assert.deepEqual(refined,[]);
+  view.camera.position.z=2000;sync();await until(()=>refined.length===1);
+  assert.deepEqual(refined,['b']);
+ }finally{controller.destroy();await controller.whenDisposed();}
+});

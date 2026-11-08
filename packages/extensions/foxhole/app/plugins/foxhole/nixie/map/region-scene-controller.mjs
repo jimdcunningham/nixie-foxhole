@@ -26,7 +26,7 @@ export function summarizeTerrainTransfers(records){
 }
 /** Region residency follows explicit selection. Only preparation is queued. */
 export class FoxholeRegionSceneController {
- constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.retiringScenes=new Set();this.disposal=new Promise(resolve=>{this.resolveDisposal=resolve;});this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.mapImageRetirements=new Set();this.disposed=false;this.selectionKey='';this.selectionGeneration=0;this.cutouts=[];}
+ constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true,deferTerrainDetail=false,previewConcurrency=concurrency}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment,deferTerrainDetail,previewConcurrency});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.retiringScenes=new Set();this.disposal=new Promise(resolve=>{this.resolveDisposal=resolve;});this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.mapImageRetirements=new Set();this.disposed=false;this.selectionKey='';this.selectionGeneration=0;this.cutouts=[];}
  disposeScene(scene){
   if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);
   // Record the barrier before aborting or destroying; both can settle work synchronously.
@@ -88,7 +88,9 @@ export class FoxholeRegionSceneController {
   const windTime=performance.now()/1000;
   if(!this.terrainOverlays||this.terrainOverlays.rdz!==(settings.terrainRdz===true)||this.terrainOverlays.topo!==(settings.terrainTopo===true)||this.terrainOverlays.borders!==(settings.borders===true)||this.terrainOverlays.divisions!==(settings.voronoi===true)||this.terrainOverlays.faction!==(settings.faction===true)||this.terrainOverlays.grid!==(settings.grid===true)||this.terrainOverlays.front!==!!(settings.frontline||settings.frontAlt)||this.terrainOverlays.hotspots!==(settings.hotspots===true))this.terrainOverlays={rdz:settings.terrainRdz===true,topo:settings.terrainTopo===true,borders:settings.borders===true,divisions:settings.voronoi===true,faction:settings.faction===true,grid:settings.grid===true,front:!!(settings.frontline||settings.frontAlt),hotspots:settings.hotspots===true};
   this.softShadows=settings.softShadows!==false;this.shadowStrength=['medium','strong'].includes(settings.shadowStrength)?settings.shadowStrength:'light';this.waterReflections=settings.waterReflections!==false;this.vegetationShadows=settings.vegetationShadows!==false;this.vegetationWind=settings.vegetationWind!==false;this.layers=settings.worldLayers;this.frustumCulling=settings.frustumCulling!==false;this.ambientOcclusion=settings.ambientOcclusion!==false;const solidMap=settings.solidMap===true,vegetationDensity=['reduced','minimal'].includes(settings.vegetationDensity)?settings.vegetationDensity:'full',adaptiveStreaming=settings.adaptiveStreaming===true,modelLod=settings.modelLod===true,terrainLod=settings.terrainLod===true,adaptiveTextures=settings.adaptiveTextures===true,terrainSurface=['plain','map'].includes(settings.terrainSurface)?settings.terrainSurface:'native';
-  if(this.view!==view||this.adaptiveStreaming!==adaptiveStreaming||this.modelLod!==modelLod||this.terrainLod!==terrainLod||this.adaptiveTextures!==adaptiveTextures||this.vegetationDensity!==vegetationDensity||this.terrainSurface!==terrainSurface||this.solidMap!==solidMap){this.retire();this.view=view;this.adaptiveStreaming=adaptiveStreaming;this.modelLod=modelLod;this.terrainLod=terrainLod;this.adaptiveTextures=adaptiveTextures;this.vegetationDensity=vegetationDensity;this.terrainSurface=terrainSurface;this.solidMap=solidMap;}
+  const previewOnly=this.deferTerrainDetail&&terrainSurface==='map'&&!solidMap&&this.layers?.terrain===true
+   &&Object.entries(this.layers).every(([key,value])=>key==='terrain'||key==='shell'||!value);
+  if(this.view!==view||this.previewOnly!==previewOnly||this.adaptiveStreaming!==adaptiveStreaming||this.modelLod!==modelLod||this.terrainLod!==terrainLod||this.adaptiveTextures!==adaptiveTextures||this.vegetationDensity!==vegetationDensity||this.terrainSurface!==terrainSurface||this.solidMap!==solidMap){this.retire();this.view=view;this.previewOnly=previewOnly;this.adaptiveStreaming=adaptiveStreaming;this.modelLod=modelLod;this.terrainLod=terrainLod;this.adaptiveTextures=adaptiveTextures;this.vegetationDensity=vegetationDensity;this.terrainSurface=terrainSurface;this.solidMap=solidMap;}
   const ids=selectedSpatialRegions({...settings,mode}),sources=regions||ids.map(id=>({id,position,warState}));
   if(ids.length){this.applyShadows(view);this.applyLighting(view);}else{this.restoreShadows();this.restoreLighting();}
   const desired=new Map(sources.filter(r=>ids.includes(r.id)).map(r=>[r.id,r]));
@@ -97,7 +99,7 @@ export class FoxholeRegionSceneController {
   for(const [id,source]of desired){let record=this.records.get(id);if(!record){record={...source,id,controller:new AbortController(),state:{phase:'Queued',downloadBytes:0},scene:null,retired:false,started:false};this.records.set(id,record);}this.updateMapImage(record,source.terrainMapImage);record.warState=source.warState;record.planningOverlays=source.planningOverlays;if(record.preparing&&record.preparing!==record.scene)record.preparing.setLayers?.(this.detailLayers(record));if(record.preparing){record.preparing.setFrustumCulling?.(this.frustumCulling);record.preparing.setAmbientOcclusion?.(this.ambientOcclusion);record.preparing.setWaterReflections?.(this.waterReflections);record.preparing.setVegetationShadows?.(this.vegetationShadows);record.preparing.setVegetationWind?.(this.vegetationWind);record.preparing.setPlanningOverlays?.({...this.terrainOverlays,...record.planningOverlays});}
    if(record.scene){record.scene.setPlanningOverlays?.({...this.terrainOverlays,...record.planningOverlays});record.scene.setAmbientOcclusion?.(this.ambientOcclusion);record.scene.setWaterReflections?.(this.waterReflections);record.scene.setVegetationShadows?.(this.vegetationShadows);record.scene.setVegetationWind?.(this.vegetationWind);record.scene.setFrustumCulling?.(this.frustumCulling);record.scene.setWarState?.(record.warState);record.scene.setLayers?.(this.detailLayers(record));const camera=view.camera,cp=camera?.position,scale=32;if(cp)record.scene.update?.({deltaMS,wind,time:windTime,camera:{position:[(cp.x-record.position.x)/scale,cp.z/scale,(cp.y+record.position.y)/scale],height:view.height,fov:camera.fov||45,planes:camera.frustum?.planesData,orthographicHeight:camera.mode==='orthographic'?2*camera.orthographicSize*camera.zoom*view.height/view.width/scale:null}});}
   }
-  this.pump();if((selectionChanged||positionChanged)&&desired.size)this.report();if(!desired.size)this.onStatus?.({phase:'idle'});
+  this.pump();this.refineNearbyTerrain();if((selectionChanged||positionChanged)&&desired.size)this.report();if(!desired.size)this.onStatus?.({phase:'idle'});
  }
  report(){
   if(!this.onStatus)return;
@@ -110,7 +112,28 @@ export class FoxholeRegionSceneController {
  pump(){
   // Retired jobs keep their slots until all asynchronous resources have drained.
   if(this.disposed||this.retiringScenes.size||[...this.loading].some(record=>record.retired))return;
-  while(this.loading.size<this.concurrency){const record=[...this.records.values()].find(r=>!r.started);if(!record)return;record.started=true;this.loading.add(record);void this.start(record).finally(()=>{this.loading.delete(record);this.checkDisposed();this.pump();});}
+  const limit=this.previewOnly?this.previewConcurrency:this.concurrency;
+  while(this.loading.size<limit){const queued=[...this.records.values()].filter(record=>!record.started),camera=this.view?.camera?.position;
+   if(camera&&this.terrainSurface==='map')queued.sort((a,b)=>Math.hypot(camera.x-a.position.x,camera.y+a.position.y)-Math.hypot(camera.x-b.position.x,camera.y+b.position.y));
+   const record=queued[0];if(!record)return;record.started=true;this.loading.add(record);void this.start(record).finally(()=>{this.loading.delete(record);this.checkDisposed();this.pump();});}
+ }
+ refineNearbyTerrain(){
+  if(!this.previewOnly||this.loading.size||this.refiningTerrain||!this.records.size)return;
+  if([...this.records.values()].some(record=>!record.started))return;
+  const camera=this.view?.camera,p=camera?.position;if(!p)return;
+  const altitude=p.z/32;
+  if(camera.mode==='orthographic'){
+   const height=2*camera.orthographicSize*camera.zoom*this.view.height/this.view.width/32;
+   if(height>3500)return;
+  }else if(altitude>700)return;
+  const distance=record=>Math.hypot(p.x-record.position.x,p.y+record.position.y)/32;
+  const nearest=[...this.records.values()].filter(record=>record.scene?.refineTerrain&&!record.refinementRequested&&distance(record)<1250)
+   .sort((a,b)=>distance(a)-distance(b))[0];
+  if(!nearest)return;
+  nearest.refinementRequested=true;this.refiningTerrain=true;
+  void nearest.scene.refineTerrain().catch(error=>{
+   if(!nearest.retired)console.warn('Foxhole terrain refinement failed',nearest.id,error);
+  }).finally(()=>{this.refiningTerrain=false;});
  }
  async loadIndex(signal){
   signal?.throwIfAborted();if(this.index)return this.index;this.indexController.signal.throwIfAborted();
@@ -150,7 +173,7 @@ export class FoxholeRegionSceneController {
    await this.loadIndex(signal);
    signal.throwIfAborted();const entry=this.index.regions[id];if(!entry)throw Error('This region is not available in the assets bundle yet.');
    const cp=this.view.camera?.position;
-   const scene=await this.loadRegion({baseUrl:this.baseUrl,entry,frame:{...position,scale:32},signal,progressive:true,ambientOcclusion:this.ambientOcclusion,waterReflections:this.waterReflections,vegetationShadows:this.vegetationShadows,vegetationWind:this.vegetationWind,vegetationDensity:this.vegetationDensity,adaptiveStreaming:this.adaptiveStreaming,modelLod:this.modelLod,terrainLod:this.terrainLod,adaptiveTextures:this.adaptiveTextures,frustumCulling:this.frustumCulling,solidMap:this.solidMap,terrainSurface:this.terrainSurface,terrainMapTexture:record.terrainMapImage?.load,layers:this.detailLayers(record),onSceneCreated:scene=>{record.preparing=scene;void scene.setTerrainMapImage?.(record.terrainMapImage?.load).catch(error=>{if(!record.retired){record.state={...record.state,phase:'error',error:String(error)};this.report();}});},priorityPosition:cp?[(cp.x-position.x)/32,cp.z/32,(cp.y+position.y)/32]:undefined,onSceneReady:adopt,onProgress:state=>{if(valid()){record.state=this.onStatus?{...state,totalBytes:entry.downloadBytes}:state;this.report();}}});
+   const scene=await this.loadRegion({baseUrl:this.baseUrl,entry,frame:{...position,scale:32},signal,progressive:true,ambientOcclusion:this.ambientOcclusion,waterReflections:this.waterReflections,vegetationShadows:this.vegetationShadows,vegetationWind:this.vegetationWind,vegetationDensity:this.vegetationDensity,adaptiveStreaming:this.adaptiveStreaming,modelLod:this.modelLod,terrainLod:this.terrainLod,adaptiveTextures:this.adaptiveTextures,frustumCulling:this.frustumCulling,solidMap:this.solidMap,terrainSurface:this.terrainSurface,deferTerrainDetail:this.previewOnly,terrainMapTexture:record.terrainMapImage?.load,layers:this.detailLayers(record),onSceneCreated:scene=>{record.preparing=scene;void scene.setTerrainMapImage?.(record.terrainMapImage?.load).catch(error=>{if(!record.retired){record.state={...record.state,phase:'error',error:String(error)};this.report();}});},priorityPosition:cp?[(cp.x-position.x)/32,cp.z/32,(cp.y+position.y)/32]:undefined,onSceneReady:adopt,onProgress:state=>{if(valid()){record.state=this.onStatus?{...state,totalBytes:entry.downloadBytes}:state;this.report();}}});
    if(!adopt(scene))return;record.state={phase:'Ready',...scene.metrics};this.report();
   }catch(error){const scene=record.scene;record.scene=null;this.reconcile();this.disposeScene(scene);if(valid()){record.state={...record.state,phase:'error',error:error instanceof Error?error.message:String(error)};console.error('Foxhole region load failed',id,error);this.report();}}finally{
    // Settled loaders release preparation; failed scenes have already retired their resources.

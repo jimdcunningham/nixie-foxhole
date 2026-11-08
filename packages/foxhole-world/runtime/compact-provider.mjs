@@ -11,10 +11,10 @@ import {retainModelMaterialNames} from './model-material-names.mjs';
 import {Texture,ImageSource,CubeTexture} from 'pixi.js';
 import {glbToGltf,normalizeMeshopt,parseGltf} from '@pixi/3d';
 import {cachedRecipe,writeCachedRoadAssembly,recipeKey,roadKey} from './recipe-cache.mjs';
-import {fetchCompactResource,compactResourceCacheKey} from './compact-cache.mjs';
+import {WorldResourceError,fetchCompactResource,compactResourceCacheKey} from './compact-cache.mjs';
 import {stripMapTextures} from './solid-map-materials.mjs';
 
-export async function createCompactProvider({baseUrl,entry,solidMap=false,signal:externalSignal,onProgress=()=>{},scheduleModelTask=task=>task(),retainCompactAssets=true}){
+export async function createCompactProvider({baseUrl,entry,solidMap=false,signal:externalSignal,onProgress=()=>{},scheduleModelTask=task=>task(),retainCompactAssets=true,deferTerrainDetail=false}){
  const lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  performance.setResourceTimingBufferSize(30000);
  const externalAssets=new Set(),workerTimings=[];const start=performance.now(),base=new URL(baseUrl,location.href),metrics={downloadBytes:0,cacheHits:0,cacheMisses:0,cacheWriteFailures:0,decodeMs:0};
@@ -35,11 +35,14 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
  async function measure(name,fn){const begin=performance.now();try{return await fn();}finally{const end=performance.now();stages[name]=end-begin;performance.measure('foxhole:'+entry.id+':'+name,{start:begin,end});}}
  function stage(name){const now=performance.now();stages[stageName]=(stages[stageName]||0)+now-stageStart;performance.measure('foxhole:'+entry.id+':'+stageName,{start:stageStart,end:now});stageName=name;stageStart=now;}
 
- let manifest;try{manifest=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
+ const previewResources=deferTerrainDetail&&entry.terrainPreview?entry.terrainPreviewResources:null;
+ let manifest;try{manifest=previewResources
+  ? {version:1,format:'compact-recipes-v1',region:entry.id,resources:previewResources,physicalResources:Object.values(previewResources).map(entry=>entry.resource)}
+  : JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
  if(manifest.version!==1||manifest.format!=='compact-recipes-v1'||manifest.region!==entry.id)throw Error('Unsupported compact region');
  if(manifest.bundles)attachCompactBundles(manifest);
  let reportedPercent=-1;
- if(retainCompactAssets)await usage.use('foxhole-world-compact-v1',(manifest.physicalResources||entry.resources||[]).map(compactResourceCacheKey),{onProgress:({completed,total})=>{
+ if(retainCompactAssets&&!previewResources)await usage.use('foxhole-world-compact-v1',(manifest.physicalResources||entry.resources||[]).map(compactResourceCacheKey),{onProgress:({completed,total})=>{
   const percent=total?Math.floor(completed*100/total):100;
   if(!signal?.aborted&&percent!==reportedPercent){reportedPercent=percent;onProgress({phase:'Preparing region cache',progress:{completed,total,unit:'asset records'},...metrics});}
  }});}catch(error){usage.dispose();throw error;}
@@ -172,5 +175,13 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
   for(const url of modelImageUrls){if(textureUrls.has(url))continue;const pending=texturePromises.get(url);texturePromises.delete(url);if(pending)track(pending.then(texture=>{const source=texture.source;imageSources.delete(source);if(source&&!source.destroyed){source.resource?.close?.();texture.destroy(true);}}).catch(()=>{}));}modelImageUrls.clear();
  }
  if(signal.aborted)destroy();
- return {profile,loadProfile,createModelLease,releaseModels,observeTerrain,terrainDescriptor:(id,kind,dimensions={})=>({baseUrl:base.href,entry:resource(id),kind,...dimensions}),trackExternalAsset:url=>externalAssets.add(new URL(url,base).href),readRoadAssembly:()=>track((async()=>{signal.throwIfAborted();await usage.use('foxhole-world-recipes-v1',roadKey(base,entry.manifest.hash));signal.throwIfAborted();return run(2,{kind:'road-assembly-read',baseUrl:base.href,hash:entry.manifest.hash});})()),writeRoadAssembly:bytes=>{signal.throwIfAborted();return track(writeCachedRoadAssembly(base,entry.manifest.hash,bytes,{metrics}));},json,binary,zipped,metrics,model,environment,stage,measure,url:id=>new URL(resource(id).resource.path,base).href,texture:(id,repeat=false)=>track((async()=>{signal.throwIfAborted();const url=new URL(resource(id).resource.path,base).href;textureUrls.add(url);const t=await image(url);if(repeat)t.source.style.addressMode='repeat';return t;})()),report:(phase,progress)=>onProgress({phase,...metrics,...(progress?{progress}:{})}),finish(){stage('ready');metrics.stages=stages;metrics.readyMs=performance.now()-start;metrics.preparedFetchBytes=metrics.downloadBytes;const entries=[...performance.getEntriesByType('resource').filter(e=>e.startTime>=start&&(e.name.startsWith(base.href)||externalAssets.has(e.name))),...workerTimings.filter(e=>e.name.startsWith(base.href))];const unique=[...new Map(entries.map(e=>[[e.name,e.startTime,e.duration].join('|'),e])).values()];metrics.downloadBytes=unique.filter(e=>e.transferSize>0).reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.requestedEncodedBytes=unique.reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.httpCacheResponses=unique.filter(e=>e.transferSize===0&&e.encodedBodySize>0).length;binaryEpoch++;resolvedBinary.clear();memo.clear();if(!pending.size)destroyWorkers();return metrics;},destroy,whenDisposed:()=>disposedPromise,textureUrls};
+ async function ensureFullManifest(){
+  if(!previewResources)return;
+  const full=JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
+  if(full.version!==1||full.format!=='compact-recipes-v1'||full.region!==entry.id)throw Error('Unsupported compact region');
+  if(full.bundles)attachCompactBundles(full);
+  manifest=full;
+  for(const ref of full.physicalResources||entry.resources||[])refs.set(new URL(ref.path,base).href,ref);
+ }
+ return {profile,loadProfile,ensureFullManifest,previewTerrain:entry.terrainPreview?()=>read(entry.terrainPreview).catch(error=>{if(error instanceof WorldResourceError)return null;throw error;}):undefined,createModelLease,releaseModels,observeTerrain,terrainDescriptor:(id,kind,dimensions={})=>({baseUrl:base.href,entry:resource(id),kind,...dimensions}),trackExternalAsset:url=>externalAssets.add(new URL(url,base).href),readRoadAssembly:()=>track((async()=>{signal.throwIfAborted();await usage.use('foxhole-world-recipes-v1',roadKey(base,entry.manifest.hash));signal.throwIfAborted();return run(2,{kind:'road-assembly-read',baseUrl:base.href,hash:entry.manifest.hash});})()),writeRoadAssembly:bytes=>{signal.throwIfAborted();return track(writeCachedRoadAssembly(base,entry.manifest.hash,bytes,{metrics}));},json,binary,zipped,metrics,model,environment,stage,measure,url:id=>new URL(resource(id).resource.path,base).href,texture:(id,repeat=false)=>track((async()=>{signal.throwIfAborted();const url=new URL(resource(id).resource.path,base).href;textureUrls.add(url);const t=await image(url);if(repeat)t.source.style.addressMode='repeat';return t;})()),report:(phase,progress)=>onProgress({phase,...metrics,...(progress?{progress}:{})}),finish(){stage('ready');metrics.stages=stages;metrics.readyMs=performance.now()-start;metrics.preparedFetchBytes=metrics.downloadBytes;const entries=[...performance.getEntriesByType('resource').filter(e=>e.startTime>=start&&(e.name.startsWith(base.href)||externalAssets.has(e.name))),...workerTimings.filter(e=>e.name.startsWith(base.href))];const unique=[...new Map(entries.map(e=>[[e.name,e.startTime,e.duration].join('|'),e])).values()];metrics.downloadBytes=unique.filter(e=>e.transferSize>0).reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.requestedEncodedBytes=unique.reduce((sum,e)=>sum+e.encodedBodySize,0);metrics.httpCacheResponses=unique.filter(e=>e.transferSize===0&&e.encodedBodySize>0).length;binaryEpoch++;resolvedBinary.clear();memo.clear();if(!pending.size)destroyWorkers();return metrics;},destroy,whenDisposed:()=>disposedPromise,textureUrls};
 }

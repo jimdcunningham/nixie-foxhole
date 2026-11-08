@@ -136,3 +136,29 @@ test('identical embedded images share decoding across model leases until the las
  const p=await create({baseUrl:'https://fixture.test/world/',entry:{id:'fixture',manifest:{path:'manifest'}}}),a=p.createModelLease(),b=p.createModelLease();
  const [x,y]=await Promise.all([a.get('https://fixture.test/world/a.glb'),b.get('https://fixture.test/world/b.glb')]);assert.equal(decoded,1);assert.equal(x.textures[0],y.textures[0]);a.release();await new Promise(r=>setTimeout(r,0));assert.equal(closed,0);b.release();await new Promise(r=>setTimeout(r,0));assert.equal(closed,1);p.destroy();
 });
+
+test('terrain preview reads compact resources without opening the full manifest',async()=>{
+ const requests=[];
+ const manifest={version:1,format:'compact-recipes-v1',region:'fixture',resources:{'fixture/extra.json':{resource:{path:'extra.json'}}},physicalResources:[{path:'extra.json'}]};
+ class Worker {
+  constructor(){queueMicrotask(()=>this.onmessage?.({data:{kind:'foxhole-worker-ready'}}));}
+  postMessage({id,ref}){requests.push(ref.path);const payload=ref.path==='manifest.json'?JSON.stringify(manifest):'{}';queueMicrotask(()=>this.onmessage({data:{id,result:new TextEncoder().encode(payload).buffer}}));}
+  terminate(){}
+ }
+ const create=runInNewContext(source,{createTransferLedger,createWorldCacheLease,compactResourceCacheKey,createSourceLeasePool,location:{href:'https://fixture.test/'},performance,URL,Worker,Map,Set,Promise,AbortController,DOMException,setTimeout,clearTimeout,TextDecoder,console,fetchCompactResource:async(_base,ref)=>{
+  requests.push(ref.path);
+  return new TextEncoder().encode(ref.path==='manifest.json'?JSON.stringify(manifest):'{}').buffer;
+ }});
+ const provider=await create({baseUrl:'https://fixture.test/world/',deferTerrainDetail:true,retainCompactAssets:false,entry:{
+  id:'fixture',manifest:{path:'manifest.json'},terrainPreview:{path:'preview.glb'},
+  terrainPreviewResources:{'fixture/terrain.json':{resource:{path:'terrain.json'},codec:'brotli'}},
+ }});
+ try{
+  await provider.previewTerrain();
+  await provider.json('fixture/terrain.json');
+  assert.deepEqual(requests,['preview.glb','terrain.json']);
+  await provider.ensureFullManifest();
+  await provider.json('fixture/extra.json');
+  assert.deepEqual(requests,['preview.glb','terrain.json','manifest.json','extra.json']);
+ }finally{provider.destroy();await provider.whenDisposed();}
+});

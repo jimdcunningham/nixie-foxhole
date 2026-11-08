@@ -585,10 +585,13 @@ export class FoxholeMapViewportPlugin extends Plugin {
     }
 
     getSpatialMapImage(regionKey: string): { key: string; load: () => Promise<PIXI.Texture>; release: () => Promise<void>; } | null {
-        if (!this.readMapSettings().modded) return null;
         const region = FOXHOLE_MAP_REGIONS.find(region => region.key === regionKey);
+        if (!region) return null;
         const store = getFoxholeMapModStore();
-        const url = region ? store.getTextureUrl(region.textureKey) : null;
+        const modUrl = this.readMapSettings().modded ? store.getTextureUrl(region.textureKey) : null;
+        const url = modUrl ?? (region.standalone
+            ? resolveFoxholeAssetUrl(`maps/HexMaps/Processed/${region.textureKey}.webp`)
+            : null);
         if (!url) return null;
         // Separate leases keep a 2D refresh from unloading the spatial surface.
         let owner: ReturnType<typeof mapTexturePool.createOwner> | undefined;

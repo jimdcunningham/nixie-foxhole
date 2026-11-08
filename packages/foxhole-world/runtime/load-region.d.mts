@@ -4,9 +4,10 @@ import type { Container3D, Pass3D } from '@pixi/3d';
 export type TerrainTransferObservation = { id: string; kind: 'observed'; bytes: number; } | { id: string; kind: 'http-cache'; bytes: 0; } | { id: string; kind: 'unknown'; };
 export interface TerrainTransferMetrics { events: TerrainTransferObservation[]; bytes: number; observed: number; unknown: number; cached: number; }
 export interface BakedResource { path: string; hash: string; bytes: number; }
-export interface BakedRegionEntry { id: string; key?: string; manifest: BakedResource; resources?: BakedResource[]; downloadBytes: number; }
+export interface BakedRegionEntry { id: string; key?: string; manifest: BakedResource; terrainPreview?: BakedResource; terrainPreviewResources?: Record<string, { resource: BakedResource; codec: string }>; resources?: BakedResource[]; downloadBytes: number; }
 export interface BakedRegion {
     root: Container3D;
+    refineTerrain?(): Promise<void>;
     passes: Pass3D[];
     sharedPasses?: Record<string, Pass3D>;
     combinedPasses?: Record<string, Pass3D>;
@@ -38,4 +39,4 @@ export function loadBakedRegion(options: { baseUrl: string; entry: BakedRegionEn
 
 export type PreparingRegion = Omit<BakedRegion, 'metrics'> & { metrics: Omit<BakedRegion['metrics'], 'readyMs'> & { readyMs?: number; }; };
 /** Progressive publication defaults on. Asset streaming, model LOD, terrain LOD, adaptive terrain textures and frustum culling are independent; all adaptive policies default off. Atomic publication remains an internal viewer/test option. */
-export function loadCompactRegion(options: Parameters<typeof loadBakedRegion>[0] & { retainCompactAssets?: boolean; scheduleModelTask?: <T>(task: () => Promise<T>) => Promise<T>; solidMap?: boolean; terrainSurface?: 'native' | 'map' | 'plain'; terrainMapTexture?: () => Promise<Texture | null>; waterReflections?: boolean; vegetationShadows?: boolean; vegetationWind?: boolean; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; progressive?: boolean; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; layers?: Parameters<NonNullable<BakedRegion['setLayers']>>[0]; onSceneCreated?: (scene: PreparingRegion) => void; onSceneReady?: (scene: PreparingRegion) => boolean | void; priorityPosition?: number[]; }): Promise<BakedRegion>;
+export function loadCompactRegion(options: Parameters<typeof loadBakedRegion>[0] & { retainCompactAssets?: boolean; deferTerrainDetail?: boolean; scheduleModelTask?: <T>(task: () => Promise<T>) => Promise<T>; solidMap?: boolean; terrainSurface?: 'native' | 'map' | 'plain'; terrainMapTexture?: () => Promise<Texture | null>; waterReflections?: boolean; vegetationShadows?: boolean; vegetationWind?: boolean; ambientOcclusion?: boolean; vegetationDensity?: 'full' | 'reduced' | 'minimal'; progressive?: boolean; adaptiveStreaming?: boolean; modelLod?: boolean; terrainLod?: boolean; adaptiveTextures?: boolean; frustumCulling?: boolean; layers?: Parameters<NonNullable<BakedRegion['setLayers']>>[0]; onSceneCreated?: (scene: PreparingRegion) => void; onSceneReady?: (scene: PreparingRegion) => boolean | void; priorityPosition?: number[]; }): Promise<BakedRegion>;

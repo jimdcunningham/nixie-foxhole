@@ -50,16 +50,16 @@ import {buildRegionShell,shellDepthBit,REGION_SHELL_COLOR} from '../authoring/re
 import {framedMaterialBits,createRegionFramePreparation} from './spatial-frame.mjs';
 
 function properties(value){const keys=new Set();for(let p=value;p&&p!==Object.prototype;p=Object.getPrototypeOf(p))for(const key of Object.getOwnPropertyNames(p))if(!key.startsWith('_')&&key!=='constructor')keys.add(key);return keys;}
-export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},solidMap=false,terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask,retainCompactAssets=true}){
+export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,frame,renderer,onProgress=()=>{},prepareTerrain=()=>{},progressive=true,adaptiveStreaming=false,modelLod=false,terrainLod=false,adaptiveTextures=false,frustumCulling=true,ambientOcclusion=true,waterReflections=true,vegetationShadows=true,vegetationWind=true,vegetationDensity='full',onSceneReady=()=>{},priorityPosition,layers={},solidMap=false,terrainSurface='native',terrainMapTexture,onSceneCreated=()=>{},scheduleModelTask,retainCompactAssets=true,deferTerrainDetail=false}){
  prepareAtlasRetirement(renderer);
  const started=performance.now(),lifetime=new AbortController(),signal=externalSignal?AbortSignal.any([externalSignal,lifetime.signal]):lifetime.signal;
  const homePreview=entry.profile==='home-solid-v1';
  const homeRegion=homePreview||entry.profile==='home-native-v1';
- const availableLayers=flags=>homeRegion?{...flags,shell:false,roads:false,decals:false,puddles:false,effects:false}:flags;
+ const availableLayers=flags=>homeRegion?{...flags,roads:false,decals:false,puddles:false,effects:false}:flags;
  if(homeRegion){layers=availableLayers(layers);adaptiveTextures=false;}
  if(homePreview)solidMap=true;
  if(solidMap)terrainSurface='plain';
- const provider=await createCompactProvider({baseUrl,entry,solidMap,signal,onProgress,scheduleModelTask,retainCompactAssets}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
+ const provider=await createCompactProvider({baseUrl,entry,solidMap,signal,onProgress,scheduleModelTask,retainCompactAssets,deferTerrainDetail}),{json,binary,zipped,texture}=provider,region=entry.id,root=new Container3D({label:'Foxhole Region '+entry.id,eventMode:'none'}),ownedGeometry=new Set(),ownedMaterial=new Set(),excavationMask=createTerrainExcavationMask();let weatherMaterials=[];const containedWater=new Set(),fireMaterials=new Set();const shellWalls=[];let shellEdgeFlags=[];
  // Map assets own their authored LOD; host placed-object simplification must not replace it.
  Object.defineProperty(root,Symbol.for('nixie.spatial.full-detail-root'),{value:true});
  let roads,roadTransitions,waterMat,weatherTextures={},packedWeather,disposed=false,cleaned=false,loading=true,terrainLoaded=false,terrainPreview,terrainChunks,sourceMaxHeight=256,environment,warState=null,sharedActorVisibility,layerFlags=layers,revealedBatches=0;
@@ -81,7 +81,7 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const hexBit={name:'foxholeHexBoundary',gpu:{fragment:{material:'if (input.vPosition.y < -220.0 || abs(input.vPosition.z) > 945.0 || abs(input.vPosition.x) + abs(input.vPosition.z) * 0.577777778 > 1092.0) { discard; }'}},gl:{fragment:{material:'if(vPosition.y<-220.0 || abs(vPosition.z)>945.0 || abs(vPosition.x)+abs(vPosition.z)*0.577777778>1092.0) discard;'}}};
  const weatherMaterial=m=>{for(const [key,value]of Object.entries(weatherTextures))if(key in m.textures)m.textures[key]=value;weatherMaterials.push(m);m.data.surfaceWeather=[0,0,0,0];return m;};
  let terrainOverlays={rdz:false,topo:false};
- let retirement,streamRetirements=[];let resolveDisposal,rejectDisposal;const disposal=new Promise((resolve,reject)=>{resolveDisposal=resolve;rejectDisposal=reject;});void disposal.catch(()=>{});
+ let retirement,refinement,streamRetirements=[];let resolveDisposal,rejectDisposal;const disposal=new Promise((resolve,reject)=>{resolveDisposal=resolve;rejectDisposal=reject;});void disposal.catch(()=>{});
  let sample,sampleWater,releasePreparation,releaseEnvironmentPreparation,roadCacheReady;
  function terrainGeometry(parsed){const p=parsed.view(0),n=parsed.view(1),indices=parsed.view(2),uv=new Float32Array(p.length/3*2);for(let i=0;i<p.length/3;i++){uv[i*2]=(p[i*3]+WIDTH/2)/WIDTH;uv[i*2+1]=(HEIGHT/2-p[i*3+2])/HEIGHT;}return geo(new Geometry3D({positions:p,normals:n,indices,uvs:uv,quantizeNormals:false}));}
  // Progressive publication is independent of camera-driven residency. Retain
@@ -95,14 +95,14 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
   if(retirement)return retirement;
   retirement=(async()=>{
    const streams=[...streamRetirements,...[...modelStreams.values()].map(stream=>stream.dispose())];
-   const settled=await Promise.allSettled([demand?.whenSettled(),...streams]);
+   const settled=await Promise.allSettled([demand?.whenSettled(),refinement?.catch(()=>{}),...streams]);
    const chunks=terrainChunks;cleanup();
    const barriers=await Promise.allSettled([provider.whenDisposed?.(),liveTerrainPass.whenDisposed?.(),chunks?.whenDisposed?.()]);
    const failure=[...settled,...barriers].find(result=>result.status==='rejected');if(failure)throw failure.reason;
   })();
   retirement.then(resolveDisposal,rejectDisposal);return retirement;
  }
- function destroy(){if(disposed)return;disposed=true;root.removeFromParent();const busy=demand?.busy||streamingBusy();lifetime.abort();streamRetirements=[...modelStreams.values()].map(stream=>stream.dispose());for(const task of streamRetirements)Promise.resolve(task).catch(()=>{});if(!loading){if(!busy){try{cleanup();}catch(error){rejectDisposal(error);throw error;}}void retire().catch(()=>{});}}
+ function destroy(){if(disposed)return;disposed=true;root.removeFromParent();const busy=refinement||demand?.busy||streamingBusy();lifetime.abort();streamRetirements=[...modelStreams.values()].map(stream=>stream.dispose());for(const task of streamRetirements)Promise.resolve(task).catch(()=>{});if(!loading){if(!busy){try{cleanup();}catch(error){rejectDisposal(error);throw error;}}void retire().catch(()=>{});}}
  signal.addEventListener('abort',destroy,{once:true});
  const framePreparation=frame?createRegionFramePreparation({root,materials:ownedMaterial,terrainPass:liveTerrainPass},frame):null;
  const reveal=progressive?createRegionRevealQueue({signal}):null;
@@ -245,35 +245,83 @@ async function loadRoads(seamsReady,ctx){
  }
 
  try{
-  provider.stage('metadata');const [terrainMeta,source]=await Promise.all([json(region+'/terrain.json'),binary(region+'/terrain.bin')]);
-  const sourcePositions=new Float32Array(source);sample=heightSampler(terrainMeta,sourcePositions);sourceMaxHeight=terrainMeta.max[1];terrainLoaded=true;
-  provider.stage('environment');if(!solidMap){environment=await provider.environment();releaseEnvironmentPreparation=prepareRegionEnvironment(renderer,environment,{signal});}provider.stage('layers');
-  const enabled=(flags,key)=>flags[key]!==false;
-  let terrainGeometryReady;
+  let mapPreview;
+  if(progressive&&terrainSurface==='map'&&layers.terrain!==false&&provider.previewTerrain){
+   provider.stage('map-preview');
+   const [mesh]=await Promise.all([provider.previewTerrain(),terrainMapImage.read()]);
+   signal.throwIfAborted();
+   if(mesh){
+    const parsed=parseGlb(mesh);
+    mapPreview=terrainGeometry(parsed);
+    if(deferTerrainDetail){
+     let previewSampler;
+     sample=(x,z)=>(previewSampler??=waterSurfaceSampler(parsed.view(0),parsed.view(2)))(x,z);
+     sourceMaxHeight=parsed.json.accessors[0].max[1];
+     terrainLoaded=true;
+    }
+    await liveTerrainPass.load(region,mapPreview,{surface:'map',mapTexture:terrainMapImage.read,signal,status});
+    framePreparation?.prepare();refresh();order();
+    scene.metrics.firstVisibleMs=performance.now()-started;
+    if(onSceneReady(scene)===false)throw new DOMException('Region retired','AbortError');
+   }
+  }
+  let terrainGeometryReady,sourceTerrain;
+  const loadSourceTerrain=()=>sourceTerrain??=(async()=>{
+   provider.stage('metadata');
+   const [meta,source]=await Promise.all([json(region+'/terrain.json'),binary(region+'/terrain.bin')]);
+   const positions=new Float32Array(source);
+   sample=heightSampler(meta,positions);sourceMaxHeight=meta.max[1];terrainLoaded=true;
+   return {meta,positions};
+  })();
   const geometryReady=()=>terrainGeometryReady??=provider.measure('terrain-geometry',async()=>{
-   terrainChunks=createChunkedTerrainLod({meta:terrainMeta,source:sourcePositions,signal,renderer,adaptive:terrainLod,frustumCulling,frame:liveTerrainPass.frame,
+   const {meta,positions}=await loadSourceTerrain();
+   terrainChunks=createChunkedTerrainLod({meta,source:positions,signal,renderer,adaptive:terrainLod,frustumCulling,frame:liveTerrainPass.frame,
     create:mesh=>geo(new Geometry3D({positions:mesh.positions,normals:mesh.normals,indices:mesh.indices,quantizeNormals:false})),
     release:g=>{ownedGeometry.delete(g);if(!g.destroyed)g.destroy(true);},
     createView:(base,indices)=>geo(new Geometry3D({attributes:base.attributes,indices,bounds3D:base.bounds3D})),
     releaseView:g=>{ownedGeometry.delete(g);g.indexBuffer.destroy();if(!g.destroyed)g.destroy(false);},
-    apply:g=>{if(liveTerrainPass.current)liveTerrainPass.current.geometry=g;}});
+    apply:g=>{if(!mapPreview&&liveTerrainPass.current)liveTerrainPass.current.geometry=g;}});
+   const geometry=await terrainChunks.initialize();
    liveTerrainPass.geometryLod=terrainChunks;
-   scene.metrics.terrainGeometry=terrainChunks.stats;return terrainChunks.initialize();
+   scene.metrics.terrainGeometry=terrainChunks.stats;return geometry;
   }).catch(error=>{terrainChunks?.destroy();terrainChunks=null;terrainGeometryReady=null;throw error;});
-  // Build the inexpensive border before the preview; no model assets are needed.
-  if(!progressive&&!adaptiveStreaming||enabled(layerFlags,'shell')){
-   const shell=buildRegionShell(await json(region+'/world-fixes/boundary/profile.json')),shellMat=mat(new Material3D({baseColor:REGION_SHELL_COLOR,roughness:.95,doubleSided:true,extraBits:[shellDepthBit]}));shellMat.data.shellDepthBias=.000001;
+  async function replaceMapPreview(){
+   const geometry=await geometryReady();
+   signal.throwIfAborted();
+   liveTerrainPass.current.geometry=geometry;
+   ownedGeometry.delete(mapPreview);
+   mapPreview.destroy(true);
+   mapPreview=null;
+   framePreparation?.prepare();
+   refresh();
+  }
+  // Home Regions use the same level hex rim and have no boundary-profile asset.
+  const loadShellGeometry=async read=>buildRegionShell(homeRegion?{}:await read(region+'/world-fixes/boundary/profile.json'));
+  async function loadInitialShell(){
+   const shell=await loadShellGeometry(json),shellMat=mat(new Material3D({baseColor:REGION_SHELL_COLOR,roughness:.95,doubleSided:true,extraBits:[shellDepthBit]}));shellMat.data.shellDepthBias=.000001;
    const shellRoot=new Container3D({label:'Region Shell'});targets.shell.push(root.addChild(shellRoot));
    const shellPart=(indices,label)=>shellRoot.addChild(new Mesh3D({label,geometry:geo(new Geometry3D({positions:shell.positions,normals:shell.normals,indices})),material:shellMat,castShadow:false,receiveShadow:false}));
    if(shell.wallIndices){shellPart(shell.floorIndices,'Region Floor');shell.wallIndices.forEach((indices,i)=>shellWalls.push(shellPart(indices,'Region Wall '+i)));}else shellPart(shell.indices,'Region Shell Geometry');
   }
+  if(mapPreview&&deferTerrainDetail){
+   if(layerFlags.shell!==false)await loadInitialShell();
+   scene.refineTerrain=()=>refinement??=replaceMapPreview();
+   Object.assign(scene.metrics,provider.finish(),{progressive,resident:false,frustumCulling,terrainSurface});
+   initialComplete=true;
+   return scene;
+  }
+  await provider.ensureFullManifest?.();
+  await loadSourceTerrain();
+  provider.stage('environment');if(!solidMap){environment=await provider.environment();releaseEnvironmentPreparation=prepareRegionEnvironment(renderer,environment,{signal});}provider.stage('layers');
+  const enabled=(flags,key)=>flags[key]!==false;
+  if(!progressive&&!adaptiveStreaming||enabled(layerFlags,'shell'))await loadInitialShell();
   if(progressive){
-   if(enabled(layerFlags,'terrain')){const preview=buildTerrainPreview(sample),geometry=geo(new Geometry3D({...preview,quantizeNormals:false}));signal.throwIfAborted();terrainPreview=root.addChild(new Mesh3D({label:'Loading Terrain',geometry,material:mat(new Material3D({baseColor:0x7a8061,roughness:1,metallic:0,extraBits:[hexBit]})),castShadow:false}));targets.terrain=[terrainPreview];}
-   framePreparation?.prepare();refresh();order();scene.metrics.firstVisibleMs=performance.now()-started;
-   if(onSceneReady(scene)===false)throw new DOMException('Region retired','AbortError');
+   if(!mapPreview&&enabled(layerFlags,'terrain')){const preview=buildTerrainPreview(sample),geometry=geo(new Geometry3D({...preview,quantizeNormals:false}));signal.throwIfAborted();terrainPreview=root.addChild(new Mesh3D({label:'Loading Terrain',geometry,material:mat(new Material3D({baseColor:0x7a8061,roughness:1,metallic:0,extraBits:[hexBit]})),castShadow:false}));targets.terrain=[terrainPreview];}
+   framePreparation?.prepare();refresh();order();
+   if(!mapPreview){scene.metrics.firstVisibleMs=performance.now()-started;if(onSceneReady(scene)===false)throw new DOMException('Region retired','AbortError');}
   }
   const tasks={
-   terrain:{needed:f=>enabled(f,'terrain'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Terrain Loading');try{const geometry=await geometryReady();taskSignal.throwIfAborted();const options={surface:terrainSurface,mapTexture:terrainMapImage.read,texture:ctx.texture,json:ctx.json,zipped:ctx.zipped,status,prepareTerrain:source=>provider.profile('terrain-upload',()=>prepareTerrain(source)),signal:taskSignal,onTerrainObservation:provider.observeTerrain,terrainDescriptor:adaptiveTextures?provider.terrainDescriptor:undefined,texturePool:adaptiveTextures&&provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined};const showTerrain=()=>{if(terrainPreview){terrainPreview.removeFromParent();terrainPreview.destroy();terrainPreview=null;targets.terrain=[];}framePreparation?.prepare();refresh();};if(progressive&&!adaptiveTextures&&typeof liveTerrainPass.loadProgressive==='function')await liveTerrainPass.loadProgressive(region,geometry,options,{terrainDescriptor:provider.terrainDescriptor,texturePool:provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined,onPreview:showTerrain});else await liveTerrainPass.load(region,geometry,options);taskSignal.throwIfAborted();showTerrain();}catch(error){liveTerrainPass.clear?.();ctx.rollback();throw error;}}},
+   terrain:{needed:f=>enabled(f,'terrain'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Terrain Loading');try{const geometry=await geometryReady();taskSignal.throwIfAborted();const options={surface:terrainSurface,mapTexture:terrainMapImage.read,texture:ctx.texture,json:ctx.json,zipped:ctx.zipped,status,prepareTerrain:source=>provider.profile('terrain-upload',()=>prepareTerrain(source)),signal:taskSignal,onTerrainObservation:provider.observeTerrain,terrainDescriptor:adaptiveTextures?provider.terrainDescriptor:undefined,texturePool:adaptiveTextures&&provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined};const showTerrain=()=>{if(terrainPreview){terrainPreview.removeFromParent();terrainPreview.destroy();terrainPreview=null;targets.terrain=[];}framePreparation?.prepare();refresh();};if(mapPreview&&liveTerrainPass.current?.geometry===mapPreview)await replaceMapPreview();else if(progressive&&!adaptiveTextures&&typeof liveTerrainPass.loadProgressive==='function')await liveTerrainPass.loadProgressive(region,geometry,options,{terrainDescriptor:provider.terrainDescriptor,texturePool:provider.terrainDescriptor?terrainTexturePoolFor(renderer):undefined,onPreview:showTerrain});else await liveTerrainPass.load(region,geometry,options);taskSignal.throwIfAborted();showTerrain();}catch(error){liveTerrainPass.clear?.();ctx.rollback();throw error;}}},
    water:{needed:f=>enabled(f,'water'),load:async taskSignal=>{const ctx=taskContext(taskSignal,'Water');try{const parsed=parseGlb(await ctx.binary(region+'/water-visible.glb'));const waterSample=waterSurfaceSampler(parsed.view(0),parsed.view(2));if(parsed.view(2).length){const material=solidMap?new Material3D({baseColor:solidMapColors.water,roughness:1,metallic:0,doubleSided:true,extraBits:[hexBit,liveTerrainPass.planning.solidWaterBit]}):(await createNativeWaterMaterial({region,json:ctx.json,texture:ctx.texture,hexBit,extraBits:[liveTerrainPass.planning.waterBit]})).material;waterMat=ctx.mat(material);liveTerrainPass.planning.bindWater(waterMat,!solidMap||terrainOverlays.solidWater===true);if(!solidMap)waterMat.data.waterReflectionStrength=waterReflections?1:0;targets.water.push(ctx.root.addChild(new Mesh3D({label:'Native Water',geometry:ctx.geo(terrainGeometry(parsed)),material:waterMat,castShadow:false})));}taskSignal.throwIfAborted();sampleWater=waterSample;framePreparation?.prepare();refresh();}catch(error){targets.water=[];waterMat=null;sampleWater=null;ctx.rollback();throw error;}}},
    weather:{needed:()=>false,load:solidMap?async()=>{}:weather},
    bridges:{needed:()=>false,load:taskSignal=>models('bridges',taskSignal,true),unload:()=>modelGroups.get('bridges')?.dispose?.()},
@@ -284,7 +332,7 @@ async function loadRoads(seamsReady,ctx){
    ...Object.fromEntries(effectLayers.map(category=>[category+'Effects',{needed:f=>!solidMap&&enabled(f,'effects')&&enabled(f,category),load:taskSignal=>loadDetails(category+'Effects',taskSignal,{decals:false,puddles:false,effects:true},category),unload:()=>detailGroups.get(category+'Effects')?.dispose()}])),
   };
   // Late shell enablement uses the same region; it never requires a model reload.
-  tasks.shell={needed:f=>enabled(f,'shell'),load:async taskSignal=>{if(targets.shell.length)return;const ctx=taskContext(taskSignal,'Region Shell');try{const shell=buildRegionShell(await ctx.json(region+'/world-fixes/boundary/profile.json')),material=ctx.mat(new Material3D({baseColor:REGION_SHELL_COLOR,roughness:.95,doubleSided:true,extraBits:[shellDepthBit]}));material.data.shellDepthBias=.000001;const part=(indices,label)=>ctx.root.addChild(new Mesh3D({label,geometry:ctx.geo(new Geometry3D({positions:shell.positions,normals:shell.normals,indices})),material,castShadow:false,receiveShadow:false}));if(shell.wallIndices){part(shell.floorIndices,'Region Floor');shell.wallIndices.forEach((indices,i)=>shellWalls[i]=part(indices,'Region Wall '+i));}else part(shell.indices,'Region Shell Geometry');targets.shell=[ctx.root];scene.setShellEdges(shellEdgeFlags);framePreparation?.prepare();refresh();}catch(error){ctx.rollback();throw error;}}};
+  tasks.shell={needed:f=>enabled(f,'shell'),load:async taskSignal=>{if(targets.shell.length)return;const ctx=taskContext(taskSignal,'Region Shell');try{const shell=await loadShellGeometry(ctx.json),material=ctx.mat(new Material3D({baseColor:REGION_SHELL_COLOR,roughness:.95,doubleSided:true,extraBits:[shellDepthBit]}));material.data.shellDepthBias=.000001;const part=(indices,label)=>ctx.root.addChild(new Mesh3D({label,geometry:ctx.geo(new Geometry3D({positions:shell.positions,normals:shell.normals,indices})),material,castShadow:false,receiveShadow:false}));if(shell.wallIndices){part(shell.floorIndices,'Region Floor');shell.wallIndices.forEach((indices,i)=>shellWalls[i]=part(indices,'Region Wall '+i));}else part(shell.indices,'Region Shell Geometry');targets.shell=[ctx.root];scene.setShellEdges(shellEdgeFlags);framePreparation?.prepare();refresh();}catch(error){ctx.rollback();throw error;}}};
   if(provider.loadProfile)for(const [key,task] of Object.entries(tasks)){
    const load=task.load;task.load=(...args)=>provider.profile('layer:'+key,()=>load(...args));
   }
