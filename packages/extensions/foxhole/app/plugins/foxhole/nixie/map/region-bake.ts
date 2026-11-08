@@ -25,10 +25,11 @@ export async function bakeFoxholeRegion(
     const width = 2048 * scale;
     const height = 1776 * scale;
     const renderWidth = supersample ? width * 2 : width;
-    const renderHeight = supersample ? height * 2 : height;
+    // Fit the world hex in the square, then resample its actual height to the Pak aspect ratio.
+    const renderHeight = renderWidth * FOXHOLE_REGION_HEIGHT / FOXHOLE_REGION_WIDTH;
     const camera = new Camera3D({ near: 1, far: FOXHOLE_REGION_WIDTH * 4 });
     camera.mode = 'orthographic';
-    camera.orthographicSize = Math.max(FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT * width / height) / 2;
+    camera.orthographicSize = FOXHOLE_REGION_WIDTH / 2;
     camera.position.set(region.position.x, -region.position.y, FOXHOLE_REGION_WIDTH);
     camera.lookAt({ x: region.position.x, y: -region.position.y, z: 0 }, { x: 0, y: 1, z: 0 });
     const view = new View3D({
