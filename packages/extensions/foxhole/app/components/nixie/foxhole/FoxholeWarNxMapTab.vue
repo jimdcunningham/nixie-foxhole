@@ -1093,7 +1093,7 @@ const mapModVisibilityDisabled = computed(() => (
 
 .foxhole-war-nx-map-tab__mod-panel {
     display: grid;
-    gap: var(--nx-space-1);
+    gap: var(--nx-space-2);
     min-width: 0;
     max-width: 100%;
 }
@@ -1103,7 +1103,10 @@ const mapModVisibilityDisabled = computed(() => (
     min-width: 0;
 }
 
-/* Same track sizing/gap as layer grids; NxButton fills each cell. */
+.foxhole-war-nx-map-tab__mod-actions {
+    gap: var(--nx-space-2);
+}
+
 .foxhole-war-nx-map-tab__mod-actions :deep(.nx-btn) {
     width: 100%;
     min-width: 0;
