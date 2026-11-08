@@ -433,6 +433,7 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 
 const regionBakePending = ref(false);
 const clearingBakeCache = ref(false);
+const hasCachedMapBakes = ref(false);
 const fullMapProgress = ref<{ message: string; processed: number; total: number; region?: string } | null>(null);
 const modProgress = computed(() => {
     if (isPakImportActive.value) {
@@ -457,12 +458,35 @@ const modProgress = computed(() => {
 const fullMapResult = shallowRef<{ pak: Blob; archive: Blob; elapsedMs: number } | null>(null);
 let fullMapController: AbortController | null = null;
 
+async function refreshBakeCacheAvailability(): Promise<void> {
+    try {
+        const { hasFoxholeFullMapBakeCache } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
+        hasCachedMapBakes.value = await hasFoxholeFullMapBakeCache();
+    } catch {
+        hasCachedMapBakes.value = false;
+    }
+}
+
+onMounted(() => {
+    if (import.meta.dev) void refreshBakeCacheAvailability();
+});
+
 async function clearBakeCache(): Promise<void> {
-    if (clearingBakeCache.value || regionBakePending.value) return;
+    if (!hasCachedMapBakes.value || clearingBakeCache.value || regionBakePending.value) return;
     clearingBakeCache.value = true;
     try {
+        const confirmed = await requestNxConfirmDialog({
+            title: 'Clear cached map bakes?',
+            message: 'The next full map export will bake every region again.',
+            confirmLabel: 'Clear Cached Map Bakes',
+            cancelLabel: 'Cancel',
+            destructive: true,
+        });
+        if (!confirmed) return;
+
         const { clearFoxholeFullMapBakeCache } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
         await clearFoxholeFullMapBakeCache();
+        hasCachedMapBakes.value = false;
         showNxToast({ kind: 'success', title: 'Bake Cache Cleared' });
     } catch (error) {
         showNxToast({
@@ -507,6 +531,7 @@ async function exportFullMap(): Promise<void> {
             kind: 'error',
         });
     } finally {
+        await refreshBakeCacheAvailability();
         fullMapController = null;
         fullMapProgress.value = null;
         regionBakePending.value = false;
@@ -998,7 +1023,8 @@ const mapModVisibilityDisabled = computed(() => (
                     <NxButton
                         variant="danger"
                         size="sm"
-                        :label="clearingBakeCache ? 'Clearing Bake Cache…' : 'Clear Bake Cache'"
+                        v-if="hasCachedMapBakes"
+                        :label="clearingBakeCache ? 'Clearing Cached Map Bakes…' : 'Clear Cached Map Bakes'"
                         :disabled="regionBakePending || clearingBakeCache"
                         @click="clearBakeCache"
                     />
@@ -1183,7 +1209,8 @@ const mapModVisibilityDisabled = computed(() => (
     cursor: pointer;
 }
 
-.foxhole-war-nx-map-tab__mod-progress-cancel:hover {
+.foxhole-war-nx-map-tab__mod-progress-cancel:hover .foxhole-war-nx-map-tab__mod-progress-caption {
+    color: var(--nx-danger-text);
     text-decoration: underline;
 }
 
