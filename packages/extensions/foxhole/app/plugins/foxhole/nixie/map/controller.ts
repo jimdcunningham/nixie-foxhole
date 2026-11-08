@@ -181,6 +181,26 @@ export interface FoxholeMapViewportContext extends Omit<NixieViewportPluginConte
     };
 }
 
+class FoxholeWorldBackgroundClamp extends Plugin {
+    constructor(parent: Viewport, private readonly bounds: FoxholeMapActiveBounds) {
+        super(parent);
+    }
+
+    override update(): void {
+        const viewport = this.parent;
+        const { left, right, top, bottom } = this.bounds;
+        const clampAxis = (position: number, screen: number, scale: number, start: number, end: number) => {
+            const min = screen - end * scale;
+            const max = -start * scale;
+            return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, position));
+        };
+        viewport.position.set(
+            clampAxis(viewport.x, viewport.screenWidth, viewport.scale.x, left, right),
+            clampAxis(viewport.y, viewport.screenHeight, viewport.scale.y, top, bottom),
+        );
+    }
+}
+
 export class FoxholeMapViewportPlugin extends Plugin {
     private static readonly DEFAULT_MIN_SCALE = 0.0025;
     private static readonly DEFAULT_MAX_SCALE = 2;
@@ -987,7 +1007,14 @@ export class FoxholeMapViewportPlugin extends Plugin {
             ) * FoxholeMapViewportPlugin.BACKGROUND_FILL_OVERSCAN_FACTOR
             : noBackgroundMinScale;
         const fitWorldBackground = settings.background && this.pluginContext.manualPresentation && !this.pluginContext.isSpatialView?.();
-        const worldBounds = fitWorldBackground ? this.getActiveBounds({ ...settings, regionKeys: [] }) : null;
+        const backgroundBounds = fitWorldBackground ? this.getActiveBounds({ ...settings, regionKeys: [] }) : null;
+        const worldBounds = backgroundBounds ? (() => {
+            const left = Math.min(activeBounds.left, backgroundBounds.left);
+            const right = Math.max(activeBounds.right, backgroundBounds.right);
+            const top = Math.min(activeBounds.top, backgroundBounds.top);
+            const bottom = Math.max(activeBounds.bottom, backgroundBounds.bottom);
+            return { left, right, top, bottom, width: right - left, height: bottom - top };
+        })() : null;
         const minScale = worldBounds
             ? Math.min(noBackgroundMinScale, viewportWidth / worldBounds.width, viewportHeight / worldBounds.height)
             : settings.background
@@ -1001,7 +1028,11 @@ export class FoxholeMapViewportPlugin extends Plugin {
             maxScale,
         });
 
-        if (settings.lockCameraToMap && settings.background) {
+        if (settings.lockCameraToMap && worldBounds) {
+            // Pixi's built-in clamp anchors to an edge when custom bounds
+            // underflow, even when those bounds are centered at world origin.
+            this.parent.plugins.add('clamp', new FoxholeWorldBackgroundClamp(this.parent, worldBounds));
+        } else if (settings.lockCameraToMap && settings.background) {
             this.parent.clamp({
                 left: activeBounds.left,
                 right: activeBounds.right,
