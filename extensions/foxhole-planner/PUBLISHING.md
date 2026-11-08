@@ -33,8 +33,9 @@ must advance the Studio version before a new extension can depend on it.
 
 Pushing relevant changes to `main`, or dispatching **Publish Planner SDK Extension**,
 builds an isolated consumer, verifies it, packages the generated runtime manifest,
-and publishes the exact `.nxext`. Equal version/hash retries are idempotent; reusing
-a version with different bytes fails. Publication never deploys Studio or changes
+and checks the published registry against the exact `.nxext` hash. The workflow
+skips publishing identical bytes for an existing version and fails if that
+version has a different hash. Publication never deploys Studio or changes
 its private integration source pin. Nixie chooses the newest stable compatible
 release when a user installs or updates; an open editor keeps its accepted runtime.
 

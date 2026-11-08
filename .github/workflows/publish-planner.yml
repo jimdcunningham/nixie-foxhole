@@ -65,7 +65,12 @@ jobs:
           path: ${{ runner.temp }}/planner-consumer/extensions/foxhole-planner/artifacts/extension.nxext
           if-no-files-found: error
 
+      - name: Check published version and package hash
+        id: release
+        run: node "$PLANNER_ROOT/build/check-published-release.mjs" "$PLANNER_ROOT/artifacts/extension.nxext"
+
       - name: Publish immutable extension release
+        if: steps.release.outputs.publish == 'true'
         run: npm run publish:extension --prefix "$PLANNER_ROOT"
         env:
           NIXIE_EXTENSION_PUBLISH_API_URL: https://nixiejs.com/api/nixie/extensions/publish

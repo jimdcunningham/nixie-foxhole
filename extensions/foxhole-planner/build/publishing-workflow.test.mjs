@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { shouldPublishRelease } from './check-published-release.mjs';
 
 test('Planner publishing builds an independent remote package with scoped authority', async () => {
     const text = await readFile(new URL('../../../.github/workflows/publish-planner.yml', import.meta.url), 'utf8');
@@ -24,4 +25,17 @@ test('Planner publishing builds an independent remote package with scoped author
     assert.equal(pkg.devDependencies['@nixiejs/extension-package'], '0.1.0-preview.5');
     assert.match(pkg.scripts.pack, /^nixie-extension pack /);
     assert.match(pkg.scripts['publish:extension'], /^nixie-extension publish /);
+});
+
+test('only a new Planner release is published', async () => {
+    const build = { extensionId: 'nixie.foxhole-planner', version: '0.5.0', packageHash: 'a'.repeat(64) };
+    const registry = releases => async () => Response.json(releases);
+    assert.equal(await shouldPublishRelease(build, registry([])), true);
+    assert.equal(await shouldPublishRelease(build, registry([{
+        version: build.version, packageSha256: build.packageHash,
+    }])), false);
+    await assert.rejects(shouldPublishRelease(build, registry([{
+        version: build.version, packageSha256: 'b'.repeat(64),
+    }])), /different package bytes/);
+    await assert.rejects(shouldPublishRelease(build, async () => new Response(null, { status: 503 })), /HTTP 503/);
 });
