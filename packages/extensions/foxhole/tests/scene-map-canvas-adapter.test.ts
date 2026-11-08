@@ -42,7 +42,10 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         resolveFoxholeMapFitCamera: () => ({ position: { x: 5, y: 6 }, scale: 0.01 }),
         computed, shallowRef, useNixieSettingsStore: () => ({ getValueOr() {} }),
         readFoxholeMapSettings: () => { settingsReads++; return { ...settings }; },
-        getFoxholeMapActiveBounds: () => ({ left: -100, top: -200, right: 300, bottom: 400 }),
+        getFoxholeMapActiveBounds: (settings: { background: boolean; regionKeys: string[] }) =>
+            settings.background && settings.regionKeys.length === 0
+                ? { left: -500, top: -500, right: 500, bottom: 500 }
+                : { left: -100, top: -200, right: 300, bottom: 400 },
         FoxholeMapViewportPlugin: class {
             presentationRoot = root;
             getSpatialWarState(key: string) { return {items:[key]}; }
@@ -104,6 +107,14 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     mode = '2d';
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = 'flat';
+
+    settings.regionKeys = ['WestgateHex', 'HomeRegionC'];
+    assert.equal(adapter.worldBounds().minX, -500, '2D zoom bounds include the enabled world background');
+    assert.equal(adapter.frameBounds().minX, -100, 'Zoom to Fit still frames the selected regions');
+    settings.background = false;
+    assert.equal(adapter.worldBounds().minX, -100, 'without World, the region bounds set the zoom limit');
+    settings.background = true;
+    settings.regionKeys = ['WestgateHex'];
     assert.equal(adapter.spatialLayers().find((layer: { content: unknown; }) => layer.content === summaries).billboardGroups, undefined);
     settings.lockCameraToMap = false;
     assert.equal(adapter.navigationBounds(), null);
@@ -115,7 +126,7 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     context.session.cameraTo({ position: { x: 5, y: 6 }, scale: 0.01 });
     assert.deepEqual(moves, [[{ x: 5, y: 6 }, 0.01]]);
     assert.equal(adapter.root, root);
-    assert.equal(JSON.stringify(adapter.worldBounds()), JSON.stringify({ minX: -100, minY: -200, maxX: 300, maxY: 400 }));
+    assert.equal(JSON.stringify(adapter.worldBounds()), JSON.stringify({ minX: -500, minY: -500, maxX: 500, maxY: 500 }));
     assert.equal(JSON.stringify(adapter.documentRendererIds), JSON.stringify(['planning-map', 'planning-grid']));
     settings.regionKeys = ['WestgateHex','OriginHex']; mode = '3d';
     adapter.updateSpatialPresentation({view:{},mode:'3d',deltaMS:16});

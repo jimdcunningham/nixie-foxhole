@@ -986,9 +986,13 @@ export class FoxholeMapViewportPlugin extends Plugin {
                 viewportHeight / Math.max(1, activeBounds.height),
             ) * FoxholeMapViewportPlugin.BACKGROUND_FILL_OVERSCAN_FACTOR
             : noBackgroundMinScale;
-        const minScale = settings.background
-            ? Math.max(noBackgroundMinScale, backgroundFillMinScale)
-            : noBackgroundMinScale;
+        const fitWorldBackground = settings.background && this.pluginContext.manualPresentation && !this.pluginContext.isSpatialView?.();
+        const worldBounds = fitWorldBackground ? this.getActiveBounds({ ...settings, regionKeys: [] }) : null;
+        const minScale = worldBounds
+            ? Math.min(noBackgroundMinScale, viewportWidth / worldBounds.width, viewportHeight / worldBounds.height)
+            : settings.background
+                ? Math.max(noBackgroundMinScale, backgroundFillMinScale)
+                : noBackgroundMinScale;
         const maxScale = Math.max(FoxholeMapViewportPlugin.DEFAULT_MAX_SCALE, minScale);
 
         this.minimumMapScale = minScale;

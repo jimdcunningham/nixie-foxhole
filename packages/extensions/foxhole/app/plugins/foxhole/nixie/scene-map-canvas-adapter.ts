@@ -380,6 +380,15 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             const settings = mapSettings.value;
             if (!settings.enabled) return null;
             const bounds = getFoxholeMapActiveBounds(context.viewMode() !== 'flat' && settings.regionKeys.length > 0 ? { ...settings, background: false } : settings);
+            if (context.viewMode() === 'flat' && settings.background && settings.regionKeys.length > 0) {
+                const background = getFoxholeMapActiveBounds({ ...settings, regionKeys: [] });
+                return {
+                    minX: Math.min(bounds.left, background.left),
+                    minY: Math.min(bounds.top, background.top),
+                    maxX: Math.max(bounds.right, background.right),
+                    maxY: Math.max(bounds.bottom, background.bottom),
+                };
+            }
             return { minX: bounds.left, minY: bounds.top, maxX: bounds.right, maxY: bounds.bottom };
         },
         diagnostics() {
