@@ -954,9 +954,9 @@ const mapModVisibilityDisabled = computed(() => (
                             :aria-label="isPakImportActive ? 'Cancel Map Mod Import' : 'Cancel Full Map Export'"
                             @click="isPakImportActive ? mapModStore.requestCancelImport() : fullMapController?.abort()"
                         >
-                            Cancel
+                            <span class="foxhole-war-nx-map-tab__mod-progress-caption">Cancel</span>
                         </button>
-                        <span v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-stats">
+                        <span v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-caption foxhole-war-nx-map-tab__mod-progress-stats">
                             {{ modProgress.processed }}/{{ modProgress.total }} ({{ modProgress.percent }}%)
                         </span>
                     </div>
@@ -1119,7 +1119,7 @@ const mapModVisibilityDisabled = computed(() => (
 
 .foxhole-war-nx-map-tab__mod-progress-title,
 .foxhole-war-nx-map-tab__mod-progress-file,
-.foxhole-war-nx-map-tab__mod-progress-stats {
+.foxhole-war-nx-map-tab__mod-progress-caption {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1132,7 +1132,7 @@ const mapModVisibilityDisabled = computed(() => (
 }
 
 .foxhole-war-nx-map-tab__mod-progress-file,
-.foxhole-war-nx-map-tab__mod-progress-stats {
+.foxhole-war-nx-map-tab__mod-progress-caption {
     color: var(--nx-text-muted);
 }
 
@@ -1153,9 +1153,7 @@ const mapModVisibilityDisabled = computed(() => (
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--nx-text-muted);
     font: inherit;
-    font-size: var(--nx-text-xs);
     cursor: pointer;
 }
 
