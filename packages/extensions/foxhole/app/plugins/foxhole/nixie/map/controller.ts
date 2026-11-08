@@ -224,6 +224,13 @@ export class FoxholeMapViewportPlugin extends Plugin {
             this.pluginContext.projectStore.settings,
             settingId => this.settingsStore.getValueOr(settingId, undefined),
         );
+        if (this.pluginContext.manualPresentation) {
+            Object.assign(settings, {
+                colors: false, baseMap: false, baseMapFull: false, roads: false, roadsTiers: false,
+                rdz: false, darkRdz: false, glaciers: false, bulwark: false, railBridge: false,
+                rocks: false, underwaterRocksStripes: false,
+            });
+        }
         // Do not request the 2D world backdrop while a spatial view is active.
         return this.pluginContext.isSpatialView?.() ? { ...settings, background: false } : settings;
     });
@@ -401,6 +408,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
                     const parsed = Date.parse(preview.capturedAt);
                     return Number.isFinite(parsed) ? parsed : null;
                 },
+                flatTerrainOverlays: () => this.pluginContext.manualPresentation === true && !this.pluginContext.isSpatialView?.(),
                 getAssetsBaseUrl: () => assetsBaseUrl,
                 getWorldPointer: () => pointerTracker?.pointer.value.world ?? null,
                 getZoom: () => this.pluginContext.getZoom?.() ?? this.parent.scale.x,

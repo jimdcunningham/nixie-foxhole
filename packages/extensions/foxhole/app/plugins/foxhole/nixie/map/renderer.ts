@@ -1,3 +1,4 @@
+import { RDZ_WIDTH, rdzExemptions } from '../../../../../../../foxhole-world/authoring/terrain-overlay-policy.mjs';
 import { resolveFoxholeMapIconPreviewAsset } from './icon-preview.ts';
 import * as PIXI from 'pixi.js';
 import Voronoi from 'voronoi';
@@ -166,6 +167,7 @@ interface FoxholeMapRegionView {
     region: FoxholeMapRegionRecord;
     container: PIXI.Container;
     sprite: PIXI.Sprite;
+    flatRdz?: { sprite: PIXI.Sprite; signature: string };
     textureLayers: Partial<Record<FoxholeMapTextureLayerKey, PIXI.Sprite>>;
     textureSignature: string;
     overlaySignature: string;
@@ -694,6 +696,7 @@ export class FoxholeMapRenderer {
             const canDisplayResistanceRegionData = this.canDisplayResistanceRegionData(view.region);
             this.syncRegionCasualtyLabel(view, this.liveData[view.region.key]?.reports, settings);
             view.container.visible = regionVisible;
+            this.syncFlatRdz(view, settings, this.liveData[view.region.key]?.icons);
             view.border.visible = settings.borders && regionVisible;
             view.label.visible = settings.names && regionVisible;
             view.victoryBaseBadge.visible = settings.victoryTownBadges && regionVisible && canDisplayResistanceRegionData && view.hasVictoryBaseBadge && !showIconsAndLabels;
@@ -1194,6 +1197,7 @@ export class FoxholeMapRenderer {
 
     private destroyRegionViews(): void {
         for (const view of this.regionViews) {
+            view.flatRdz?.sprite.destroy({ texture: true, textureSource: true });
             view.container.destroy({ children: true });
             view.border.destroy();
             view.label.destroy();
@@ -1509,6 +1513,7 @@ export class FoxholeMapRenderer {
         };
 
         this.regionViews.push(view);
+        this.syncFlatRdz(view, settings, this.liveData[region.key]?.icons);
         this.regionViewByKey.set(region.key, view);
         await this.syncRegionTextureLayers(
             view,
@@ -1914,10 +1919,70 @@ export class FoxholeMapRenderer {
         return (1 / Math.max(this.context.getZoom(), 0.0001)) < FoxholeMapRenderer.GRID_MAX_BASE_ZOOM;
     }
 
+    private syncFlatRdz(
+        view: FoxholeMapRegionView,
+        settings: FoxholeMapSettingsSnapshot,
+        icons: FoxholeMapServerRegionData['icons'],
+    ): void {
+        if (!settings.terrainRdz || !this.context.flatTerrainOverlays?.() || !view.container.visible) {
+            if (view.flatRdz) view.flatRdz.sprite.visible = false;
+            return;
+        }
+        const exemptions = rdzExemptions(icons);
+        const signature = JSON.stringify(exemptions);
+        if (view.flatRdz?.signature === signature) {
+            view.flatRdz.sprite.visible = true;
+            return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 546;
+        canvas.height = 473;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(canvas.width / 2184, 0, 0, canvas.height / 1890, canvas.width / 2, canvas.height / 2);
+        const slope = 546 / 945;
+        const insetHex = (inset: number) => {
+            const y = 945 - inset;
+            const tip = 1092 - inset * Math.hypot(1, slope);
+            const corner = tip - y * slope;
+            ctx.beginPath();
+            ctx.moveTo(-tip, 0);
+            ctx.lineTo(-corner, -y);
+            ctx.lineTo(corner, -y);
+            ctx.lineTo(tip, 0);
+            ctx.lineTo(corner, y);
+            ctx.lineTo(-corner, y);
+            ctx.closePath();
+            ctx.fill();
+        };
+        ctx.fillStyle = '#c72b14';
+        insetHex(0);
+        ctx.globalCompositeOperation = 'destination-out';
+        insetHex(RDZ_WIDTH);
+        for (const [x, z, radius] of exemptions) {
+            ctx.beginPath();
+            ctx.arc(x, -z, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        view.flatRdz?.sprite.destroy({ texture: true, textureSource: true });
+        const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
+        sprite.label = 'foxhole-map-rdz';
+        sprite.anchor.set(0.5);
+        sprite.width = FOXHOLE_REGION_WIDTH;
+        sprite.height = FOXHOLE_REGION_HEIGHT;
+        sprite.alpha = 0.3;
+        sprite.zIndex = 20;
+        view.container.addChild(sprite);
+        view.flatRdz = { sprite, signature };
+    }
+
     private async syncRegionLiveData(view: FoxholeMapRegionView, data: FoxholeMapServerRegionData | undefined): Promise<void> {
         const settings = this.context.readMapSettings();
         const tasks: Array<Promise<void>> = [];
 
+        this.syncFlatRdz(view, settings, data?.icons);
         tasks.push(this.syncRegionVictoryBaseBadge(view, data?.icons));
 
         if (settings.hotspots) {

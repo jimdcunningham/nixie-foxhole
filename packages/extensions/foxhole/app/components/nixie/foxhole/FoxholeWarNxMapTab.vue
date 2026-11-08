@@ -125,10 +125,13 @@ function setRoadTourOption(key: 'region' | 'speed' | 'view', value: unknown): vo
     plannerRoadTourOptions.value = { ...plannerRoadTourOptions.value, [key]: key === 'speed' ? Number(value) : String(value) };
 }
 const worldLayerOptions: NxToggleGridOption[] = FOXHOLE_WORLD_LAYER_GROUPS.map(group => ({ id: group.id, label: group.label }));
-const terrainOverlayOptions: NxToggleGridOption[] = [{ id: 'rdz', label: 'RDZ' }, { id: 'topo', label: 'Topo' }];
-const activeTerrainOverlays = computed(() => [mapSettings.value.terrainRdz ? 'rdz' : '', mapSettings.value.terrainTopo ? 'topo' : ''].filter(Boolean));
+const terrainOverlayOptions = computed<NxToggleGridOption[]>(() => [
+    { id: 'rdz', label: 'RDZ' },
+    { id: 'topo', label: 'Topo', disabled: !isSpatialView.value },
+]);
+const activeTerrainOverlays = computed(() => [mapSettings.value.terrainRdz ? 'rdz' : '', isSpatialView.value && mapSettings.value.terrainTopo ? 'topo' : ''].filter(Boolean));
 function onTerrainOverlaysChange(ids: string[]): void {
-    patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainRdz]: ids.includes('rdz'), [FOXHOLE_MAP_SETTING_KEYS.terrainTopo]: ids.includes('topo') }, 'foxhole-war-nx-map:terrain-overlays');
+    patchSettings({ [FOXHOLE_MAP_SETTING_KEYS.terrainRdz]: ids.includes('rdz'), ...(isSpatialView.value ? { [FOXHOLE_MAP_SETTING_KEYS.terrainTopo]: ids.includes('topo') } : {}) }, 'foxhole-war-nx-map:terrain-overlays');
 }
 const activeWorldLayers = computed(() => activeWorldLayerGroups(mapSettings.value.worldLayers));
 function onWorldLayerClick({ id, nextIds }: NxToggleGridOptionClick): void {
@@ -866,7 +869,7 @@ const mapModVisibilityDisabled = computed(() => (
 
             </NixieSidebarFormSection>
             <NixieSidebarFormSection
-                v-if="group.heading !== 'Improved Map Mod' || !isSpatialView || standalonePreview"
+                v-if="group.heading !== 'Improved Map Mod' || !isSceneV2Active"
                 :title="getLayerGroupTitle(group)"
                 :sectionKey="getLayerGroupSectionKey(group)"
                 collapsible
@@ -969,7 +972,7 @@ const mapModVisibilityDisabled = computed(() => (
                         <p role="status">{{ fullMapProgress }}</p>
                         <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
                     </template>
-                    <div v-if="fullMapResult">
+                    <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
                         <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                         <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
@@ -1121,8 +1124,15 @@ const mapModVisibilityDisabled = computed(() => (
 }
 
 .foxhole-war-nx-map-tab__mod-panel {
+    display: grid;
+    gap: var(--nx-space-2);
     min-width: 0;
     max-width: 100%;
+}
+
+.foxhole-war-nx-map-tab__mod-panel > :deep(.nx-btn) {
+    width: 100%;
+    min-width: 0;
 }
 
 /* Same track sizing/gap as layer grids; NxButton fills each cell. */

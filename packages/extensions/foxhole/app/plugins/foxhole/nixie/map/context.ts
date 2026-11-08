@@ -12,6 +12,7 @@ export interface FoxholeMapContext {
     getProjectSettings: () => NixieProjectSettings;
     patchProjectSettings: (patch: Partial<NixieProjectSettings>, reason?: string) => NixieProjectSettings;
     readMapSettings: () => FoxholeMapSettings & { spatialWorldData?: boolean; };
+    flatTerrainOverlays?: () => boolean;
     getWarData: () => {
         shardId?: string;
         warId?: string;
