@@ -361,6 +361,12 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
                 billboardGroups: context.viewMode() !== 'flat' && summaries.has(content.label) ? getFoxholeMapRegionBillboardGroups(content) : undefined,
             }));
         },
+        frameBounds() {
+            const settings = mapSettings.value;
+            if (!settings.enabled) return null;
+            const bounds = getFoxholeMapActiveBounds(settings.regionKeys.length > 0 ? { ...settings, background: false } : settings);
+            return { minX: bounds.left, minY: bounds.top, maxX: bounds.right, maxY: bounds.bottom };
+        },
         worldBounds() {
             const settings = mapSettings.value;
             if (!settings.enabled) return null;
