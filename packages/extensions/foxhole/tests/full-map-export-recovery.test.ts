@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 
 const source = readFileSync(new URL('../app/plugins/foxhole/nixie/map/full-map-export.ts', import.meta.url), 'utf8')
     .replace(/^import .*$/gm, '')
-    .replace('export async function', 'async function');
+    .replaceAll('export async function', 'async function');
 
 test('full map export recovers only completed tiles with matching inputs', async () => {
     const tiles = new Map<string, Response>();

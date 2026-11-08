@@ -432,6 +432,7 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 }
 
 const regionBakePending = ref(false);
+const clearingBakeCache = ref(false);
 const fullMapProgress = ref<{ message: string; processed: number; total: number; region?: string } | null>(null);
 const modProgress = computed(() => {
     if (isPakImportActive.value) {
@@ -456,9 +457,27 @@ const modProgress = computed(() => {
 const fullMapResult = shallowRef<{ pak: Blob; archive: Blob; elapsedMs: number } | null>(null);
 let fullMapController: AbortController | null = null;
 
+async function clearBakeCache(): Promise<void> {
+    if (clearingBakeCache.value || regionBakePending.value) return;
+    clearingBakeCache.value = true;
+    try {
+        const { clearFoxholeFullMapBakeCache } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
+        await clearFoxholeFullMapBakeCache();
+        showNxToast({ kind: 'success', title: 'Bake Cache Cleared' });
+    } catch (error) {
+        showNxToast({
+            kind: 'error',
+            title: 'Could Not Clear Bake Cache',
+            message: error instanceof Error ? error.message : String(error),
+        });
+    } finally {
+        clearingBakeCache.value = false;
+    }
+}
+
 async function exportFullMap(): Promise<void> {
     const bake = regionBakeAction.value;
-    if (!bake || regionBakePending.value || isPakImportActive.value) return;
+    if (!bake || regionBakePending.value || clearingBakeCache.value || isPakImportActive.value) return;
     const controller = new AbortController();
     fullMapController = controller;
     regionBakePending.value = true;
@@ -967,7 +986,7 @@ const mapModVisibilityDisabled = computed(() => (
                         variant="secondary"
                         size="sm"
                         label="Export Full Map Mod"
-                        :disabled="regionBakePending"
+                        :disabled="regionBakePending || clearingBakeCache"
                         @click="exportFullMap"
                     />
                     <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
@@ -976,6 +995,13 @@ const mapModVisibilityDisabled = computed(() => (
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
                         <p role="status" class="foxhole-war-nx-map-tab__mod-result-status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                     </div>
+                    <NxButton
+                        variant="danger"
+                        size="sm"
+                        :label="clearingBakeCache ? 'Clearing Bake Cache…' : 'Clear Bake Cache'"
+                        :disabled="regionBakePending || clearingBakeCache"
+                        @click="clearBakeCache"
+                    />
                 </template>
                 <input
                     ref="mapModFileInput"

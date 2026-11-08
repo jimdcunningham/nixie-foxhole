@@ -9,6 +9,10 @@ const payloadSize = width * height;
 // Bump when the bake renderer, mask, or BC7 output changes.
 const recoveryCacheName = 'nixie.foxhole.full-map-bake.v1';
 
+export async function clearFoxholeFullMapBakeCache(): Promise<void> {
+    await globalThis.caches?.delete(recoveryCacheName);
+}
+
 async function hashInputs(inputs: string): Promise<string> {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputs));
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
