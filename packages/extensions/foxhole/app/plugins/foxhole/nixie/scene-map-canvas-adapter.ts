@@ -258,13 +258,13 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             };
             const selected = foxholeWorldAssetDelivery();
             if (!selected) throw new Error('No selected world catalog.');
-            const png = await bakeFoxholeRegion(context.app.renderer, {
+            const result = await bakeFoxholeRegion(context.app.renderer, {
                 ...worldOptions(), baseUrl: selected.baseUrl, indexLoader: selected.loadIndex,
                 // A full bake reads each region once and should not fill the interactive cache.
                 loadRegion: options => worldOptions().loadRegion({ ...options, retainCompactAssets: !regionKey }),
             }, settings, source, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, scale, supersample, onStage);
             controller.signal.throwIfAborted();
-            return { png, filename: region.textureKey + (scale === 0.5 ? '-1024x888.png' : scale === 2 ? '-4096x3552.png' : '.png') };
+            return { ...result, filename: region.textureKey + (scale === 0.5 ? '-1024x888.png' : scale === 2 ? '-4096x3552.png' : '.png') };
         } finally {
             bakeController = null;
         }

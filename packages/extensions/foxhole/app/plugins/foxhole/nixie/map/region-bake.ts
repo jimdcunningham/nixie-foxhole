@@ -7,10 +7,12 @@ import { FOXHOLE_REGION_WIDTH, FOXHOLE_REGION_HEIGHT } from './constants.ts';
 import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
 
 export type FoxholeRegionBakeScale = 0.5 | 1 | 2;
-export const regionBakeAction = shallowRef<((scale: FoxholeRegionBakeScale, supersample?: boolean, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => Promise<{ png: Blob; filename: string }>) | null>(null);
+export type RegionBakeLoadProfile = NonNullable<LoadedRegion['metrics']['loadProfile']>;
+export const regionBakeAction = shallowRef<((scale: FoxholeRegionBakeScale, supersample?: boolean, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => Promise<{ png: Blob; filename: string; loadProfile?: RegionBakeLoadProfile }>) | null>(null);
 
 type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
 type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];
+type LoadedRegion = Awaited<ReturnType<WorldOptions['loadRegion']>>;
 
 export async function bakeFoxholeRegion(
     renderer: Renderer,
@@ -21,7 +23,7 @@ export async function bakeFoxholeRegion(
     scale: FoxholeRegionBakeScale,
     supersample = false,
     onStage?: (stage: string) => void,
-): Promise<Blob> {
+): Promise<{ png: Blob; loadProfile?: RegionBakeLoadProfile }> {
     const width = 2048 * scale;
     const height = 1776 * scale;
     const renderWidth = supersample ? width * 2 : width;
@@ -42,7 +44,6 @@ export async function bakeFoxholeRegion(
         },
     });
     const lighting = new NixieSpatialSceneLighting(view);
-    type LoadedRegion = Awaited<ReturnType<WorldOptions['loadRegion']>>;
     let loaded: LoadedRegion | undefined;
     const { promise, resolve, reject } = Promise.withResolvers<LoadedRegion>();
     const abort = () => reject(signal.reason);
@@ -140,9 +141,10 @@ export async function bakeFoxholeRegion(
         }
         context.putImageData(image, 0, 0);
         onStage?.('Writing PNG');
-        return await new Promise<Blob>((done, fail) => {
+        const png = await new Promise<Blob>((done, fail) => {
             canvas.toBlob(blob => blob ? done(blob) : fail(new Error('Could not encode the region PNG.')), 'image/png');
         });
+        return { png, loadProfile: scene.metrics.loadProfile };
     } finally {
         signal.removeEventListener('abort', abort);
         onStage?.('Releasing renderer resources');

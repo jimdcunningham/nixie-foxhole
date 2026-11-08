@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { buildMapPak, encodeBc7 } from './deadlands-pak-export.mjs';
 import { PakImporter } from './mod-pak.js';
+import type { RegionBakeLoadProfile } from './region-bake.ts';
 
 const width = 2048;
 const height = 1776;
@@ -27,7 +28,7 @@ function readTemplates(buffer: ArrayBuffer) {
 export async function exportFoxholeFullMap(
     reference: File,
     regions: readonly { key: string; textureKey: string; name: string }[],
-    bake: (key: string, onStage: (stage: string) => void) => Promise<{ png: Blob }>,
+    bake: (key: string, onStage: (stage: string) => void) => Promise<{ png: Blob; loadProfile?: RegionBakeLoadProfile }>,
     signal: AbortSignal,
     onProgress: (message: string) => void,
 ) {
@@ -59,7 +60,7 @@ export async function exportFoxholeFullMap(
             phase = next;
             phaseStarted = now;
         }
-        const { png } = await bake(region.key, stage => {
+        const { png, loadProfile } = await bake(region.key, stage => {
             if (stage === 'Rendering') enterPhase('render');
             if (stage === 'Writing PNG') enterPhase('png');
             if (stage === 'Releasing renderer resources') enterPhase('release');
@@ -81,7 +82,7 @@ export async function exportFoxholeFullMap(
         entries.push(template);
         pngs[region.textureKey + '.png'] = new Uint8Array(await png.arrayBuffer());
         enterPhase('done');
-        timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), stagesMs });
+        timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), stagesMs, loadProfile });
         await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     signal.throwIfAborted();
