@@ -864,22 +864,23 @@ const mapModVisibilityDisabled = computed(() => (
             </template>
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
-                <NxButton
-                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
-                    variant="secondary"
-                    size="sm"
-                    :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG (2048 × 1776)'"
-                    :disabled="regionBakePending"
-                    @click="downloadRegionBake(1)"
-                />
-                <NxButton
-                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
-                    variant="secondary"
-                    size="sm"
-                    label="Bake Region PNG (4096 × 3552)"
-                    :disabled="regionBakePending"
-                    @click="downloadRegionBake(2)"
-                />
+                <template v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview">
+                    <NxButton
+                        variant="secondary"
+                        size="sm"
+                        :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG (2048 × 1776)'"
+                        :disabled="regionBakePending"
+                        @click="downloadRegionBake(1)"
+                    />
+                    <NxButton
+                        variant="secondary"
+                        size="sm"
+                        label="Bake Region PNG (4096 × 3552)"
+                        :disabled="regionBakePending"
+                        @click="downloadRegionBake(2)"
+                    />
+                    <NxDivider v-if="!isPakImportActive" />
+                </template>
                 <div
                     v-if="!isPakImportActive"
                     class="nx-toggle-grid foxhole-war-nx-map-tab__mod-actions"
