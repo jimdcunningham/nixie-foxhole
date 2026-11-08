@@ -45,9 +45,9 @@ extension's DevTools and reload controls in Manage Extensions for diagnostics.
 Changes that introduce new capabilities require approval. The watcher builds
 JavaScript; Studio does not compile TypeScript itself.
 
-Planner 0.4.2 currently declares Studio `0.9.4 || ^1.0.0`, SDK
-`@nixiejs/extension-sdk@0.1.0-preview.3`, and packaging CLI
-`@nixiejs/extension-package@0.1.0-preview.4`. These are declared compatibility
+Planner 0.5.0 currently declares Studio `^1.1.0`, SDK
+`@nixiejs/extension-sdk@0.1.0-preview.4`, and packaging CLI
+`@nixiejs/extension-package@0.1.0-preview.5`. These are declared compatibility
 requirements, not a claim that every matching Studio release was tested.
 Use a Studio build with local-source activation support. If Manage Extensions attempts to download Planner instead of enabling your local build, update Studio.
 
