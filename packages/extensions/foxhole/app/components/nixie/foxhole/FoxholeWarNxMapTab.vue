@@ -880,27 +880,6 @@ const mapModVisibilityDisabled = computed(() => (
                     :disabled="regionBakePending"
                     @click="downloadRegionBake(2)"
                 />
-                <template v-if="regionBakeAction && mapSettings.enabled">
-                    <NxButton
-                        v-if="!fullMapProgress"
-                        variant="secondary"
-                        size="sm"
-                        label="Export Full Map Mod"
-                        :disabled="regionBakePending"
-                        @click="fullMapReferenceInput?.click()"
-                    />
-                    <p v-if="!fullMapProgress" class="text-muted text-sm">Includes a Foxhole Pak and a ZIP of all region PNGs.</p>
-                    <template v-if="fullMapProgress">
-                        <p role="status">{{ fullMapProgress }}</p>
-                        <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
-                    </template>
-                    <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
-                        <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
-                        <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
-                        <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
-                    </div>
-                    <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
-                </template>
                 <div
                     v-if="!isPakImportActive"
                     class="nx-toggle-grid foxhole-war-nx-map-tab__mod-actions"
@@ -952,6 +931,26 @@ const mapModVisibilityDisabled = computed(() => (
                     </div>
                 </div>
 
+                <template v-if="regionBakeAction && mapSettings.enabled">
+                    <NxButton
+                        v-if="!fullMapProgress"
+                        variant="secondary"
+                        size="sm"
+                        label="Export Full Map Mod"
+                        :disabled="regionBakePending"
+                        @click="fullMapReferenceInput?.click()"
+                    />
+                    <template v-else>
+                        <p role="status">{{ fullMapProgress }}</p>
+                        <NxButton label="Cancel Full Map Export" size="sm" @click="fullMapController?.abort()" />
+                    </template>
+                    <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
+                        <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
+                        <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
+                        <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
+                    </div>
+                    <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
+                </template>
                 <input
                     ref="mapModFileInput"
                     class="foxhole-war-nx-map-tab__mod-file-input"
