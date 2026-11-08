@@ -864,7 +864,7 @@ const mapModVisibilityDisabled = computed(() => (
             </template>
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
-                <template v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview">
+                <template v-if="!isPakImportActive && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview">
                     <NxButton
                         variant="secondary"
                         size="sm"
@@ -879,7 +879,7 @@ const mapModVisibilityDisabled = computed(() => (
                         :disabled="regionBakePending"
                         @click="downloadRegionBake(2)"
                     />
-                    <NxDivider v-if="!isPakImportActive" />
+                    <NxDivider />
                 </template>
                 <div
                     v-if="!isPakImportActive"
@@ -932,7 +932,7 @@ const mapModVisibilityDisabled = computed(() => (
                     </div>
                 </div>
 
-                <template v-if="regionBakeAction && mapSettings.enabled">
+                <template v-if="!isPakImportActive && regionBakeAction && mapSettings.enabled">
                     <NxButton
                         v-if="!fullMapProgress"
                         variant="secondary"
