@@ -8,7 +8,7 @@ import { FoxholeRegionSceneController } from './region-scene-controller.mjs';
 
 export type FoxholeRegionBakeScale = 0.5 | 1 | 2;
 export type RegionBakeLoadProfile = NonNullable<LoadedRegion['metrics']['loadProfile']>;
-export const regionBakeAction = shallowRef<((scale: FoxholeRegionBakeScale, supersample?: boolean, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => Promise<{ png: Blob; filename: string; loadProfile?: RegionBakeLoadProfile }>) | null>(null);
+export const regionBakeAction = shallowRef<(((scale: FoxholeRegionBakeScale, supersample?: boolean, regionKey?: string, signal?: AbortSignal, onStage?: (stage: string) => void) => Promise<{ png: Blob; filename: string; loadProfile?: RegionBakeLoadProfile }>) & { cacheInputs?: (key: string) => string }) | null>(null);
 
 type WorldOptions = ConstructorParameters<typeof FoxholeRegionSceneController>[0];
 type SyncOptions = Parameters<FoxholeRegionSceneController['sync']>[0];

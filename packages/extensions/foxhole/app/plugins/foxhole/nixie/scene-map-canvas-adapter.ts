@@ -269,7 +269,16 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             bakeController = null;
         }
     };
-    if (import.meta.dev) regionBakeAction.value = bake;
+    if (import.meta.dev) {
+        regionBakeAction.value = Object.assign(bake, {
+            cacheInputs: (key: string) => JSON.stringify([
+                mapSettings.value,
+                getFoxholeRegionPosition(FOXHOLE_MAP_REGIONS.find(region => region.key === key)!),
+                plugin.getSpatialWarState(key),
+                context.app.renderer.name,
+            ]),
+        });
+    }
     return {
         documentRendererIds: ['planning-map', 'planning-grid'],
         ownsViewportConstraints: true,

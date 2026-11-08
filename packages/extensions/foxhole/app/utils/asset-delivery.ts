@@ -12,6 +12,7 @@ import { createFoxholeAssetGenerationSelector, type FoxholeAssetGeneration } fro
 import { shouldUseFoxholeLocalAssetDelivery } from '../plugins/foxhole/nixie/map/memory-storage.mjs';
 let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = null;
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
+let publishedCatalogHash: string | undefined;
 const revision = shallowRef(0);
 const localSpatialRegions = shallowRef<ReadonlySet<string>>(new Set());
 const cache = new NixiePersistentExtensionResourceCache();
@@ -47,9 +48,12 @@ const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async ge
     const mapLocation = library.files.get('maps/map-data.v1.json');
     if (!mapLocation || mapLocation.entry.mediaType !== 'application/json') throw new Error('The selected catalog has no map metadata.');
     const mapData = parseFoxholePublishedMapData(await read({url:mapLocation.url, ...mapLocation.entry}));
-    return {library, manifest, mapData};
+    const catalogDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document.text));
+    const catalogHash = Array.from(new Uint8Array(catalogDigest), byte => byte.toString(16).padStart(2, '0')).join('');
+    return {library, manifest, mapData, catalogHash};
 }, (prepared, generation) => {
     publishedLibrary = prepared?.library ?? null;
+    publishedCatalogHash = prepared?.catalogHash;
     const library = prepared?.library;
     installFoxholeAssetLocations(library ? path => library.resolve(path) : null);
     installFoxholeManifest(prepared?.manifest ?? null);
@@ -79,8 +83,8 @@ export function resolveSelectedFoxholeAsset(path: string): string | undefined {
 export function hasLocalFoxholeSpatialRegion(key: string): boolean { return localSpatialRegions.value.has(key.toLowerCase()); }
 export function foxholeWorldAssetDelivery() {
     void revision.value;
-    if (localDelivery) return { ...localDelivery.world, revision: revision.value };
+    if (localDelivery) return { ...localDelivery.world, revision: revision.value, catalogHash: undefined };
     const library = publishedLibrary;
     if (!library?.worldBaseUrl || !library.worldIndex) return null;
-    return {baseUrl: library.worldBaseUrl, revision: revision.value, loadIndex: () => read(library.worldIndex!)};
+    return {baseUrl: library.worldBaseUrl, revision: revision.value, catalogHash: publishedCatalogHash, loadIndex: () => read(library.worldIndex!)};
 }

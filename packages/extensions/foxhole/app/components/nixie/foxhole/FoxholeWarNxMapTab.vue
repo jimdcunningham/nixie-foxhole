@@ -460,7 +460,10 @@ async function exportFullMap(event: Event): Promise<void> {
         if (unavailable.length) throw new Error('Full map materials are unavailable for: ' + unavailable.map(region => region.name).join(', '));
         const { exportFoxholeFullMap } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
         fullMapResult.value = await exportFoxholeFullMap(reference, regions,
-            (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal, message => { fullMapProgress.value = message; });
+            (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal,
+            message => { fullMapProgress.value = message; },
+            key => foxholeWorldAssetDelivery()?.revision === delivery.revision ? bake.cacheInputs?.(key) : undefined,
+            JSON.stringify([delivery.baseUrl, delivery.catalogHash, index]));
     } catch (error) {
         if (!controller.signal.aborted) showNxToast({
             title: 'Full Map Export Failed',

@@ -6,6 +6,26 @@ import type { RegionBakeLoadProfile } from './region-bake.ts';
 const width = 2048;
 const height = 1776;
 const payloadSize = width * height;
+// Bump when the bake renderer, mask, or BC7 output changes.
+const recoveryCacheName = 'nixie.foxhole.full-map-bake.v1';
+
+async function hashInputs(inputs: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputs));
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function readRecoveredTile(cache: Cache, key: string, signature: string) {
+    try {
+        const response = await cache.match(key);
+        if (response?.headers.get('x-bake-signature') !== signature) return null;
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const pngSize = bytes.length - payloadSize;
+        if (pngSize <= 8 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71) return null;
+        return { png: bytes.subarray(0, pngSize), bc7: bytes.subarray(pngSize) };
+    } catch {
+        return null;
+    }
+}
 
 function readTemplates(buffer: ArrayBuffer) {
     const importer = new PakImporter(buffer);
@@ -31,6 +51,8 @@ export async function exportFoxholeFullMap(
     bake: (key: string, onStage: (stage: string) => void) => Promise<{ png: Blob; loadProfile?: RegionBakeLoadProfile }>,
     signal: AbortSignal,
     onProgress: (message: string) => void,
+    cacheInputs: (key: string) => string | undefined,
+    catalogInputs: string,
 ) {
     if (!regions.length) throw new Error('The world has no map regions.');
     const started = performance.now();
@@ -43,6 +65,8 @@ export async function exportFoxholeFullMap(
     canvas.height = height;
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not read the baked map pixels.');
+    const cache = typeof caches === 'undefined' ? null : await caches.open(recoveryCacheName).catch(() => null);
+    const catalogSignature = cache ? await hashInputs(catalogInputs) : '';
     const entries = [];
     const pngs: Record<string, Uint8Array<ArrayBuffer>> = {};
     const setupMs = Math.round(performance.now() - started);
@@ -51,6 +75,20 @@ export async function exportFoxholeFullMap(
         signal.throwIfAborted();
         const label = `${index + 1}/${regions.length} · ${region.name}`;
         const regionStarted = performance.now();
+        const template = templates.get(region.textureKey.toLowerCase())!;
+        const inputs = cache ? cacheInputs(region.key) : undefined;
+        const signature = inputs ? await hashInputs(JSON.stringify([catalogSignature, inputs])) : undefined;
+        const cacheKey = new URL('/__nixie/foxhole/full-map-bake/' + encodeURIComponent(region.key), location.href).href;
+        const recovered = cache && signature ? await readRecoveredTile(cache, cacheKey, signature) : null;
+        signal.throwIfAborted();
+        if (recovered && cacheInputs(region.key) === inputs) {
+            onProgress(label + ' · Reusing saved bake');
+            template.data.set(recovered.bc7, template.offset);
+            entries.push(template);
+            pngs[region.textureKey + '.png'] = recovered.png;
+            timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), recovered: true });
+            continue;
+        }
         let phaseStarted = regionStarted;
         let phase = 'load';
         const stagesMs: Record<string, number> = {};
@@ -77,10 +115,22 @@ export async function exportFoxholeFullMap(
         } finally {
             bitmap.close();
         }
-        const template = templates.get(region.textureKey.toLowerCase())!;
-        template.data.set(encodeBc7(context.getImageData(0, 0, width, height).data), template.offset);
+        const pixels = context.getImageData(0, 0, width, height).data;
+        if (!pixels.some((value, index) => index % 4 === 3 && value !== 0)) {
+            throw new Error('Empty region bake for ' + region.name);
+        }
+        const bc7 = encodeBc7(pixels);
+        if (bc7.byteLength !== payloadSize) throw new Error('Unexpected BC7 size for ' + region.name);
+        template.data.set(bc7, template.offset);
         entries.push(template);
-        pngs[region.textureKey + '.png'] = new Uint8Array(await png.arrayBuffer());
+        const pngBytes = new Uint8Array(await png.arrayBuffer());
+        pngs[region.textureKey + '.png'] = pngBytes;
+        if (cache && signature && cacheInputs(region.key) === inputs) {
+            enterPhase('save');
+            await cache.put(cacheKey, new Response(new Blob([png, Uint8Array.from(bc7)]), {
+                headers: { 'x-bake-signature': signature },
+            })).catch(error => console.warn('[foxhole:map-bake] Could not save recovery tile:', error));
+        }
         enterPhase('done');
         timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), stagesMs, loadProfile });
         await new Promise<void>(resolve => setTimeout(resolve, 0));
