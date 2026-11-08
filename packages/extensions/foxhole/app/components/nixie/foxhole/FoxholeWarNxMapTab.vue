@@ -952,14 +952,14 @@ const mapModVisibilityDisabled = computed(() => (
                         :label="modProgress.title"
                     />
                     <div class="foxhole-war-nx-map-tab__mod-progress-footer">
-                        <NxButton
+                        <button
+                            type="button"
                             class="foxhole-war-nx-map-tab__mod-progress-cancel"
-                            label="Cancel"
                             :aria-label="isPakImportActive ? 'Cancel Map Mod Import' : 'Cancel Full Map Export'"
-                            variant="danger"
-                            size="sm"
                             @click="isPakImportActive ? mapModStore.requestCancelImport() : fullMapController?.abort()"
-                        />
+                        >
+                            Cancel
+                        </button>
                         <span v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-stats">
                             {{ modProgress.processed }}/{{ modProgress.total }} ({{ modProgress.percent }}%)
                         </span>
@@ -975,9 +975,10 @@ const mapModVisibilityDisabled = computed(() => (
                         @click="fullMapReferenceInput?.click()"
                     />
                     <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
-                        <p role="status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
+                        <NxDivider />
                         <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
+                        <p role="status" class="text-muted text-sm text-center">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                     </div>
                     <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
                 </template>
@@ -1144,7 +1145,16 @@ const mapModVisibilityDisabled = computed(() => (
 }
 
 .foxhole-war-nx-map-tab__mod-progress-cancel {
-    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--nx-danger-text);
+    font-size: var(--nx-text-xs);
+    cursor: pointer;
+}
+
+.foxhole-war-nx-map-tab__mod-progress-cancel:hover {
+    text-decoration: underline;
 }
 
 .foxhole-war-nx-map-tab__mod-progress-stats {
