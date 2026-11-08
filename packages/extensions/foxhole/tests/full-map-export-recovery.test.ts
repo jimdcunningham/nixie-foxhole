@@ -25,14 +25,8 @@ test('full map export recovers only completed tiles with matching inputs', async
         }) }) },
         createImageBitmap: async () => ({ width: 2048, height: 1776, close() {} }),
         encodeBc7: () => { encoded++; return new Uint8Array(2048 * 1776); },
-        PakImporter: class {
-            exportHexMaps() {
-                return ['a', 'b'].map(assetPath => ({ assetPath, raw: { uasset: new ArrayBuffer(2048 * 1776 + 28) } }));
-            }
-            extractGeneratorBc7PayloadMeta() {
-                return { width: 2048, height: 1776, payloadSize: 2048 * 1776, start: 0, footerLen: 28, formatCandidates: ['bc7'] };
-            }
-        },
+        atob,
+        textureTemplates: { a: btoa('a'.repeat(40)), b: btoa('b'.repeat(40)) },
         buildMapPak: async () => new Blob(),
         zipSync: () => new Uint8Array(),
         strToU8: (value: string) => new TextEncoder().encode(value),
@@ -41,7 +35,7 @@ test('full map export recovers only completed tiles with matching inputs', async
     const png = new Blob([Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10, 1)]);
     const baked: string[] = [];
     const run = (bake: (key: string) => Promise<{ png: Blob }>, signature = 'same settings') =>
-        exportMap(new Blob(), regions, bake, new AbortController().signal, () => {}, () => signature, 'same catalog');
+        exportMap(regions, bake, new AbortController().signal, () => {}, () => signature, 'same catalog');
     const bake = async (key: string) => { baked.push(key); return { png }; };
     await assert.rejects(run(async key => {
         if (key === 'b') throw new Error('interrupted');

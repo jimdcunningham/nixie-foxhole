@@ -432,7 +432,6 @@ async function confirmReplaceMapMod(): Promise<boolean> {
 }
 
 const regionBakePending = ref(false);
-const fullMapReferenceInput = ref<HTMLInputElement | null>(null);
 const fullMapProgress = ref<{ message: string; processed: number; total: number; region?: string } | null>(null);
 const modProgress = computed(() => {
     if (isPakImportActive.value) {
@@ -457,12 +456,9 @@ const modProgress = computed(() => {
 const fullMapResult = shallowRef<{ pak: Blob; archive: Blob; elapsedMs: number } | null>(null);
 let fullMapController: AbortController | null = null;
 
-async function exportFullMap(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const reference = input.files?.[0];
-    input.value = '';
+async function exportFullMap(): Promise<void> {
     const bake = regionBakeAction.value;
-    if (!reference || !bake || regionBakePending.value) return;
+    if (!bake || regionBakePending.value || isPakImportActive.value) return;
     const controller = new AbortController();
     fullMapController = controller;
     regionBakePending.value = true;
@@ -480,7 +476,7 @@ async function exportFullMap(event: Event): Promise<void> {
         });
         if (unavailable.length) throw new Error('Full map materials are unavailable for: ' + unavailable.map(region => region.name).join(', '));
         const { exportFoxholeFullMap } = await import('#foxhole/plugins/foxhole/nixie/map/full-map-export.ts');
-        fullMapResult.value = await exportFoxholeFullMap(reference, regions,
+        fullMapResult.value = await exportFoxholeFullMap(regions,
             (key, onStage) => bake(1, true, key, controller.signal, onStage), controller.signal,
             (message, processed, total, region) => { fullMapProgress.value = { message, processed, total, region }; },
             key => foxholeWorldAssetDelivery()?.revision === delivery.revision ? bake.cacheInputs?.(key) : undefined,
@@ -972,7 +968,7 @@ const mapModVisibilityDisabled = computed(() => (
                         size="sm"
                         label="Export Full Map Mod"
                         :disabled="regionBakePending"
-                        @click="fullMapReferenceInput?.click()"
+                        @click="exportFullMap"
                     />
                     <div v-if="fullMapResult" class="foxhole-war-nx-map-tab__mod-panel">
                         <NxDivider />
@@ -980,7 +976,6 @@ const mapModVisibilityDisabled = computed(() => (
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
                         <p role="status" class="text-muted text-sm text-center">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                     </div>
-                    <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
                 </template>
                 <input
                     ref="mapModFileInput"

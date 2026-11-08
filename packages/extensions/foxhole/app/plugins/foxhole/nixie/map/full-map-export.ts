@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from 'fflate';
 import { buildMapPak, encodeBc7 } from './deadlands-pak-export.mjs';
-import { PakImporter } from './mod-pak.js';
+import textureTemplates from './full-map-texture-templates.json';
 import type { RegionBakeLoadProfile } from './region-bake.ts';
 
 const width = 2048;
@@ -27,26 +27,23 @@ async function readRecoveredTile(cache: Cache, key: string, signature: string) {
     }
 }
 
-function readTemplates(buffer: ArrayBuffer) {
-    const importer = new PakImporter(buffer);
-    const templates = new Map<string, { path: string; data: Uint8Array<ArrayBuffer>; offset: number }>();
-    for (const map of importer.exportHexMaps({ skipDecode: true })) {
-        const { uasset, uexp, ubulk } = map.raw;
-        if (!uasset || uexp || ubulk) continue;
-        const info = importer.extractGeneratorBc7PayloadMeta({ files: map.raw });
-        if (!info || info.width !== width || info.height !== height || info.payloadSize !== payloadSize
-            || !info.formatCandidates.includes('bc7') || info.footerLen !== 28
-            || info.start + payloadSize + 28 !== uasset.byteLength) continue;
-        const key = map.assetPath.split('/').at(-1)?.toLowerCase();
-        if (!key) continue;
-        if (templates.has(key)) throw new Error('Duplicate map texture template: ' + map.assetPath);
-        templates.set(key, { path: map.assetPath + '.uasset', data: new Uint8Array(uasset), offset: info.start });
-    }
-    return templates;
+const templateFooterSize = 28;
+// Cooked 2K texture headers and footers from the verified Nixie full map export.
+// The bundled metadata contains no BC7 payloads.
+const templates = new Map(Object.entries(textureTemplates).map(([key, metadata]) =>
+    [key.toLowerCase(), { key, metadata }] as const));
+
+function buildTextureEntry(template: { key: string; metadata: string }, bc7: Uint8Array) {
+    const metadata = Uint8Array.from(atob(template.metadata), char => char.charCodeAt(0));
+    const headerSize = metadata.length - templateFooterSize;
+    const data = new Uint8Array(metadata.length + payloadSize);
+    data.set(metadata.subarray(0, headerSize));
+    data.set(bc7, headerSize);
+    data.set(metadata.subarray(headerSize), headerSize + payloadSize);
+    return { path: 'War/Content/Textures/UI/HexMaps/Processed/' + template.key + '.uasset', data };
 }
 
 export async function exportFoxholeFullMap(
-    reference: File,
     regions: readonly { key: string; textureKey: string; name: string }[],
     bake: (key: string, onStage: (stage: string) => void) => Promise<{ png: Blob; loadProfile?: RegionBakeLoadProfile }>,
     signal: AbortSignal,
@@ -56,9 +53,8 @@ export async function exportFoxholeFullMap(
 ) {
     if (!regions.length) throw new Error('The world has no map regions.');
     const started = performance.now();
-    const templates = readTemplates(await reference.arrayBuffer());
     const missing = regions.filter(region => !templates.has(region.textureKey.toLowerCase()));
-    if (missing.length) throw new Error('The reference Pak is missing 2K textures for: ' + missing.map(region => region.name).join(', '));
+    if (missing.length) throw new Error('Missing bundled 2K texture templates for: ' + missing.map(region => region.name).join(', '));
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -82,8 +78,7 @@ export async function exportFoxholeFullMap(
         signal.throwIfAborted();
         if (recovered && cacheInputs(region.key) === inputs) {
             onProgress('Reusing saved bake', index + 1, regions.length, region.name);
-            template.data.set(recovered.bc7, template.offset);
-            entries.push(template);
+            entries.push(buildTextureEntry(template, recovered.bc7));
             pngs[region.textureKey + '.png'] = recovered.png;
             timings.push({ region: region.name, textureKey: region.textureKey, totalMs: Math.round(performance.now() - regionStarted), recovered: true });
             continue;
@@ -120,8 +115,7 @@ export async function exportFoxholeFullMap(
         }
         const bc7 = encodeBc7(pixels);
         if (bc7.byteLength !== payloadSize) throw new Error('Unexpected BC7 size for ' + region.name);
-        template.data.set(bc7, template.offset);
-        entries.push(template);
+        entries.push(buildTextureEntry(template, bc7));
         const pngBytes = new Uint8Array(await png.arrayBuffer());
         pngs[region.textureKey + '.png'] = pngBytes;
         if (cache && signature && cacheInputs(region.key) === inputs) {
