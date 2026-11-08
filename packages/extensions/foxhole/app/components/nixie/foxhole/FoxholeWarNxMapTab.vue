@@ -2,7 +2,7 @@
 import { resolveFoxholeAssetUrl } from '#foxhole/plugins/foxhole/nixie/asset-locations.ts';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from '#foxhole/plugins/foxhole/nixie/map/road-tour-state.ts';
 import { foxholeWorldAssetDelivery, hasLocalFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
-import { regionBakeAction, type FoxholeRegionBakeScale } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
+import { regionBakeAction } from '#foxhole/plugins/foxhole/nixie/map/region-bake.ts';
 import { downloadNxBlob } from '#nixie/utils/nx-download.ts';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import NixieSidebarFormSection from '#nixie/components/nixie/NixieSidebarFormSection.vue';
@@ -441,7 +441,7 @@ async function exportFullMap(event: Event): Promise<void> {
     const reference = input.files?.[0];
     input.value = '';
     const bake = regionBakeAction.value;
-    if (!reference || !bake || regionBakePending.value || deadlandsPakExporting.value) return;
+    if (!reference || !bake || regionBakePending.value) return;
     const controller = new AbortController();
     fullMapController = controller;
     regionBakePending.value = true;
@@ -473,12 +473,12 @@ async function exportFullMap(event: Event): Promise<void> {
         regionBakePending.value = false;
     }
 }
-async function downloadRegionBake(scale: FoxholeRegionBakeScale) {
+async function downloadRegionBake(scale: 1 | 2) {
     const bake = regionBakeAction.value;
-    if (!bake || regionBakePending.value || deadlandsPakExporting.value) return;
+    if (!bake || regionBakePending.value) return;
     regionBakePending.value = true;
     try {
-        const { png, filename } = await bake(scale, scale === 0.5);
+        const { png, filename } = await bake(scale);
         downloadNxBlob(png, filename);
     } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -490,50 +490,6 @@ async function downloadRegionBake(scale: FoxholeRegionBakeScale) {
         }
     } finally {
         regionBakePending.value = false;
-    }
-}
-
-const deadlandsPakHeaderInput = ref<HTMLInputElement | null>(null);
-const deadlandsPakExporting = ref(false);
-const canExportDeadlandsPak = computed(() => !!regionBakeAction.value
-    && mapSettings.value.enabled
-    && mapSettings.value.regionKeys.length === 1
-    && mapSettings.value.regionKeys[0] === 'DeadLandsHex');
-
-async function exportDeadlandsPak(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const header = input.files?.[0];
-    input.value = '';
-    const bake = regionBakeAction.value;
-    if (!header || !bake || !canExportDeadlandsPak.value || deadlandsPakExporting.value || regionBakePending.value) return;
-    deadlandsPakExporting.value = true;
-    try {
-        const { png } = await bake(1, true);
-        const bitmap = await createImageBitmap(png);
-        const canvas = document.createElement('canvas');
-        canvas.width = 2048;
-        canvas.height = 1776;
-        const context = canvas.getContext('2d');
-        try {
-            if (!context) throw new Error('Could not render the Deadlands map image.');
-            if (bitmap.width !== canvas.width || bitmap.height !== canvas.height) {
-                throw new Error('Expected a 2048 × 1776 Deadlands bake.');
-            }
-            context.drawImage(bitmap, 0, 0);
-        } finally {
-            bitmap.close();
-        }
-        const { buildDeadlandsPak } = await import('#foxhole/plugins/foxhole/nixie/map/deadlands-pak-export.mjs');
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-        downloadNxBlob(await buildDeadlandsPak(pixels.data, await header.arrayBuffer()), 'War-WindowsNoEditor_NixieDeadlands.pak');
-    } catch (error) {
-        showNxToast({
-            title: 'Deadlands Export Failed',
-            message: error instanceof Error ? error.message : 'Could not export the Deadlands map.',
-            kind: 'error',
-        });
-    } finally {
-        deadlandsPakExporting.value = false;
     }
 }
 
@@ -913,7 +869,7 @@ const mapModVisibilityDisabled = computed(() => (
                     variant="secondary"
                     size="sm"
                     :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
-                    :disabled="regionBakePending || deadlandsPakExporting"
+                    :disabled="regionBakePending"
                     @click="downloadRegionBake(1)"
                 />
                 <NxButton
@@ -921,16 +877,8 @@ const mapModVisibilityDisabled = computed(() => (
                     variant="secondary"
                     size="sm"
                     label="Bake High-Resolution PNG"
-                    :disabled="regionBakePending || deadlandsPakExporting"
+                    :disabled="regionBakePending"
                     @click="downloadRegionBake(2)"
-                />
-                <NxButton
-                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
-                    variant="secondary"
-                    size="sm"
-                    label="Bake 1024 × 888 PNG"
-                    :disabled="regionBakePending || deadlandsPakExporting"
-                    @click="downloadRegionBake(0.5)"
                 />
                 <template v-if="regionBakeAction && mapSettings.enabled">
                     <NxButton
@@ -938,7 +886,7 @@ const mapModVisibilityDisabled = computed(() => (
                         variant="secondary"
                         size="sm"
                         label="Export Full Map Pak + PNGs"
-                        :disabled="regionBakePending || deadlandsPakExporting"
+                        :disabled="regionBakePending"
                         @click="fullMapReferenceInput?.click()"
                     />
                     <template v-else>
@@ -951,17 +899,6 @@ const mapModVisibilityDisabled = computed(() => (
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
                     </div>
                     <input ref="fullMapReferenceInput" type="file" accept=".pak" hidden @change="exportFullMap" />
-                </template>
-                <template v-if="canExportDeadlandsPak">
-                    <NxButton
-                        variant="secondary"
-                        size="sm"
-                        :label="deadlandsPakExporting ? 'Exporting Deadlands Pak…' : 'Export Deadlands Pak'"
-                        :disabled="deadlandsPakExporting || regionBakePending"
-                        @click="deadlandsPakHeaderInput?.click()"
-                    />
-                    <p class="text-muted text-sm">Choose the cooked Deadlands texture header to bake and export the region at 2048 × 1776.</p>
-                    <input ref="deadlandsPakHeaderInput" type="file" hidden @change="exportDeadlandsPak" />
                 </template>
                 <div
                     v-if="!isPakImportActive"
