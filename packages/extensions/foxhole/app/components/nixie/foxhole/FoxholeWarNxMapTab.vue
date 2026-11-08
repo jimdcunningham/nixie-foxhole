@@ -886,6 +886,7 @@ const mapModVisibilityDisabled = computed(() => (
                         variant="secondary"
                         size="sm"
                         label="Export Full Map Pak + PNGs"
+                        preserveLabelCase
                         :disabled="regionBakePending"
                         @click="fullMapReferenceInput?.click()"
                     />
