@@ -951,12 +951,20 @@ const mapModVisibilityDisabled = computed(() => (
                         variant="accent"
                         :label="modProgress.title"
                     />
-                    <div v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-stats">
-                        {{ modProgress.processed }}/{{ modProgress.total }} ({{ modProgress.percent }}%)
+                    <div class="foxhole-war-nx-map-tab__mod-progress-footer">
+                        <NxButton
+                            class="foxhole-war-nx-map-tab__mod-progress-cancel"
+                            label="Cancel"
+                            :aria-label="isPakImportActive ? 'Cancel Map Mod Import' : 'Cancel Full Map Export'"
+                            variant="danger"
+                            size="sm"
+                            @click="isPakImportActive ? mapModStore.requestCancelImport() : fullMapController?.abort()"
+                        />
+                        <span v-if="modProgress.total" class="foxhole-war-nx-map-tab__mod-progress-stats">
+                            {{ modProgress.processed }}/{{ modProgress.total }} ({{ modProgress.percent }}%)
+                        </span>
                     </div>
                 </div>
-
-                <NxButton v-if="fullMapProgress && !isPakImportActive" label="Cancel Full Map Export" variant="danger" size="sm" @click="fullMapController?.abort()" />
 
                 <template v-if="!modProgress && regionBakeAction && mapSettings.enabled">
                     <NxButton
@@ -1128,7 +1136,19 @@ const mapModVisibilityDisabled = computed(() => (
     color: var(--nx-text-muted);
 }
 
+.foxhole-war-nx-map-tab__mod-progress-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--nx-space-2);
+}
+
+.foxhole-war-nx-map-tab__mod-progress-cancel {
+    width: auto;
+}
+
 .foxhole-war-nx-map-tab__mod-progress-stats {
+    margin-inline-start: auto;
     text-align: right;
 }
 
