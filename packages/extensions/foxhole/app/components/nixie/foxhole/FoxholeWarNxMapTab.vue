@@ -888,33 +888,6 @@ const mapModVisibilityDisabled = computed(() => (
         </template>
 
         <NixieSidebarFormSection
-            v-if="showRoadTour && plannerRoadTourStatus.attached"
-            title="Dev Region Tour"
-            sectionKey="foxhole-war-nx.map.region-tour"
-            collapsible
-            :defaultOpen="true"
-        >
-            <div class="foxhole-war-nx-map-tab__road-tour" role="group" aria-label="Dev Region Tour">
-                <NxSelect label="Dev Tour Region" :modelValue="plannerRoadTourOptions.region" :options="roadTourRegions" :disabled="plannerRoadTourStatus.state !== 'idle'" @update:modelValue="setRoadTourOption('region', $event)" />
-                <div class="foxhole-war-nx-map-tab__tour-options">
-                    <NxSelect label="Speed" :modelValue="String(plannerRoadTourOptions.speed)" :options="roadTourSpeeds" @update:modelValue="setRoadTourOption('speed', $event)" />
-                    <NxSelect label="View" :modelValue="plannerRoadTourOptions.view" :options="roadTourViews" @update:modelValue="setRoadTourOption('view', $event)" />
-                </div>
-                <div class="foxhole-war-nx-map-tab__tour-actions">
-                    <NxButton size="sm" :label="plannerRoadTourStatus.state === 'running' ? 'Pause Tour' : plannerRoadTourStatus.state === 'paused' ? 'Resume Tour' : 'Start Tour'" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.start()" />
-                    <NxButton size="sm" variant="secondary" label="Next Road" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.next()" />
-                    <NxButton size="sm" variant="secondary" label="Stop Tour" :disabled="plannerRoadTourStatus.state === 'idle'" @click="plannerRoadTourActions?.stop()" />
-                </div>
-                <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.shaking ? 'Stop Handheld Camera' : 'Handheld Camera'" :aria-pressed="plannerRoadTourStatus.shaking" :disabled="!plannerRoadTourStatus.canShake" @click="plannerRoadTourActions?.toggleCameraShake()" />
-                <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.walking ? 'Stop Walking' : 'Walking Camera'" :aria-pressed="plannerRoadTourStatus.walking" :disabled="!plannerRoadTourStatus.canWalk && !plannerRoadTourStatus.walking" @click="plannerRoadTourActions?.toggleWalkingCamera()" />
-                <NxButton v-if="plannerRoadTourStatus.walking" size="sm" variant="secondary" :label="plannerRoadTourStatus.mouseCaptured ? 'Release Mouse' : 'Capture Mouse'" :aria-pressed="plannerRoadTourStatus.mouseCaptured" @click="plannerRoadTourActions?.toggleMouseLook()" />
-                <NxSwitch label="Walking Bob" :modelValue="plannerRoadTourStatus.walkingBob" @update:modelValue="plannerRoadTourActions?.toggleWalkingBob()" />
-                <p class="text-xs opacity-70">WASD to walk · Shift to move faster · hold right mouse to look · Capture Mouse for continuous look · Esc to release the cursor. Follows terrain and water; buildings do not block movement.</p>
-                <p v-if="plannerRoadTourStatus.error" role="alert" class="text-xs opacity-70">{{ plannerRoadTourStatus.error }}</p>
-            </div>
-        </NixieSidebarFormSection>
-
-        <NixieSidebarFormSection
             title="Custom Map Mod"
             sectionKey="foxhole-war-nx.map.custom-map-mod"
             collapsible
@@ -1085,6 +1058,33 @@ const mapModVisibilityDisabled = computed(() => (
                 preserveLabelCase
                 @option-click="onCategoryIconClick(categoryKey, $event)"
             />
+        </NixieSidebarFormSection>
+
+        <NixieSidebarFormSection
+            v-if="showRoadTour && plannerRoadTourStatus.attached"
+            title="Dev Region Tour"
+            sectionKey="foxhole-war-nx.map.region-tour"
+            collapsible
+            :defaultOpen="true"
+        >
+            <div class="foxhole-war-nx-map-tab__road-tour" role="group" aria-label="Dev Region Tour">
+                <NxSelect label="Dev Tour Region" :modelValue="plannerRoadTourOptions.region" :options="roadTourRegions" :disabled="plannerRoadTourStatus.state !== 'idle'" @update:modelValue="setRoadTourOption('region', $event)" />
+                <div class="foxhole-war-nx-map-tab__tour-options">
+                    <NxSelect label="Speed" :modelValue="String(plannerRoadTourOptions.speed)" :options="roadTourSpeeds" @update:modelValue="setRoadTourOption('speed', $event)" />
+                    <NxSelect label="View" :modelValue="plannerRoadTourOptions.view" :options="roadTourViews" @update:modelValue="setRoadTourOption('view', $event)" />
+                </div>
+                <div class="foxhole-war-nx-map-tab__tour-actions">
+                    <NxButton size="sm" :label="plannerRoadTourStatus.state === 'running' ? 'Pause Tour' : plannerRoadTourStatus.state === 'paused' ? 'Resume Tour' : 'Start Tour'" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.start()" />
+                    <NxButton size="sm" variant="secondary" label="Next Road" :disabled="!plannerRoadTourStatus.canRun || plannerRoadTourStatus.state === 'loading'" @click="plannerRoadTourActions?.next()" />
+                    <NxButton size="sm" variant="secondary" label="Stop Tour" :disabled="plannerRoadTourStatus.state === 'idle'" @click="plannerRoadTourActions?.stop()" />
+                </div>
+                <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.shaking ? 'Stop Handheld Camera' : 'Handheld Camera'" :aria-pressed="plannerRoadTourStatus.shaking" :disabled="!plannerRoadTourStatus.canShake" @click="plannerRoadTourActions?.toggleCameraShake()" />
+                <NxButton size="sm" variant="secondary" :label="plannerRoadTourStatus.walking ? 'Stop Walking' : 'Walking Camera'" :aria-pressed="plannerRoadTourStatus.walking" :disabled="!plannerRoadTourStatus.canWalk && !plannerRoadTourStatus.walking" @click="plannerRoadTourActions?.toggleWalkingCamera()" />
+                <NxButton v-if="plannerRoadTourStatus.walking" size="sm" variant="secondary" :label="plannerRoadTourStatus.mouseCaptured ? 'Release Mouse' : 'Capture Mouse'" :aria-pressed="plannerRoadTourStatus.mouseCaptured" @click="plannerRoadTourActions?.toggleMouseLook()" />
+                <NxSwitch label="Walking Bob" :modelValue="plannerRoadTourStatus.walkingBob" @update:modelValue="plannerRoadTourActions?.toggleWalkingBob()" />
+                <p class="text-xs opacity-70">WASD to walk · Shift to move faster · hold right mouse to look · Capture Mouse for continuous look · Esc to release the cursor. Follows terrain and water; buildings do not block movement.</p>
+                <p v-if="plannerRoadTourStatus.error" role="alert" class="text-xs opacity-70">{{ plannerRoadTourStatus.error }}</p>
+            </div>
         </NixieSidebarFormSection>
     </div>
 </template>
