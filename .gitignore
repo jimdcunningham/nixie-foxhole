@@ -44,3 +44,4 @@ packages/extensions/foxhole/app/assets/legacy-scene-v2/
 packages/extensions/foxhole/app/assets/images/screenshots/
 packages/extensions/foxhole/tools/legacy-plans/position-map-report.json
 packages/extensions/foxhole/tools/legacy-plans/recipe-id-seed-report.json
+full-map-texture-templates.json

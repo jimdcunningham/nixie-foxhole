@@ -489,3 +489,25 @@ Use `assets-prepare`, then `assets-publish` for a local dry run; add `--upload`
 only when the prepared target and release are ready to publish. The Monitor's
 **Asset Publishing** panel exposes the same workflow with encrypted local
 credentials. See [the publication guide](../../docs/asset-publication.md).
+
+### Map Export Texture Templates
+
+Use a local full-map mod Pak containing the inline 2048 × 1776 cooked textures
+for the regions in Studio's `map-data.v1.json`. FoxWatch keeps the texture
+headers and footers and discards the image payloads.
+
+```powershell
+npm run foxwatch -- map-templates-publish --pak-path "C:/path/to/full-map-mod.pak"
+npm run foxwatch -- map-templates-publish --pak-path "C:/path/to/full-map-mod.pak" --upload
+```
+
+The first command prints the hash, byte count, and URL without writing a file.
+The second uses the existing asset publication credentials and writes to
+`map-export/templates/<sha256>.json` under the configured R2 prefix, or verifies
+the stored bytes if the object already exists. Generated JSON stays outside the
+repository. Use `--map-data` to validate against a different map catalog and
+`--config` to select a different publication target.
+
+When a new Pak changes the template hash, use the reported hash and byte count
+to update the pins in `full-map-export.ts` after verifying the new object.
+Existing Studio builds continue to read their pinned immutable object.

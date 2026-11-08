@@ -74,6 +74,7 @@ const workflowCommands = [
     'assets-prepare',
     'catalog-prepare',
     'assets-publish',
+    'map-templates-publish',
     'export-3d',
     'export-world',
     'clear-cache',
@@ -158,6 +159,12 @@ if (steamMonitorCommands.includes(command)) {
         repoRoot,
         runnerScriptPath,
     });
+    process.exit(0);
+}
+
+if (command === 'map-templates-publish') {
+    const {runMapTextureTemplatePublication} = await import('./scripts/map-texture-template-publication.mjs');
+    await runMapTextureTemplatePublication(rawArgs, repoRoot);
     process.exit(0);
 }
 
