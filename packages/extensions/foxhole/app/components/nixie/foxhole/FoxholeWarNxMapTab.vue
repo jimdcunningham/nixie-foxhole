@@ -974,7 +974,7 @@ const mapModVisibilityDisabled = computed(() => (
                         <NxDivider />
                         <NxButton label="Download Map Pak" size="sm" @click="downloadNxBlob(fullMapResult.pak, 'War-WindowsNoEditor_NixieFullMap.pak')" />
                         <NxButton label="Download PNG Archive" size="sm" @click="downloadNxBlob(fullMapResult.archive, 'Nixie-Foxhole-Region-PNGs.zip')" />
-                        <p role="status" class="text-muted text-sm text-center">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
+                        <p role="status" class="text-muted text-sm foxhole-war-nx-map-tab__mod-result-status">Full map bake finished in {{ (fullMapResult.elapsedMs / 60000).toFixed(1) }} min.</p>
                     </div>
                 </template>
                 <input
@@ -1136,6 +1136,10 @@ const mapModVisibilityDisabled = computed(() => (
     color: var(--nx-text-muted);
 }
 
+.foxhole-war-nx-map-tab__mod-result-status {
+    text-align: center;
+}
+
 .foxhole-war-nx-map-tab__mod-progress-footer {
     display: flex;
     align-items: center;
@@ -1147,7 +1151,8 @@ const mapModVisibilityDisabled = computed(() => (
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--nx-danger-text);
+    color: var(--nx-text-muted);
+    font: inherit;
     font-size: var(--nx-text-xs);
     cursor: pointer;
 }
