@@ -240,11 +240,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         const preferences = mapSettings.value;
         const settings = regionKey ? { ...preferences, solidMap: false, terrainSurface: 'native' as const, modelLod: false,
             worldLayers: Object.fromEntries(Object.keys(preferences.worldLayers).map(key => [key, true])) as typeof preferences.worldLayers } : preferences;
-        const region = regionKey
-            ? FOXHOLE_MAP_REGIONS.find(candidate => candidate.key === regionKey)
-            : spatialRegions.value.length === 1 ? spatialRegions.value[0] : null;
-        if (destroyed || bakeController || context.viewMode() === 'flat' || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
-            throw new Error('Select one map region in 2.5D or 3D to bake.');
+        const selectedKey = regionKey ?? (settings.regionKeys.length === 1 ? settings.regionKeys[0] : null);
+        const region = FOXHOLE_MAP_REGIONS.find(candidate => candidate.key === selectedKey
+            && (regionKey || !candidate.standalone || hasLocalFoxholeSpatialRegion(candidate.key)));
+        if (destroyed || bakeController || !settings.enabled || !region || !foxholeWorldAssetDelivery()) {
+            throw new Error('Select one map region with world assets to bake.');
         }
         const controller = new AbortController();
         bakeController = controller;

@@ -438,7 +438,7 @@ async function exportFullMap(event: Event): Promise<void> {
     const reference = input.files?.[0];
     input.value = '';
     const bake = regionBakeAction.value;
-    if (!reference || !bake || !isSpatialView.value || regionBakePending.value || deadlandsPakExporting.value) return;
+    if (!reference || !bake || regionBakePending.value || deadlandsPakExporting.value) return;
     const controller = new AbortController();
     fullMapController = controller;
     regionBakePending.value = true;
@@ -492,8 +492,7 @@ async function downloadRegionBake(scale: FoxholeRegionBakeScale) {
 
 const deadlandsPakHeaderInput = ref<HTMLInputElement | null>(null);
 const deadlandsPakExporting = ref(false);
-const canExportDeadlandsPak = computed(() => isSpatialView.value
-    && !!regionBakeAction.value
+const canExportDeadlandsPak = computed(() => !!regionBakeAction.value
     && mapSettings.value.enabled
     && mapSettings.value.regionKeys.length === 1
     && mapSettings.value.regionKeys[0] === 'DeadLandsHex');
@@ -934,7 +933,7 @@ const mapModVisibilityDisabled = computed(() => (
 
             <div class="nixie-sidebar-form-dense foxhole-war-nx-map-tab__mod-panel">
                 <NxButton
-                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
                     :label="regionBakePending ? 'Baking Region…' : 'Bake Region PNG'"
@@ -942,7 +941,7 @@ const mapModVisibilityDisabled = computed(() => (
                     @click="downloadRegionBake(1)"
                 />
                 <NxButton
-                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
                     label="Bake High-Resolution PNG"
@@ -950,14 +949,14 @@ const mapModVisibilityDisabled = computed(() => (
                     @click="downloadRegionBake(2)"
                 />
                 <NxButton
-                    v-if="isSpatialView && regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
+                    v-if="regionBakeAction && mapSettings.enabled && mapSettings.regionKeys.length === 1 && !standalonePreview"
                     variant="secondary"
                     size="sm"
                     label="Bake 1024 × 888 PNG"
                     :disabled="regionBakePending || deadlandsPakExporting"
                     @click="downloadRegionBake(0.5)"
                 />
-                <template v-if="isSpatialView && regionBakeAction && mapSettings.enabled">
+                <template v-if="regionBakeAction && mapSettings.enabled">
                     <NxButton
                         v-if="!fullMapProgress"
                         variant="secondary"
