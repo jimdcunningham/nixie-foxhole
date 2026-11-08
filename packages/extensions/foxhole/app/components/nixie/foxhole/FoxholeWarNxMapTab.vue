@@ -1093,7 +1093,7 @@ const mapModVisibilityDisabled = computed(() => (
 
 .foxhole-war-nx-map-tab__mod-panel {
     display: grid;
-    gap: var(--nx-space-2);
+    gap: var(--nx-space-1);
     min-width: 0;
     max-width: 100%;
 }
