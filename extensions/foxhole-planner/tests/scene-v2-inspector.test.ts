@@ -264,3 +264,14 @@ test('swatch labels retain the native neutral and named color vocabulary', () =>
         assert.equal(foxholeColorLabel(hex!), name);
     }
 });
+
+test('structures without appearance declare defaults for shared appearance editing', () => {
+    const data = { asset: { catalogId: 'foxhole.structures', assetId: 'engineeringcenter' }, modification: { selections: [] },
+        cargo: { items: [] }, 'production-order': { orders: [] }, 'socket-attachments': { attachments: [] } };
+    const subject = { entityId: 'fixture', revision: 1, components: Object.entries(data).map(([componentId, value]) =>
+        ({ ownerId: manifest.id, componentId, version: 1, definitionAvailable: true, data: value })) };
+    const request = projectNixieInspectorSubjectV1(subject, manifest.id, provider);
+    const result = inspectFoxholeSceneV2Structure(request);
+    validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
+    assert.deepEqual(result.components.find(component => component.componentId === 'appearance')?.initialData, {});
+});

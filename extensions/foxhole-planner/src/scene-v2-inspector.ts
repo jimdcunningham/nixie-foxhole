@@ -419,6 +419,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
         tabs,
     }, components: [...result].flatMap(([componentId, fields]) => {
         if (data(componentId) !== undefined) return [{ componentId, fields }];
+        if (componentId === 'appearance') return [{ componentId, fields, initialData: {} }];
         return componentId === 'maintenance-supply' && supplyDefaults ? [{ componentId, fields, initialData: supplyDefaults }] : [];
     }) };
 }
