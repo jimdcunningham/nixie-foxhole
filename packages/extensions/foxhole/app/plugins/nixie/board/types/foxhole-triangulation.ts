@@ -254,8 +254,10 @@ function drawDashedPolylineStroke(
         if (!dashStart || !dashEnd) {
             continue;
         }
-        drawPolylineStroke(graphics, [dashStart, dashEnd], color, width, alpha);
+        graphics.moveTo(dashStart.x, dashStart.y);
+        graphics.lineTo(dashEnd.x, dashEnd.y);
     }
+    graphics.stroke({ color, width, alpha, pixelLine: false, cap: 'round', join: 'round' });
 }
 
 function drawStrokePath(
@@ -449,13 +451,12 @@ export function renderFoxholeTriangulationTrackingLines(
 }
 
 export class FoxholeTriangulationNode extends BoardNodeBase<FoxholeTriangulationState> implements BoardNodeEditableHandleProvider, BoardNodeLiveTransformOverlayProvider, BoardNodeSelectionBoundsProvider, BoardNodeWorldHitTester {
-    private static readonly ZOOM_SYNC_INTERVAL_MS = 50;
+    private static readonly ZOOM_SYNC_INTERVAL_MS = 150;
 
     readonly graphicsObject: PIXI.Graphics;
     readonly labelLayer: PIXI.Container;
     private renderScale = 1;
     private pendingRenderScale: number | null = null;
-    private lastZoomSyncAt = 0;
     private zoomSyncTimeout: ReturnType<typeof setTimeout> | null = null;
     private readonly zoomSyncTicker = (): void => {
         const nextScale = this.getRenderScale();
@@ -642,7 +643,6 @@ export class FoxholeTriangulationNode extends BoardNodeBase<FoxholeTriangulation
 
     protected override onBoardMounted(): void {
         this.renderScale = this.getRenderScale();
-        this.lastZoomSyncAt = this.getNowMs();
         if (this.boardState.scaleWithZoom) {
             PIXI.Ticker.shared.add(this.zoomSyncTicker);
         }
@@ -674,21 +674,13 @@ export class FoxholeTriangulationNode extends BoardNodeBase<FoxholeTriangulation
             return;
         }
 
-        const now = this.getNowMs();
-        const elapsed = now - this.lastZoomSyncAt;
-        if (elapsed >= FoxholeTriangulationNode.ZOOM_SYNC_INTERVAL_MS) {
-            this.flushPendingZoomSync();
-            return;
-        }
-
-        if (this.zoomSyncTimeout !== null) {
-            return;
-        }
-
+        // Rebuilding dashed geometry on every zoom frame stalls the viewport.
+        // Keep the existing visual during movement and refresh once it settles.
+        this.clearZoomSyncTimeout();
         this.zoomSyncTimeout = setTimeout(() => {
             this.zoomSyncTimeout = null;
             this.flushPendingZoomSync();
-        }, FoxholeTriangulationNode.ZOOM_SYNC_INTERVAL_MS - elapsed);
+        }, FoxholeTriangulationNode.ZOOM_SYNC_INTERVAL_MS);
     }
 
     private flushPendingZoomSync(): void {
@@ -698,7 +690,6 @@ export class FoxholeTriangulationNode extends BoardNodeBase<FoxholeTriangulation
 
         this.renderScale = this.pendingRenderScale;
         this.pendingRenderScale = null;
-        this.lastZoomSyncAt = this.getNowMs();
         this.syncFromState();
     }
 
@@ -711,11 +702,6 @@ export class FoxholeTriangulationNode extends BoardNodeBase<FoxholeTriangulation
         this.zoomSyncTimeout = null;
     }
 
-    private getNowMs(): number {
-        return typeof performance !== 'undefined' && typeof performance.now === 'function'
-            ? performance.now()
-            : Date.now();
-    }
 }
 
 export function getFoxholeTriangulationSelectionLocalBounds(
