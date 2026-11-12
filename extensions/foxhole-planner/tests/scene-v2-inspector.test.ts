@@ -39,10 +39,20 @@ test('all published assets return bounded Inspector choices validated against th
     }
 });
 
-test('modification tiles include the localized catalog description', () => {
-    const lockers = inspect('fortt3').components.find(component => component.componentId === 'modification')
-        ?.fields[0]?.choices?.options.find(option => option.label === 'Lockers');
+test('modification tiles include their category, rendered preview, and material costs', () => {
+    const options = inspect('fortt3').components.find(component => component.componentId === 'modification')
+        ?.fields[0]?.choices?.options ?? [];
+    const lockers = options.find(option => option.label === 'Lockers');
     assert.match(lockers?.description ?? '', /personal storage lockers/i);
+    assert.deepEqual(lockers?.costs?.map(({ label, value }) => ({ label, value })), [{ label: 'Basic Materials', value: 'x50' }]);
+    assert.ok(lockers?.costs?.[0]?.icon);
+    assert.equal(lockers?.category, 'Infrastructure');
+    assert.deepEqual(lockers?.preview, assets.fortt3?.modifications.BackInfraModSlot?.variants.lockers?.browserPreview);
+    assert.ok(lockers?.preview);
+    assert.notDeepEqual(lockers.preview, lockers.image);
+    const sandbags = options.find(option => option.label === 'Sandbags');
+    assert.equal(sandbags?.costs?.[0]?.value, 'x1');
+    assert.equal(sandbags?.category, 'Modifications');
 });
 
 test('firing ports and infrastructure exclude only their own wall in either selection order', () => {

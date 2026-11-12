@@ -12,7 +12,7 @@ import { resolveFoxholeSceneV2HitboxFrame } from './scene-v2-renderers.ts';
 import { FOXHOLE_HITBOX_SETTING_ID, resolveFoxholeDefaultHitboxPolygons } from './scene-v2-hitbox-overlays.ts';
 import { formatFoxholeStockpileLimits, labelFoxholeStockpileGroups } from './stockpile-groups.ts';
 import { usesPipeCurveScale } from './pipe-spline-constraints.ts';
-import { hasFoxholeModificationTypeConflict, hasFoxholeSameWallModificationConflict } from './modification-wall-conflicts.ts';
+import { hasFoxholeModificationTypeConflict, hasFoxholeSameWallModificationConflict, isFoxholeInfrastructureModificationSlot } from './modification-wall-conflicts.ts';
 import { FOXHOLE_TACTICAL_PRESET_FIELDS, FOXHOLE_TACTICAL_PRESET_CHOICES } from './tactical-line-presets.ts';
 
 export const FOXHOLE_INSPECTOR_SYSTEM_ID = 'inspect.structure';
@@ -193,8 +193,17 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
         .map(([variantId, variant]) => {
             const name = label(variant.label ?? variantId);
             const description = variant.description && label(variant.description, 1024);
-            return { label: name, value: { slotId, variantId }, image: variant.browserIcon ?? asset.browserIcon,
-                ...(description ? { description } : {}),
+            const costs = Object.entries(asset.statistics?.modificationCosts[slotId]?.[variantId] ?? {}).map(([code, quantity]) => {
+                const material = itemByCode.get(code.toLowerCase());
+                return { label: label(material?.label ?? code),
+                    value: 'x' + quantity.toLocaleString('en-US', { maximumFractionDigits: 2 }),
+                    ...(material?.browserIcon ? { icon: material.browserIcon } : {}) };
+            });
+            const category = isFoxholeInfrastructureModificationSlot(slot) ? 'Infrastructure'
+                : variant.isUpgrade ? 'Structure Upgrades' : 'Modifications';
+            return { label: name, value: { slotId, variantId }, category,
+                image: variant.browserIcon ?? asset.browserIcon, preview: variant.browserPreview,
+                ...(description ? { description } : {}), ...(costs.length ? { costs } : {}),
                 ...(variant.isUpgrade ? {} : { tileGroup: {
                     id: `${variantId}:${name}`.slice(0, 128),
                     itemLabel: label((slot.name ?? slotId).replace(/(?:mod)?slot$/iu, '')) || 'Upgrade',

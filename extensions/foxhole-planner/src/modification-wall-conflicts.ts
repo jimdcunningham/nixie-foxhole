@@ -9,7 +9,7 @@ export interface FoxholeWallModificationSelection {
     variantId: string;
 }
 
-function isInfrastructure(slot: FoxholeWallModificationSlot): boolean {
+export function isFoxholeInfrastructureModificationSlot(slot: FoxholeWallModificationSlot): boolean {
     return slot.componentType?.trim().toLowerCase() === 'bpfortinframodslot_c';
 }
 
@@ -29,8 +29,8 @@ export function hasFoxholeSameWallModificationConflict(
     if (!wallSockets.size) return false;
     return selections.some(selection => {
         const other = slots[selection.slotId];
-        return other && ((isInfrastructure(slot) && isFiringPort(other, selection.variantId))
-            || (isFiringPort(slot, variantId) && isInfrastructure(other)))
+        return other && ((isFoxholeInfrastructureModificationSlot(slot) && isFiringPort(other, selection.variantId))
+            || (isFiringPort(slot, variantId) && isFoxholeInfrastructureModificationSlot(other)))
             && (other.linkedSocketNames ?? []).some(name => wallSockets.has(name.trim().toLowerCase()));
     });
 }
@@ -47,7 +47,7 @@ export function filterFoxholeSameWallInfrastructureSelections<T extends FoxholeW
     }
     return retained.filter(selection => {
         const slot = slots[selection.slotId];
-        return !slot || !isInfrastructure(slot)
+        return !slot || !isFoxholeInfrastructureModificationSlot(slot)
             || !hasFoxholeSameWallModificationConflict(slot, selection.variantId, slots, selections);
     });
 }
