@@ -1677,6 +1677,12 @@ def ensure_sidecar_material(name: str, material_sidecar_path: str, search_roots:
 
     shader.inputs["Specular IOR Level"].default_value = 0.35
     shader.inputs["Roughness"].default_value = 0.65 if roughness_path is None else shader.inputs["Roughness"].default_value
+    if name in {"BasicWater_LatrineWater", "BasicWater_DirtyPond"}:
+        # Bake the native Water2 instance as tinted, glossy water in the static sprite.
+        body_color = parameters["Colors"]["Body Color"]
+        shader.inputs["Base Color"].default_value = (body_color["R"], body_color["G"], body_color["B"], 1.0)
+        shader.inputs["Roughness"].default_value = 0.1
+        shader.inputs["IOR"].default_value = 1.333
     material.use_backface_culling = not bool(property_overrides.get("TwoSided", False))
     return material
 
