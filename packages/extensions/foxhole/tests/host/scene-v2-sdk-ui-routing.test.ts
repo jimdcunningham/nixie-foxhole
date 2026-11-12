@@ -79,7 +79,12 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
         } } as NixiePrimaryToolbarContext;
     await toolbar.run(toolbarContext);
     assert.equal(values.get(socketId), false);
-    assert.ok(registry.getMenuContributions('overlays.debug').some(entry => entry.item.id === 'nixie.foxhole-planner.overlay.placement-warnings'));
+    const plannerMenu = registry.getMenuItems('overlays').find(item => item.type === 'submenu' && item.label === 'Foxhole Planner');
+    assert.ok(plannerMenu?.type === 'submenu' && plannerMenu.menu);
+    const experimental = registry.getMenuItems(plannerMenu.menu).find(item => item.type === 'submenu' && item.label === 'Experimental');
+    assert.ok(experimental?.type === 'submenu' && experimental.menu);
+    assert.equal(experimental.accessibleInDev, true);
+    assert.ok(registry.getMenuItems(experimental.menu).some(item => item.id === 'nixie.foxhole-planner.overlay.placement-warnings'));
     assert.ok(registry.getAllSettingsPageSections().some(section => section.id === 'foxhole'));
     await registry.getCommand('foxhole.map.toggle')!.run({} as never);
     assert.equal(mapCalls, 1);

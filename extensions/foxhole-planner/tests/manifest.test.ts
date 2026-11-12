@@ -49,7 +49,7 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.equal(placementWarnings?.accessibleInDev, true);
     assert.equal(placementWarnings?.settingsPageSectionId, 'foxhole-debug');
     const placementOverlay = manifest.contributes.menus.find(menu => menu.id === 'nixie.foxhole-planner.overlay.placement-warnings');
-    assert.equal(placementOverlay?.menu, 'overlays.debug');
+    assert.equal(placementOverlay?.menu, 'nixie.foxhole-planner.overlays.experimental');
     assert.equal(placementOverlay?.type, 'toggle-setting');
     assert.equal(placementOverlay?.type === 'toggle-setting' && placementOverlay.settingId, 'nixie.foxhole-planner.debug.placementWarnings');
     assert.ok(manifest.contributes.renderers?.find(renderer => renderer.id === 'foxhole-assets')?.settingIds?.includes('nixie.foxhole-planner.debug.placementWarnings'));
@@ -66,6 +66,29 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.equal(socketAttachments?.schema.properties.attachments?.title, 'Socket Attachments');
     assert.ok(manifest.contributes.products?.some(product => product.id === 'connector.facility-pipe'));
     assert.ok(manifest.contributes.renderers?.some(renderer => renderer.id === 'spline-connector'));
+});
+
+test('Planner overlay menus link to its own Scene V2 renderer settings', async () => {
+    const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(resolve(extensionRoot, 'nixie.extension.json'), 'utf8')));
+    const menus = manifest.contributes.menus;
+    const foxhole = menus.find(row => row.type === 'submenu' && row.menu === 'overlays' && row.label === manifest.name && row.icon === 'nx:hexagon-bars');
+    assert.ok(foxhole);
+    const ranges = menus.find(row => row.type === 'submenu' && row.menu === foxhole.id && row.label === 'Ranges');
+    const experimental = menus.find(row => row.type === 'submenu' && row.menu === foxhole.id && row.label === 'Experimental');
+    assert.equal(experimental?.accessibleInDev, true);
+    assert.ok(menus.every(row => row.menu !== 'overlays.debug'));
+    const volumes = menus.find(row => row.type === 'submenu' && row.menu === experimental?.id && row.label === 'Structure Volumes');
+    assert.ok(ranges && volumes);
+    for (const [menu, setting] of [[foxhole.id, 'foxhole.structure.hideRoofs'], [foxhole.id, 'foxhole.map.enabled'],
+        [ranges.id, 'foxhole.ranges.artillery'], [volumes.id, 'foxhole.debug.structure.volume.seatTrigger']]) {
+        assert.ok(menus.some(row => row.menu === menu && row.type === 'toggle-setting' && row.settingId === setting), setting);
+    }
+    const renderers = [...manifest.contributes.renderers ?? [], ...manifest.contributes.documentRenderers ?? []];
+    for (const row of menus) {
+        if (row.type === 'toggle-setting') {
+            assert.ok(renderers.some(renderer => renderer.settingIds?.includes(row.settingId)), row.settingId);
+        }
+    }
 });
 
 test('connects with the local migration capability', async () => {
