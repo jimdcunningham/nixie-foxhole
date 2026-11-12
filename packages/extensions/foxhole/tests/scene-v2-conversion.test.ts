@@ -22,6 +22,7 @@ test('production opt-outs survive import and conversion only for assets with pro
     const cases = [
         { key: 'motorboat', keepFlag: false },
         { key: 'trencht1', keepFlag: false },
+        { key: 'fortt3', keepFlag: false },
         { key: 'ammunition_factory', keepFlag: true },
         { key: 'bms_foreman_stacker', keepFlag: true },
     ];
@@ -39,11 +40,12 @@ test('production opt-outs survive import and conversion only for assets with pro
         // A previously imported V1 asset may still carry the stale flag.
         const result = convertNixieSceneV1ToV2([{
             ...node,
-            state: { ...node.state, disableProduction: true },
+            state: { ...node.state, disableProduction: true,
+                ...(key === 'fortt3' ? { productionOrders: [{ recipeId: 'stale-order' }] } : {}) },
         }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
         const order = result.content.entities[0]?.components.find(component => component.componentId === 'production-order');
-        assert.ok(order, key);
-        assert.equal(order.data.disabled, keepFlag ? true : undefined, key);
+        assert.equal(Boolean(order), keepFlag, key);
+        assert.equal(order?.data.disabled, keepFlag ? true : undefined, key);
     }
 });
 

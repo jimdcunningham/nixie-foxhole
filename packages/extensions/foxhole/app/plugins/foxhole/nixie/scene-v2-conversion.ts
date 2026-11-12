@@ -1301,11 +1301,14 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
     const cargoLimit = getFoxholeSceneV2CargoSupport(assetId).limit;
     const { assets } = getFoxholeManifest('/foxhole/assets/');
     const structure = assets.find(asset => asset.id === assetId);
-    const parent = state.disableProduction === true && structure?.parentStructureId
+    const parent = structure?.parentStructureId
         ? assets.find(asset => asset.id === structure.parentStructureId)
         : undefined;
-    const disableProduction = state.disableProduction === true
-        && structure != null && canContributeFoxholeProductionStats(structure, parent);
+    const supportsProduction = structure != null && canContributeFoxholeProductionStats(structure, parent);
+    const disableProduction = state.disableProduction === true && supportsProduction;
+    if (!supportsProduction && orders.length) {
+        issues.push(unsupportedStateIssue('Production orders are unsupported for this asset and remain only in legacy source data.'));
+    }
     const stockpileGroups = resolveFoxholeStockpileSelectionGroups(structure?.stockpiles);
     const markedCargo = isFoxholeBuildSiteKey(assetId)
         ? []
@@ -1390,7 +1393,7 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
                 version: 1,
                 data: { attachments: socketAttachments.attachments },
             }]
-            : []), {
+            : []), ...(supportsProduction ? [{
             ownerId: FOXHOLE_SCENE_V2_OWNER_ID,
             componentId: 'production-order',
             version: 1,
@@ -1398,6 +1401,6 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
                 orders,
                 ...(disableProduction ? { disabled: true } : {}),
             },
-        }],
+        }] : [])],
     };
 };

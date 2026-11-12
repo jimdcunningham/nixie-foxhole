@@ -324,7 +324,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
                     { title: 'Outputs', preview: true as const, rows: products },
                 ] } }];
     });
-    result.set('production-order', [{ path: ['orders'], title: 'Production Orders',
+    result.set('production-order', [{ path: ['orders'], title: 'Production Orders', hidden: !asset.supportsProduction,
         maxItems: Math.min(64, resolveFoxholeSdkProductionOrderLimit(String(assetId), asset.production?.maxOrders)),
         choices: { presentation: 'add-dialog', valuePropertyIds: ['recipeId', 'parent'], matchDefaults: { parent: false }, options: recipes,
             collection: { title: 'Add Production Orders', itemLabel: 'Order', pluralLabel: 'Production Orders',
@@ -414,7 +414,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
         actions: [...relationshipActions, ...productionActions.values()],
         summary: inspectorSummary(String(assetId), asset),
         ...(data('appearance') ? { menu: { label: 'Variants', componentId: 'appearance',
-            ...(data('production-order') ? { toggles: [{ componentId: 'production-order', propertyId: 'disabled',
+            ...((asset.supportsProduction || asset.production?.powerDelta) && data('production-order') ? { toggles: [{ componentId: 'production-order', propertyId: 'disabled',
                 label: 'Production Stats', inverted: true, icon: 'ph:chart-bar-horizontal' }] } : {}) } } : splineMenu ? { menu: splineMenu } : {}),
         tabs,
     }, components: [...result].flatMap(([componentId, fields]) => {

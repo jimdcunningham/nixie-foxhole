@@ -60,6 +60,12 @@ test('firing ports and infrastructure exclude only their own wall in either sele
     }
 });
 
+test('stale production data does not give a bunker a production tab', () => {
+    const bunker = inspect('fortt3', { 'production-order': { orders: [{ id: 'stale', recipeId: 'stale' }] } });
+    assert.equal(bunker.layout?.tabs?.some(tab => tab.id === 'production'), false);
+    assert.equal(inspect('facilityfactoryammo').layout?.tabs?.some(tab => tab.id === 'production'), true);
+});
+
 test('cargo retains the Native item selection set and enforces published capacity', () => {
     const stockpile = Object.entries(assets).find(([, asset]) => asset.cargo?.allowsAnyItem && asset.cargo.limit === null)!;
     const field = inspect(stockpile[0]).components.find(component => component.componentId === 'cargo')!.fields[0]!;
