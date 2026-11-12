@@ -1,5 +1,6 @@
 import type { NixieDocumentRenderRequestV1, NixieDocumentRenderResultV1, NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
+import { foxholeSceneV2MapRegions } from './scene-v2-map-metadata.ts';
 
 const CELL = 125 * 32;
 export function renderFoxholePlanningGrid(request: NixieDocumentRenderRequestV1): NixieDocumentRenderResultV1 {
@@ -9,7 +10,7 @@ export function renderFoxholePlanningGrid(request: NixieDocumentRenderRequestV1)
         return { contractVersion: 1, plan: { schemaVersion: 1, root } };
     }
     const keys = String(settings['foxhole.map.regionKeys'] ?? '').split(',').map(value => value.trim()).filter(Boolean);
-    const regions = maps.regions.filter(region => !keys.length || keys.includes(region.key));
+    const regions = foxholeSceneV2MapRegions(maps, keys);
     const viewport = request.viewport.visibleBounds;
     const pointer = request.viewport.pointer ?? { x: viewport ? (viewport.minX + viewport.maxX) / 2 : 0, y: viewport ? (viewport.minY + viewport.maxY) / 2 : 0 };
     const region = [...regions].sort((left, right) => Math.hypot(left.x - pointer.x, left.y - pointer.y) - Math.hypot(right.x - pointer.x, right.y - pointer.y))[0];

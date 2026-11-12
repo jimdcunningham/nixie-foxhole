@@ -13,7 +13,7 @@ interface PublishedMapIcon {
     name?: string; icon?: string; category?: string; color?: string | number; key?: string;
 }
 interface PublishedMapRegion {
-    name?: string; textureKey?: string; showForResistance?: boolean; gridCoord?: { x?: number; y?: number; };
+    name?: string; textureKey?: string; showForResistance?: boolean; standalone?: boolean; gridCoord?: { x?: number; y?: number; };
     static?: { icons?: Array<{ iconType?: string | number; x?: number; y?: number; teamId?: string; flags?: number; }>; };
 }
 export interface PublishedFoxholeMapData {
@@ -73,12 +73,21 @@ export function createFoxholeSceneV2MapMetadata(published: PublishedFoxholeMapDa
         if (!Number.isFinite(gridCoord.x) || !Number.isFinite(gridCoord.y)) {
             throw new Error(`Invalid published Foxhole map coordinates: ${key}`);
         }
+        const standalone = input.standalone === true;
+        const texture = (layer: keyof typeof FOXHOLE_MAP_TEXTURE_DIRECTORIES) =>
+            resource(`foxhole.map.${layer.toLowerCase()}-${textureKey.toLowerCase()}`, `maps/${FOXHOLE_MAP_TEXTURE_DIRECTORIES[layer]}/${textureKey}.webp`);
+        const textures: { terrain: string } & Partial<Record<keyof typeof FOXHOLE_MAP_TEXTURE_DIRECTORIES, string>> = {
+            terrain: texture('terrain'),
+            ...(!standalone ? Object.fromEntries(Object.keys(FOXHOLE_MAP_TEXTURE_DIRECTORIES)
+                .filter(layer => layer !== 'terrain')
+                .map(layer => [layer, texture(layer as keyof typeof FOXHOLE_MAP_TEXTURE_DIRECTORIES)])) : {}),
+        };
         return { key, name: String(input.name ?? key).trim() || key, textureKey, gridCoord,
             showForResistance: input.showForResistance === true,
             x: gridCoord.x * ((FOXHOLE_MAP_REGION_WIDTH / 2048) * (2048 * 0.75)),
             y: gridCoord.y * FOXHOLE_MAP_REGION_HEIGHT + gridCoord.x * (FOXHOLE_MAP_REGION_HEIGHT / 2),
-            textures: Object.fromEntries(Object.entries(FOXHOLE_MAP_TEXTURE_DIRECTORIES).map(([layer, directory]) => [layer,
-                resource(`foxhole.map.${layer.toLowerCase()}-${textureKey.toLowerCase()}`, `maps/${directory}/${textureKey}.webp`)])) as Record<keyof typeof FOXHOLE_MAP_TEXTURE_DIRECTORIES, string>,
+            ...(standalone ? { standalone: true as const } : {}),
+            textures,
             staticIcons: (input.static?.icons ?? []).map(icon => ({ iconType: icon.iconType ?? '', x: Number(icon.x ?? 0), y: Number(icon.y ?? 0),
                 ...(icon.teamId === undefined ? {} : { teamId: icon.teamId }), ...(icon.flags === undefined ? {} : { flags: icon.flags }) })),
             labels: structuredClone(published.warApiFallback?.maps?.[key]?.labels?.items ?? []),
@@ -108,11 +117,15 @@ export function createFoxholeSceneV2MapMetadata(published: PublishedFoxholeMapDa
 
 export type FoxholeSceneV2MapMetadata = ReturnType<typeof createFoxholeSceneV2MapMetadata>['metadata'];
 
+export function foxholeSceneV2MapRegions(metadata: FoxholeSceneV2MapMetadata, regionKeys: readonly string[]) {
+    return metadata.regions.filter(region => regionKeys.length ? regionKeys.includes(region.key) : !region.standalone);
+}
+
 export function foxholeSceneV2MapBounds(metadata: FoxholeSceneV2MapMetadata, regionKeys: readonly string[], background: boolean) {
     if (background) {
         return { minX: -metadata.worldSize.width / 2, minY: -metadata.worldSize.height / 2, maxX: metadata.worldSize.width / 2, maxY: metadata.worldSize.height / 2 };
     }
-    const regions = metadata.regions.filter(region => !regionKeys.length || regionKeys.includes(region.key));
+    const regions = foxholeSceneV2MapRegions(metadata, regionKeys);
     if (!regions.length) {
         return { minX: -metadata.regionWidth / 2, minY: -metadata.regionHeight / 2, maxX: metadata.regionWidth / 2, maxY: metadata.regionHeight / 2 };
     }

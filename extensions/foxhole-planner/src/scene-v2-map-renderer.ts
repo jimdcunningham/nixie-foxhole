@@ -1,6 +1,6 @@
 import type { NixieDocumentRenderRequestV1, NixieDocumentRenderResultV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
 import maps from '#foxhole-scene-v2-maps';
-import { foxholeSceneV2MapBounds, FOXHOLE_MAP_TEXTURE_DIRECTORIES } from './scene-v2-map-metadata.ts';
+import { foxholeSceneV2MapBounds, foxholeSceneV2MapRegions, FOXHOLE_MAP_TEXTURE_DIRECTORIES } from './scene-v2-map-metadata.ts';
 import { renderFoxholePlanningMapIcons } from './scene-v2-map-icons.ts';
 
 export function renderFoxholePlanningMap(request: NixieDocumentRenderRequestV1): NixieDocumentRenderResultV1 {
@@ -11,7 +11,7 @@ export function renderFoxholePlanningMap(request: NixieDocumentRenderRequestV1):
         return { contractVersion: 1, plan: { schemaVersion: 1, root } };
     }
     const regionKeys = String(settings['foxhole.map.regionKeys'] ?? '').split(',').map(value => value.trim()).filter(Boolean);
-    const regions = maps.regions.filter(region => !regionKeys.length || regionKeys.includes(region.key));
+    const regions = foxholeSceneV2MapRegions(maps, regionKeys);
     const bounds = foxholeSceneV2MapBounds(maps, regionKeys, enabled('background', true));
     if (enabled('background', true)) {
         root.children.push({ id: 'world-background', kind: 'sprite', resourceId: enabled('darkBackground', true) ? maps.background.dark : maps.background.light,
@@ -28,12 +28,13 @@ export function renderFoxholePlanningMap(request: NixieDocumentRenderRequestV1):
     for (const region of regions) {
         const base = enabled('base_map') ? 'base' : enabled('colors') ? 'topo' : enabled('base_map_full') ? 'full' : 'terrain';
         const prefix = region.textureKey.toLowerCase();
-        const children: NixieExtensionRenderNodeV1[] = [{ id: `terrain-${prefix}`, kind: 'sprite', resourceId: region.textures[base],
+        const children: NixieExtensionRenderNodeV1[] = [{ id: `terrain-${prefix}`, kind: 'sprite', resourceId: region.textures[base] ?? region.textures.terrain,
             width: maps.regionWidth, height: maps.regionHeight, anchorX: 0.5, anchorY: 0.5 }];
         for (const layer of Object.keys(FOXHOLE_MAP_TEXTURE_DIRECTORIES).slice(4) as Array<keyof typeof FOXHOLE_MAP_TEXTURE_DIRECTORIES>) {
             const setting = ({ roadsTiers: 'roads_tiers', darkRdz: 'dark_rdz', railBridge: 'rail_bridge', underwaterRocks: 'underwater_rocks_stripes' } as Record<string, string>)[layer] ?? layer;
-            if (enabled(setting)) {
-                children.push({ id: `${layer}-${prefix}`, kind: 'sprite', resourceId: region.textures[layer], width: maps.regionWidth, height: maps.regionHeight, anchorX: 0.5, anchorY: 0.5 });
+            const resourceId = region.textures[layer];
+            if (resourceId && enabled(setting)) {
+                children.push({ id: `${layer}-${prefix}`, kind: 'sprite', resourceId, width: maps.regionWidth, height: maps.regionHeight, anchorX: 0.5, anchorY: 0.5 });
             }
         }
         root.children.push({ id: `region-${region.textureKey.toLowerCase()}`, kind: 'group', x: region.x, y: region.y, children });
