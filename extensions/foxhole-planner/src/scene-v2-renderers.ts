@@ -460,15 +460,20 @@ export function renderFoxholeSceneV2Entity(
     entity: NixieComponentEntitySnapshotV1,
     context: NixieEntityRendererContextV1 = { contractVersion: 1, entities: [entity] },
 ): NixieExtensionRenderPlanV1 {
-    const hoverEnabled = context.settings?.['foxhole.structure.hideRoofsOnHover'] === true
-        && context.settings?.['foxhole.structure.hideRoofs'] !== true;
-    const effectiveContext = hoverEnabled ? { ...context, settings: { ...context.settings, 'foxhole.structure.useStaticRender': false } } : context;
-    const plan = renderFoxholeSceneV2EntityPlan(entity, effectiveContext);
     const asset = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'asset' && component.definitionAvailable);
     const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'spline-connector' && component.definitionAvailable);
     const metadata = assetMetadataById[String(asset?.data.assetId ?? spline?.data.foxholeKey ?? '')];
+    const previewInterior = context.settings?.['nixie.scene.inspectorPreview'] === true && metadata
+        && selectedFoxholeSceneV2Modifications(entity, metadata).some(({ slot, variant }) =>
+            !variant.isUpgrade && resolveFoxholeModificationTextureLayer(slot, { id: variant.id ?? '' },
+                { profileType: metadata.profileType }) === 'base');
+    const hoverEnabled = !previewInterior && context.settings?.['foxhole.structure.hideRoofsOnHover'] === true
+        && context.settings?.['foxhole.structure.hideRoofs'] !== true;
+    const effectiveContext = hoverEnabled || previewInterior ? { ...context, settings: { ...context.settings,
+        'foxhole.structure.useStaticRender': false, ...(previewInterior ? { 'foxhole.structure.hideRoofs': true } : {}) } } : context;
+    const plan = renderFoxholeSceneV2EntityPlan(entity, effectiveContext);
     const appearance = readFoxholeSceneV2Appearance(entity);
     if (hoverEnabled && metadata && !metadata.isDestroyed && !metadata.isBreached && !appearance.destroyed && !appearance.packaged) {
         const roofless = renderFoxholeSceneV2EntityPlan(entity, { ...effectiveContext,

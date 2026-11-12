@@ -31,8 +31,8 @@ export function inspectFoxholeSceneV2PlanningPath(request: NixieInspectorRequest
         : [] };
 }
 const OWNER = 'nixie.foxhole-planner';
-function label(value: string): string {
-    return value.replace(/\p{Cc}/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 128);
+function label(value: string, maxLength = 128): string {
+    return value.replace(/\p{Cc}/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, maxLength).trimEnd();
 }
 
 function inspectorSummary(assetId: string, asset: (typeof assets)[string]) {
@@ -192,7 +192,9 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
             && !hasFoxholeModificationTypeConflict(slot, variantId, asset.modifications, wallSelections))
         .map(([variantId, variant]) => {
             const name = label(variant.label ?? variantId);
+            const description = variant.description && label(variant.description, 1024);
             return { label: name, value: { slotId, variantId }, image: variant.browserIcon ?? asset.browserIcon,
+                ...(description ? { description } : {}),
                 ...(variant.isUpgrade ? {} : { tileGroup: {
                     id: `${variantId}:${name}`.slice(0, 128),
                     itemLabel: label((slot.name ?? slotId).replace(/(?:mod)?slot$/iu, '')) || 'Upgrade',

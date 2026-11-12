@@ -47,6 +47,27 @@ test('roof hover fades completely, includes flags, and leaves Hide Roofs authori
     assert.equal(renderFoxholeSceneV2Entity(subject).hover, undefined);
 });
 
+test('an Inspector preview reveals interior bunker modifications in planar and model views', () => {
+    const subject = entity('fortt3');
+    subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,
+        data: { selections: [{ slotId: 'BackInfraModSlot', variantId: 'lockers' }] } });
+    const normal = renderFoxholeSceneV2Entity(subject);
+    const preview = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
+        settings: { 'nixie.scene.inspectorPreview': true, 'foxhole.structure.useStaticRender': true } });
+    const asset = assets.fortt3!;
+    const roofs = Object.entries(asset.renderLayers).filter(([id, layer]) =>
+        isFoxholeRoofRenderLayer({ id, ...layer }, asset.codeName));
+    assert.ok(roofs.length);
+    for (const [id] of roofs) {
+        assert.ok(normal.root.children.some(node => node.id === 'structure-layer-' + id), id);
+        assert.ok(!preview.root.children.some(node => node.id === 'structure-layer-' + id), id);
+        for (const name of asset.model?.structuralProfile?.layers[id] ?? []) {
+            assert.ok(preview.spatial?.hiddenModelNodes?.includes(name), name);
+        }
+    }
+    assert.ok(preview.root.children.some(node => node.id.startsWith('modification-')));
+});
+
 test('connected roof hover follows fort sockets while excluding foundation sockets and unrelated structures', () => {
     const subject = entity('fortt3'), neighbor = entity('observationbunkert3');
     neighbor.entityId = 'neighbor';

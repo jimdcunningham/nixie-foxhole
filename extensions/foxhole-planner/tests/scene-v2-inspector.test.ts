@@ -39,6 +39,12 @@ test('all published assets return bounded Inspector choices validated against th
     }
 });
 
+test('modification tiles include the localized catalog description', () => {
+    const lockers = inspect('fortt3').components.find(component => component.componentId === 'modification')
+        ?.fields[0]?.choices?.options.find(option => option.label === 'Lockers');
+    assert.match(lockers?.description ?? '', /personal storage lockers/i);
+});
+
 test('firing ports and infrastructure exclude only their own wall in either selection order', () => {
     for (const assetId of ['fortt2', 'fortt3', 'fortcornert2', 'fortcornert3']) {
         const asset = assets[assetId]!;
