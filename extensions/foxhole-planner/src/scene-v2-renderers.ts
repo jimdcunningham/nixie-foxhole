@@ -87,6 +87,9 @@ type FoxholeSceneV2SplineConnectorData = Parameters<typeof renderFoxholeSceneV2S
 
 export const FOXHOLE_SCENE_V2_ENTITY_RENDERER_SYSTEM_ID = 'render.entity';
 
+// These upgrades place their defining geometry under the roof.
+const interiorBunkerUpgrade = /^(?:engineroom|ammoroom|fortflame|fortfirepit|medicalroom|fortartilleryshelter)t[123]$/i;
+
 const assetMetadataById = foxholeSceneV2Assets as Record<string, FoxholeSceneV2AssetMetadata>;
 const itemAssetIdByCodeName = new Map(Object.entries(assetMetadataById).flatMap(([assetId, metadata]) => (
     metadata.codeName ? [[metadata.codeName.toLocaleLowerCase(), assetId] as const] : []
@@ -466,9 +469,11 @@ export function renderFoxholeSceneV2Entity(
         && component.componentId === 'spline-connector' && component.definitionAvailable);
     const metadata = assetMetadataById[String(asset?.data.assetId ?? spline?.data.foxholeKey ?? '')];
     const previewInterior = context.settings?.['nixie.scene.inspectorPreview'] === true && metadata
-        && selectedFoxholeSceneV2Modifications(entity, metadata).some(({ slot, variant }) =>
-            !variant.isUpgrade && resolveFoxholeModificationTextureLayer(slot, { id: variant.id ?? '' },
-                { profileType: metadata.profileType }) === 'base');
+        && (interiorBunkerUpgrade.test(metadata.codeName)
+            || selectedFoxholeSceneV2Modifications(entity, metadata).some(({ slot, variant }) =>
+                !variant.isUpgrade && (variant.id === 'interiorfiringport'
+                    || resolveFoxholeModificationTextureLayer(slot, { id: variant.id ?? '' },
+                        { profileType: metadata.profileType }) === 'base')));
     const hoverEnabled = !previewInterior && context.settings?.['foxhole.structure.hideRoofsOnHover'] === true
         && context.settings?.['foxhole.structure.hideRoofs'] !== true;
     const effectiveContext = hoverEnabled || previewInterior ? { ...context, settings: { ...context.settings,

@@ -68,6 +68,75 @@ test('an Inspector preview reveals interior bunker modifications in planar and m
     assert.ok(preview.root.children.some(node => node.id.startsWith('modification-')));
 });
 
+test('Inspector upgrade previews reveal bunker interiors and retain rooftop equipment', () => {
+    const rooms = { engineroom: 'skeletalmesh', ammoroom: 'ammoroom', fortflame: 'fortflame', fortfirepit: 'firepitmesh',
+        medicalroom: 'medicalroommesh', fortartilleryshelter: 'artilleryshelter' };
+    for (const [room, interiorLayer] of Object.entries(rooms)) {
+        for (const tier of [1, 2, 3]) {
+            const id = room + 't' + tier;
+            const asset = assets[id];
+            if (!asset) continue;
+            const subject = entity(id);
+            const normal = renderFoxholeSceneV2Entity(subject);
+            const preview = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
+                settings: { 'nixie.scene.inspectorPreview': true, 'foxhole.structure.useStaticRender': true } });
+            const roofs = Object.entries(asset.renderLayers).filter(([id, layer]) =>
+                isFoxholeRoofRenderLayer({ id, ...layer }, asset.codeName));
+            assert.ok(roofs.length, id);
+            if (room === 'medicalroom') {
+                assert.ok(roofs.some(([layerId]) => layerId === 'staticmesh'), id + ': ladder must hide with the roof');
+            }
+            for (const [layerId] of roofs) {
+                assert.ok(normal.root.children.some(node => node.id === 'structure-layer-' + layerId), id);
+                assert.ok(!preview.root.children.some(node => node.id === 'structure-layer-' + layerId), id + ': ' + layerId);
+                for (const name of asset.model?.structuralProfile?.layers[layerId] ?? []) {
+                    assert.ok(preview.spatial?.hiddenModelNodes?.includes(name), id + ': ' + name);
+                }
+            }
+            assert.ok(preview.root.children.some(node => node.id === 'structure-layer-' + interiorLayer), id);
+            for (const name of asset.model?.structuralProfile?.layers[interiorLayer] ?? []) {
+                assert.ok(!preview.spatial?.hiddenModelNodes?.includes(name), id + ': ' + name);
+            }
+        }
+    }
+    for (const [id, layer] of [['fortradart3', 'radarmesh'], ['observationbunkert3', 'observationbunkert3'], ['mgait3', 'topmesh'], ['fortrampt3', 'floor']]) {
+        const subject = entity(id!);
+        const preview = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
+            settings: { 'nixie.scene.inspectorPreview': true } });
+        assert.ok(preview.root.children.some(node => node.id === 'structure-layer-roof'), id);
+        assert.ok(preview.root.children.some(node => node.id === 'structure-layer-' + layer), id);
+    }
+});
+
+test('Observation Bunker draws its upper section above the roof in 2D', () => {
+    for (const tier of [1, 2, 3]) {
+        const id = 'observationbunkert' + tier;
+        const subject = entity(id);
+        for (const settings of [undefined, { 'nixie.scene.inspectorPreview': true }]) {
+            const { root } = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject], settings });
+            const roof = root.children.findIndex(node => node.id === 'structure-layer-roof');
+            const top = root.children.findIndex(node => node.id === 'structure-layer-' + id);
+            const flag = root.children.findIndex(node => node.id === 'structure-layer-teamflagmesh');
+            assert.ok(roof >= 0 && top > roof && flag > top, id);
+            assert.ok(root.children[flag]!.laneOrder! >= root.children[top]!.laneOrder!, id);
+            assert.ok(root.children[top]!.laneOrder! >= root.children[roof]!.laneOrder!, id);
+        }
+    }
+});
+
+test('the Interior Firing Port preview hides the bunker roof', () => {
+    const subject = entity('fortt3');
+    subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,
+        data: { selections: [{ slotId: 'BackFortInteriorFiringPortModSlot', variantId: 'interiorfiringport' }] } });
+    const normal = renderFoxholeSceneV2Entity(subject);
+    const preview = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject],
+        settings: { 'nixie.scene.inspectorPreview': true } });
+    assert.ok(normal.root.children.some(node => node.id === 'structure-layer-roof'));
+    assert.ok(!preview.root.children.some(node => node.id === 'structure-layer-roof'));
+    assert.ok(preview.root.children.some(node => node.id.startsWith('modification-')));
+    assert.ok(preview.spatial?.hiddenModelNodes?.includes('structure-layer-roof'));
+});
+
 test('connected roof hover follows fort sockets while excluding foundation sockets and unrelated structures', () => {
     const subject = entity('fortt3'), neighbor = entity('observationbunkert3');
     neighbor.entityId = 'neighbor';

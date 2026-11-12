@@ -4160,7 +4160,7 @@ public sealed class FoxWatchRenderSceneGenerator
                 continue;
             }
 
-            var includeMesh = includeFullSubtree && ShouldIncludeFortRoofLayerMesh(structure, layerId, node.Name, node.MeshId);
+            var includeMesh = includeFullSubtree && ShouldIncludeStructureLayerMesh(structure, layerId, node.Name, node.MeshId);
             filteredNodes.Add(new FoxWatchRenderSceneNode
             {
                 Id = node.Id,
@@ -4247,13 +4247,21 @@ public sealed class FoxWatchRenderSceneGenerator
             || normalizedNodeName.StartsWith("OutputDecal", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ShouldIncludeFortRoofLayerMesh(
+    private static bool ShouldIncludeStructureLayerMesh(
         FoxWatchManifestStructure structure,
         string layerId,
         string? nodeName,
         string? meshId)
     {
         if (string.IsNullOrWhiteSpace(meshId))
+        {
+            return false;
+        }
+
+        // Tier 3 attaches its roof blanket to the interior mesh. The blanket has its own render layer.
+        if (string.Equals(structure.Id, "medicalroomt3", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(layerId, "medicalroommesh", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(meshId, "mesh-medicalroomt3roof", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

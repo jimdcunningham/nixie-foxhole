@@ -323,7 +323,7 @@ export function isFoxholeRoofRenderLayer(
 
     return layerId === 'roof'
         || (structureId.startsWith('artilleryai') && layerId === 'mesh')
-        || (structureId.startsWith('medicalroom') && layerId === 'blanket')
+        || (structureId.startsWith('medicalroom') && (layerId === 'blanket' || layerId === 'staticmesh'))
         || (additionalRoofLayerIdsByStructure[structureId]?.includes(layerId) ?? false)
         || (layer.componentTags ?? []).some(tag => normalizeSocketTag(tag) === 'roof');
 }
@@ -388,6 +388,7 @@ export function isFoxholeTopRenderLayer(
     structureCodeName?: string | null,
 ): boolean {
     return (layer.componentTags ?? []).some(tag => normalizeSocketTag(tag) === 'top')
+        || (/^observationbunkert[123]$/.test(normalizeSocketTag(structureCodeName)) && normalizeSocketTag(layer.id) === 'teamflagmesh')
         || (
             normalizeSocketTag(structureCodeName).startsWith('atgunai')
             && normalizeSocketTag(layer.id) === 'skelmesh'
@@ -408,7 +409,14 @@ export function orderFoxholeStructureRenderLayers<T extends Pick<FoxholeStructur
     layers: readonly T[],
     structureCodeName?: string | null,
 ): readonly T[] {
-    if (!/^fortradart[123]$/.test(normalizeSocketTag(structureCodeName))) {
+    const structureId = normalizeSocketTag(structureCodeName);
+    if (/^observationbunkert[123]$/.test(structureId)) {
+        // The observation post and its flag sit above the concrete roof.
+        return [...layers.filter(layer => ![structureId, 'teamflagmesh'].includes(normalizeSocketTag(layer.id))),
+            ...layers.filter(layer => normalizeSocketTag(layer.id) === structureId),
+            ...layers.filter(layer => normalizeSocketTag(layer.id) === 'teamflagmesh')];
+    }
+    if (!/^fortradart[123]$/.test(structureId)) {
         return layers;
     }
     // The intact radar assembly sits above the opaque concrete roof. Both
