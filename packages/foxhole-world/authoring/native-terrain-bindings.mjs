@@ -1,5 +1,6 @@
 import {BindGroup} from 'pixi.js';
-import {globalBitGpu,cameraBit} from '@pixi/3d';
+import {cameraBit} from '@pixi/3d';
+import {globalBitGpu} from './pixi3d-backend-shaders.mjs';
 
 // Landscape passes shade native vertices directly. They do not read the mesh
 // stores or opaque-frame copies that ordinary model materials need. Keeping

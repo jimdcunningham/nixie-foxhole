@@ -5,7 +5,8 @@ import {terrainTextureTier} from '../runtime/terrain-texture-quality.mjs';
 import {compileNativeTerrainShader,nativeTerrainGlobalGroup} from './native-terrain-bindings.mjs';
 import {framedMaterialBits,framedTerrainTemplate} from '../runtime/spatial-frame.mjs';
 import {BufferImageSource,UniformGroup,BindGroup,State,CubeTexture} from 'pixi.js';
-import {Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,envSourceDefaultBit,shadowBitsGpu,shadowBitsGl,acesToneMappingBit} from '@pixi/3d';
+import {Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,envSourceDefaultBit,acesToneMappingBit} from '@pixi/3d';
+import {shadowBitsGpu,shadowBitsGl} from './pixi3d-backend-shaders.mjs';
 import {liveTerrainBit,liveTerrainTemplate} from './live-terrain-shader.mjs';
 
 class NativeTerrainDraw extends RenderPass {

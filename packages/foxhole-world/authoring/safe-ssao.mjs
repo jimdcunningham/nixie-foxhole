@@ -44,7 +44,7 @@ function protectFullscreenPass(pass){
   // Fullscreen shaders don't read them, but WebGPU still validates all bound
   // resources. Retiring a region destroys those buffers before its next draw.
   if(!('gl' in session.renderer)){session.globalBindGroup.setResource(EMPTY_BUFFER_RESOURCE,10);session.globalBindGroup.setResource(EMPTY_BUFFER_RESOURCE,11);}
-  try{return render.call(this,session);}finally{session.globalBindGroup.setResource(DEPTH_VIEW_PLACEHOLDER,this.pipe.globalSlots.opaqueDepth);}
+  try{return render.call(this,session);}finally{const binding=session.view3d._graph.globalTextureBindings?.opaqueDepth;if(binding)binding.group.setResource(DEPTH_VIEW_PLACEHOLDER,binding.slot);else session.globalBindGroup.setResource(DEPTH_VIEW_PLACEHOLDER,this.pipe.globalSlots.opaqueDepth);}
  };
 }
 export class SceneColorFinishEffect extends PostEffect {

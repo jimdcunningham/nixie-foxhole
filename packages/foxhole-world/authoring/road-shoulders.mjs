@@ -5,7 +5,8 @@ import {terrainExcavationBit} from './terrain-excavation-mask.mjs';
 import {shoulderChunk} from './road-shoulder-geometry.mjs';
 import {framedMaterialBits,framedTerrainTemplate} from '../runtime/spatial-frame.mjs';
 import {BufferImageSource,UniformGroup,BindGroup,State,CubeTexture} from 'pixi.js';
-import {Geometry3D,Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,envSourceDefaultBit,shadowBitsGpu,shadowBitsGl,acesToneMappingBit} from '@pixi/3d';
+import {Geometry3D,Pass3D,RenderPass,getCameraData,pbrLightingBit,iblBit,envSourceCubeBit,envSourceHemisphereBit,envSourceDefaultBit,acesToneMappingBit} from '@pixi/3d';
+import {shadowBitsGpu,shadowBitsGl} from './pixi3d-backend-shaders.mjs';
 import {liveTerrainBit,liveTerrainTemplate} from './live-terrain-shader.mjs';
 
 const maskGL=`
