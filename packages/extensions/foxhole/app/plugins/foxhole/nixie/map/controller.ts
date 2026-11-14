@@ -22,7 +22,7 @@ import { mergeFoxholeMapServerEntry } from './memory-storage.mjs';
 import type { FoxholeMapContext } from './context.ts';
 import { FoxholeMapRenderer } from './renderer.ts';
 import { FoxholeMapTexturePool } from './texture-leases.ts';
-import { FoxholeRealtimeSocket } from './live-socket.ts';
+import { getFoxholeRealtimeSocket } from './live-socket.ts';
 import { resolveFoxholeRealtimeSocketEndpoint } from './realtime-origin.ts';
 import type { NixieViewportPluginContext } from '#nixie/plugins/nixie/registry/types.ts';
 import {
@@ -194,7 +194,7 @@ export class FoxholeMapViewportPlugin extends Plugin {
     private cacheLoadPromise: Promise<void> | null = null;
     private cachedMaps: Record<string, FoxholeMapCacheEntry> = {};
     private warData: FoxholeMapWarCacheEntry | null = null;
-    private apiSocket: FoxholeRealtimeSocket<ReturnType<FoxholeMapViewportPlugin['createClientRequest']>, FoxholeMapServerUpdate> | null = null;
+    private apiSocket: ReturnType<ReturnType<typeof getFoxholeRealtimeSocket>['subscribeMaps']> | null = null;
     private lastRequestSignature = '';
     private forceFullLiveRefreshOnNextPacket = false;
     private liveDataRevision = 0;
@@ -721,24 +721,17 @@ export class FoxholeMapViewportPlugin extends Plugin {
         const request = this.createClientRequest();
         const signature = JSON.stringify(request);
         if (!this.apiSocket) {
-            this.apiSocket = new FoxholeRealtimeSocket({
-                endpoint: this.getSocketEndpoint(),
-                onUpdate: data => {
-                    void this.handleServerUpdate(data);
-                },
-                onOpen: () => {
-                    // Keep cached live data visible until a fresh packet arrives.
-                    // Clearing here causes a visible reset during service startup.
-                    this.forceFullLiveRefreshOnNextPacket = true;
-                },
-            });
-            this.apiSocket.connect();
+            const socket = getFoxholeRealtimeSocket(this.getSocketEndpoint());
+            this.apiSocket = socket.subscribeMaps<FoxholeMapServerUpdate>(
+                data => { void this.handleServerUpdate(data); },
+                () => { this.forceFullLiveRefreshOnNextPacket = true; },
+            );
             this.apiSocket.sendRequest(request);
             this.lastRequestSignature = signature;
             return;
         }
 
-        if (signature !== this.lastRequestSignature || !this.apiSocket.connected) {
+        if (signature !== this.lastRequestSignature) {
             this.lastRequestSignature = signature;
             this.apiSocket.sendRequest(request);
         }

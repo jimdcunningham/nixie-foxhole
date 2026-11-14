@@ -18,10 +18,14 @@ export default defineWebSocketHandler({
             return;
         }
 
-        await startFoxholeRealtimeService();
         registerFoxholeConnection(peer as { send(data: string): void; });
+        await startFoxholeRealtimeService();
     },
-    message(peer, message) {
+    async message(peer, message) {
+        if (!isFoxholeRealtimeLocalEnabled()) {
+            return;
+        }
+        await startFoxholeRealtimeService();
         handleFoxholeRealtimeMessage(peer as { send(data: string): void; }, message.text());
     },
     close(peer) {

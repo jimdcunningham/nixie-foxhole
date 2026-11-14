@@ -907,13 +907,17 @@ function isUniqueViolationError(error: unknown): boolean {
 async function insertPlaybackEventRows(
     client: SupabaseClient,
     eventRows: Array<Record<string, unknown>>,
+    onEventSaved?: (event: FoxholePlaybackEventRecord) => void,
 ): Promise<void> {
     for (const eventRow of eventRows) {
         const insert = await client
             .from(WAR_EVENTS_TABLE)
-            .insert(eventRow);
+            .insert(eventRow)
+            .select('id,shard_id,war_id,war_number,map_key,event_type,source,observed_at,data')
+            .single<FoxholePlaybackEventRow>();
 
         if (!insert.error) {
+            onEventSaved?.(mapPlaybackEventRowToRecord(insert.data));
             continue;
         }
 
@@ -1067,7 +1071,10 @@ async function saveCheckpoint(
     return normalizeString(insert.data?.id) || null;
 }
 
-export async function captureFoxholePlaybackSnapshot(input: FoxholePlaybackSnapshotInput): Promise<void> {
+export async function captureFoxholePlaybackSnapshot(
+    input: FoxholePlaybackSnapshotInput,
+    onEventSaved?: (event: FoxholePlaybackEventRecord) => void,
+): Promise<void> {
     const shardId = normalizeString(input.shardId);
     if (!shardId) {
         return;
@@ -1147,7 +1154,7 @@ export async function captureFoxholePlaybackSnapshot(input: FoxholePlaybackSnaps
         }
 
         if (eventRows.length) {
-            await insertPlaybackEventRows(client, eventRows);
+            await insertPlaybackEventRows(client, eventRows, onEventSaved);
         }
 
         const nextSequence = lastSequence + 1;

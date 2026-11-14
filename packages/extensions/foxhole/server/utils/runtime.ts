@@ -8,7 +8,7 @@ import {
     captureFoxholePlaybackSnapshot,
 
 } from './playback.ts';
-import type { FoxholePlaybackEventInput } from './playback.ts';
+import type { FoxholePlaybackEventInput, FoxholePlaybackEventRecord } from './playback.ts';
 import {
     buildFactionCasualtySummary,
     getHourlyCasualtyRingCapacity,
@@ -111,6 +111,9 @@ interface FoxholeConnectionState {
     id: string;
     peer: FoxholePeer;
     request?: FoxholeValidatedClientRequest;
+    eventShardId?: string;
+    mapPeers?: Map<string, FoxholePeer>;
+    virtual?: boolean;
 }
 
 interface SerializedFoxholeMapState {
@@ -528,6 +531,21 @@ function broadcastUpdate(runtime: FoxholeRuntimeState, connectionIds: Iterable<s
             type: 'update-maps',
             payload,
         });
+    }
+}
+
+function broadcastPlaybackEvent(event: FoxholePlaybackEventRecord): void {
+    const payload = JSON.stringify({ type: 'playback-event', payload: event });
+    for (const connection of getRuntimeState().connections.values()) {
+        if (connection.eventShardId !== event.shardId) {
+            continue;
+        }
+
+        try {
+            connection.peer.send(payload);
+        } catch (error) {
+            console.warn('[foxhole:realtime] failed to send playback event', error);
+        }
     }
 }
 
@@ -1066,7 +1084,7 @@ async function capturePlaybackSnapshotForShard(
             icons: shard.mapCache.icons,
             changedMaps,
             events,
-        });
+        }, broadcastPlaybackEvent);
     } catch (error) {
         console.error('[foxhole:playback] failed to capture playback snapshot', {
             shardId: shard.id,
@@ -1516,16 +1534,16 @@ export function getFoxholeRealtimeStats(): {
                 },
             },
         ])),
-        totalConnections: runtime.connections.size,
+        totalConnections: [...runtime.connections.values()].filter(connection => !connection.virtual).length,
         uptime: process.uptime(),
     };
 }
 
-export function registerFoxholeConnection(peer: FoxholePeer): string {
+export function registerFoxholeConnection(peer: FoxholePeer, virtual = false): string {
     const runtime = getRuntimeState();
     const connectionId = `foxhole-${runtime.nextConnectionId}`;
     runtime.nextConnectionId += 1;
-    runtime.connections.set(connectionId, { id: connectionId, peer });
+    runtime.connections.set(connectionId, { id: connectionId, peer, virtual });
     runtime.peerIds.set(peer as object, connectionId);
     return connectionId;
 }
@@ -1538,6 +1556,9 @@ export function unregisterFoxholeConnection(peer: FoxholePeer): void {
     }
 
     const connection = runtime.connections.get(connectionId);
+    for (const mapPeer of connection?.mapPeers?.values() ?? []) {
+        unregisterFoxholeConnection(mapPeer);
+    }
     removeConnectionSubscriptions(runtime, connection?.request, connectionId);
     runtime.connections.delete(connectionId);
     runtime.peerIds.delete(peer as object);
@@ -1555,14 +1576,67 @@ export function handleFoxholeRealtimeMessage(peer: FoxholePeer, text: string): v
         return;
     }
 
-    let parsed: { type?: string; payload?: FoxholeRawClientRequest; } | FoxholeRawClientRequest;
+    let parsed: {
+        type?: string;
+        subscriptionId?: string;
+        payload?: FoxholeRawClientRequest;
+    } | FoxholeRawClientRequest;
     try {
-        parsed = JSON.parse(text) as { type?: string; payload?: FoxholeRawClientRequest; } | FoxholeRawClientRequest;
+        parsed = JSON.parse(text);
     } catch {
         sendPeerMessage(peer, {
             type: 'error',
             payload: { message: 'Invalid JSON message.' },
         });
+        return;
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return;
+    }
+
+    if (!connection.virtual && 'type' in parsed && parsed.type === 'subscribe-events') {
+        const shardId = normalizeString(parsed.payload?.shardId);
+        connection.eventShardId = Object.hasOwn(runtime.shards, shardId) ? shardId : undefined;
+        sendPeerMessage(peer, { type: 'events-subscribed', payload: { shardId: connection.eventShardId } });
+        return;
+    }
+
+    if (!connection.virtual && 'subscriptionId' in parsed && 'type' in parsed) {
+        const subscriptionId = normalizeString(parsed.subscriptionId);
+        if (!subscriptionId || subscriptionId.length > 32) {
+            return;
+        }
+
+        const mapPeers = connection.mapPeers ??= new Map<string, FoxholePeer>();
+        let mapPeer = mapPeers.get(subscriptionId);
+        if (parsed.type === 'unsubscribe-maps') {
+            if (mapPeer) {
+                unregisterFoxholeConnection(mapPeer);
+                mapPeers.delete(subscriptionId);
+            }
+            return;
+        }
+
+        if (parsed.type !== 'request-maps' || !parsed.payload) {
+            return;
+        }
+
+        if (!mapPeer) {
+            if (mapPeers.size >= 16) {
+                return;
+            }
+
+            mapPeer = {
+                send(data) {
+                    sendPeerMessage(peer, { ...JSON.parse(data), subscriptionId });
+                },
+            };
+            registerFoxholeConnection(mapPeer, true);
+            mapPeers.set(subscriptionId, mapPeer);
+        }
+
+        handleFoxholeRealtimeMessage(mapPeer, JSON.stringify({ type: 'request-maps', payload: parsed.payload }));
         return;
     }
 

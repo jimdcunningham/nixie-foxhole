@@ -1,4 +1,5 @@
-import type { RealtimeChannel, RealtimePostgresInsertPayload } from '@supabase/supabase-js';
+import { getFoxholeRealtimeSocket } from '#foxhole/plugins/foxhole/nixie/map/live-socket.ts';
+import { resolveFoxholeRealtimeSocketEndpoint } from '#foxhole/plugins/foxhole/nixie/map/realtime-origin.ts';
 import { computed, readonly, ref, watch } from 'vue';
 import { isInitialFoxholeOwnershipEvent } from './foxholeWarObservationBaseline.ts';
 import type { ComputedRef } from 'vue';
@@ -19,20 +20,7 @@ import { formatFoxholePlaybackEventTypeLabel as formatEventTypeLabel } from '#fo
 interface FoxholePlaybackEventServiceBindings {
     mapSettings: ComputedRef<ReturnType<typeof readFoxholeMapSettings>>;
     playbackEnabled: ComputedRef<boolean>;
-    supabase: ReturnType<typeof useSupabaseClient>;
     runtime: NixieRuntimeServiceContext['runtime'];
-}
-
-interface FoxholePlaybackEventRow {
-    id?: string | null;
-    shard_id?: string | null;
-    war_id?: string | null;
-    war_number?: number | null;
-    map_key?: string | null;
-    event_type?: string | null;
-    source?: string | null;
-    observed_at?: string | null;
-    data?: unknown;
 }
 
 interface FoxholeShardOption {
@@ -93,7 +81,7 @@ const LIVE_TOAST_WINDOW_LIMIT = 3;
 const knownShardLabels = new Map<string, string>();
 
 let bindings: FoxholePlaybackEventServiceBindings | null = null;
-let playbackEventsChannel: RealtimeChannel | null = null;
+let stopPlaybackEvents: (() => void) | null = null;
 let shardLabelLoadPromise: Promise<void> | null = null;
 
 function normalizeString(value: unknown): string {
@@ -102,20 +90,6 @@ function normalizeString(value: unknown): string {
 
 function asNumberOrNull(value: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function mapPlaybackEventRow(row: FoxholePlaybackEventRow): FoxholePlaybackEventRecord {
-    return {
-        id: normalizeString(row.id),
-        shardId: normalizeString(row.shard_id),
-        warId: normalizeString(row.war_id) || null,
-        warNumber: asNumberOrNull(row.war_number),
-        mapKey: normalizeString(row.map_key) || null,
-        eventType: normalizeString(row.event_type),
-        source: normalizeString(row.source),
-        observedAt: normalizeString(row.observed_at),
-        data: row.data ?? null,
-    };
 }
 
 function asTownOwnershipEventData(value: unknown): FoxholeTownOwnershipEventData | null {
@@ -438,56 +412,48 @@ export function previewFoxholePlaybackEventToast(event: FoxholePlaybackEventReco
     })();
 }
 
-function appendLivePlaybackEvent(event: FoxholePlaybackEventRecord): void {
+function appendLivePlaybackEvent(event: FoxholePlaybackEventRecord, toast = true): void {
     if (!event.id || knownLiveEventIds.has(event.id) || isInitialFoxholeOwnershipEvent(event)) {
         return;
     }
 
     knownLiveEventIds.add(event.id);
-    sharedLiveEvents.value = [event, ...sharedLiveEvents.value];
+    sharedLiveEvents.value = [event, ...sharedLiveEvents.value]
+        .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt));
     trimSharedLiveEvents();
-    maybeToastPlaybackEvent(event);
+    if (toast) maybeToastPlaybackEvent(event);
 }
 
-function subscribeToPlaybackEvents(): void {
-    if (playbackEventsChannel || !bindings?.playbackEnabled.value || !getSelectedShardId()) {
-        return;
+function syncPlaybackEventSubscription(endpoint: string): void {
+    const previous = stopPlaybackEvents;
+    stopPlaybackEvents = null;
+    const shardId = getSelectedShardId();
+    if (bindings?.playbackEnabled.value && shardId) {
+        let active = true;
+        let catchUpRequest = 0;
+        const unsubscribe = getFoxholeRealtimeSocket(endpoint).subscribeEvents({
+            shardId,
+            onEvent: appendLivePlaybackEvent,
+            onSubscribed() {
+                // Subscribe before reading history, then deduplicate events arriving during the read.
+                const request = ++catchUpRequest;
+                void $fetch<{ items: FoxholePlaybackEventRecord[]; }>('/api/foxhole/playback/events', {
+                    query: { shardId, limit: LIVE_EVENT_WINDOW_LIMIT },
+                }).then(({ items }) => {
+                    if (!active || request !== catchUpRequest) return;
+
+                    for (const event of items.slice().reverse()) {
+                        appendLivePlaybackEvent(event, false);
+                    }
+                }).catch(error => console.warn('[foxhole:realtime] failed to catch up on playback events', error));
+            },
+        });
+        stopPlaybackEvents = () => {
+            active = false;
+            unsubscribe();
+        };
     }
-
-    playbackEventsChannel = bindings.supabase
-        .channel('foxhole-war-history-events-shared')
-        .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'foxhole_war_events',
-        }, payload => {
-            const row = (payload as RealtimePostgresInsertPayload<FoxholePlaybackEventRow>).new;
-            const event = mapPlaybackEventRow(row);
-            if (!event.id || !event.eventType) {
-                return;
-            }
-
-            appendLivePlaybackEvent(event);
-        })
-        .subscribe();
-}
-
-function unsubscribeFromPlaybackEvents(): void {
-    if (!playbackEventsChannel || !bindings) {
-        return;
-    }
-
-    void bindings.supabase.removeChannel(playbackEventsChannel);
-    playbackEventsChannel = null;
-}
-
-function syncPlaybackEventSubscription(): void {
-    if (!bindings?.playbackEnabled.value || !getSelectedShardId()) {
-        unsubscribeFromPlaybackEvents();
-        return;
-    }
-
-    subscribeToPlaybackEvents();
+    previous?.();
 }
 
 export function startFoxholePlaybackEventService(context: NixieRuntimeServiceContext): NixieRuntimeServiceHandle {
@@ -501,16 +467,16 @@ export function startFoxholePlaybackEventService(context: NixieRuntimeServiceCon
     bindFoxholePlaybackEventService({
         mapSettings,
         playbackEnabled,
-        supabase: context.supabase as ReturnType<typeof useSupabaseClient>,
         runtime: context.runtime,
     });
     void ensureShardLabelsLoaded();
 
+    const endpoint = resolveFoxholeRealtimeSocketEndpoint();
     const stopSyncWatch = watch([
         () => playbackEnabled.value,
         () => mapSettings.value.shardId,
     ], () => {
-        syncPlaybackEventSubscription();
+        syncPlaybackEventSubscription(endpoint);
     }, {
         immediate: true,
     });
@@ -518,7 +484,8 @@ export function startFoxholePlaybackEventService(context: NixieRuntimeServiceCon
     return {
         async stop() {
             stopSyncWatch();
-            unsubscribeFromPlaybackEvents();
+            stopPlaybackEvents?.();
+            stopPlaybackEvents = null;
             bindings = null;
             resetFoxholePlaybackEventServiceState();
         },
