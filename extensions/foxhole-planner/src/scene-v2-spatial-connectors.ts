@@ -2,6 +2,7 @@ import { isTrenchConnectorBuildSite } from './trench-connector.ts';
 import { renderSpatialTrench } from './scene-v2-spatial-trench.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
+import { renderFoxholeStraightSpatialSpan } from './scene-v2-straight-spans.ts';
 import type { NixieComponentEntitySnapshotV1, NixieSpatialEndpointBindingsV1,
     NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
@@ -62,7 +63,9 @@ export function renderFoxholeSpatialConnector(entity: NixieComponentEntitySnapsh
                 instances: [{ distance: 0 }], ...(binding ? { endpointBindings: { start: binding } } : {}) };
         }) };
     }
-    if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey)) return renderFoxholeSpatialRepeats(data, asset);
+    if (!['facilitypipe', 'facilitypipeoverhead'].includes(data.foxholeKey)) {
+        return renderFoxholeSpatialRepeats(data, asset) ?? renderFoxholeStraightSpatialSpan(data, asset);
+    }
     if (!asset?.model) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
     if (path.totalLength < 1e-8) return undefined;
