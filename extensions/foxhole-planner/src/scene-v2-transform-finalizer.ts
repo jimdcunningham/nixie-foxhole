@@ -7,10 +7,14 @@ import type {
 } from '@nixiejs/extension-sdk/scene-v2';
 import { clampDraggedSplineEndpoint, selectNixieConnectionTargetV1 } from '@nixiejs/extension-sdk/scene-v2';
 import foxholeSceneV2Assets from '#foxhole-scene-v2-assets';
+import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
+import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { sampleFoxholeSceneV2Connector, foxholeSceneV2ConnectorConstraints, foxholeSceneV2ConnectorEndpoints } from './scene-v2-connector-path.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveFacilityPipeSideSocketsFromPath } from './connector-side-sockets.ts';
+import { isTrenchConnector } from './trench-connector.ts';
+import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { isFoxholePowerSocketConnectionAvailable } from './power-socket-capacity.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { readFoxholeSceneV2CoreTransform, withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
@@ -411,13 +415,32 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
     if (gesture && !role) {
         const tangentRole = gesture.handleId === 'start-rotation' ? 'start' : gesture.handleId === 'end-rotation' ? 'end' : null;
         if (!tangentRole || connector.componentId !== 'spline-connector') return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
+        const attachment = trenchEndRotationTarget(moved, tangentRole, entities);
+        if (attachment && !attachment.connector) {
+            throw new Error('This end is locked to the attached structure.');
+        }
         const point = projection.toLocal(moved, [gesture.worldPoint.x, gesture.worldPoint.y, gesture.worldPoint.z ?? 0]);
         const key = String(connector.data.foxholeKey ?? '').toLowerCase();
         const reversedEnd = tangentRole === 'end' && !(key.includes('pipe') && !key.includes('underground'));
-        const angle = Math.atan2(point[1] - Number(connector.data[tangentRole + 'Y']), point[0] - Number(connector.data[tangentRole + 'X'])) + (reversedEnd ? Math.PI : 0);
+        const peer = attachment?.target;
+        const socket = peer && resolveFoxholeEntityAttachmentSockets(peer, assetMetadata(peer))
+            .find(candidate => normalizeFoxholeBuildSocketName(candidate.name).toLowerCase() === attachment.targetSocket);
+        const origin = socket && peer ? projection.toLocal(moved, projection.toWorld(peer, [socket.x, socket.y, socket.z ?? 0]))
+            : [Number(connector.data[tangentRole + 'X']), Number(connector.data[tangentRole + 'Y'])];
+        const angle = Math.atan2(point[1] - origin[1]!, point[0] - origin[0]!) + (reversedEnd ? Math.PI : 0);
+        const operations: NixieComponentOperationV1[] = [{ op: 'patch', entityId: moved.entityId,
+            componentId: connector.componentId, set: { [tangentRole + 'Rotation']: Math.atan2(Math.sin(angle), Math.cos(angle)) } }];
+        const peerEnd = attachment?.peerEnd;
+        if (peer && peerEnd && attachment.connector?.componentId === 'spline-connector'
+            && isTrenchConnector(String(attachment.connector.data.foxholeKey))) {
+            const peerAngle = angle + (peerEnd === tangentRole ? Math.PI : 0);
+            const origin = projection.toLocal(peer, projection.toWorld(moved, [0, 0, 0]));
+            const direction = projection.toLocal(peer, projection.toWorld(moved, [Math.cos(peerAngle), Math.sin(peerAngle), 0]));
+            operations.push({ op: 'patch', entityId: peer.entityId, componentId: 'spline-connector',
+                set: { [peerEnd + 'Rotation']: Math.atan2(direction[1] - origin[1], direction[0] - origin[0]) } });
+        }
         return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y }, transaction: { contractVersion: 1,
-            transactionId: 'connector-tangent-' + globalThis.crypto.randomUUID(), operations: [{ op: 'patch', entityId: moved.entityId,
-                componentId: connector.componentId, set: { [tangentRole + 'Rotation']: Math.atan2(Math.sin(angle), Math.cos(angle)) } }] } };
+            transactionId: 'connector-tangent-' + globalThis.crypto.randomUUID(), operations } };
     }
     const matrices = worldMatrices(entities, moved.entityId, request.transform);
     const matrix = matrices.get(moved.entityId) ?? localMatrix(moved, request.transform);
@@ -560,6 +583,12 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
         }
         claimed.add(`${best.target.entityId}:${best.target.socket.name}`);
         nextAttachments.get(best.target.entityId)!.push({ localSocketName: best.target.socket.name, targetEntityId: moved.entityId, targetSocketName: endpoint.socket.name });
+    }
+    if (request.interaction === 'placement' && role === 'end' && isTrenchConnector(String(connector.data.foxholeKey))) {
+        const data = { ...connector.data, ...set } as unknown as FoxholeSceneV2SplineConnectorData;
+        const heading = Math.atan2(data.endY - data.startY, data.endX - data.startX);
+        if (!data.startAttachmentNodeId) set.startRotation = heading;
+        if (!data.endAttachmentNodeId || unset.includes('endAttachmentNodeId')) set.endRotation = heading;
     }
     const changed = Object.fromEntries(Object.entries(set).filter(([key, value]) => JSON.stringify(connector.data[key]) !== JSON.stringify(value)));
     const removed = unset.filter(field => field in connector.data);

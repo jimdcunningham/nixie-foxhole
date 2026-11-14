@@ -5,6 +5,8 @@ import type {
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';
+import { isTrenchConnector } from './trench-connector.ts';
+import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 
@@ -223,17 +225,20 @@ export function resolveFoxholeSceneV2SplineAttachments(
     };
     const start = resolve('start');
     const end = resolve('end');
+    const startRotation = trenchEndRotationTarget(entity, 'start', context.entities)?.connector ? data.startRotation : start?.rotation;
+    const endRotation = trenchEndRotationTarget(entity, 'end', context.entities)?.connector ? data.endRotation
+        : end && isTrenchConnector(data.foxholeKey) ? Math.atan2(-Math.sin(end.rotation), -Math.cos(end.rotation)) : end?.rotation;
     const occupancy = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
     return {
         ...data,
         socketAttachments: Array.isArray(occupancy)
             ? Object.fromEntries(occupancy.flatMap(entry =>
-                entry && typeof entry === 'object' && 'socketName' in entry && typeof entry.socketName === 'string'
-                    ? [[entry.socketName, entry]]
+                entry && typeof entry === 'object' && 'localSocketName' in entry && typeof entry.localSocketName === 'string'
+                    ? [[entry.localSocketName, entry]]
                     : []))
             : {},
-        ...(start ? { startX: start.x, startY: start.y, startRotation: start.rotation } : {}),
-        ...(end ? { endX: end.x, endY: end.y, endRotation: end.rotation } : {}),
+        ...(start ? { startX: start.x, startY: start.y, startRotation } : {}),
+        ...(end ? { endX: end.x, endY: end.y, endRotation } : {}),
     };
 }

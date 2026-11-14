@@ -2,11 +2,13 @@ import type { NixieExtensionGraphicsCommandV1, NixieExtensionRenderNodeV1 } from
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
+import { isTrenchConnector } from './trench-connector.ts';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import { FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, foxholeRenderLane } from './render-lanes.ts';
 
 export function allowsFoxholeConnectorGuideRotation(data: FoxholeSceneV2SplineConnectorData, asset?: FoxholeSceneV2AssetMetadata): boolean {
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
+    if (isTrenchConnector(data.foxholeKey)) return true;
     const style = behavior.undergroundPipe ? 'spline' : asset?.connector?.pathStyle;
     if (behavior.mineSpline || behavior.powerline || data.foxholeKey.toLowerCase().includes('cranerail')) {
         return false;
@@ -23,7 +25,8 @@ export function sampleFoxholeConnectorGuide(data: FoxholeSceneV2SplineConnectorD
     return sampleFoxholeSceneV2Connector({ ...data, maxBuffer: behavior.undergroundPipe ? 96 : data.maxBuffer > 0 ? data.maxBuffer : fallback }, asset);
 }
 
-export function renderFoxholeConnectorGuides(data: FoxholeSceneV2SplineConnectorData, asset?: FoxholeSceneV2AssetMetadata): NixieExtensionRenderNodeV1[] {
+export function renderFoxholeConnectorGuides(data: FoxholeSceneV2SplineConnectorData, asset?: FoxholeSceneV2AssetMetadata,
+    visibleHandles?: readonly { id: string }[]): NixieExtensionRenderNodeV1[] {
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
     const path = sampleFoxholeConnectorGuide(data, asset);
     const stem: NixieExtensionGraphicsCommandV1[] = behavior.powerline || path.points.length < 2
@@ -43,7 +46,7 @@ export function renderFoxholeConnectorGuides(data: FoxholeSceneV2SplineConnector
             : data.endRotation
                 + (data.foxholeKey.toLowerCase().includes('pipe') && !behavior.undergroundPipe ? 0 : Math.PI);
         handles.push({ op: 'circle', x, y, radius: 7 }, { op: 'fill', color: 0xD8F7FF, alpha: 1 });
-        if (rotations) {
+        if (rotations && (!visibleHandles || visibleHandles.some(handle => handle.id === role + '-rotation'))) {
             handles.push({ op: 'circle', x: x + Math.cos(rotation) * 36, y: y + Math.sin(rotation) * 36, radius: 6 },
                 { op: 'fill', color: 0xD8F7FF, alpha: 1 });
         }

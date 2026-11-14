@@ -1,3 +1,4 @@
+import { isTrenchConnectorBuildSite } from './trench-connector.ts';
 import { renderSpatialTrench } from './scene-v2-spatial-trench.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { renderFoxholeSpatialRepeats } from './scene-v2-spatial-repeats.ts';
@@ -14,6 +15,7 @@ export function renderFoxholeSpatialConnector(entity: NixieComponentEntitySnapsh
         endpointBindings?: NixieSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string,unknown>> = {},
     entities: readonly NixieComponentEntitySnapshotV1[] = [entity]): NixieSpatialPlanV1 | undefined {
     if (/^trenchconnectort[123]$/.test(data.foxholeKey) && asset) return renderSpatialTrench(entity,data,asset,settings);
+    if (isTrenchConnectorBuildSite(data.foxholeKey)) return { contractVersion: 1, supplementModel: true, model: null, nodes: [] };
     if (data.foxholeKey === 'powerline') {
         const count = 32, startZ = data.startZ ?? 0, endZ = data.endZ ?? 0;
         const projection = createFoxholeSpatialProjection(entities);

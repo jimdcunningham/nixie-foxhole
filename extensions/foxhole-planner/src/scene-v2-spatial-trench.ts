@@ -1,9 +1,8 @@
 import type { NixieComponentEntitySnapshotV1, NixieSpatialNodeV1, NixieSpatialPlanV1, NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
-import { trenchLayerQuad } from './trench-connector.ts';
-import type { TrenchEndpoint } from './trench-connector.ts';
-import { trenchWallPieces, trenchFloorPolygon, clipPiece, intervalPieces, nativePiece, offsetEndpoint, pieceFrame, stripPieces, trenchRoofPolygon } from './trench-connector-pieces.ts';
+import { trenchFloorPolygon } from './trench-connector-pieces.ts';
+import { sceneV2TrenchLayers, sceneV2TrenchPieces, trenchConnectedEnds } from './scene-v2-trench-pieces.ts';
 import type { TrenchPiece, TrenchPieceFrame } from './trench-connector-pieces.ts';
 /** Native V1 pieces and independently rotated handles, with the actual source mesh/materials. */
 export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data: FoxholeSceneV2SplineConnectorData & {
@@ -19,54 +18,10 @@ export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data
     if (length < 1e-6)
         return undefined;
     const angle = Math.atan2(dy, dx), c = Math.cos(angle), s = Math.sin(angle), height = (data.endZ ?? 0) - (data.startZ ?? 0), length3 = Math.hypot(dx, dy, height);
-    const layers = Object.entries(asset.renderLayers).map(([id, v]) => ({ id, textureUrl: id, width: v.width * 2, height: v.height * 2, offsetX: v.offsetX * 2, offsetY: v.offsetY * 2, anchorX: v.anchorX, anchorY: v.anchorY }));
-    const back = !!(data.startAttachmentNodeId || (data.startSocketName && data.socketAttachments?.[data.startSocketName]));
-    const front = !!(data.endAttachmentNodeId || (data.endSocketName && data.socketAttachments?.[data.endSocketName]));
-    const pieces = trenchWallPieces(layers, start, end, back, front).filter(p => p.id.startsWith('floorcover') ? settings['foxhole.structure.hideFloors'] !== true
-        : p.id.startsWith('dirt:') ? settings['foxhole.structure.hideDirt'] !== true : settings['foxhole.structure.hideWalls'] !== true);
-    // Match V1: only front/back walls, dirt and corner caps belong to an endpoint.
-    for (const frame of layers.filter(f => /^(?:wall|corner|dirt)/.test(f.id) && /back|front/.test(f.id))) {
-        const connected = frame.id.includes('back') ? back : front;
-        if (connected && !frame.id.startsWith('dirtcorner'))
-            continue;
-        if (settings['foxhole.structure.hideDirt'] === true && frame.id.startsWith('dirt'))
-            continue;
-        if (settings['foxhole.structure.hideWalls'] === true && !frame.id.startsWith('dirt'))
-            continue;
-        pieces.push({ id: 'cap:' + frame.id, textureUrl: frame.id, positions: trenchLayerQuad(frame, start, end), uvs: [0, 0, 1, 0, 1, 1, 0, 1], alpha: 1 });
-    }
-    const selections = entity.components.find(row => row.ownerId === 'nixie.foxhole-planner' && row.componentId === 'modification' && row.definitionAvailable)?.data.selections;
-    if (Array.isArray(selections))
-        for (const row of selections) {
-            if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.slotId !== 'string' || typeof row.variantId !== 'string')
-                continue;
-            const slot = asset.modifications[row.slotId], variant = slot?.variants[row.variantId];
-            if (!slot || !variant || variant.isUpgrade)
-                continue;
-            const id = 'mod:' + row.slotId + ':' + row.variantId;
-            if (row.variantId === 'trenchroof') {
-                if (settings['foxhole.structure.hideRoofs'] !== true)
-                    pieces.push(...roofPieces(layers, id, start, end, 1));
-                continue;
-            }
-            if (!['sandbags', 'barbedwire'].includes(row.variantId))
-                continue;
-            const side = slot.y < 0 ? -1 : 1, a = offsetEndpoint(side < 0 ? start : end, side * 70.4, side < 0 ? 4.8 : -4.8), b = offsetEndpoint(side < 0 ? end : start, side * 70.4, side < 0 ? -4.8 : 4.8), heading = Math.atan2(b.y - a.y, b.x - a.x);
-            if (row.variantId === 'sandbags') {
-                const frames = Array.from({ length: 4 }, (_, i) => pieceFrame(layers, 'TrenchConnectorSandbagsAngledSpline0' + (i + 1))).filter((f): f is TrenchPieceFrame => !!f);
-                pieces.push(...intervalPieces(frames, id, a, b, 25.6, { start: 25.6, end: 12.8, fromEnd: side > 0 }));
-                const cap = pieceFrame(layers, 'TrenchConnectorSandbagsAngledSplineEnd');
-                if (cap)
-                    pieces.push(nativePiece(cap, id + ':start', { x: a.x + Math.cos(heading) * 8, y: a.y + Math.sin(heading) * 8 }, heading + Math.PI), nativePiece(cap, id + ':end', { x: b.x - Math.cos(heading) * 8, y: b.y - Math.sin(heading) * 8 }, heading));
-            }
-            else {
-                const post = pieceFrame(layers, 'TrenchBarbedWirePillarT' + data.foxholeKey.at(-1)), wire = pieceFrame(layers, 'TrenchBarbedWireT' + data.foxholeKey.at(-1));
-                if (wire)
-                    pieces.push(...stripPieces(wire, id + ':wire', a, b, 1, undefined, side > 0));
-                if (post)
-                    pieces.push(nativePiece(post, id + ':start', a, heading), nativePiece(post, id + ':end', b, heading));
-            }
-        }
+    const layers = sceneV2TrenchLayers(asset);
+    const framesById = new Map(layers.map(frame => [frame.id, frame]));
+    const { back, front } = trenchConnectedEnds(data);
+    const pieces = sceneV2TrenchPieces(entity, data, asset, layers, start, end, settings);
     const groups = new Map<string, {
         frame: TrenchPieceFrame;
         pieces: TrenchPiece[];
@@ -83,7 +38,7 @@ export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data
     for (const piece of pieces) {
         if (piece.positions.length < 6)
             continue;
-        const frame = layers.find(f => f.textureUrl === piece.textureUrl);
+        const frame = framesById.get(piece.textureUrl);
         if (!frame || !profile.parts[frame.id])
             throw Error('Missing exported trench piece: ' + piece.textureUrl);
         let next = 1;
@@ -106,7 +61,7 @@ export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data
         group.pieces.push(piece);
         group.instances.push({ distance: t * length3, rotation: heading - angle, offset: [ox * c + oy * s, -ox * s + oy * c, 0] });
     }
-    const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points: [start.x, start.y, data.startZ ?? 0, end.x, end.y, data.endZ ?? 0], ...(data.endpointBindings ? { endpointBindings: data.endpointBindings } : {}) };
+    const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points: [start.x, start.y, data.startZ ?? 0, end.x, end.y, data.endZ ?? 0], ...(data.endpointBindings?.start || data.endpointBindings?.end ? { endpointBindings: data.endpointBindings } : {}) };
     const nodes: NixieSpatialNodeV1[] = [];
     for (const group of groups.values())
         for (const meshIndex of profile.parts[group.frame.id]!.meshIndices ?? [profile.parts[group.frame.id]!.meshIndex]) {
@@ -127,29 +82,4 @@ export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data
         polygon: trenchFloorPolygon(start, end, layers, back, front).flatMap(p => [p.x, p.y]),
         minZ: -64, maxZ: 0, ...(deformationPathId ? { deformationPathId } : {}),
     }] };
-}
-function roofPieces(layers: readonly TrenchPieceFrame[], id: string, start: TrenchEndpoint, end: TrenchEndpoint, alpha: number): TrenchPiece[] {
-    const panel = pieceFrame(layers, 'TrenchT3RoofSurface') ?? pieceFrame(layers, 'TrenchT3Roof01');
-    if (!panel)
-        return [];
-    const polygon = trenchRoofPolygon(start, end);
-    const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    const angle = Math.atan2(end.y - start.y, end.x - start.x), c = Math.cos(angle), s = Math.sin(angle);
-    // Tile the native roof section in the polygon's plane, then clip the actual
-    // geometry. UVs remain affine across both triangles, with no skewed panels.
-    const along = polygon.map(p => (p.x - center.x) * c + (p.y - center.y) * s);
-    const min = Math.min(...along), max = Math.max(...along);
-    const pieces = stripPieces(panel, `${id}:panel`, { x: center.x + c * min, y: center.y + s * min }, { x: center.x + c * max, y: center.y + s * max }, alpha, undefined, false, true)
-        .map(p => clipPiece(p, polygon));
-    for (const suffix of ['', 'Top']) {
-        const frames = Array.from({ length: 3 }, (_, i) => pieceFrame(layers, `TrenchT3RoofTrim0${i + 1}${suffix}`)).filter((f): f is TrenchPieceFrame => !!f);
-        pieces.push(...intervalPieces(frames, `${id}:trim${suffix}`, start, end, 79.36, { start: 39.68, end: 39.68, center: true, alpha }).map(p => clipPiece(p, polygon)));
-    }
-    const cap = pieceFrame(layers, 'TrenchT3RoofEnd');
-    if (cap) {
-        // The source mesh pivot is 500cm from its end; use the blueprint's
-        // opposing +/-500cm offsets instead of centring the image on a socket.
-        pieces.push(nativePiece(cap, `${id}:start`, offsetEndpoint(start, 0, 160), start.rotation + Math.PI, alpha), nativePiece(cap, `${id}:end`, offsetEndpoint(end, 0, -160), end.rotation, alpha));
-    }
-    return pieces.filter(p => p.positions.length >= 6);
 }

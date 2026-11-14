@@ -11,6 +11,7 @@ import type {
 import { productionRecipesById } from '#foxhole-scene-v2-assets';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { createFoxholeSceneV2SplineProductData } from './scene-v2-connector-products.ts';
+import { isTrenchConnector } from './trench-connector.ts';
 
 export const FOXHOLE_SCENE_V2_PRODUCT_PROVIDER_SYSTEM_ID = 'products.assets';
 
@@ -173,6 +174,9 @@ export function listFoxholeSceneV2Products(
         contractVersion: 1,
         total: filtered.length,
         items: filtered.slice(query.offset, query.offset + query.limit).map(({ assetId, metadata, productId, selections }) => {
+            // Existing catalogs predate the FoxWatch trench spline classification.
+            const connector = metadata.connector;
+            const spline = connector && (connector.spline || isTrenchConnector(assetId));
             const product: NixieProductResultV1['items'][number]['product'] = metadata.isItem
                 ? {
                     contractVersion: 1,
@@ -202,9 +206,9 @@ export function listFoxholeSceneV2Products(
                         data: { catalogId: 'foxhole.structures', assetId },
                     }, ...(metadata.model
                         ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'model', version: 1, data: getFoxholeSceneV2ModelComponentData(metadata.model) }]
-                        : []), ...(metadata.connector?.spline
+                        : []), ...(spline
                         ? [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector', version: 1,
-                            data: createFoxholeSceneV2SplineProductData(assetId, metadata.connector) }]
+                            data: createFoxholeSceneV2SplineProductData(assetId, connector) }]
                         : [{ ownerId: 'nixie.foxhole-planner', componentId: 'appearance', version: 1, data: {} }]), {
                         ownerId: 'nixie.foxhole-planner',
                         componentId: 'modification',
@@ -244,7 +248,7 @@ export function listFoxholeSceneV2Products(
                 match: { catalogId: metadata.isItem ? 'foxhole.icons' : 'foxhole.structures' },
                 ...(!metadata.isItem ? { preserve: [
                     { componentId: 'socket-attachments' },
-                    ...(metadata.connector?.spline ? [{ componentId: 'spline-connector', propertyIds: [
+                    ...(spline ? [{ componentId: 'spline-connector', propertyIds: [
                         'startX', 'startY', 'startRotation', 'startHandleLength', 'endX', 'endY', 'endRotation', 'endHandleLength',
                         'startSocketName', 'endSocketName', 'startAttachmentNodeId', 'startAttachmentSocketName', 'endAttachmentNodeId', 'endAttachmentSocketName',
                     ] }] : []),

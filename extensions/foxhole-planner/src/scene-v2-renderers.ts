@@ -14,6 +14,9 @@ import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
 import { structuralModelClips, occupiedTrenchDirtNodes } from './scene-v2-structural-clips.ts';
 import { structuralGroundCutouts } from './scene-v2-ground-cutouts.ts';
 import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts';
+import { renderPlanarTrench } from './scene-v2-planar-trench.ts';
+import { isTrenchConnector } from './trench-connector.ts';
+import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
@@ -622,15 +625,23 @@ function renderFoxholeSceneV2EntityPlan(
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, settings ?? {});
         }
+        const geometryHandles = foxholeConnectorGeometryHandles(resolved, splineAsset).filter(handle => {
+            if (handle.id !== 'start-rotation' && handle.id !== 'end-rotation') return true;
+            const attachment = trenchEndRotationTarget(entity, handle.id === 'start-rotation' ? 'start' : 'end', context.entities);
+            return !attachment || Boolean(attachment.connector);
+        });
         const wheel = foxholeConnectorGeometryWheel(resolved, splineAsset);
-        const content = renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered, splineAsset, destroyedAsset);
+        const content = splineAsset && isTrenchConnector(rendered.foxholeKey) && !destroyedAsset
+            ? renderPlanarTrench(entity, rendered, splineAsset,
+                assetMetadataById[rendered.foxholeKey === 'trenchconnectort3' ? 'trencht3' : 'trencht1']?.renderLayers.floor, settings)
+            : renderFoxholeSceneV2SplineConnector(destroyedAsset ? { ...rendered, ...appearance } : rendered, splineAsset, destroyedAsset);
         return {
             schemaVersion: 1,
-            selectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles: foxholeConnectorGeometryHandles(resolved, splineAsset),
+            selectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles,
                 ...(wheel ? { geometryWheelControl: wheel } : {}) },
             ...(spatial ? { spatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,
-                assetMetadataById[String(splineConnector.data.foxholeKey ?? '')]), ...renderFoxholeConnectorSocketOverlays(resolved,
+                splineAsset, geometryHandles), ...renderFoxholeConnectorSocketOverlays(resolved,
                 assetMetadataById[String(splineConnector.data.foxholeKey ?? '')], attachments, settings ?? {})] },
         };
     }

@@ -1,4 +1,5 @@
 import type { NixieSelectionGeometryV1, NixieExtensionRenderNodeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { isTrenchConnector } from './trench-connector.ts';
 import { resolveConnectorBehavior, resolveConnectorVisualPathStyle } from './connector-behavior.ts';
 import { FOXHOLE_POWERLINE_CORE_WIDTH } from './powerline-stroke.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
@@ -37,7 +38,7 @@ export function resolveFoxholeConnectorSelectionGeometry(data: FoxholeSceneV2Spl
         transformOrigin: { x: (data.startX + data.endX) / 2, y: (data.startY + data.endY) / 2 } };
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
     const style = resolveConnectorVisualPathStyle(asset?.connector?.pathStyle, data.foxholeKey);
-    const straight = !behavior.undergroundPipe && (behavior.mineSpline || data.foxholeKey.toLowerCase().includes('cranerail')
+    const straight = !behavior.undergroundPipe && (isTrenchConnector(data.foxholeKey) || behavior.mineSpline || data.foxholeKey.toLowerCase().includes('cranerail')
         || style === 'straight-telescoping' || style === 'endpoints-only');
     if (!behavior.powerline && !straight) return geometry;
     const dx = data.endX - data.startX, dy = data.endY - data.startY;

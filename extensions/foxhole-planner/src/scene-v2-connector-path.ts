@@ -1,5 +1,6 @@
 import { buildArcLengthTable } from '@nixiejs/extension-sdk/scene-v2';
 import type { SplinePathConstraints, SplinePathEndpoint } from '@nixiejs/extension-sdk/scene-v2';
+import { isTrenchConnector } from './trench-connector.ts';
 import { resolveConnectorBehavior } from './connector-behavior.ts';
 import { isBarbedWireFence, sampleBarbedWireFencePath } from './barbed-wire-fence.ts';
 import { blendConnectorPathSamples, sampleExtensionPipePath } from './pipe-extension-path.ts';
@@ -34,7 +35,7 @@ export function sampleFoxholeSceneV2Connector(data: FoxholeSceneV2SplineConnecto
     if (isBarbedWireFence(data.foxholeKey)) {
         return sampleBarbedWireFencePath(start, end, foxholeSceneV2ConnectorConstraints(data, asset));
     }
-    if (style === 'straight-telescoping' || style === 'endpoints-only' || behavior.mineSpline || data.foxholeKey.toLowerCase().includes('cranerail')) {
+    if (isTrenchConnector(data.foxholeKey) || style === 'straight-telescoping' || style === 'endpoints-only' || behavior.mineSpline || data.foxholeKey.toLowerCase().includes('cranerail')) {
         const points = [{ x: start.x, y: start.y }, { x: end.x, y: end.y }];
         const lengths = buildArcLengthTable(points);
         return { points, lengths, totalLength: lengths.at(-1) ?? 0 };

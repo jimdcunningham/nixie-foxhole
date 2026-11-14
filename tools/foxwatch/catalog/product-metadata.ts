@@ -8,6 +8,7 @@ import type { FoxholeAuthoredSpotlight } from '../../../extensions/foxhole-plann
 import { isFoxholeModificationSlotTierEligible } from '../../../extensions/foxhole-planner/src/modification-tier.ts';
 import { resolveFoxholeEmplacementModificationSplineEnd } from '../../../extensions/foxhole-planner/src/modification-spline.ts';
 import type { NixieProductAttributeV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { isTrenchConnector } from '../../../extensions/foxhole-planner/src/trench-connector.ts';
 import { resolveConnectorBehavior, resolveConnectorEndpointSocketNames, resolveConnectorVisualPathStyle } from '../../../extensions/foxhole-planner/src/connector-behavior.ts';
 import { createFoxholeStatisticsRecipe } from '../../../extensions/foxhole-planner/src/production-statistics.ts';
 import type { FoxholePublishedProductionEntry, FoxholeStatisticsRecipe, FoxholeStatisticsStructure } from '../../../extensions/foxhole-planner/src/production-statistics.ts';
@@ -895,7 +896,7 @@ export function createFoxholeSceneV2AssetMetadata(
         const connector = asset.connector
             ? {
                 pathStyle: resolveConnectorVisualPathStyle(asset.connector.pathStyle, asset.id) ?? '',
-                spline: asset.connector.splineComponentName === 'SplineConnector'
+                spline: isTrenchConnector(asset.id) || asset.connector.splineComponentName === 'SplineConnector'
                     || /^sandbag(?:half|full)spline$/iu.test(asset.id)
                     || resolveConnectorBehavior(asset.id, asset.connector).trimSpan
                     || resolveConnectorBehavior(asset.id, asset.connector).mineSpline,

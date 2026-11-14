@@ -50,3 +50,23 @@ test('native side strips never render again as rigid endpoint spans', () => {
         }
     }
 });
+
+
+test('attached trench ends hide dirt caps while preserving concrete seams and free ends', () => {
+    for (const tier of [1, 2, 3]) {
+        const id = 'trenchconnectort' + tier;
+        const asset = assets[id]!;
+        const profile = asset.model!.pathProfile!;
+        for (const attachedEnd of ['back', 'front']) {
+            const input = { ...data(id), ...(attachedEnd === 'back'
+                ? { startAttachmentNodeId: 'neighbor' } : { endAttachmentNodeId: 'neighbor' }) };
+            const plan = renderSpatialTrench(entity, input, asset)!;
+            for (const end of ['back', 'front']) {
+                const part = profile.parts['dirtcorner' + end + 'left']!;
+                const indices = part.meshIndices ?? [part.meshIndex];
+                const visible = plan.nodes.some(node => node.kind === 'model-path' && indices.includes(node.meshIndex));
+                assert.equal(visible, tier === 3 || attachedEnd !== end, id + ' ' + end);
+            }
+        }
+    }
+});

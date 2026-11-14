@@ -1,6 +1,8 @@
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieEntityRendererContextV1 as Context,
     NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
+import { isTrenchConnector } from './trench-connector.ts';
+import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
@@ -26,8 +28,10 @@ export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: F
         const point = projection.toLocal(entity, projection.toWorld(subject, [socket.x, socket.y, socket.z ?? 0]));
         const direction = projection.toLocal(entity, projection.toWorld(subject, [socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation), socket.z ?? 0]));
         if (![...point, ...direction].every(Number.isFinite)) continue;
+        const facing = prefix === 'end' && isTrenchConnector(spline.foxholeKey) ? -1 : 1;
         Object.assign(result, { [`${prefix}X`]: point[0], [`${prefix}Y`]: point[1], [`${prefix}Z`]: point[2],
-            [`${prefix}Rotation`]: Math.atan2(direction[1] - point[1], direction[0] - point[0]) });
+            [`${prefix}Rotation`]: trenchEndRotationTarget(entity, prefix, context.entities)?.connector
+                ? spline[`${prefix}Rotation`] : Math.atan2(facing * (direction[1] - point[1]), facing * (direction[0] - point[0])) });
         endpointBindings[prefix] = { entityId: subject.entityId, point: [socket.x, socket.y, socket.z ?? 0] };
     }
     return result;
