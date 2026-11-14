@@ -39,7 +39,7 @@ test('catalog spline products use published geometry and socket defaults instead
     for (const [assetId, expected] of [
         ['wallsplinet1', { minLength: 96, maxLength: 320, minRadius: 1, maxRadius: 1, maxBuffer: 0.32, endX: 96 }],
         ['facilitypipe', { minLength: 96, maxLength: 640, minRadius: 16, maxRadius: 96, maxBuffer: 96, endX: 96 }],
-        ['powerline', { minLength: 3.2, maxLength: 800, minRadius: 16, maxRadius: 800, maxBuffer: 3.2, endX: 3.2 }],
+        ['powerline', { minLength: 3.2, maxLength: 800, minRadius: 16, maxRadius: 800, maxBuffer: 3.2, endX: 32 }],
     ] as const) {
         const product = listFoxholeSceneV2Products({ contractVersion: 1, query: assetId, offset: 0, limit: 100 })
             .items.find(item => item.product.id === `asset.${assetId}`)!.product;
@@ -111,7 +111,7 @@ test('every provider page is bounded and all published items create portable ico
         if (spline) {
             assert.ok(Number(spline.data.minLength) > 0, item.product.id);
             assert.equal(Math.hypot(Number(spline.data.endX) - Number(spline.data.startX),
-                Number(spline.data.endY) - Number(spline.data.startY)), Number(spline.data.minLength), item.product.id);
+                Number(spline.data.endY) - Number(spline.data.startY)), item.product.id === "asset.powerline" ? 32 : Number(spline.data.minLength), item.product.id);
         }
         assert.equal(asset.data.catalogId, metadata.isItem ? 'foxhole.icons' : 'foxhole.structures');
         if (metadata.isItem) {

@@ -3,6 +3,7 @@ import type { FoxholeSceneV2ConnectorMetadata } from './scene-v2-asset-metadata.
 import { isTrenchConnector } from './trench-connector.ts';
 
 const PIXELS_PER_CENTIMETER = 32 / 100;
+export const FOXHOLE_POWERLINE_PREVIEW_LENGTH = 32;
 function pixels(value: number | undefined, fallback: number): number {
     return (typeof value === 'number' && Number.isFinite(value) ? value : fallback) * PIXELS_PER_CENTIMETER;
 }
@@ -21,7 +22,7 @@ export function createFoxholeSceneV2SplineProductData(assetId: string, connector
     return {
         foxholeKey: assetId, startX: 0, startY: 0, startRotation: 0,
         // Surface pipe routing uses socket-facing ends; underground data stores tangent-aligned ends.
-        endX: minLength, endY: 0, endRotation: assetId === 'facilitypipe' ? Math.PI : 0,
+        endX: assetId === 'powerline' ? Math.min(FOXHOLE_POWERLINE_PREVIEW_LENGTH, maxLength) : minLength, endY: 0, endRotation: assetId === 'facilitypipe' ? Math.PI : 0,
         minLength, maxLength, minRadius, maxRadius,
         maxBuffer: Math.max(0, pixels(connector.maxBufferCm, connector.minLengthCm ?? 300)), curveT: 0, blueprint: false,
         ...(backSocketName ? { startSocketName: backSocketName } : {}),

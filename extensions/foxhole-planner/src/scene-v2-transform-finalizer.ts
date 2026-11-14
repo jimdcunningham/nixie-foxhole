@@ -1,3 +1,4 @@
+import { FOXHOLE_POWERLINE_PREVIEW_LENGTH } from './scene-v2-connector-products.ts';
 import type {
     NixieComponentEntitySnapshotV1,
     NixieComponentOperationV1,
@@ -625,11 +626,15 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
         }
         const { moving, lockedSocket, placingFirstEnd, eligible } = eligibleTargets(endpoint);
         const proposedPoint = pose?.apply(moving.world) ?? moving.world;
+        const requestedPort = power ? gesture?.connectionTarget : undefined;
+        const targets = requestedPort ? eligible.filter(candidate => candidate.entityId === requestedPort.entityId
+            && (!requestedPort.portId || candidate.id.toLowerCase() === requestedPort.portId)) : eligible;
         const selected = !gesture && !pose ? candidatesByEndpoint.get(endpoint)?.[0]
             : !gesture || gesture.snappingEnabled ? selectNixieConnectionTargetV1({
                 point: gesture ? [gesture.worldPoint.x, gesture.worldPoint.y, power ? 0 : gesture.worldPoint.z ?? moving.world[2]]
                     : [proposedPoint[0], proposedPoint[1], power ? 0 : proposedPoint[2]],
-                targets: eligible, maximumDistance: pose ? 1 : SNAP_DISTANCE,
+                targets,
+                maximumDistance: pose ? 1 : SNAP_DISTANCE,
                 ...(power && gesture ? { hoveredEntityIds: gesture.hoveredEntityIds } : {}),
             }) : null;
         const best = selected ? { target: selected.target } : null;
@@ -690,10 +695,11 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
                 points[index + 1] = (patch.points as number[])[index + 1]!;
             } else {
                 Object.assign(set, patch);
-                if (placingFirstEnd && !power && connector.componentId === 'spline-connector') {
+                if (placingFirstEnd && connector.componentId === 'spline-connector') {
                     const angle = Number(patch.startRotation);
-                    set.endX = Number(patch.startX) + spline.minLength * Math.cos(angle);
-                    set.endY = Number(patch.startY) + spline.minLength * Math.sin(angle);
+                    const previewLength = power ? Math.min(spline.maxLength, FOXHOLE_POWERLINE_PREVIEW_LENGTH) : spline.minLength;
+                    set.endX = Number(patch.startX) + previewLength * Math.cos(angle);
+                    set.endY = Number(patch.startY) + previewLength * Math.sin(angle);
                     set.endRotation = angle + (String(spline.foxholeKey).includes('pipe') && !String(spline.foxholeKey).includes('underground') ? Math.PI : 0);
                 }
             }

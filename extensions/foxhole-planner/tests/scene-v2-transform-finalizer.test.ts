@@ -688,3 +688,22 @@ test('placing the first pipe endpoint points the draft straight out of the snapp
     assert.ok(Math.abs(Number(geometry.endX) - Number(geometry.startX)) < 1e-8);
     assert.ok(Math.abs(Number(geometry.endY) - Number(geometry.startY) - 48) < 1e-8);
 });
+
+test('first power-line snap keeps a short preview pointed out of the selected socket', () => {
+    const line = pipe('line', 0), building = structure('building', 500);
+    Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', minLength: 3.2, endX: 32, endY: 0 });
+    building.components[1]!.data.assetId = 'facilityrefinery1';
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
+        interaction: 'placement', transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'preview', handleId: 'start', snappingEnabled: true,
+            worldPoint: { x: 500, y: 100 }, hoveredEntityIds: [building.entityId],
+            connectionTarget: { entityId: building.entityId, portId: 'powersocket' } },
+        context: { contractVersion: 1, entities: [line, building] } });
+    const patch = result.transaction?.operations.find(op => op.entityId === line.entityId);
+    assert.ok(patch?.op === 'patch');
+    const { startX, startY, startRotation, endX, endY } = patch.set!;
+    assert.equal(patch.set?.startAttachmentSocketName, 'PowerSocket');
+    assert.ok(Math.abs(Number(endX) - Number(startX) - 32 * Math.cos(Number(startRotation))) < 1e-6);
+    assert.ok(Math.abs(Number(endY) - Number(startY) - 32 * Math.sin(Number(startRotation))) < 1e-6);
+    assert.equal(patch.set?.minLength, undefined);
+});

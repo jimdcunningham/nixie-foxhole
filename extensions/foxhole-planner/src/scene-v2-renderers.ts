@@ -1,3 +1,4 @@
+import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
 import { renderFoxholeHitboxOverlays } from './scene-v2-hitbox-overlays.ts';
@@ -33,7 +34,7 @@ import { resolveFoxholeBunkerSpotlightLights, showFoxholeBunkerSpotlightGlow } f
 import { createFoxholeSpotlightBeamGraphics } from './spotlight-beam.ts';
 import { renderFoxholeConnectorGuides } from './scene-v2-connector-guides.ts';
 import { renderFoxholeConnectorSocketOverlays, renderFoxholeConnectorSpatialMarkers } from './scene-v2-connector-socket-overlays.ts';
-import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers } from './scene-v2-socket-overlays.ts';
+import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers, resolveFoxholeSocketDisplayKind } from './scene-v2-socket-overlays.ts';
 import type {
     NixieComponentEntitySnapshotV1,
     NixieComponentJsonObjectV1,
@@ -485,7 +486,18 @@ export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieCom
         maxX: Math.max(...points.map(point => point.x)), maxY: Math.max(...points.map(point => point.y)) };
     const trenchBounds = !shapes.length && !appearance.destroyed && !appearance.packaged && !replacement && /^trencht[12]$/i.test(assetMetadata.codeName)
         ? resolveFoxholeTrenchSelectionBounds(spriteBounds, Object.values(assetMetadata.renderLayers)) : null;
-    return { contractVersion: 1 as const, localBounds: trenchBounds ?? spriteBounds, transformOrigin: { x: 0, y: 0 }, showTransformGizmo: true };
+    const powerPorts = new Map<string, { id: string; local: { x: number; y: number; }; }>();
+    if (!appearance.destroyed && !appearance.packaged && !assetMetadata.isDestroyed) {
+        for (const socket of resolveFoxholeEntityStructureSockets(entity, assetMetadata)) {
+            const id = socket.name.toLowerCase();
+            if (/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 128
+                && resolveFoxholeSocketDisplayKind({ ...socket, socketTags: socket.socketTags ?? [] }) === 'power') {
+                powerPorts.set(id, { id, local: { x: socket.x, y: socket.y } });
+            }
+        }
+    }
+    return { contractVersion: 1 as const, localBounds: trenchBounds ?? spriteBounds, transformOrigin: { x: 0, y: 0 }, showTransformGizmo: true,
+        ...(powerPorts.size ? { connectionPorts: { toolId: 'powerline', quickStart: true, points: [...powerPorts.values()].slice(0, 32) } } : {}) };
 }
 
 export function renderFoxholeSceneV2Entity(
