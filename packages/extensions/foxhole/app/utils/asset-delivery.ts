@@ -6,10 +6,8 @@ import { createFoxholeCatalogLibrary, type CatalogReceipt, type FoxholeCatalogLi
 import { configureWorldAssetLocations } from '@nixiejs/foxhole-world/asset-locations';
 import { installFoxholeAssetLocations } from '../plugins/foxhole/nixie/asset-locations.ts';
 import { installFoxholeManifest, foxholeManifestSchema } from '../plugins/foxhole/nixie/manifest.ts';
-import { useRuntimeConfig } from '#app';
 import { createLocalFoxholeAssetDelivery } from './local-asset-delivery.ts';
 import { createFoxholeAssetGenerationSelector, type FoxholeAssetGeneration } from './asset-generation.ts';
-import { shouldUseFoxholeLocalAssetDelivery } from '../plugins/foxhole/nixie/map/memory-storage.mjs';
 let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = null;
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
 let publishedCatalogHash: string | undefined;
@@ -26,21 +24,30 @@ const metadataCache = new NixiePersistentExtensionResourceCache(
 async function read<T>(receipt: CatalogReceipt): Promise<T> {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await metadataCache.loadVerified(receipt.url, receipt, 16 * 1024 * 1024))) as T;
 }
-export function initializeFoxholeAssetDelivery(): void {
-    if (shouldUseFoxholeLocalAssetDelivery(import.meta.dev, useRuntimeConfig().public.foxholeAssetMode, typeof window === 'undefined' ? undefined : window)) {
-        if (!localDelivery) {
-            localDelivery = createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', globalThis.location.href).href);
-            void localDelivery.world.loadIndex().then(index => {
-                selectedSpatialRegions.value = new Set(Object.keys(index.regions ?? {}));
-            }).catch(() => {
-                // The 2D previews remain available when there is no local spatial index.
-            });
+function activateLocalDelivery(delivery: NonNullable<typeof localDelivery>): void {
+    if (localDelivery === delivery) return;
+    localDelivery = delivery;
+    publishedLibrary = null;
+    publishedCatalogHash = undefined;
+    publishedWorldIndex = null;
+    selectedSpatialRegions.value = new Set();
+    installFoxholeManifest(null);
+    installFoxholeMapData(null);
+    installFoxholeAssetLocations(delivery.resolve);
+    configureWorldAssetLocations(delivery);
+    revision.value++;
+    void delivery.world.loadIndex().then(index => {
+        if (localDelivery === delivery) {
+            selectedSpatialRegions.value = new Set(Object.keys(index.regions ?? {}));
         }
-        installFoxholeAssetLocations(localDelivery.resolve);
-        configureWorldAssetLocations(localDelivery);
-    }
+    }).catch(() => {
+        // The 2D previews remain available without a local spatial index.
+    });
 }
-const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async generation => {
+const prepareGeneration = createFoxholeAssetGenerationSelector(async (generation: FoxholeAssetGeneration & { useLocal?: boolean }) => {
+    if (generation.useLocal) {
+        return { local: createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', window.location.href).href) } as const;
+    }
     const document = await generation.readProductCatalog('foxhole.catalog');
     const library = createFoxholeCatalogLibrary(document.baseUrl, JSON.parse(document.text));
     const location = library.files.get('manifest.v1.json');
@@ -55,6 +62,11 @@ const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async ge
     const worldIndex = library.worldIndex ? await read<FoxholeWorldIndex>(library.worldIndex) : null;
     return {library, manifest, mapData, catalogHash, worldIndex};
 }, (prepared, generation) => {
+    if (prepared?.local) {
+        activateLocalDelivery(prepared.local);
+        return;
+    }
+    localDelivery = null;
     publishedLibrary = prepared?.library ?? null;
     publishedCatalogHash = prepared?.catalogHash;
     publishedWorldIndex = prepared?.worldIndex ?? null;
@@ -79,8 +91,10 @@ const preparePublishedGeneration = createFoxholeAssetGenerationSelector(async ge
     installFoxholeMapData(prepared?.mapData ?? null);
     revision.value++;
 });
-export function prepareFoxholeAssetGeneration(generation: FoxholeAssetGeneration | null): Promise<() => void> {
-    return localDelivery ? Promise.resolve(() => {}) : preparePublishedGeneration(generation);
+export function prepareFoxholeAssetGeneration(generation: FoxholeAssetGeneration | null, assetMode: unknown): Promise<() => void> {
+    const useLocal = import.meta.dev && assetMode === 'local' && generation?.distribution === 'development';
+    return prepareGeneration(generation && { ...generation, useLocal,
+        generationHash: useLocal ? 'local:' + generation.generationHash : generation.generationHash });
 }
 export function resolveSelectedFoxholeAsset(path: string): string | undefined {
     return localDelivery?.resolve(path) ?? publishedLibrary?.resolve(path);

@@ -12,7 +12,7 @@ import {createFoxholeFlagAtlasCatalog} from '../../../extensions/foxhole-planner
 import {createFoxholeModelLightCatalog} from '../../../extensions/foxhole-planner/build/model-light-metadata.ts';
 
 /** All extraction interpretation happens before Planner builds or clients run. */
-export async function readCatalogSources(assetsRoot) {
+export async function readCatalogSources(assetsRoot, {includeWorld = true} = {}) {
     const read = async name => JSON.parse(await fs.readFile(path.join(assetsRoot, name), 'utf8'));
     const manifest = await normalizeRenderedIconAssociations(await read('manifest.v1.json'), publishedRenderedIconValidator(assetsRoot));
     const omittedOptionalIcons = await omitUnavailableSeatIcons(manifest, async url => {
@@ -49,7 +49,7 @@ export async function readCatalogSources(assetsRoot) {
         else if (value && typeof value === 'object') Object.values(value).forEach(collect);
     }
     collect(manifest);
-    const worldPresent = await fs.stat(path.join(assetsRoot, 'world/index.json')).then(() => true).catch(error => {if (error.code === 'ENOENT') return false; throw error;});
+    const worldPresent = includeWorld && await fs.stat(path.join(assetsRoot, 'world/index.json')).then(() => true).catch(error => {if (error.code === 'ENOENT') return false; throw error;});
     const world = worldPresent ? await buildAssetPublicationInventory({assetsRoot, worldOnly: true}) : null;
     if (world && !world.valid) throw Error('World publication graph is invalid: ' + JSON.stringify(world.issues.slice(0, 10)));
     const maps = createFoxholeSceneV2MapMetadata(await read('maps/map-data.v1.json'), createFoxholeMapTooltipAssets(manifest, generated.assets));

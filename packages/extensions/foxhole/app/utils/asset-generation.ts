@@ -1,13 +1,14 @@
 /** Async preparation cannot replace the active catalog until the host accepts its state. */
 export interface FoxholeAssetGeneration {
     generationHash: string;
+    distribution?: 'development' | 'published' | 'workspace';
     readProductCatalog(id: string): Promise<{baseUrl: string; sha256: string; text: string}>;
 }
-export function createFoxholeAssetGenerationSelector<T>(prepare: (generation: FoxholeAssetGeneration) => Promise<T>,
-    activate: (value: T | null, generation: FoxholeAssetGeneration | null) => void) {
+export function createFoxholeAssetGenerationSelector<T, Generation extends FoxholeAssetGeneration>(prepare: (generation: Generation) => Promise<T>,
+    activate: (value: T | null, generation: Generation | null) => void) {
     const prepared = new Map<string, Promise<T>>();
     let active: string | null | undefined;
-    return async (generation: FoxholeAssetGeneration | null): Promise<() => void> => {
+    return async (generation: Generation | null): Promise<() => void> => {
         const key = generation?.generationHash ?? null;
         if (key === active) return () => {};
         let value: T | null = null;

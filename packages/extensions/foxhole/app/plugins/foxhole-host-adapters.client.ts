@@ -1,7 +1,7 @@
 import { prepareFoxholePreviewAssets } from '#foxhole/utils/scene-v2-preview-assets.ts';
 import { parseLegacySettings } from '#foxhole/utils/nixie-legacy-settings.ts';
-import { initializeFoxholeAssetDelivery, prepareFoxholeAssetGeneration } from '#foxhole/utils/asset-delivery.ts';
-import { defineNuxtPlugin } from '#app';
+import { prepareFoxholeAssetGeneration } from '#foxhole/utils/asset-delivery.ts';
+import { defineNuxtPlugin, useRuntimeConfig } from '#app';
 import { registerNixieInternalExtensionAdapter } from '#nixie-internal/desktop-extensions/internal-extension-adapters.ts';
 
 import { createFoxholeRetainedSceneV2Ui } from '#foxhole/plugins/foxhole/nixie/scene-v2-retained-ui.ts';
@@ -18,7 +18,7 @@ export default defineNuxtPlugin({
     enforce: 'pre',
     dependsOn: ['nixie-registry'],
     async setup(nuxtApp) {
-        initializeFoxholeAssetDelivery();
+        const assetMode = useRuntimeConfig().public.foxholeAssetMode;
         registerNixieSettingsImportIntegration('nixie.foxhole-planner', LegacySettingsImport, text => {
             parseLegacySettings(text, []);
             return true;
@@ -29,7 +29,7 @@ export default defineNuxtPlugin({
             ownerId: 'nixie.foxhole-planner',
             aliases: ['foxhole'],
             prepareGeneration: async generation => {
-                const activate = await prepareFoxholeAssetGeneration(generation);
+                const activate = await prepareFoxholeAssetGeneration(generation, assetMode);
                 const activatePreviews = await prepareFoxholePreviewAssets(generation);
                 return () => {
                     activate();
