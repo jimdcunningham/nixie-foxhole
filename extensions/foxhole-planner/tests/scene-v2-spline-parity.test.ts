@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import assets from '#foxhole-scene-v2-assets';
 import { SPLINE_PATH_INVALID_TINT } from '@nixiejs/extension-sdk/scene-v2';
+import { createFoxholeSceneV2SplineProductData } from '../src/scene-v2-connector-products.ts';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 
@@ -73,6 +74,24 @@ test('attached bridge endpoints omit their approach ramps without hiding the opp
     const nodes = renderFoxholeSceneV2SplineConnector(connector('fieldbridge', { startAttachmentNodeId: 'bridge-host' }), assets.fieldbridge);
     assert.ok(!nodes.some(node => node.id === 'spline-connector-back-ramp'));
     assert.ok(nodes.some(node => node.id === 'spline-connector-front-ramp'));
+});
+
+test('field bridge angle validation follows free ends and checks attached sockets', () => {
+    const asset = assets.fieldbridge!;
+    const template = createFoxholeSceneV2SplineProductData('fieldbridge', asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
+    const angled = { ...template, endX: 200, endY: 200 };
+    const invalid = (patch: Partial<FoxholeSceneV2SplineConnectorData>) => {
+        const nodes = renderFoxholeSceneV2SplineConnector({ ...angled, ...patch }, asset);
+        const span = nodes.find(node => node.id === 'spline-connector-span');
+        assert.ok(span?.kind === 'mesh');
+        return span.tint === SPLINE_PATH_INVALID_TINT;
+    };
+
+    assert.equal(invalid({}), false, 'saved rotations do not constrain a disconnected bridge');
+    assert.equal(invalid({ startAttachmentNodeId: 'host', startRotation: Math.PI / 4 }), false);
+    assert.equal(invalid({ startAttachmentNodeId: 'host', startRotation: 0 }), true);
+    assert.equal(invalid({ endAttachmentNodeId: 'host', endRotation: Math.PI / 4 }), false);
+    assert.equal(invalid({ endAttachmentNodeId: 'host', endRotation: 0 }), true);
 });
 
 test('bridge pillars render above the approach ramps as in V1', () => {

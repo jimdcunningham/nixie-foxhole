@@ -10,7 +10,7 @@ import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_P
 import { resolveIntervalMarkerSamples, resolveMeshConfigIntervalMarkerSamples, resolveCenteredMeshConfigIntervalBoundarySamples, resolveMineSplineMarkerSample } from './interval-connector-path.ts';
 import { isExtensionPipeGeometryViable } from './pipe-extension-path.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2VisualMetadata } from './scene-v2-asset-metadata.ts';
-import { resolveConnectorBehavior } from './connector-behavior.ts';
+import { requiresStraightConnectorSocketAlignment, resolveConnectorBehavior } from './connector-behavior.ts';
 import { resolveIntervalMarkerVariantIds } from './interval-marker-variants.ts';
 import { isBarbedWireFence, resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';
 import { isWaterWallSpline, resolveWaterWallBuoys, resolveWaterWallNetInsets } from './water-wall-spline.ts';
@@ -255,10 +255,21 @@ function resolveVisualData(data: FoxholeSceneV2SplineConnectorData, asset?: Foxh
     const constraints = foxholeSceneV2ConnectorConstraints(data, asset);
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);
     const style = behavior.undergroundPipe ? 'spline' : asset?.connector?.pathStyle;
+    const socketFacingEndRotation = key.includes('pipe') && !behavior.undergroundPipe;
+    // Free ends of rigid spans turn with the span. Only attached ends face a fixed socket.
+    if (style === 'straight-telescoping' && requiresStraightConnectorSocketAlignment(key)) {
+        const heading = Math.atan2(end.y - start.y, end.x - start.x);
+        if (!data.startAttachmentNodeId && !(data.startSocketName && data.socketAttachments?.[data.startSocketName])) {
+            start.rotation = heading;
+        }
+        if (!data.endAttachmentNodeId && !(data.endSocketName && data.socketAttachments?.[data.endSocketName])) {
+            end.rotation = heading + (socketFacingEndRotation ? Math.PI : 0);
+        }
+    }
     const viable = behavior.undergroundPipe || ((!(style === 'spline' && behavior.pipeExtension) || isExtensionPipeGeometryViable(start, end, constraints))
         && isSplinePathViable(start, end, constraints, sampleFoxholeSceneV2Connector(data, asset),
             { enforceLengthLimits: false, enforceMinRadius: asset?.connector?.enforceSplineModeCornerRadius === true,
-                socketFacingEndRotation: key.includes('pipe') && !behavior.undergroundPipe }));
+                socketFacingEndRotation }));
     const blueprint = data.blueprint && asset?.canBlueprint === true;
     return { ...data, blueprint, ...(!referenceRoad && !viable ? { tint: SPLINE_PATH_INVALID_TINT } : blueprint ? { tint: 0x335CFF } : {}) };
 }
