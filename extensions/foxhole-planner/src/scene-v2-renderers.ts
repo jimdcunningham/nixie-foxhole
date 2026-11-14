@@ -35,6 +35,7 @@ import { renderFoxholeConnectorSocketOverlays, renderFoxholeConnectorSpatialMark
 import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers } from './scene-v2-socket-overlays.ts';
 import type {
     NixieComponentEntitySnapshotV1,
+    NixieComponentJsonObjectV1,
     NixieEntityRendererContextV1,
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderPlanV1,
@@ -46,6 +47,7 @@ import { filterFoxholeSameWallInfrastructureSelections } from './modification-wa
 import { createFoxholeStructureFloorMaskPoints, createFoxholeCornerWallMaskPoints,
     createFoxholeTrenchEmplacementMaskPolygons, isFoxholeTrenchEmplacementCodeName } from './structure-floor-mask.ts';
 import { isFoxholeBunkerSocketUnbreachable, isFoxholeBreachIndicatorSocket } from './breach-indicators.ts';
+import { isFoxholeEcsBunkerMember } from './bunker-statistics.ts';
 import { buildFoxholeModelLightOverrides, shouldEnableFoxholePoweredModelLights } from './model-light-presentation.ts';
 import {buildFoxholeModelTextureTransforms, FOXHOLE_SCENE_FACTION_SETTING_ID} from './model-texture-presentation.ts';
 import foxholeSceneV2Assets, { productionOutputsByRecipeId, modelLightHintsByResourceId, flagAtlasesByResourceId } from '#foxhole-scene-v2-assets';
@@ -403,22 +405,30 @@ function resolveBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadat
     }
     const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+    const socketKey = (name: unknown) => normalizeFoxholeBuildSocketName(name).toLowerCase();
+    const rows = Array.isArray(attachments) ? attachments.filter((entry): entry is NixieComponentJsonObjectV1 => entry !== null && typeof entry === 'object' && !Array.isArray(entry)) : [];
     return metadata.buildSockets.filter(socket => isFoxholeBreachIndicatorSocket(metadata, socket)).map((socket, index) => {
-        const attachment = Array.isArray(attachments)
-            ? attachments.find(entry => entry && typeof entry === 'object'
-                && !Array.isArray(entry) && (entry.localSocketName ?? entry.socketName) === socket.name)
-            : null;
-        const neighbor = attachment && typeof attachment === 'object' && !Array.isArray(attachment)
-            ? context.entities.find(candidate => candidate.entityId === attachment.targetEntityId)
-            : undefined;
+        const attachment = rows.find(entry => (entry.localSocketName ?? entry.socketName) === socket.name)
+            ?? rows.find(entry => socketKey(entry.localSocketName ?? entry.socketName) === socketKey(socket.name));
+        const neighbor = attachment ? context.entities.find(candidate => candidate.entityId === attachment.targetEntityId) : undefined;
         const neighborAssetId = neighbor?.components.find(component => component.ownerId === 'nixie.foxhole-planner'
             && component.componentId === 'asset' && component.definitionAvailable)?.data.assetId;
         const neighborMetadata = typeof neighborAssetId === 'string' ? assetMetadataById[neighborAssetId] : undefined;
+        const targetSocket = socketKey(attachment?.targetSocketName);
+        // A bunker upgrade can seal an adjacent wall even when it has no breach faces of its own.
+        const bunkerUpgradeSocket = neighborMetadata?.isUpgrade === true && neighborMetadata.isBunker === true
+            && neighborMetadata.bunker && isFoxholeEcsBunkerMember(neighborMetadata.codeName, neighborMetadata.bunker)
+            && neighborMetadata.buildSockets.some(candidate => socketKey(candidate.name) === targetSocket
+                && candidate.integrityBonus !== false && candidate.socketTags?.some(tag => tag.category === 4 && (BigInt(tag.mask) & ~8n) !== 0n));
+        const neighborAppearance = neighbor ? readFoxholeSceneV2Appearance(neighbor) : undefined;
         const sealed = Boolean(attachment) && isFoxholeBunkerSocketUnbreachable({
             selfBreachable: metadata.breachable === true, selfStructuralGarrison: metadata.structuralGarrison === true,
             selfExposed: metadata.codeName.toLowerCase() === 'fortbuildsite',
-            neighborBreachable: neighborMetadata?.breachable === true, neighborStructuralGarrison: neighborMetadata?.structuralGarrison === true,
-            neighborExposed: neighborMetadata?.codeName.toLowerCase() === 'fortbuildsite', connectionCount: 1,
+            neighborBreachable: neighborMetadata?.breachable === true || bunkerUpgradeSocket === true,
+            neighborStructuralGarrison: neighborMetadata?.structuralGarrison === true,
+            neighborExposed: neighborMetadata?.codeName.toLowerCase() === 'fortbuildsite' || neighborMetadata?.isDestroyed === true
+                || neighborMetadata?.isBreached === true || neighborAppearance?.destroyed === true || neighborAppearance?.packaged === true,
+            connectionCount: 1,
         });
         return {
             id: `breach-${index}`,
@@ -430,7 +440,8 @@ function resolveBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadat
 
 function renderPlanarBreachIndicator(marker: NixieSpatialMarkerV1): NixieExtensionRenderNodeV1 {
     return {
-        id: marker.id, kind: 'graphics', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
+        id: marker.id, kind: 'graphics', laneId: 'nixie:scene:overlay', laneOrder: FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug.laneOrder,
+        presentation: { contractVersion: 1, excludeFromBounds: true },
         x: marker.point[0], y: marker.point[1],
         commands: [
             { op: 'rect', x: -6, y: -6, width: 12, height: 12 },

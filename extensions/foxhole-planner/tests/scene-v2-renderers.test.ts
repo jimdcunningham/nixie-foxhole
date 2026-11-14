@@ -225,6 +225,37 @@ test('breach overlays share face status with spatial markers and keep authored s
     assert.ok(!off.spatial?.markers?.some(marker => marker.id.startsWith('breach-')));
 });
 
+test('connected Storm Cannon and Intelligence Center sockets seal the adjacent bunker face', () => {
+    const asset = (assetId: string) => ({
+        ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
+        definitionAvailable: true, data: { catalogId: 'foxhole.structures', assetId },
+    });
+    const bunker: NixieComponentEntitySnapshotV1 = {
+        entityId: 'bunker', revision: 1, components: [asset('fortt3'), {
+            ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1, definitionAvailable: true,
+            data: { attachments: [{ localSocketName: 'FrontFortSocket', targetEntityId: 'neighbor',
+                targetSocketName: 'FortCommon:BackFortSocket' }] },
+        }],
+    };
+    for (const id of ['lrartillery', 'intelcenter', 'fortbuildsite', 'lrartillerydestroyed']) {
+        const neighbor = { entityId: 'neighbor', revision: 1, components: [asset(id)] };
+        const context = { contractVersion: 1 as const, entities: [bunker, neighbor],
+            settings: { 'foxhole.structure.breachIndicators': true } };
+        const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(bunker, context));
+        const green = id === 'lrartillery' || id === 'intelcenter';
+        const color = green ? 0x53D769 : 0xFF4D4D;
+        const marker = plan.spatial?.markers?.find(node => node.id.startsWith('breach-') && node.point[0] > 0);
+        assert.ok(marker, id);
+        assert.equal(marker.color, color, id);
+        const square = plan.root.children.find(node => node.id === marker.id);
+        assert.ok(square?.kind === 'graphics', id);
+        assert.equal(square.commands.find(command => command.op === 'fill')?.color, color, id);
+        assert.equal(square.laneId, 'nixie:scene:overlay');
+        assert.equal(square.presentation?.excludeFromBounds, true);
+        assert.ok(!renderFoxholeSceneV2Entity(neighbor, context).spatial?.markers?.some(node => node.id.startsWith('breach-')), id);
+    }
+});
+
 test('ladder renders in the roof lane and disappears with Hide Roofs', () => {
     const subject: NixieComponentEntitySnapshotV1 = { entityId: 'bunker', revision: 1, components: [
         { ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1,
