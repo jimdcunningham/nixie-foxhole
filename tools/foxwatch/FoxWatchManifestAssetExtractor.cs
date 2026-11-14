@@ -1082,6 +1082,7 @@ public partial class FoxWatchManifestAssetExtractor
                 CraneSpawns = craneSpawns,
                 FootprintPolygons = BuildFootprintPolygons(buildFootprintBoxes),
                 StructureVolumes = structureVolumes,
+                WaterStencils = ExtractWaterStencils(blueprint),
                 VehicleSeats = vehicleSeats,
                 Spotlights = spotlights,
                 FuelTanks = fuelTanks,
@@ -3586,6 +3587,11 @@ public partial class FoxWatchManifestAssetExtractor
             if (preferredStructure.VehicleSeats.Count == 0 && supplementalStructure.VehicleSeats.Count > 0)
             {
                 preferredStructure.VehicleSeats = [.. supplementalStructure.VehicleSeats];
+            }
+
+            if (preferredStructure.WaterStencils.Count == 0 && supplementalStructure.WaterStencils.Count > 0)
+            {
+                preferredStructure.WaterStencils = supplementalStructure.WaterStencils;
             }
 
             if (preferredStructure.Ranges.Count == 0 && supplementalStructure.Ranges.Count > 0)
@@ -7854,8 +7860,51 @@ public partial class FoxWatchManifestAssetExtractor
                 }
             }
 
+            var references = _meshAssetExporter?.InspectBlueprintComponentsAsync(GetPackagePath(blueprint))
+                .GetAwaiter().GetResult() ?? [];
+            foreach (var reference in references)
+            {
+                var category = ResolveLandscapeHoleCategory(reference.ComponentTags);
+                if (category == null) continue;
+                var name = NormalizeComponentReferenceName(reference.ComponentName);
+                var existing = volumes.FirstOrDefault(volume =>
+                    string.Equals(NormalizeComponentReferenceName(volume.Name).Replace("_GEN_VARIABLE", "", StringComparison.OrdinalIgnoreCase),
+                        name, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    existing.Category = category;
+                    continue;
+                }
+
+                // Template actors contribute nested components outside the main Blueprint's owner scope.
+                if (reference.BoxExtent is not [var width, var length, var height]) continue;
+                var transform = ResolveComponentReferenceTransform(reference, references);
+                var scale = string.IsNullOrWhiteSpace(reference.AbsoluteScale) ? reference.RelativeScale : reference.AbsoluteScale;
+                volumes.Add(new FoxWatchManifestStructureVolume
+                {
+                    Name = reference.ComponentName,
+                    Label = "Landscape Hole",
+                    ComponentType = reference.ComponentType,
+                    Category = category,
+                    X = transform.X,
+                    Y = transform.Y,
+                    Z = transform.Z,
+                    Width = Math.Abs(width * (ParseVectorValue(scale, "x") ?? 1)),
+                    Length = Math.Abs(length * (ParseVectorValue(scale, "y") ?? 1)),
+                    Height = Math.Abs(height * (ParseVectorValue(scale, "z") ?? 1)),
+                    Rotation = transform.YawDegrees,
+                });
+            }
             return volumes;
         }
+
+        private static string? ResolveLandscapeHoleCategory(List<string> tags)
+        {
+            if (tags.Contains("LandscapeHoleCircle", StringComparer.OrdinalIgnoreCase)) return "landscapeHoleEllipse";
+            if (tags.Contains("LandscapeHoleOctagon", StringComparer.OrdinalIgnoreCase)) return "landscapeHoleOctagon";
+            return tags.Contains("LandscapeOverlap", StringComparer.OrdinalIgnoreCase) ? "landscapeHoleBox" : null;
+        }
+
 
         private IReadOnlyList<BlueprintComponentScope> EnumerateBlueprintComponentScopes(
             IEnumerable<dynamic> rootObjects,
@@ -9091,7 +9140,8 @@ public partial class FoxWatchManifestAssetExtractor
             {
                 Name = rawName,
                 Label = HumanizeStructureVolumeLabel(rawName, GetObjectTypeName(component)),
-                Category = ClassifyStructureVolumeCategory(rawName, GetObjectTypeName(component)),
+                Category = string.Equals(ExtractText(GetNamedValue(GetNamedValue(component, "BodyInstance"), "CollisionProfileName")),
+                    "LandscapeHole", StringComparison.OrdinalIgnoreCase) ? "landscapeHoleBox" : ClassifyStructureVolumeCategory(rawName, GetObjectTypeName(component)),
                 ComponentType = GetObjectTypeName(component),
                 X = transform.X,
                 Y = transform.Y,
@@ -9101,6 +9151,25 @@ public partial class FoxWatchManifestAssetExtractor
                 Height = ExtractVectorComponent(boxExtent, "Z"),
                 Rotation = transform.YawDegrees,
             };
+        }
+
+        private List<double[]> ExtractWaterStencils(UBlueprintGeneratedClass blueprint)
+        {
+            var references = _meshAssetExporter?.InspectBlueprintComponentsAsync(GetPackagePath(blueprint))
+                .GetAwaiter().GetResult() ?? [];
+            var triangles = new List<double[]>();
+            foreach (var reference in references.Where(reference =>
+                reference.ComponentType.Contains("WaterStencilComponent", StringComparison.OrdinalIgnoreCase))
+                .DistinctBy(reference => reference.ComponentName, StringComparer.OrdinalIgnoreCase))
+            {
+                var transform = ResolveComponentReferenceTransform(reference, references);
+                var scaleText = string.IsNullOrEmpty(reference.AbsoluteScale) ? reference.RelativeScale : reference.AbsoluteScale;
+                var scale = new Vector3((float)(ParseVectorValue(scaleText, "x") ?? 1),
+                    (float)(ParseVectorValue(scaleText, "y") ?? 1), (float)(ParseVectorValue(scaleText, "z") ?? 1));
+                var offset = new Vector3((float)transform.X, (float)transform.Y, (float)transform.Z);
+                triangles.AddRange(_meshAssetExporter!.ReadWaterStencilTriangles(reference.MeshPath, scale, transform.Rotation, offset));
+            }
+            return triangles;
         }
 
         private static string HumanizeStructureVolumeLabel(string? name, string? componentType = null)

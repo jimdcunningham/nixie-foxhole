@@ -2095,6 +2095,10 @@ public sealed partial class FoxWatchAssetMeshExporter
         targetReference.Light = FoxWatchBlueprintLights.Extract(export);
         ApplyBuildSocketMetadata(targetReference, export);
         ApplyComponentTagsMetadata(targetReference, export);
+        if (export.TryGetValue<FVector>(out var extent, "BoxExtent"))
+        {
+            targetReference.BoxExtent = [extent.X, extent.Y, extent.Z];
+        }
         ApplyMaterialOverrideMetadata(targetReference, export);
         ApplyAuthoredFlagMaterialOverrideMetadata(targetReference, export);
         ApplyAuthoredLightBeamMaterialOverrideMetadata(targetReference, export);
@@ -2411,6 +2415,44 @@ public sealed partial class FoxWatchAssetMeshExporter
             vectorFallback.GetOrDefault<double>("X"),
             vectorFallback.GetOrDefault<double>("Y"),
         ];
+    }
+
+    internal List<double[]> ReadWaterStencilTriangles(string assetPath, System.Numerics.Vector3 scale,
+        System.Numerics.Quaternion rotation, System.Numerics.Vector3 offset)
+    {
+        System.Numerics.Vector3[] positions;
+        uint[] indices;
+        if (string.IsNullOrWhiteSpace(assetPath) || assetPath.EndsWith("/Cube.uasset", StringComparison.OrdinalIgnoreCase))
+        {
+            // The Blueprint defaults to Engine/BasicShapes/Cube. Its upper face is the water mask.
+            positions = [new(-50, -50, 50), new(50, -50, 50), new(50, 50, 50), new(-50, 50, 50)];
+            indices = [0, 1, 2, 0, 2, 3];
+        }
+        else
+        {
+            var packagePath = ResolvePackagePath(assetPath);
+            if (string.IsNullOrWhiteSpace(packagePath)) return [];
+            EnsureMounted();
+            var mesh = FileProvider.LoadPackage(packagePath).GetExports().OfType<UStaticMesh>().FirstOrDefault();
+            if (mesh == null || !MeshConverter.TryConvert(mesh, out var converted)) return [];
+            using var source = converted;
+            var lod = source.LODs.FirstOrDefault(candidate => !candidate.SkipLod);
+            if (lod?.Verts == null || lod.Indices == null) return [];
+            positions = lod.Verts.Select(v => new System.Numerics.Vector3(v.Position.X, v.Position.Y, v.Position.Z)).ToArray();
+            indices = lod.Indices.Value.ToArray();
+        }
+
+        var transformed = positions.Select(v => System.Numerics.Vector3.Transform(v * scale, rotation) + offset).ToArray();
+        var result = new List<double[]>();
+        for (var i = 0; i + 2 < indices.Length; i += 3)
+        {
+            var a = transformed[indices[i]];
+            var b = transformed[indices[i + 1]];
+            var c = transformed[indices[i + 2]];
+            if (Math.Abs(System.Numerics.Vector3.Cross(b - a, c - a).Z) < .01) continue;
+            result.Add([a.X, a.Y, a.Z, b.X, b.Y, b.Z, c.X, c.Y, c.Z]);
+        }
+        return result;
     }
 
     internal double? ResolveMeshAxisLengthCentimeters(string? assetPath, char axis)
@@ -3141,6 +3183,8 @@ public sealed partial class FoxWatchAssetMeshExporter
             AbsoluteLocation = reference.AbsoluteLocation,
             AbsoluteRotation = reference.AbsoluteRotation,
             AbsoluteScale = reference.AbsoluteScale,
+            ComponentTags = [.. reference.ComponentTags],
+            BoxExtent = reference.BoxExtent,
             ContributesToIslandIntegrityBonus = reference.ContributesToIslandIntegrityBonus,
             SocketTags = [.. reference.SocketTags.Select(tag => new FoxWatchBlueprintSocketTagReference
             {
@@ -3273,6 +3317,7 @@ public sealed partial class FoxWatchAssetMeshExporter
             targetReference.AbsoluteScale = fallbackReference.AbsoluteScale;
         }
 
+        targetReference.BoxExtent ??= fallbackReference.BoxExtent;
         if (targetReference.ComponentTags.Count == 0 &&
             fallbackReference.ComponentTags.Count > 0)
         {
@@ -3972,6 +4017,7 @@ public sealed class FoxWatchBlueprintComponentReference
     public bool? ContributesToIslandIntegrityBonus { get; set; }
     public List<FoxWatchBlueprintSocketTagReference> SocketTags { get; set; } = [];
     public List<string> ComponentTags { get; set; } = [];
+    public double[]? BoxExtent { get; set; }
     public List<double>? SplineDefaultTargetUnrealLocationCentimeters { get; set; }
     public string? SplinePathMode { get; set; }
     public double? SplineMinBufferCentimeters { get; set; }

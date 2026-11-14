@@ -197,6 +197,8 @@ public sealed class FoxWatchManifestStructure
 
     public double? ClipFloorZ { get; set; }
 
+    public List<double[]> WaterStencils { get; set; } = [];
+
     public FoxWatchBounds3D? ClipBounds { get; set; }
 
     public bool? IsItem { get; set; }

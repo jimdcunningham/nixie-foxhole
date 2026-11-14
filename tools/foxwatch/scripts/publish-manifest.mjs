@@ -1844,6 +1844,7 @@ function compactStructure(value) {
         lineOfSightPolygons: [],
         selectionPolygons: [],
         structureVolumes: [],
+        waterStencils: [],
         vehicleSeats: [],
         spotlights: [],
         fuelTanks: [],

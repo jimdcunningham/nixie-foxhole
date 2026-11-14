@@ -1507,6 +1507,7 @@ const structureManifestSchema = z.preprocess(value => {
     selectionPolygons: z.array(hitPolygonSchema).default([]),
     lineOfSightPolygons: z.array(hitPolygonSchema).default([]),
     structureVolumes: z.array(structureVolumeSchema).default([]),
+    waterStencils: z.array(z.array(z.number()).length(9)).default([]),
     emplacementLocation: emplacementLocationSchema.nullish().transform(value => value ?? undefined),
     railCouplers: z.array(railCouplerSchema).default([]),
     wheelBase: optionalNumberSchema,

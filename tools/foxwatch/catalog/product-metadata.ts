@@ -157,10 +157,27 @@ export function normalizeFoxholeSceneV2StructureVolumes(value: unknown): Foxhole
         if ([x, y, width, length, rotation].some(value => typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1_000_000)
             || (width as number) <= 0 || (length as number) <= 0) return [];
         const category = typeof (raw.category ?? raw.g) === 'string' ? String(raw.category ?? raw.g) : 'other';
+        if (category.startsWith('landscapeHole')) return [];
         const label = typeof (raw.label ?? raw.l) === 'string' ? String(raw.label ?? raw.l).trim().slice(0, 128) : '';
         return [{ category: categories.has(category) ? category : 'other', label: label || 'Volume',
             x: x as number, y: y as number, width: width as number, length: length as number, rotation: rotation as number }];
     });
+}
+
+function normalizeLandscapeHoles(value: unknown): NonNullable<FoxholeSceneV2AssetMetadata['landscapeHoles']> {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap(raw => {
+        if (!raw || typeof raw !== 'object') return [];
+        const category = raw.category ?? raw.g;
+        const shape: "ellipse" | "octagon" | "box" | null = category === 'landscapeHoleEllipse' ? 'ellipse' : category === 'landscapeHoleOctagon' ? 'octagon'
+            : category === 'landscapeHoleBox' ? 'box' : null;
+        if (!shape) return [];
+        const [x, y, z, width, length, height, rotation] = [raw.x ?? 0, raw.y ?? 0, raw.z ?? 0,
+            raw.width ?? raw.w, raw.length ?? raw.d, raw.height ?? raw.h, raw.rotation ?? raw.r ?? 0];
+        if (![x, y, z, width, length, height, rotation].every(n => Number.isFinite(n) && Math.abs(n) <= 1_000_000)
+            || width <= 0 || length <= 0 || height <= 0) return [];
+        return [{ shape, x, y, z, width, length, height, rotation }];
+    }).slice(0, 32);
 }
 
 export interface FoxholeSceneV2AssetMetadata {
@@ -180,6 +197,8 @@ export interface FoxholeSceneV2AssetMetadata {
     selectionPolygons?: Array<{ shape: number[]; }>;
     lineOfSightPolygons?: Array<{ shape: number[]; }>;
     structureVolumes?: FoxholeSceneV2StructureVolume[];
+    waterStencils?: number[][];
+    landscapeHoles?: Array<{ shape: 'ellipse' | 'octagon' | 'box'; x: number; y: number; z: number; width: number; length: number; height: number; rotation: number }>;
     /** Authored Foxhole build footprint polygons in metres from the asset origin. */
     footprintPolygons?: Array<{ shape: number[]; }>;
     /** Static facility placement requires authored foundation coverage. */
@@ -435,6 +454,7 @@ export interface PublishedFoxholeAssetForSceneV2 {
     stockpiles?: import('../../../extensions/foxhole-planner/src/stockpile-groups.ts').NativeStockpileGroup[];
     spotlights?: unknown[];
     structureVolumes?: unknown[];
+    waterStencils?: unknown[];
     bIsBuiltOnFoundation?: boolean;
     bIsBuiltOnLandscape?: boolean;
     vehicleSeats?: unknown[];
@@ -953,6 +973,12 @@ export function createFoxholeSceneV2AssetMetadata(
                 offsetY: finiteNumber(alternative.sprite?.offsetY ?? alternative.offsetY, finiteNumber(fallback.offsetY)) * FOXHOLE_BOARD_SPRITE_SCALE,
             }
             : undefined;
+        const landscapeHoles = normalizeLandscapeHoles(asset.structureVolumes);
+        const waterStencils = (asset.waterStencils ?? []).flatMap(triangle => {
+            if (!Array.isArray(triangle) || triangle.length !== 9
+                || !triangle.every(value => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1_000_000)) return [];
+            return [triangle.map(value => value * .32)];
+        }).slice(0, 1024);
         const requiresFoundation = asset.isFacility === true
             && asset.bIsBuiltOnLandscape === false
             && ['facility', 'power', 'mining', 'liquids'].includes(asset.categoryId ?? '')
@@ -961,6 +987,8 @@ export function createFoxholeSceneV2AssetMetadata(
             selectionPolygons: asset.selectionPolygons ?? [],
             lineOfSightPolygons: normalizeFoxholeSceneV2LineOfSightPolygons(asset.lineOfSightPolygons),
             structureVolumes: normalizeFoxholeSceneV2StructureVolumes(asset.structureVolumes),
+            ...(landscapeHoles.length ? { landscapeHoles } : {}),
+            ...(waterStencils.length ? { waterStencils } : {}),
             footprintPolygons: asset.footprintPolygons ?? [],
             requiresFoundation,
             selectionDestroyed: relatedDestroyed?.sprite
