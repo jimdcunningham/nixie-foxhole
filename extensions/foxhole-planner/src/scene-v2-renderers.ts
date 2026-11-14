@@ -35,6 +35,7 @@ import type {
     NixieEntityRendererContextV1,
     NixieExtensionRenderNodeV1,
     NixieExtensionRenderPlanV1,
+    NixieSpatialMarkerV1,
 } from '@nixiejs/extension-sdk/scene-v2';
 import { FOXHOLE_STRUCTURE_RENDER_LANES, FOXHOLE_MODIFICATION_TEXTURE_LAYER_LANES, foxholeRenderLane, resolveFoxholeStructureDirtRenderLane, resolveFoxholeStructurePrimaryRenderLane, resolveFoxholeAssetHeightLane, resolveFoxholeAssetComponentLane } from './render-lanes.ts';
 import { compareFoxholeModificationRenderOrder, isFoxholeRoofModification, resolveFoxholeModificationTextureLayer } from './modification-render-order.ts';
@@ -391,8 +392,8 @@ function renderFoxholeSceneV2Asset(
     return renderFoxholeContactShadows([...poleLamp, ...(useLayers && !shouldCompositeFoxholeStructureBaseTexture(layers) ? [] : [base]), ...pallet, ...bodyLayers, ...overlays, ...glow], assetMetadata.contactShadows);
 }
 
-function renderBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,
-    context: NixieEntityRendererContextV1): NixieExtensionRenderNodeV1[] {
+function resolveBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,
+    context: NixieEntityRendererContextV1): NixieSpatialMarkerV1[] {
     const appearance = readFoxholeSceneV2Appearance(entity);
     if (context.settings?.['foxhole.structure.breachIndicators'] !== true || appearance.destroyed || appearance.packaged) {
         return [];
@@ -416,11 +417,24 @@ function renderBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadata
             neighborBreachable: neighborMetadata?.breachable === true, neighborStructuralGarrison: neighborMetadata?.structuralGarrison === true,
             neighborExposed: neighborMetadata?.codeName.toLowerCase() === 'fortbuildsite', connectionCount: 1,
         });
-        return { id: `breach-${index}`, kind: 'graphics', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug), x: socket.x, y: socket.y,
-            commands: [{ op: 'rect', x: -6, y: -6, width: 12, height: 12 },
-                { op: 'fill', color: sealed ? 0x53D769 : 0xFF4D4D, alpha: 0.95 },
-                { op: 'stroke', color: 0x081018, alpha: 0.95, width: 2 }] };
+        return {
+            id: `breach-${index}`,
+            point: [socket.x, socket.y, socket.z ?? 0],
+            color: sealed ? 0x53D769 : 0xFF4D4D,
+        };
     });
+}
+
+function renderPlanarBreachIndicator(marker: NixieSpatialMarkerV1): NixieExtensionRenderNodeV1 {
+    return {
+        id: marker.id, kind: 'graphics', ...foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.hitboxDebug),
+        x: marker.point[0], y: marker.point[1],
+        commands: [
+            { op: 'rect', x: -6, y: -6, width: 12, height: 12 },
+            { op: 'fill', color: marker.color, alpha: 0.95 },
+            { op: 'stroke', color: 0x081018, alpha: 0.95, width: 2 },
+        ],
+    };
 }
 
 export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieComponentEntitySnapshotV1, assetMetadata: FoxholeSceneV2AssetMetadata) {
@@ -750,15 +764,17 @@ function renderFoxholeSceneV2EntityPlan(
         : null;
     let placementSpatial = placement ? renderFoxholeStructurePlacementSpatialOverlay(entity, assetMetadata, placement) : undefined;
     if (placement) visualState.nodes.push(...renderFoxholeStructurePlacementOverlay(assetMetadata, placement));
-    visualState.nodes.push(...renderBreachIndicators(entity, assetMetadata, context));
+    const breachIndicators = resolveBreachIndicators(entity, assetMetadata, context);
+    visualState.nodes.push(...breachIndicators.map(renderPlanarBreachIndicator));
     visualState.nodes.push(...renderFoxholeStructureRangeOverlays(assetMetadata, settings ?? {}, appearance, entity.components.find(component =>
         component.ownerId === 'nixie.foxhole-planner' && component.componentId === 'maintenance-supply' && component.definitionAvailable)?.data));
     const socketAttachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
-    const markers = renderFoxholeSpatialSocketMarkers(assetMetadata,
+    const socketMarkers = renderFoxholeSpatialSocketMarkers(assetMetadata,
         selectedFoxholeSceneV2Modifications(entity, assetMetadata).map(entry => entry.variant), socketAttachments, settings ?? {}, appearance);
+    const markers = [...breachIndicators, ...socketMarkers].slice(0, 128);
     if (markers.length) {
-        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [], markers };
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, markers };
     }
     if (hiddenModelNodes.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
