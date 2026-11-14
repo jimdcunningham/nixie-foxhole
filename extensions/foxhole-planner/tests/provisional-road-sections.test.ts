@@ -73,25 +73,31 @@ test('published road retains native length-dependent UV scaling through the SDK 
 });
 
 
-test('spatial views draw the curved Provisional Road ribbon at the authored span', () => {
+test('spatial views deform the road mesh and its end caps along the spline', () => {
     const asset = assets.facilityroad!;
-    assert.ok(asset.model, 'the static catalog model would otherwise take precedence in spatial views');
     const data = createFoxholeSceneV2SplineProductData('facilityroad', asset.connector!);
-    const render = (endY: number, endRotation: number) => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
+    const render = (endX: number, endY: number, endRotation: number) => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
         entityId: 'road',
         revision: 0,
         components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector',
-            version: 1, definitionAvailable: true, data: { ...data, endX: 700, endY, endRotation } }],
+            version: 1, definitionAvailable: true, data: { ...data, endX, endY, endRotation } }],
     }));
-    const straight = render(0, 0);
-    const curved = render(300, Math.PI / 3);
-    assert.equal(straight.spatial?.model, null);
-    assert.equal(curved.spatial?.model, null);
-    assert.equal(straight.root.kind, 'group');
-    assert.equal(curved.root.kind, 'group');
-    const straightSpan = straight.root.children.find(node => node.id === 'spline-connector-span');
-    const curvedSpan = curved.root.children.find(node => node.id === 'spline-connector-span');
-    assert.ok(straightSpan?.kind === 'mesh' && curvedSpan?.kind === 'mesh');
-    const maxY = (positions: number[]) => Math.max(...positions.filter((_, index) => index % 2 === 1));
-    assert.ok(maxY(curvedSpan.positions) > maxY(straightSpan.positions) + 200);
+    const plan = render(700, 300, Math.PI / 3);
+    const nodes = plan.spatial!.nodes;
+    assert.deepEqual(nodes.map(node => node.id), ['road-start', 'road-end', 'road-body']);
+    for (const node of nodes) {
+        assert.equal(node.kind, 'model-path');
+        assert.equal(node.resourceId, asset.model!.resourceId);
+        assert.deepEqual(node.points.slice(-3), [700, 300, 0]);
+        assert.ok(node.points.some((value, i) => i % 3 === 1 && Math.abs(value - node.points[i - 1]! * 300 / 700) > 10));
+    }
+    const [start, end, body] = nodes;
+    assert.ok(start?.kind === 'model-path' && end?.kind === 'model-path' && body?.kind === 'model-path');
+    assert.equal(start.meshIndex, asset.model?.pathProfile?.parts.start?.meshIndex ?? 0);
+    assert.equal(end.meshIndex, asset.model?.pathProfile?.parts.end?.meshIndex ?? 2);
+    assert.equal(body.meshIndex, asset.model?.pathProfile?.parts.span?.meshIndex ?? 1);
+    assert.equal(body.startInset, 144);
+    assert.equal(body.endInset, 144);
+    assert.equal(body.instances, undefined, 'the host bends and repeats the body mesh');
+    assert.deepEqual(render(220, 0, 0).spatial!.nodes.map(node => node.id), ['road-start', 'road-end']);
 });

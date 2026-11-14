@@ -10,7 +10,8 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number;
     endpointBindings?: NixieSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata): NixieSpatialPlanV1 | undefined {
     const profile = asset?.model?.pathProfile;
-    if (!asset?.model || !profile) return undefined;
+    const road = data.foxholeKey === 'facilityroad';
+    if (!asset?.model || (!road && !profile)) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
     if (path.totalLength <= 1e-6) return undefined;
     const points = path.points.flatMap((point, i) => [point.x, point.y,
@@ -19,6 +20,22 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     const distance3D = (distance: number) => Math.max(0, Math.min(length, distance / path.totalLength * length));
     const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points,
         ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) };
+    if (road) {
+        // The original exported road GLB already contains the back cap, body and front cap in this order.
+        const back = profile?.parts.start?.meshIndex ?? 0;
+        const body = profile?.parts.span?.meshIndex ?? 1;
+        const front = profile?.parts.end?.meshIndex ?? 2;
+        const capLength = Math.min(450 * .32, length / 2);
+        const nodes: NixieSpatialNodeV1[] = [
+            { ...common, id: 'road-start', meshIndex: back, endInset: length - capLength },
+            { ...common, id: 'road-end', meshIndex: front, startInset: length - capLength },
+        ];
+        if (length - 2 * capLength > 1e-6) {
+            nodes.push({ ...common, id: 'road-body', meshIndex: body, startInset: capLength, endInset: capLength });
+        }
+        return { contractVersion: 1, nodes };
+    }
+    if (!profile) return undefined;
     const nodes: NixieSpatialNodeV1[] = [];
     const span = (id: string, role: string, extra = {}) => {
         const part = profile.parts[role];

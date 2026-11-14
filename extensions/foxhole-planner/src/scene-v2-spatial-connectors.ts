@@ -16,8 +16,6 @@ export function renderFoxholeSpatialConnector(entity: NixieComponentEntitySnapsh
         endpointBindings?: NixieSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata, settings: Readonly<Record<string,unknown>> = {},
     entities: readonly NixieComponentEntitySnapshotV1[] = [entity]): NixieSpatialPlanV1 | undefined {
     if (/^trenchconnectort[123]$/.test(data.foxholeKey) && asset) return renderSpatialTrench(entity,data,asset,settings);
-    // Compose the road's textured spline surface in spatial views instead of its static catalog model.
-    if (data.foxholeKey === 'facilityroad') return { contractVersion: 1, supplementModel: true, model: null, nodes: [] };
     if (isTrenchConnectorBuildSite(data.foxholeKey)) return { contractVersion: 1, supplementModel: true, model: null, nodes: [] };
     if (data.foxholeKey === 'powerline') {
         const count = 32, startZ = data.startZ ?? 0, endZ = data.endZ ?? 0;
