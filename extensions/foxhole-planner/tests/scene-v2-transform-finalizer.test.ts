@@ -83,14 +83,18 @@ test('an internally occupied structure socket cannot attract the group to a stat
     assert.equal(result.transaction?.operations.some(operation => operation.entityId === stationary.entityId) ?? false, false);
 });
 
-test('connector geometry snapping uses typed endpoints and writes reciprocal socket occupancy', () => {
+test('moving a curved pipe rotates the asset and writes occupancy without editing its handles', () => {
     const moving = pipe('pipe', 95);
     const target = structure('target', 100);
     target.components[1]!.data.assetId = 'facilitypipe';
+    Object.assign(moving.components[1]!.data, { startRotation: Math.PI / 4, endY: 60, endRotation: 2.4 });
     const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: 'pipe', transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [moving, target] } });
     const geometry = result.transaction!.operations.find(operation => operation.entityId === 'pipe');
     assert.ok(geometry?.op === 'patch');
-    assert.equal(geometry.set?.startX, 100);
+    assert.ok(Math.abs(result.transform.rotation! + Math.PI / 4) < 1e-8);
+    assert.ok(Math.abs(result.transform.x + 95 * Math.cos(result.transform.rotation!) - 100) < 1e-8);
+    assert.ok(Math.abs(result.transform.y + 95 * Math.sin(result.transform.rotation!)) < 1e-8);
+    assert.deepEqual(geometry.set, { startAttachmentNodeId: 'target', startAttachmentSocketName: 'BackSocket' });
     assert.equal(geometry.set?.startAttachmentNodeId, 'target');
     const reciprocal = result.transaction!.operations.find(operation => operation.entityId === 'target');
     assert.ok(reciprocal?.op === 'patch');
@@ -662,4 +666,25 @@ test('moving a straight catwalk snaps the whole span without skewing its ends', 
     assert.equal(patch.set?.startAttachmentNodeId, 'platform');
     assert.equal(patch.set?.startY, undefined);
     assert.equal(patch.set?.endY, undefined);
+});
+
+
+test('placing the first pipe endpoint points the draft straight out of the snapped socket', () => {
+    const moving = pipe('pipe', 0);
+    const target = structure('target', 100);
+    target.components[1]!.data.assetId = 'facilitypipe';
+    target.components[0]!.data.rotation = Math.PI / 2;
+    const result = finalizeFoxholeSceneV2Transform({
+        contractVersion: 1, entityId: moving.entityId, interaction: 'placement',
+        transform: { x: 100, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        geometryGesture: { phase: 'preview', handleId: 'start', snappingEnabled: true, worldPoint: { x: 100, y: 0 }, hoveredEntityIds: [] },
+        context: { contractVersion: 1, entities: [moving, target] },
+    });
+    const patch = result.transaction?.operations.find(op => op.entityId === moving.entityId && op.op === 'patch');
+    assert.ok(patch?.op === 'patch');
+    const geometry = { ...moving.components[1]!.data, ...patch.set };
+    assert.equal(geometry.startAttachmentNodeId, 'target');
+    assert.ok(Math.abs(Number(geometry.startRotation) - Math.PI / 2) < 1e-8);
+    assert.ok(Math.abs(Number(geometry.endX) - Number(geometry.startX)) < 1e-8);
+    assert.ok(Math.abs(Number(geometry.endY) - Number(geometry.startY) - 48) < 1e-8);
 });

@@ -34,7 +34,11 @@ test('a connector snaps to a selected upgrade-only port with reciprocal owner-lo
         context: { contractVersion: 1, entities: [target, moving] } });
     const patch = result.transaction?.operations.find(operation => operation.entityId === 'pipe');
     assert.ok(patch?.op === 'patch');
-    assert.equal(patch.set?.startX, 1000 + portX);
+    assert.equal(patch.set?.startX, undefined);
+    const angle = result.transform.rotation ?? 0;
+    const startX = 1000 + portX + 5;
+    assert.ok(Math.abs(result.transform.x + startX * Math.cos(angle) - portY * Math.sin(angle) - (1000 + portX)) < 1e-8);
+    assert.ok(Math.abs(result.transform.y + startX * Math.sin(angle) + portY * Math.cos(angle) - portY) < 1e-8);
     assert.equal(patch.set?.startAttachmentNodeId, 'factory');
     assert.equal(patch.set?.startAttachmentSocketName, 'PipeInput0');
     const reciprocal = result.transaction?.operations.find(operation => operation.entityId === 'factory');
