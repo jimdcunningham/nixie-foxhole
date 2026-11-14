@@ -257,7 +257,8 @@ export async function createSpatialModelExporter(options) {
         preparedStructures.set(id, scene);
         const upgrades = (asset.modifications ?? []).flatMap(slot => Object.entries(slot.variants ?? {})
             .filter(([variantId, variant]) => variant.isUpgrade)
-            .map(([variantId]) => ({ slotId: slot.name, variantId })));
+            .map(([variantId]) => ({ slotId: slot.name, variantId,
+                ...(id === 'facilitypipetransfer' && variantId === 'insulation' ? { upgradeMeshReplacesBase: true } : {}) })));
         const useAssembly = config.includeUpgrades && upgrades.length > 0;
         const hasCore = meshCount(scene, 'base') > 0;
         const scenes = [[scenePath, scene]];
@@ -311,9 +312,9 @@ export async function createSpatialModelExporter(options) {
             for (const upgrade of upgrades) {
                 const path = resolve(sceneRoot, id, 'modifications', `${upgrade.variantId}.scene.json`);
                 const upgraded = JSON.parse(await readFile(path, 'utf8'));
-                const replacesBase = !hasCore || coreSignature(scene) !== coreSignature(upgraded) || !meshCount(upgraded, 'upgrade');
+                const replacesBase = upgrade.upgradeMeshReplacesBase || !hasCore || coreSignature(scene) !== coreSignature(upgraded) || !meshCount(upgraded, 'upgrade');
                 const partId = `${id}.upgrade.${upgrade.variantId}`;
-                const part = await timedPublish(partId, asset, path, await timedExport(partId, path, replacesBase ? 'whole' : 'upgrade'), groundReference);
+                const part = await timedPublish(partId, asset, path, await timedExport(partId, path, replacesBase && !upgrade.upgradeMeshReplacesBase ? 'whole' : 'upgrade'), groundReference);
                 manifest.resources[partId] = part;
                 slot.options.push({ match: { slotId: upgrade.slotId, variantId: upgrade.variantId }, part: { ...descriptor(part), replacesBase } });
             }
