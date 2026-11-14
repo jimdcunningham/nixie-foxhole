@@ -30,6 +30,7 @@ export interface BakedRegion {
     mapAssetsAt?(x: number, y: number): string[];
     sampleGround?(x: number, y: number): number | null;
     sampleWater?(x: number, y: number): number | null;
+    setWaterStencils?(triangles: readonly (readonly (readonly number[])[])[]): void;
     setGroundCutouts?(volumes: readonly (readonly (readonly number[])[])[]): void;
     prepareFirstFrame?(renderer: Renderer): void;
     whenDisposed?(): Promise<void>;

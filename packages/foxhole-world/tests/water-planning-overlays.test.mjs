@@ -5,6 +5,7 @@ import {View3D} from '@pixi/3d';
 import {createTerrainPlanningOverlays} from '../authoring/terrain-planning-overlays.mjs';
 import {createNativeWaterMaterial} from '../authoring/native-water-material.mjs';
 import {framedMaterialBits} from '../runtime/spatial-frame.mjs';
+import {createTerrainExcavationMask,excavationGridContains} from '../authoring/terrain-excavation-mask.mjs';
 
 const icon=(x,z)=>({iconType:20,x:x/2184+.5,y:.5-z/1890});
 
@@ -13,12 +14,32 @@ test('water uses the shared RDZ mask without terrain contours or changing refrac
  const source=new BufferImageSource({resource:new Uint8Array([128,128,128,255]),width:1,height:1}),texture=new Texture({source});
  const colors=Object.fromEntries(['Body Color','Depth Colour','EdgeColour01','FresnelFakeSSS'].map(k=>[k,{R:.03,G:.05,B:.04}]));
  const meta={textures:Object.fromEntries(['waveLarge','waveSmall','foam','modulation','clouds'].map(k=>[k,k])),material:{colors}};
- const {material}=await createNativeWaterMaterial({region:'fixture',json:async id=>id.endsWith('boat-stencils.json')?[]:meta,texture:async()=>texture,extraBits:[planning.waterBit]});
+ const mask=createTerrainExcavationMask({openTop:false});
+ const {material}=await createNativeWaterMaterial({region:'fixture',json:async id=>id.endsWith('boat-stencils.json')?[]:meta,texture:async()=>texture,extraBits:[planning.waterBit,mask.bit]});
  assert.ok(material._textures.length<=8,'water must fit the WebGL packed sampler indices');
  const view=new View3D();
  try{
   const descriptor=material.getPrimaryDescriptor(view);
   for(const bits of [descriptor.bitsGpu,descriptor.bitsGl])assert.ok(bits.some(bit=>bit.name==='waterPlanningOverlays'),'water must paint RDZ on its visible surface');
+  const framed=new material.constructor({extraBits:framedMaterialBits([...material._featureBits,...material._extraBits])});
+  try {
+   mask.bind(framed);
+   assert.ok(framed._textures.length<=8);
+   assert.equal(framed.textures.normal.source,mask.source);
+   const framedDescriptor=framed.getPrimaryDescriptor(view);
+   assert.ok(framedDescriptor.bitsGpu.some(bit=>bit.name.startsWith('nativeWaterStencil:foxhole-frame:')));
+  } finally {framed.destroy();}
+  mask.bind(material);
+  const triangle=[[0,0,0],[6,0,0],[0,0,3]];
+  mask.set([[-2,.1].flatMap(offset=>triangle.map(([x,y,z])=>[x,y+offset,z]))],0);
+  const packed=new Float32Array(mask.source.resource.buffer);
+  assert.equal(excavationGridContains(packed,[1,0,1]),true);
+  assert.equal(excavationGridContains(packed,[5,0,2]),false);
+  assert.equal(excavationGridContains(packed,[1,.2,1]),false);
+  assert.equal(excavationGridContains(packed,[1,-2.1,1]),false);
+  mask.set([],0);
+  assert.equal(excavationGridContains(packed,[1,0,1]),false);
+  for(const bits of [descriptor.bitsGpu,descriptor.bitsGl])assert.ok(bits.some(bit=>bit.name==='nativeWaterStencil'));
   planning.set({rdz:true,topo:true},{items:[icon(0,850)]});planning.bindWater(material);
   assert.deepEqual(Array.from(material.data.terrainOverlayInfo),Array.from(planning.info));
   assert.equal(material.textures.baseColor.source,planning.source,'terrain and water share one exemption texture');
@@ -29,7 +50,7 @@ test('water uses the shared RDZ mask without terrain contours or changing refrac
   planning.set({rdz:false,topo:true});planning.bindWater(material);
   assert.equal(material.data.terrainOverlayInfo[0],0);assert.equal(material.data.terrainOverlayInfo[1],1);
   assert.equal(material._passBit,32);assert.equal(material.state.depthMask,true);assert.equal(material.state.depthTest,true);
- }finally{view.destroy({children:true});material.destroy();planning.destroy();texture.destroy(true);}
+ }finally{view.destroy({children:true});material.destroy();mask.destroy();planning.destroy();texture.destroy(true);}
 });
 
 for(const backend of ['gpu','gl'])test(backend+' water RDZ uses native region coordinates after board framing and omits Topo',()=>{

@@ -351,6 +351,7 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         groundAvailable: () => world.active,
         groundElevation: (x, y) => world.sampleGround(x, y),
         waterElevation: (x, y) => world.sampleWater(x, y),
+        updateWaterStencils: triangles => world.setWaterStencils(triangles),
         updateGroundCutouts: volumes => world.setGroundCutouts(volumes),
         spatialLayers() {
             const root = plugin.presentationRoot;

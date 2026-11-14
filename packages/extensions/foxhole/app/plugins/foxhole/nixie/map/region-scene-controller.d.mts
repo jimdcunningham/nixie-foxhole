@@ -13,6 +13,7 @@ export class FoxholeRegionSceneController {
     mapAssetAt(x: number, y: number): string | null;
     sampleGround(x: number, y: number): number | null;
     sampleWater(x: number, y: number): number | null;
+    setWaterStencils(triangles: readonly (readonly (readonly number[])[])[]): void;
     setGroundCutouts(volumes: readonly (readonly (readonly number[])[])[]): void;
     readonly active: boolean;
     whenDisposed(): Promise<void>;

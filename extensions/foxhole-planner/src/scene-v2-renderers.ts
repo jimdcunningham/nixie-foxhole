@@ -8,6 +8,7 @@ import { renderFoxholeModificationSlotOverlays } from './scene-v2-modification-o
 import { foxholeConnectorGeometryHandles, foxholeConnectorGeometryWheel } from './connector-gesture-policy.ts';
 import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
 import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
+import { foxholeAquaticWaterline } from './aquatic-placement.ts';
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
@@ -808,6 +809,17 @@ function renderFoxholeSceneV2EntityPlan(
     if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
         ...placementSpatial, modelClips };
     const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, occupiedTags);
+    if (!appearance.packaged && !appearance.destroyed && assetMetadata.waterStencils?.length) {
+        const origin = assetMetadata.model?.blueprintOrigin;
+        const waterline = foxholeAquaticWaterline(assetMetadata);
+        const waterStencils = assetMetadata.waterStencils.map(triangle => triangle.map((value, index) => {
+            if (index % 3 === 0) return value + (origin?.x ?? 0);
+            if (index % 3 === 1) return value + (origin?.y ?? 0);
+            // Boats use the same buoyancy reference for their water mask and placement.
+            return waterline ?? value + (origin?.z ?? 0);
+        }));
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, waterStencils };
+    }
     if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
     // Older inspector edits changed the asset without updating its saved model.
     const boundModel = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'

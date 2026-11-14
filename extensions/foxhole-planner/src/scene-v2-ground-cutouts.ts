@@ -6,6 +6,23 @@ import { triangulateStructureRegion } from './scene-v2-structural-clips.ts';
 /** Match authored floor footprints, never the padded projection's image bounds. */
 export function structuralGroundCutouts(asset: FoxholeSceneV2AssetMetadata, occupied: ReadonlySet<string>): NonNullable<NixieSpatialPlanV1['groundCutouts']> {
     const floor = asset.renderLayers.floor ?? asset.renderLayers.floormesh ?? {width:160,height:160,offsetX:0,offsetY:0};
+    if (!asset.model?.structuralProfile && asset.landscapeHoles?.length) {
+        return asset.landscapeHoles.map(hole => {
+            const sides = hole.shape === 'octagon' ? 8 : 16;
+            const outline = hole.shape === 'box' ? [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+                : Array.from({ length: sides }, (_, i) => {
+                    const angle = i * 2 * Math.PI / sides;
+                    return [Math.cos(angle), Math.sin(angle)];
+                });
+            const rotation = hole.rotation * Math.PI / 180;
+            const cos = Math.cos(rotation), sin = Math.sin(rotation);
+            const polygon = outline.flatMap(([x, y]) => [
+                (hole.x + x! * hole.width * cos - y! * hole.length * sin) * .32,
+                (hole.y + x! * hole.width * sin + y! * hole.length * cos) * .32,
+            ]);
+            return { polygon, minZ: (hole.z - hole.height) * .32, maxZ: (hole.z + hole.height) * .32 };
+        });
+    }
     if (!asset.bunker || !asset.model?.structuralProfile) return [];
     const id = asset.codeName.toLowerCase();
     let regions: Array<Array<{ x: number; y: number }>>;
