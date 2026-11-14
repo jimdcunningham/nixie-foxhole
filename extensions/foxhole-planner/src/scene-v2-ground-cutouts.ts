@@ -18,7 +18,8 @@ export function structuralGroundCutouts(asset: FoxholeSceneV2AssetMetadata, occu
             if (/^trencht[123]$/.test(id)) outline = rect(160, 48);
             else if (/^fortcornert[123]$/.test(id)) outline = [{x:-80,y:-80},{x:80,y:-80},{x:80,y:-16},{x:-16,y:80},{x:-80,y:80}];
             else if (/^fortbaset[123]$/.test(id)) outline = rect(80, 160, 80);
-            else if (asset.profileType?.toLowerCase() === 'fort') outline = rect(80, 80);
+            // Radar bunkers have the standard square floor, but lack a selection polygon.
+            else if (/^fortradart[123]$/.test(id) || asset.profileType?.toLowerCase() === 'fort') outline = rect(80, 80);
             else {
                 regions = (asset.selectionPolygons ?? []).flatMap(p => triangulateStructureRegion(p.shape.filter((_,i)=>i%2===0)
                     .map((x,i)=>({x:x*32,y:p.shape[i*2+1]!*32}))));

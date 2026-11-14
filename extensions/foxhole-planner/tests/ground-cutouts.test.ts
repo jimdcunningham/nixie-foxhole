@@ -25,6 +25,21 @@ test('ground openings use native floor shapes and occupied approaches without pr
     assert.deepEqual(structuralGroundCutouts(assets.facilityrefineryoil!,new Set()),[]);
     assert.deepEqual(structuralGroundCutouts({...assets.fortt3!,model:undefined},new Set()),[]);
 });
+test('radar bunker interiors use the same ground opening as the Tier 3 bunker', () => {
+    const expected = structuralGroundCutouts(assets.fortt3!, new Set());
+    for (const id of ['fortradart1', 'fortradart2', 'fortradart3']) {
+        const entity = { entityId: id, revision: 1, components: [{
+            ownerId: 'nixie.foxhole-planner', componentId: 'asset', version: 1, definitionAvailable: true,
+            data: { catalogId: 'foxhole.structures', assetId: id },
+        }] };
+        const plan = renderFoxholeSceneV2Entity(entity, {
+            contractVersion: 1, entities: [entity], settings: { 'foxhole.structure.hideRoofs': true },
+        });
+        assert.ok(plan.spatial, id);
+        assert.deepEqual(parseNixieSpatialPlanV1(plan.spatial).groundCutouts, expected, id);
+    }
+});
+
 test('ground cutouts cross the actual structural renderer alongside visibility and model clipping', () => {
     for(const id of ['trencht1','trencht2','trencht3','trenchintt1','trenchempt3','fortt3','fortcornert1','fortbaset2']) {
         const entity={entityId:'preview',revision:1,components:[{ownerId:'nixie.foxhole-planner',componentId:'asset',version:1,definitionAvailable:true,data:{catalogId:'foxhole.structures',assetId:id}}]};
