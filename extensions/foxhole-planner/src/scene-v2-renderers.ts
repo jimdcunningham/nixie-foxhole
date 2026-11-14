@@ -836,9 +836,16 @@ function renderFoxholeSceneV2EntityPlan(
     // Older inspector edits changed the asset without updating its saved model.
     const boundModel = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'model' && component.definitionAvailable);
-    if (boundModel && boundModel.data.resourceId !== assetMetadata.model?.resourceId) {
+    const baseModel = assetMetadata.model && getFoxholeSceneV2ModelComponentData(assetMetadata.model);
+    // Shipped Transfer Point assemblies identify the complete insulated mesh as an add-on.
+    const insulatedTransferPoint = assetId === 'facilitypipetransfer' && !appearance.destroyed && !appearance.packaged
+        && selectedFoxholeSceneV2Modifications(entity, assetMetadata)
+            .some(({ variantId, variant }) => variantId === 'insulation' && variant.isUpgrade);
+    if (baseModel && insulatedTransferPoint) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial,
-            model: assetMetadata.model ? getFoxholeSceneV2ModelComponentData(assetMetadata.model) : null };
+            model: { ...baseModel, resourceId: baseModel.resourceId + '.upgrade.insulation' } };
+    } else if (boundModel && boundModel.data.resourceId !== baseModel?.resourceId) {
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, model: baseModel ?? null };
     }
     if (appearance.destroyed && !appearance.packaged) {
         const destroyedModel = assetMetadata.destroyedAssetId ? assetMetadataById[assetMetadata.destroyedAssetId]?.model : undefined;

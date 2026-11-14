@@ -1249,3 +1249,22 @@ test('reproduces V1 viewport-relative detail scaling without changing persisted 
         && triangulation[1].children[0].children[0]?.kind === 'text'
         && triangulation[1].children[0].children[0].box?.renderScale, 4);
 });
+
+test('Transfer Point insulation selects the replacement model even when the saved model is the base', () => {
+    const ownerId = 'nixie.foxhole-planner';
+    const baseId = 'foxhole.model.facilitypipetransfer';
+    const entity = (insulated: boolean): NixieComponentEntitySnapshotV1 => ({
+        entityId: 'transfer-point',
+        revision: 1,
+        components: [
+            { ownerId, componentId: 'asset', version: 1, definitionAvailable: true,
+                data: { catalogId: 'foxhole.structures', assetId: 'facilitypipetransfer' } },
+            { ownerId, componentId: 'model', version: 1, definitionAvailable: true, data: { resourceId: baseId } },
+            { ownerId, componentId: 'modification', version: 1, definitionAvailable: true,
+                data: { selections: insulated ? [{ slotId: 'UpgradeSlotComponent', variantId: 'insulation' }] : [] } },
+        ],
+    });
+    const upgraded = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity(true)));
+    assert.equal(upgraded.spatial?.model?.resourceId, baseId + '.upgrade.insulation');
+    assert.equal(renderFoxholeSceneV2Entity(entity(false)).spatial?.model, undefined);
+});
