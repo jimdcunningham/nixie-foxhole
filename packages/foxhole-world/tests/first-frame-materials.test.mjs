@@ -67,3 +67,17 @@ test('equal attribute layouts preserve topology and dynamic exclusions',()=>{
  const release=prepareFirstFrameMaterials(f.renderer,[a,b,dynamic]);for(const g of [a,b,dynamic,dynamic])f.renderer.material3d.ensureMaterial(f.mesh(g),f.view);
  assert.equal(f.calls(),4);release();
 });
+
+test('first-frame reuse forwards the batch and view on Pixi 3D 0.1',()=>{
+ const f=fixture(),batch={};
+ f.renderer.material3d.ensureMaterial=function(mesh,receivedBatch,view){
+  assert.equal(receivedBatch,batch);
+  assert.equal(view,f.view);
+  return f.original(mesh);
+ };
+ const release=prepareFirstFrameMaterials(f.renderer,[f.geometry]);
+ try{
+  assert.equal(f.renderer.material3d.ensureMaterial(f.mesh(),batch,f.view),f.renderer.material3d.ensureMaterial(f.mesh(),batch,f.view));
+  assert.equal(f.calls(),1);
+ }finally{release();}
+});

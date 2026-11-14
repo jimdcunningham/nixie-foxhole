@@ -1,3 +1,4 @@
+import {setBatchPasses} from './batch-passes.mjs';
 import {loadCatalogModel} from './catalog-model.mjs';
 import {resourceFieldAssets,selectResourceFields} from '../authoring/resource-field-placements.mjs';
 import {createMirroredGeometryCache,isMirroredTransform} from '../authoring/mirrored-geometry.mjs';
@@ -14,9 +15,9 @@ export async function loadRegionResourceFields({baseUrl,root,placements,signal,f
    const model=new Model3D(source),parts=[];model.scale.z=-1;model.position.set(d.offsetX/32,d.offsetZ/32,-d.offsetY/32);
    const visit=(node,parent)=>{node.updateLocalTransform();const matrix=parent.clone().multiply(node.localTransform);if(node instanceof Mesh3D)parts.push({geometry:node.geometry,material:node.material,matrix});for(const child of node.children)visit(child,matrix);};visit(model,new Matrix4());model.destroy({children:true});
    const batch=new BatchedMesh3D({size:parts.length*placements.length,cull:'gpu',label:asset});let slot=0;
-   for(const [i,p]of placements.entries())for(const part of parts){const matrix=new Matrix4().fromArray(p.matrix).multiply(part.matrix);batch.setGeometryAt(slot,isMirroredTransform(Array.from(matrix.elements))?winding.get(part.geometry):part.geometry);batch.setMaterialAt(slot,part.material);batch.setMatrixAt(slot,matrix);batch.items[slot].receiveShadow=true;const mask=(part.material.alphaMode==='blend'?RenderPassBit.TRANSPARENT:RenderPassBit.OPAQUE)|RenderPassBit.SHADOW;batch.setItemActive(slot,0);records.push({batch,slot:slot++,placement:i,asset,mask});}group.addChild(batch);
+   for(const [i,p]of placements.entries())for(const part of parts){const matrix=new Matrix4().fromArray(p.matrix).multiply(part.matrix);batch.setGeometryAt(slot,isMirroredTransform(Array.from(matrix.elements))?winding.get(part.geometry):part.geometry);batch.setMaterialAt(slot,part.material);batch.setMatrixAt(slot,matrix);batch.items[slot].receiveShadow=true;const mask=(part.material.alphaMode==='blend'?RenderPassBit.TRANSPARENT:RenderPassBit.OPAQUE)|RenderPassBit.SHADOW;setBatchPasses(batch,slot,0);records.push({batch,slot:slot++,placement:i,asset,mask});}group.addChild(batch);
   }
   root.addChild(group);let lastItems,first=true;
-  return {root:group,summary,setWarState(state,visible){const items=state?.items;if(!first&&items===lastItems)return;first=false;lastItems=items;const selected=selectResourceFields(placements,state,visible);summary.visible=selected.size;summary.byAsset={};for(const asset of selected.values())summary.byAsset[asset]=(summary.byAsset[asset]||0)+1;for(const r of records)r.batch.setItemActive(r.slot,selected.get(r.placement)===r.asset?r.mask:0);},destroy(){group.removeFromParent();group.destroy({children:true});winding.destroy();}};
+  return {root:group,summary,setWarState(state,visible){const items=state?.items;if(!first&&items===lastItems)return;first=false;lastItems=items;const selected=selectResourceFields(placements,state,visible);summary.visible=selected.size;summary.byAsset={};for(const asset of selected.values())summary.byAsset[asset]=(summary.byAsset[asset]||0)+1;for(const r of records)setBatchPasses(r.batch,r.slot,selected.get(r.placement)===r.asset?r.mask:0);},destroy(){group.removeFromParent();group.destroy({children:true});winding.destroy();}};
  }catch(error){group.destroy({children:true});winding.destroy();throw error;}
 }

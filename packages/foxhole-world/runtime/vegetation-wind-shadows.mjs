@@ -19,7 +19,11 @@ function windBit(material){
  bit={name:'foxholeWindShadow:'+key,gpu:{vertex:{header:gpuHeader,afterTransform:read(true)+vegetationWindTransform(true,{normal:false,project:false})}},gl:{vertex:{header:glHeader,afterTransform:read(false)+vegetationWindTransform(false,{normal:false,project:false})}}};bits.set(key,bit);return bit;
 }
 function installPass(view,pass){
- if(!pass?.descriptor?.shaderDescriptor||passes.has(pass))return;passes.add(pass);
+ if(!pass?.descriptor?.shaderDescriptor||passes.has(pass))return;
+ const gpu=!!pass._globalBindGroup,group=gpu?pass._globalBindGroup:pass._shadowBindGroup;
+ // Leave the stock shadow pass active on Pixi versions with different bindings.
+ if(typeof group?.setResource!=='function')return;
+ passes.add(pass);
  const source=pass.descriptor.shaderDescriptor,base=new ShaderDescriptor({...source,bitsGpu:[...source.bitsGpu,storeBit],bitsGl:[...source.bitsGl,storeBit]});
  pass.descriptor={...pass.descriptor,shaderDescriptor:base};
  const variants=new Map(),dirty=pass.onRenderableDirty;
@@ -39,7 +43,7 @@ function installPass(view,pass){
  // WGSL packs textures before storage buffers: the new texture is slot 0,
  // so forward the stock GPU pass's five store writes to slots 1..5. GLSL
  // appends the texture after its existing uniform/texture slots, at slot 6.
- const gpu=!!pass._globalBindGroup,slot=gpu?0:6,group=gpu?pass._globalBindGroup:pass._shadowBindGroup,setResource=group.setResource;
+ const slot=gpu?0:6,setResource=group.setResource;
  if(gpu)group.setResource=function(resource,index){return setResource.call(this,resource,index+1);};
  const stage=gpu?'prepare':'render',render=pass[stage];
  pass[stage]=function(session){setResource.call(group,this.pipe.materialStoreBuffer.texture.source,slot);return render.call(this,session);};
@@ -51,7 +55,7 @@ function installPass(view,pass){
 export function prepareVegetationWindShadows(view){
  if(!view?._ensureInitialized)return;
  if(!views.has(view)){views.add(view);const initialize=view._ensureInitialized;
-  view._ensureInitialized=function(renderer){const result=initialize.call(this,renderer);installPass(this,this.passByBit?.[RenderPassBit.SHADOW]);return result;};
+  view._ensureInitialized=function(...args){const result=initialize.apply(this,args);installPass(this,this.passByBit?.[RenderPassBit.SHADOW]);return result;};
  }
  installPass(view,view.passByBit?.[RenderPassBit.SHADOW]);
 }

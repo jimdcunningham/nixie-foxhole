@@ -1,5 +1,10 @@
 // Use the native direct geometry pass for every surface; never duplicate it into
 // the mesh atlas just to compare materials. Coordinates remain native metres.
+export const mapTerrainLightingBit={
+ name:'foxholeMapTerrainLighting',
+ gpu:{fragment:{lighting:'finalColor=mix(albedo,finalColor,0.25);'}},
+ gl:{fragment:{lighting:'finalColor=mix(albedo,finalColor,0.25);'}}
+};
 export function simpleTerrainBit(surface){
  const map=surface==='map',fields={surfaceColor:'vec4<f32>'};
  if(map)Object.assign(fields,{uTerrainMap:'texture_2d<f32>',uTerrainMapSampler:'sampler'});

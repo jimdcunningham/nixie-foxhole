@@ -1,3 +1,4 @@
+import {setBatchPasses} from './batch-passes.mjs';
 import {decodeWorldImage} from './image-bitmap.mjs';
 import {SurfaceDecalPass,surfaceDecalMaterial} from '../authoring/surface-decal-pass.mjs';
 import {Buffer,BufferUsage,BufferImageSource,ImageSource,Texture,Rectangle,BindGroup,UniformGroup} from 'pixi.js';
@@ -59,7 +60,7 @@ export async function loadBakedRegion({baseUrl,entry,signal,frame,onProgress=()=
    signal?.throwIfAborted();let node;
    if(row.type==='batch'){
     node=new BatchedMesh3D({size:row.slots.length,cull:row.cull,label:row.label});const matrices=raw.get(row.matrices.path),matrix=new Matrix4();
-    for(let slot=0;slot<row.slots.length;slot++){const [g,m,mask,receiveShadow,billboardMode]=row.slots[slot];node.setGeometryAt(slot,geometries[g]);node.setMaterialAt(slot,materials[m]);matrix.elements.set(matrices.subarray(slot*16,slot*16+16));node.setMatrixAt(slot,matrix);node.items[slot].receiveShadow=receiveShadow;node.items[slot].billboardMode=billboardMode;node.setItemActive(slot,scene.materials[m].surfaceDecal&&mask?materials[m]._passBit:mask);}
+    for(let slot=0;slot<row.slots.length;slot++){const [g,m,mask,receiveShadow,billboardMode]=row.slots[slot];node.setGeometryAt(slot,geometries[g]);node.setMaterialAt(slot,materials[m]);matrix.elements.set(matrices.subarray(slot*16,slot*16+16));node.setMatrixAt(slot,matrix);node.items[slot].receiveShadow=receiveShadow;node.items[slot].billboardMode=billboardMode;setBatchPasses(node,slot,scene.materials[m].surfaceDecal&&mask?materials[m]._passBit:mask);}
    }else if(row.type==='mesh'||row.type==='particles'){
     node=new Mesh3D({geometry:geometries[row.geometry],material:materials[row.material],castShadow:row.castShadow,receiveShadow:row.receiveShadow,label:row.label});if(row.type==='particles')particles.push({material:node.material,uniforms:row.uniforms});
    }else node=new Container3D({label:row.label});

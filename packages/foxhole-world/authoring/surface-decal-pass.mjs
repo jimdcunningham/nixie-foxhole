@@ -15,11 +15,16 @@ export function surfaceDecalMaterial(material){
  return material;
 }
 class SurfaceDecalDraw extends ForwardRenderPass {
- onRenderableDirty(item,batch){
+ constructor(options){
+  super(options);
+  // Custom passes reuse the primary shader and therefore need its material bindings.
+  if(this._forward)this._forward.bindsMaterial=true;
+ }
+ onRenderableDirty(item,batch,rebuildsLists){
   // Reuse the compiled primary material, including view lighting, weather and
   // tone mapping. A custom membership otherwise expects an override shader.
   item._passCache[this.bit]=item._passCache[item.material._passBit&RenderPassBit.MATERIAL_PASS_MASK];
-  super.onRenderableDirty(item,batch);
+  super.onRenderableDirty(item,batch,rebuildsLists);
  }
 }
 export class SurfaceDecalPass extends Pass3D {

@@ -69,10 +69,11 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  const modelGroups=new Map(),detailGroups=new Map(),modelStreams=new Map();let detailCamera=priorityPosition?{position:priorityPosition}:null;let demand,layerProgress,initialComplete=false,layerCycleStarted=null,preparedMs=0;
  const geo=g=>(ownedGeometry.add(g),g);
  function mat(m){
-  if(frame&&m._extraBits?.length){const original=m;m=new original.constructor({extraBits:framedMaterialBits([...original._featureBits||[],...original._extraBits]),alphaMode:original.alphaMode,alphaCutoff:original.alphaCutoff,doubleSided:original.doubleSided,vertexColors:original.vertexColors,flatShading:original.flatShading,fog:original.fog});
+  const extraBits=m.extraBits??m._extraBits;
+  if(frame&&extraBits?.length){const original=m;m=new original.constructor({extraBits:framedMaterialBits([...original._featureBits||[],...extraBits]),alphaMode:original.alphaMode,alphaCutoff:original.alphaCutoff,doubleSided:original.doubleSided,vertexColors:original.vertexColors,flatShading:original.flatShading,fog:original.fog});
    for(const key of properties(original.data)){const v=original.data[key];if(typeof v==='number'||ArrayBuffer.isView(v)||Array.isArray(v))m.data[key]=ArrayBuffer.isView(v)?v.slice():v;}
    for(const key of properties(original.textures))if(original.textures[key]?.source)m.textures[key]=original.textures[key];m._passBit=original._passBit;m.state.depthMask=original.state.depthMask;m.state.blendMode=original.state.blendMode;original.destroy();}
-  if(m._extraBits?.some(bit=>bit.name.startsWith('nativeGroundExcavation:')))excavationMask.bind(m);ownedMaterial.add(m);if(framePreparation)m.data.foxholeFrame=framePreparation.frame;return m;
+  if((m.extraBits??m._extraBits)?.some(bit=>bit.name.startsWith('nativeGroundExcavation:')))excavationMask.bind(m);ownedMaterial.add(m);if(framePreparation)m.data.foxholeFrame=framePreparation.frame;return m;
  }
  const status=(phase,progress=layerProgress)=>{provider.report(phase,progress);},liveTerrainPass=new LiveTerrainPass(),roadShoulders=new RoadShoulderPass({terrainPass:liveTerrainPass,geo,release:g=>{ownedGeometry.delete(g);if(!g.destroyed)g.destroy(true);}}),passes=[liveTerrainPass,roadShoulders,new SurfaceDecalPass(),new SafeSsaoEffect({radius:1.2*(frame?.scale||1),maxDistance:.78*(frame?.scale||1),intensity:1,power:1.25,bias:.02,samples:32,resolution:'inherit'}),new SceneColorFinishEffect()];
  passes[3].enabled=ambientOcclusion;passes[4].enabled=!ambientOcclusion;

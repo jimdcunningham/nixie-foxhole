@@ -1,3 +1,4 @@
+import {screenSpaceFuncsBit} from '@pixi/3d';
 import {waterOpticsHeader} from './water-optics.mjs';
 // Source images and linear palettes come from Foxhole's Water2 material graph.
 // Four-way moving normals, refracted opaque color, scene-depth shoreline foam
@@ -95,6 +96,7 @@ function wgsl(gl){return gl.replaceAll('vPosition','input.vPosition').replaceAll
  .replace(/(?<![\w\d])(\.\d+)/g,'0$1');}
 export const nativeWaterBit={
  name:'foxholeNativeWater2',
+ requires:[screenSpaceFuncsBit],
  textures:['waveLarge','waveSmall','waterFoam','waterBed'],
  bindings:{material:{waterTime:'f32',waveStrength:'f32',hasPonds:'f32',waterBody:'vec4<f32>',waterShallow:'vec4<f32>',waterFoamColor:'vec4<f32>',waterSurface:'vec4<f32>'}},
  gl:{header:waterOpticsHeader(false),fragment:{material:materialGL,lobePerLight:sunGlintGL}},gpu:{header:waterOpticsHeader(true),fragment:{material:wgsl(materialGL),lobePerLight:wgsl(sunGlintGL).replace('light.type','light.kind')}}

@@ -28,6 +28,7 @@ function chooseLodValues(distance,radius,projection,category,cover,previous,tiny
 // GPU visibility lane in sync, without changing pass membership or rebuilding
 // draw commands. Both WebGL replay and WebGPU compaction consume these fields.
 export function setLodSlotVisible(batch,index,visible,dirty){
+ if(batch.setVisibleAt){batch.setVisibleAt(index,visible);return;}
  const item=batch.items[index],value=visible?1:0;if(item._worldVisible===value)return;
  const store=batch.batch.storeBuffer,row=item._storeIndex;
  if(store.stride!==24||MESH3D_LANE_VISIBILITY!==19)throw Error('Unsupported Pixi 3D slot layout');
