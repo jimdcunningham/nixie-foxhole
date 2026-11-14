@@ -607,3 +607,59 @@ test('SDK exchange retains unresolved peer relationships until its socket metada
         && Array.isArray(operation.set?.attachments) && operation.set.attachments.length === 0) ?? false, false);
     assert.deepEqual([target, line], before);
 });
+
+test('straight connector endpoint previews and commits lock to a real socket axis', () => {
+    for (const key of ['facilitycatwalkbridge', 'fieldbridge', 'fieldpier', 'facilitypipeoverhead']) {
+        const line = pipe('line', 0);
+        const anchor = key === 'facilitycatwalkbridge' ? structure('anchor', -36.8) : pipe('anchor', -300);
+        const anchorSocket = 'FrontSocket';
+        if (key === 'facilitycatwalkbridge') {
+            anchor.components[1]!.data.assetId = 'facilitycatwalkplatform';
+        } else {
+            Object.assign(anchor.components[1]!.data, { foxholeKey: key, endX: 0, startRotation: 0, endRotation: 0 });
+        }
+        Object.assign(line.components[1]!.data, { foxholeKey: key, startAttachmentNodeId: 'anchor', startAttachmentSocketName: anchorSocket });
+        const run = (phase: 'preview' | 'commit', x: number, y: number, extra: NixieComponentEntitySnapshotV1[] = []) => {
+            const result = finalizeFoxholeSceneV2Transform({
+                contractVersion: 1, entityId: line.entityId,
+                transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+                context: { contractVersion: 1, entities: [line, anchor, ...extra] },
+                geometryGesture: { phase, handleId: 'end', snappingEnabled: true, worldPoint: { x, y }, hoveredEntityIds: [] },
+            });
+            const patch = result.transaction?.operations.find(op => op.entityId === line.entityId && op.op === 'patch' && op.componentId === 'spline-connector');
+            return patch?.op === 'patch' ? patch.set : undefined;
+        };
+        for (const phase of ['preview', 'commit'] as const) {
+            assert.equal(run(phase, 420, 100)?.endX, 420, key);
+            assert.equal(run(phase, 420, 100)?.endY ?? 0, 0, key);
+            assert.equal(run(phase, -10, 40)?.endX, 48, key);
+        }
+        if (key === 'facilitycatwalkbridge') {
+            const target = structure('target', 456.8);
+            target.components[1]!.data.assetId = 'facilitycatwalkplatform';
+            assert.equal(run('preview', 417, 3, [target])?.endAttachmentNodeId, 'target');
+            assert.ok(Math.abs(Number(run('commit', 417, 3, [target])?.endX) - 420) < 1e-6);
+            target.components[0]!.data.y = 40;
+            assert.equal(run('commit', 420, 40, [target])?.endAttachmentNodeId, undefined);
+        }
+    }
+});
+
+test('moving a straight catwalk snaps the whole span without skewing its ends', () => {
+    const line = pipe('line', 0);
+    const target = structure('platform', -36.8);
+    target.components[1]!.data.assetId = 'facilitycatwalkplatform';
+    Object.assign(line.components[1]!.data, { foxholeKey: 'facilitycatwalkbridge' });
+    const result = finalizeFoxholeSceneV2Transform({
+        contractVersion: 1, entityId: line.entityId,
+        transform: { x: 4, y: 7, rotation: 0, scaleX: 1, scaleY: 1 },
+        context: { contractVersion: 1, entities: [line, target] },
+    });
+    assert.ok(Math.abs(result.transform.x) < 1e-6);
+    assert.equal(result.transform.y, 0);
+    const patch = result.transaction?.operations.find(op => op.entityId === line.entityId && op.op === 'patch');
+    assert.ok(patch?.op === 'patch');
+    assert.equal(patch.set?.startAttachmentNodeId, 'platform');
+    assert.equal(patch.set?.startY, undefined);
+    assert.equal(patch.set?.endY, undefined);
+});
