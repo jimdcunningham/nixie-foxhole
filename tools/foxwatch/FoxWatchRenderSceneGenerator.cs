@@ -1551,9 +1551,28 @@ public sealed class FoxWatchRenderSceneGenerator
             return null;
         }
 
+        static IEnumerable<FoxWatchRenderSceneNode> EnumeratePreviewNodes(IEnumerable<FoxWatchRenderSceneNode> nodes) =>
+            nodes.SelectMany(node => EnumeratePreviewNodes(node.Children).Prepend(node));
+
+        var excludedNames = RailTrackSplineSwitchNodeNames;
+        if (UsesPlanarSmallGaugeTrackbedLayers(structure) || UsesPlanarStandardGaugeTrackbedLayers(structure))
+        {
+            // The extracted spline contains mutually exclusive terrain variants.
+            // A level preview uses the same flat bed as the placed spline.
+            var smallGauge = IsSmallGaugeRailTrackSplineStructure(structure);
+            var bedPrefix = smallGauge ? "SmallGaugeTrack_Trackbed" : "Railway_Trackbed";
+            var flatBedName = smallGauge ? "SmallGaugeTrack_Trackbed01" : "Railway_Trackbed_01";
+            excludedNames = RailTrackSplineSwitchNodeNames
+                .Concat(EnumeratePreviewNodes(blueprintScene.Roots)
+                    .Select(node => NormalizeRenderSceneNodeName(node.Name))
+                    .Where(name => name.StartsWith(bedPrefix, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(name, flatBedName, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+        }
+
         var preparedRoots = FilterNodesExcludingNormalizedNames(
             FilterNodesForTopdownStructurePreview(structure, blueprintScene.Roots),
-            RailTrackSplineSwitchNodeNames);
+            excludedNames);
 
         return new FoxWatchBlueprintSceneExtraction
         {
