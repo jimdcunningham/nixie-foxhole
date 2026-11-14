@@ -23,6 +23,15 @@ export function spatialConnectorProfile(id, document, exported, scene) {
         const endpoint = nodes.find(node => node.name === 'FrontSocket')?.unrealLocationCentimeters;
         if (!endpoint || !(endpoint[0] > 0)) throw new Error('Missing overhead endpoint reference');
         profile.endOrigin = [endpoint[0] * .32, -endpoint[1] * .32, endpoint[2] * .32];
+    } else if (id === 'facilityroad') {
+        const caps = meshes.map((mesh, index) => ({ mesh, index }))
+            .filter(({ mesh }) => clean(mesh.name) === 'facilityroadend');
+        const minX = ({ mesh }) => Math.min(...mesh.primitives.map(primitive => document.accessors[primitive.attributes.POSITION].min[0]));
+        const [back, front] = caps.sort((a, b) => minX(a) - minX(b));
+        if (caps.length !== 2) throw new Error('Expected two spatial facility road caps');
+        profile.parts.start = part(['FacilityRoadEnd'], back.index < front.index ? 0 : 1);
+        profile.parts.end = part(['FacilityRoadEnd'], back.index < front.index ? 1 : 0);
+        profile.parts.span = part(['FacilityRoad_Test']);
     } else if (/^(?:small)?railtrackspline(?:biarc|foundation|town)?$/.test(id)) {
         const small = id.startsWith('small');
         profile.parts.rail = part([small ? 'SmallGaugeTrack_Rail' : 'Railway_Rail']);

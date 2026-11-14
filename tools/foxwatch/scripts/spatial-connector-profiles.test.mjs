@@ -21,3 +21,19 @@ test('profiles recover native span length and include a missing minimum-length f
     assert.equal(prepared.assets.meshes[0].id, 'spatial-fence-middle');
     assert.deepEqual(input, copy);
 });
+
+test('road cap roles follow their exported positions when mesh order changes', () => {
+    const document = {
+        meshes: ['FacilityRoadEnd.002', 'FacilityRoad_Test.001', 'FacilityRoadEnd.001']
+            .map((name, index) => ({ name, primitives: [{ attributes: { POSITION: index } }] })),
+        nodes: [{ name: 'front', mesh: 0 }, { name: 'body', mesh: 1 }, { name: 'back', mesh: 2 }],
+        accessors: [{ min: [2.25] }, { min: [-2.25] }, { min: [-6.75] }],
+    };
+    const exported = { meshParts: [{ name: 'front', origin: [288, 0, 1.6] },
+        { name: 'body', origin: [144, 0, 1.6] }, { name: 'back', origin: [144, 0, 1.6] }] };
+    assert.deepEqual(spatialConnectorProfile('facilityroad', document, exported).parts, {
+        start: { meshIndex: 2, origin: [144, 0, 1.6] },
+        end: { meshIndex: 0, origin: [288, 0, 1.6] },
+        span: { meshIndex: 1, origin: [144, 0, 1.6] },
+    });
+});
