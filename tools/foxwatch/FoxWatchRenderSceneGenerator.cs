@@ -2876,10 +2876,11 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool? GetClipFloorOverrideForRenderLayer(FoxWatchManifestStructure structure, string layerId)
     {
-        // Component layers are composited back into the parent at runtime. Their extracted
-        // meshes often sit partly or wholly below the parent's world-space floor, so clipping
-        // an isolated layer erases valid ramps, weapons, flags, and floor surfaces.
-        return false;
+        // Bridge and pier ramps keep their assembled transforms in the component scenes.
+        // Trim their buried ends at the same plane as the assembled icon.
+        return IsFieldBridgeOrPierStructure(structure)
+            && (layerId is "backramp" or "frontramp")
+            && GetClipFloor(structure);
     }
 
     private static bool IsEntrenchmentStructureForFloorClipping(FoxWatchManifestStructure structure)
