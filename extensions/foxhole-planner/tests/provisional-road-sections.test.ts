@@ -5,6 +5,9 @@ import published from '../../../packages/extensions/foxhole/public/foxhole/asset
 import { createFoxholeSceneV2AssetMetadata } from '../src/scene-v2-asset-metadata.ts';
 import type { PublishedFoxholeManifestForSceneV2 } from '../src/scene-v2-asset-metadata.ts';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
+import assets from '../src/scene-v2-assets-node.ts';
+import { createFoxholeSceneV2SplineProductData } from '../src/scene-v2-connector-products.ts';
+import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 
 const layer = { width: 864, height: 410, offsetY: 0 };
@@ -67,4 +70,28 @@ test('published road retains native length-dependent UV scaling through the SDK 
             endX,endY,endRotation,minLength:288.32,maxLength:960,minRadius:160,maxRadius:960,maxBuffer:64,curveT:0,blueprint:false},asset);
         assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1({schemaVersion:1,root:{id:'road',kind:'group',children:long}}));
     }
+});
+
+
+test('spatial views draw the curved Provisional Road ribbon at the authored span', () => {
+    const asset = assets.facilityroad!;
+    assert.ok(asset.model, 'the static catalog model would otherwise take precedence in spatial views');
+    const data = createFoxholeSceneV2SplineProductData('facilityroad', asset.connector!);
+    const render = (endY: number, endRotation: number) => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
+        entityId: 'road',
+        revision: 0,
+        components: [{ ownerId: 'nixie.foxhole-planner', componentId: 'spline-connector',
+            version: 1, definitionAvailable: true, data: { ...data, endX: 700, endY, endRotation } }],
+    }));
+    const straight = render(0, 0);
+    const curved = render(300, Math.PI / 3);
+    assert.equal(straight.spatial?.model, null);
+    assert.equal(curved.spatial?.model, null);
+    assert.equal(straight.root.kind, 'group');
+    assert.equal(curved.root.kind, 'group');
+    const straightSpan = straight.root.children.find(node => node.id === 'spline-connector-span');
+    const curvedSpan = curved.root.children.find(node => node.id === 'spline-connector-span');
+    assert.ok(straightSpan?.kind === 'mesh' && curvedSpan?.kind === 'mesh');
+    const maxY = (positions: number[]) => Math.max(...positions.filter((_, index) => index % 2 === 1));
+    assert.ok(maxY(curvedSpan.positions) > maxY(straightSpan.positions) + 200);
 });
