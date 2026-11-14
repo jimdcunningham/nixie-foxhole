@@ -11,7 +11,7 @@ import { getFoxholeSceneV2ModelComponentData } from './scene-v2-models.ts';
 import { resolveFoxholeTrenchSelectionBounds } from './structure-selection-bounds.ts';
 import { canFoxholeSocketConnectionOpenWalls } from './socket-wall-visibility.ts';
 import type { FoxholeModelLayerMetadata } from './model-layer-nodes.ts';
-import { structuralModelClips } from './scene-v2-structural-clips.ts';
+import { structuralModelClips, occupiedTrenchDirtNodes } from './scene-v2-structural-clips.ts';
 import { structuralGroundCutouts } from './scene-v2-ground-cutouts.ts';
 import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
@@ -746,8 +746,10 @@ function renderFoxholeSceneV2EntityPlan(
     const spatialRendered = structural ? renderFoxholeSceneV2Asset(entity, assetId, assetMetadata,
         {...settings, 'foxhole.structure.useStaticRender': false}, context.entities) : rendered;
     const renderedLayers = new Set(spatialRendered.map(node => node.id));
+    const occupiedTags = resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []);
     const hiddenModelNodes = !structural && renderedLayers.has('building-texture') ? [] : Object.entries((assetMetadata as FoxholeModelLayerMetadata).modelLayerNodes ?? {})
         .flatMap(([layerId, names]) => renderedLayers.has(`structure-layer-${layerId}`) ? [] : names);
+    hiddenModelNodes.push(...occupiedTrenchDirtNodes(assetMetadata.codeName, occupiedTags));
     if (structural?.modifications) {
         const active = !appearance.destroyed && !appearance.packaged ? selectedFoxholeSceneV2Modifications(entity,assetMetadata)
             .filter(entry=>!entry.variant.isUpgrade && (settings?.['foxhole.structure.hideRoofs']!==true || !isFoxholeRoofModification(entry.variant))) : [];
@@ -780,10 +782,10 @@ function renderFoxholeSceneV2EntityPlan(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
             ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes: [...new Set(hiddenModelNodes)] };
     }
-    const modelClips = structuralModelClips(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
+    const modelClips = structuralModelClips(assetMetadata, occupiedTags);
     if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
         ...placementSpatial, modelClips };
-    const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, resolveStructureOccupiedTags(entity, assetMetadata, context.entities ?? []));
+    const groundCutouts = appearance.packaged ? [] : structuralGroundCutouts(assetMetadata, occupiedTags);
     if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
     // Older inspector edits changed the asset without updating its saved model.
     const boundModel = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'

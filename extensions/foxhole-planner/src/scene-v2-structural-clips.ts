@@ -53,3 +53,14 @@ export function structuralModelClips(asset: FoxholeSceneV2AssetMetadata, occupie
         return regions.length ? [{ nodeNames: [...nodeNames], polygons: regions.map(region => region.flatMap(p => [(p.x - model.offsetX) / 32, (p.y - model.offsetY) / 32])) }] : [];
     });
 }
+
+/** FoxWatch exports these berm meshes outside the structural wall groups. */
+export function occupiedTrenchDirtNodes(codeName: string, occupied: ReadonlySet<string>): string[] {
+    const id = codeName.toLowerCase();
+    const nodes = /^trenchintt[12]$/.test(id)
+        ? { front: 'ShortDirt01.001', left: 'ShortDirt01.002', right: 'ShortDirt01.003', back: 'ShortDirt01.004' }
+        : /^trencht[12]$/.test(id)
+            ? { back: 'ShortDirt01.001', front: 'ShortDirt01.002', right: 'LongDirt01.001', left: 'LongDirt01.002' }
+            : {};
+    return Object.entries(nodes).flatMap(([side, mesh]) => occupied.has(side) ? ['TrenchT1' + mesh] : []);
+}

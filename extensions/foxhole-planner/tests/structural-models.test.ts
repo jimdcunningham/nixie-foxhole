@@ -80,3 +80,31 @@ test('roof modifications follow visibility settings and malformed recipes fail a
  assert.ok(roof.nodeNames.every(name=>!normal.includes(name)&&hidden.includes(name)));
  assert.throws(()=>readFoxholeStructuralModelProfile({version:1,layers:{roof:['roof']},modifications:[{slotId:'Roof',variantId:'roof',nodeNames:['part'],replacesLayers:['missing']}]}));
 });
+
+test('spatial trench joins hide only the dirt mesh on the occupied side', () => {
+    for (const family of ['trench', 'trenchint']) {
+        const sides = family === 'trench' ? {
+            Back: 'ShortDirt01.001', Front: 'ShortDirt01.002', Left: 'LongDirt01.002', Right: 'LongDirt01.001',
+        } : {
+            Back: 'ShortDirt01.004', Front: 'ShortDirt01.001', Left: 'ShortDirt01.002', Right: 'ShortDirt01.003',
+        };
+        for (const tier of [1, 2, 3]) {
+            const id = family + 't' + tier;
+            const model = readFoxholeGeneratedModel(id);
+            const gltf = JSON.parse(model.subarray(20, 20 + model.readUInt32LE(12)).toString('utf8'));
+            const dirt = gltf.nodes.map((node: { name?: string }) => node.name)
+                .filter((name: string | undefined) => /^TrenchT1(?:Short|Long)Dirt/.test(name ?? ''));
+            assert.equal(dirt.length, tier === 3 ? 0 : 4, id);
+            for (const [side, suffix] of Object.entries(sides)) {
+                const socket = assets[id]!.buildSockets.find(s => s.name.split(':').at(-1) === side + 'Socket')!;
+                const subject = make(id, [socket.name]);
+                const neighbor = { ...make(id), entityId: 'neighbor' };
+                const plan = renderFoxholeSceneV2Entity(subject, { contractVersion: 1, entities: [subject, neighbor] });
+                const hidden = plan.spatial?.hiddenModelNodes ?? [];
+                assert.deepEqual(hidden.filter(name => /^TrenchT1(?:Short|Long)Dirt/.test(name)),
+                    tier === 3 ? [] : ['TrenchT1' + suffix], id + ' ' + side);
+                if (tier !== 3) assert.ok(dirt.includes('TrenchT1' + suffix), id + ' ' + side);
+            }
+        }
+    }
+});
