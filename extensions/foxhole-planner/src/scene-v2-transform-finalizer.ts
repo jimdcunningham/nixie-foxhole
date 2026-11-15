@@ -375,19 +375,26 @@ function attachmentAt(items: readonly Attachment[], socketName: string): Attachm
     return items.find(item => normalizedName(item.localSocketName) === key);
 }
 
-function endpointAttachmentAt(entity: NixieComponentEntitySnapshotV1, socketName: string): Attachment | undefined {
-    const connector = connectorComponent(entity);
-    const endpoint = connector && connectorEndpoints(entity).find(candidate => normalizedName(candidate.socket.name) === normalizedName(socketName));
-    if (!connector || !endpoint) {
-        return undefined;
-    }
+function connectorAttachment(connector: NonNullable<ReturnType<typeof connectorComponent>>, role: 'start' | 'end') {
     const reference = connector.componentId === 'spline-connector'
-        ? { nodeId: connector.data[`${endpoint.role}AttachmentNodeId`], socketName: connector.data[`${endpoint.role}AttachmentSocketName`] }
-        : connector.data[`${endpoint.role}Attachment`];
+        ? { nodeId: connector.data[`${role}AttachmentNodeId`], socketName: connector.data[`${role}AttachmentSocketName`] }
+        : connector.data[`${role}Attachment`];
     return reference && typeof reference === 'object' && !Array.isArray(reference)
         && typeof reference.nodeId === 'string' && typeof reference.socketName === 'string'
-        ? { localSocketName: endpoint.socket.name, targetEntityId: reference.nodeId, targetSocketName: reference.socketName }
+        ? { targetEntityId: reference.nodeId, targetSocketName: reference.socketName }
         : undefined;
+}
+
+function endpointAttachmentAt(entity: NixieComponentEntitySnapshotV1, socketName: string): Attachment | undefined {
+    const connector = connectorComponent(entity);
+    if (!connector) return undefined;
+    const start = connectorAttachment(connector, 'start');
+    const end = connectorAttachment(connector, 'end');
+    if (!start && !end) return undefined;
+    const name = normalizedName(socketName);
+    const endpoint = connectorEndpoints(entity).find(candidate => normalizedName(candidate.socket.name) === name);
+    const link = endpoint?.role === 'start' ? start : end;
+    return endpoint && link ? { localSocketName: endpoint.socket.name, ...link } : undefined;
 }
 
 function sameAttachments(left: readonly Attachment[], right: readonly Attachment[]): boolean {
@@ -527,7 +534,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
         return divisor > 1e-8 && (axis[0]! * dx + axis[1]! * dy) / divisor >= STRAIGHT_SOCKET_ALIGNMENT;
     };
     const power = connector.data.foxholeKey === 'powerline';
-    const connections: FoxholePowerSocketConnection[] = entities.flatMap(entity => {
+    const connections: FoxholePowerSocketConnection[] = !power ? [] : entities.flatMap(entity => {
         const candidate = connectorComponent(entity);
         if (candidate?.data.foxholeKey !== 'powerline') {
             return [];
@@ -553,11 +560,15 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
         const lockedSocket = lockedEntity && socketsFor(lockedEntity)
             .find(socket => normalizedName(socket.socket.name) === normalizedName(oppositeLink.targetSocketName));
         const anchor = lockedSocket || (opposite && movingSockets.find(socket => socket.socket.name === opposite.socket.name));
+        const cursor = gesture && [gesture.worldPoint.x, gesture.worldPoint.y, gesture.worldPoint.z ?? moving.world[2]];
         const placingFirstEnd = request.interaction === 'placement' && role === 'start';
         const eligible: Array<{ entityId: string; id: string; position: [number, number, number]; target: WorldSocket; }> = [];
         for (const entity of entities) {
+            if (gesture && !gesture.snappingEnabled) break;
             if (movingIds.has(entity.entityId)) continue;
             for (const target of socketsFor(entity)) {
+                if (cursor && !power && Math.hypot(target.world[0] - cursor[0]!, target.world[1] - cursor[1]!,
+                    target.world[2] - cursor[2]!) > SNAP_DISTANCE) continue;
                 const key = target.entityId + ':' + target.socket.name;
                 const endpointLink = endpointAttachmentAt(entity, target.socket.name);
                 if (endpointLink && (endpointLink.targetEntityId !== moved.entityId
@@ -639,11 +650,13 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
             }) : null;
         const best = selected ? { target: selected.target } : null;
         if (gesture) for (const peer of entities) {
-            if (peer.entityId === moved.entityId || !connectorComponent(peer)) continue;
+            const peerGeometry = connectorComponent(peer);
+            if (peer.entityId === moved.entityId || !peerGeometry
+                || (connectorAttachment(peerGeometry, 'start')?.targetEntityId !== moved.entityId
+                    && connectorAttachment(peerGeometry, 'end')?.targetEntityId !== moved.entityId)) continue;
             for (const peerEndpoint of connectorEndpoints(peer)) {
                 const link = endpointAttachmentAt(peer, peerEndpoint.socket.name);
                 if (link?.targetEntityId !== moved.entityId || normalizedName(link.targetSocketName) !== normalizedName(endpoint.socket.name)) continue;
-                const peerGeometry = connectorComponent(peer)!;
                 operations.push({ op: 'patch', entityId: peer.entityId, componentId: peerGeometry.componentId,
                     unset: peerGeometry.componentId === 'spline-connector' ? [peerEndpoint.role + 'AttachmentNodeId', peerEndpoint.role + 'AttachmentSocketName'] : [peerEndpoint.role + 'Attachment'] });
             }
@@ -723,23 +736,25 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
     if (Object.keys(changed).length || removed.length) {
         operations.push({ op: 'patch', entityId: moved.entityId, componentId: connector.componentId, ...(Object.keys(changed).length ? { set: changed } : {}), ...(removed.length ? { unset: removed } : {}) });
     }
-    const finalizedData = Object.fromEntries(Object.entries({ ...connector.data, ...set }).filter(([field]) => !removed.includes(field)));
-    const finalizedMoved = { ...moved, components: moved.components.map(candidate => candidate === connector
-        ? { ...connector, data: finalizedData }
-        : candidate.ownerId === FOXHOLE_OWNER_ID && candidate.componentId === SOCKET_ATTACHMENTS_COMPONENT_ID
-            ? { ...candidate, data: { ...candidate.data, attachments: nextAttachments.get(moved.entityId)!.map(link => ({ ...link })) } } : candidate) };
-    const finalProposal = { ...request.transform, ...finalizedTransform };
-    const posedMoved = withFoxholeSceneV2TransformProposal(finalizedMoved, finalProposal, finalizedTransform.elevation);
-    const finalizedEntities = entities.map(entity => entity.entityId === moved.entityId ? posedMoved : entity);
-    const finalProjection = createFoxholeSpatialProjection(finalizedEntities);
-    for (const [entityId, carried] of carriedConnectorPatches(posedMoved, finalizedEntities, matrices,
-        sockets(posedMoved, matrix, finalProjection))) {
-        if (rigidGroup && movingIds.has(entityId)) continue;
-        const entity = entities.find(candidate => candidate.entityId === entityId)!;
-        const geometry = connectorComponent(entity)!;
-        const delta = Object.fromEntries(Object.entries(carried).filter(([field, value]) => JSON.stringify(geometry.data[field]) !== JSON.stringify(value)));
-        if (Object.keys(delta).length) {
-            operations.push({ op: 'patch', entityId, componentId: geometry.componentId, set: delta });
+    if (nextAttachments.get(moved.entityId)!.length) {
+        const finalizedData = Object.fromEntries(Object.entries({ ...connector.data, ...set }).filter(([field]) => !removed.includes(field)));
+        const finalizedMoved = { ...moved, components: moved.components.map(candidate => candidate === connector
+            ? { ...connector, data: finalizedData }
+            : candidate.ownerId === FOXHOLE_OWNER_ID && candidate.componentId === SOCKET_ATTACHMENTS_COMPONENT_ID
+                ? { ...candidate, data: { ...candidate.data, attachments: nextAttachments.get(moved.entityId)!.map(link => ({ ...link })) } } : candidate) };
+        const finalProposal = { ...request.transform, ...finalizedTransform };
+        const posedMoved = withFoxholeSceneV2TransformProposal(finalizedMoved, finalProposal, finalizedTransform.elevation);
+        const finalizedEntities = entities.map(entity => entity.entityId === moved.entityId ? posedMoved : entity);
+        const finalProjection = createFoxholeSpatialProjection(finalizedEntities);
+        for (const [entityId, carried] of carriedConnectorPatches(posedMoved, finalizedEntities, matrices,
+            sockets(posedMoved, matrix, finalProjection))) {
+            if (rigidGroup && movingIds.has(entityId)) continue;
+            const entity = entities.find(candidate => candidate.entityId === entityId)!;
+            const geometry = connectorComponent(entity)!;
+            const delta = Object.fromEntries(Object.entries(carried).filter(([field, value]) => JSON.stringify(geometry.data[field]) !== JSON.stringify(value)));
+            if (Object.keys(delta).length) {
+                operations.push({ op: 'patch', entityId, componentId: geometry.componentId, set: delta });
+            }
         }
     }
     for (const entity of entities) {
