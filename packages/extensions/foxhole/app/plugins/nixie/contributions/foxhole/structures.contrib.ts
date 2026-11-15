@@ -1,8 +1,8 @@
+import { defineAsyncComponent } from 'vue';
 import { getNixieEditorDocumentSessionBridge } from '#nixie/utils/nixie-editor-document-session-bridge.ts';
 import { buildFoxholeSceneV2SelectionTierUpdates } from '#foxhole/plugins/foxhole/nixie/scene-v2-tier-commands.ts';
 import { getFoxholeLegacyItemCatalog, getFoxholeLegacyStructureCatalog, resolveFoxholeLegacyOverlayIcon } from '#foxhole/plugins/foxhole/nixie/legacy-asset-catalog.ts';
 import { getFoxholeManifestRevision } from '#foxhole/plugins/foxhole/nixie/manifest.ts';
-import FoxholeStructureInspectorCard from '#foxhole/components/nixie/foxhole/FoxholeStructureInspectorCard.vue';
 
 import { createFoxholeAssetsBaseUrl, resolveFoxholeSharedPackagedPalletFromCatalog, resolveFoxholeTextureUrl } from '#foxhole/plugins/foxhole/nixie/catalog.ts';
 
@@ -46,6 +46,8 @@ import { defineContribution } from '#nixie/plugins/nixie/registry/index.ts';
 import { NIXIE_DEBUG_MENU_ID } from '#nixie/plugins/nixie/registry/menu-ids.ts';
 import type { NixieCommandContext } from '#nixie/plugins/nixie/registry/types.ts';
 import type { NixieProjectOperation } from '#nixie/plugins/nixie/project.ts';
+
+const FoxholeStructureInspectorCard = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeStructureInspectorCard.vue'));
 
 const FOXHOLE_ASSET_BASE_URL = createFoxholeAssetsBaseUrl('/');
 const getStructureCatalog = getFoxholeLegacyStructureCatalog;

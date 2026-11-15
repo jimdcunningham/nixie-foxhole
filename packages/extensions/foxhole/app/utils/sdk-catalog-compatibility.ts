@@ -4,7 +4,6 @@ import { createNixieIconAssetSnapshot } from '#nixie/plugins/nixie/contributions
 import type { NixieComponentProductV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { createFoxholeAssetIdentityResolver } from '../../../../../extensions/foxhole-planner/src/catalog-identity.ts';
 import { getFoxholeManifest } from '../plugins/foxhole/nixie/manifest.ts';
-import { foxholeSceneV2StateAdapter } from '../plugins/foxhole/nixie/scene-v2-state-adapter.ts';
 import { createFoxholeStructureSnapshot } from '../plugins/foxhole/nixie/snapshot.ts';
 import { createFoxholeSplineConnectorSnapshot } from '../plugins/foxhole/nixie/spline-connector-snapshot.ts';
 
@@ -63,6 +62,7 @@ export async function createFoxholeSdkCatalogSnapshot(product: NixieComponentPro
     position: { x: number; y: number; z?: number; }) {
     const entity = { entityId: crypto.randomUUID(), revision: 1,
         components: product.components.map(component => ({ ...component, definitionAvailable: true })) };
+    const { foxholeSceneV2StateAdapter } = await import('../plugins/foxhole/nixie/scene-v2-state-adapter.ts');
     const projected = foxholeSceneV2StateAdapter.project(entity);
     const asset = product.components.find(component => component.ownerId === OWNER && component.componentId === 'asset');
     if (asset?.data.catalogId === 'foxhole.icons' && typeof asset.data.assetId === 'string') {

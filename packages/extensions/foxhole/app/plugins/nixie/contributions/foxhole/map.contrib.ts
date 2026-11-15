@@ -1,11 +1,8 @@
+import { defineAsyncComponent } from 'vue';
 import FoxholeWarNxSidebarPanel from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarPanel.vue';
 import FoxholeWarNxSidebarTitle from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarTitle.vue';
 import FoxholeWarNxSidebarMetadata from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarMetadata.vue';
 import FoxholeWarNxSidebarOverflow from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarOverflow.vue';
-import FoxholeSceneStatsSidebarPanel from '#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarPanel.vue';
-import FoxholeSceneStatsSidebarMetadata from '#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarMetadata.vue';
-import FoxholeSceneStatsSidebarActions from '#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarActions.vue';
-import FoxholeSceneStatsSidebarOverflow from '#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarOverflow.vue';
 import { startFoxholePlaybackEventService } from '#foxhole/composables/useFoxholePlaybackEventService.ts';
 import { getNixieEditorDocumentSessionBridge } from '#nixie/utils/nixie-editor-document-session-bridge.ts';
 import { defineContribution } from '#nixie/plugins/nixie/registry/index.ts';
@@ -20,6 +17,11 @@ import { FOXHOLE_MAP_SETTING_KEYS, foxholeMapSettings, readFoxholeMapSettings } 
 import { FoxholeMapViewportPlugin, getFoxholeMapActiveBounds } from '#foxhole/plugins/foxhole/nixie/map/controller.ts';
 import { foxholeSceneMapRendererSetting } from '#foxhole/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
 import { foxholeStatsUserSettings } from '#foxhole/plugins/foxhole/nixie/stats-settings.ts';
+
+const FoxholeSceneStatsSidebarPanel = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarPanel.vue'));
+const FoxholeSceneStatsSidebarMetadata = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarMetadata.vue'));
+const FoxholeSceneStatsSidebarActions = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarActions.vue'));
+const FoxholeSceneStatsSidebarOverflow = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarOverflow.vue'));
 
 function isFoxholeSceneSurfaceActive(): boolean {
     const session = getNixieEditorDocumentSessionBridge();
