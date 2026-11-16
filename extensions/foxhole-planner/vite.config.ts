@@ -7,26 +7,37 @@ import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
 import {publishCompletedBuild} from './build/completed-build-publisher.ts';
+import {readLocalAssetCatalog} from './build/local-asset-catalog.ts';
 
 const extensionRoot = fileURLToPath(new URL('./', import.meta.url));
 const inputFile = process.env.NIXIE_FOXHOLE_CATALOG_FILE?.trim() || resolve(process.env.NIXIE_FOXHOLE_ASSETS_ROOT?.trim()
     || fileURLToPath(new URL('../../packages/extensions/foxhole/public/foxhole/assets/', import.meta.url)), 'catalog.v1.json');
 const ASSETS = '#foxhole-scene-v2-assets', MAPS = '#foxhole-scene-v2-maps';
-function catalogPlugin(): Plugin {
+function catalogPlugin(development: boolean): Plugin {
     let bytes: Buffer, manifest: string;
+    let localFiles: ReadonlyMap<string, Buffer> | undefined;
     const marker = resolve(extensionRoot, '.nixie-building');
     return {
         name: 'foxwatch-packaged-catalog', enforce: 'pre',
         async buildStart() {
             await writeFile(marker, 'Building extension output\n');
             const pin = await readCatalogPin();
-            bytes = await readFile(inputFile);
-            verifyCatalogInput(bytes, pin.catalog);
-            const catalog = parseNixieProductCatalogV1(JSON.parse(bytes.toString('utf8')));
-            if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', pin.baseUrl).href !== pin.catalog.url) throw new Error('Catalog differs from its pinned asset release.');
             const authored = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('./nixie.extension.json', import.meta.url), 'utf8')));
-            manifest = JSON.stringify(parseNixieExtensionManifestV1(createCatalogRuntimeManifest(authored, catalog, pin))) + '\n';
-            this.addWatchFile(inputFile); this.addWatchFile(fileURLToPath(new URL('./nixie.extension.json', import.meta.url)));
+            const local = development || this.meta.watchMode ? await readLocalAssetCatalog(
+                resolve(extensionRoot, '.tmp/local-asset-catalog'), authored, pin.baseUrl, path => this.addWatchFile(path)) : null;
+            localFiles = local?.files;
+            if (local) {
+                bytes = local.bytes;
+                manifest = JSON.stringify(parseNixieExtensionManifestV1(local.manifest)) + '\n';
+            } else {
+                bytes = await readFile(inputFile);
+                verifyCatalogInput(bytes, pin.catalog);
+                const catalog = parseNixieProductCatalogV1(JSON.parse(bytes.toString('utf8')));
+                if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', pin.baseUrl).href !== pin.catalog.url) throw new Error('Catalog differs from its pinned asset release.');
+                manifest = JSON.stringify(parseNixieExtensionManifestV1(createCatalogRuntimeManifest(authored, catalog, pin))) + '\n';
+                this.addWatchFile(inputFile);
+            }
+            this.addWatchFile(fileURLToPath(new URL('./nixie.extension.json', import.meta.url)));
             this.addWatchFile(catalogPinPath());
         },
         shouldTransformCachedModule({id}) {return id === '\0' + ASSETS || id === '\0' + MAPS;},
@@ -50,11 +61,16 @@ function catalogPlugin(): Plugin {
             await mkdir(staging, {recursive: true});
             await writeFile(resolve(staging, 'catalog.v1.json'), bytes);
             await writeFile(resolve(staging, 'nixie.extension.json'), manifest);
+            for (const [path, content] of localFiles ?? []) {
+                const file = resolve(staging, path);
+                await mkdir(dirname(file), {recursive: true});
+                await writeFile(file, content);
+            }
             await publishCompletedBuild(staging, published, previous, this.meta.watchMode);
             await unlink(marker);
         },
         async buildEnd(error) {if (error) await unlink(marker).catch(error => {if (error.code !== 'ENOENT') throw error;});},
     };
 }
-export default defineConfig({root: extensionRoot, base: './', build: {outDir: '.nixie-build', target: 'esnext',
-    rollupOptions: {output: {importAttributesKey: 'with'}}}, plugins: [catalogPlugin()]});
+export default defineConfig(({mode}) => ({root: extensionRoot, base: './', build: {outDir: '.nixie-build', target: 'esnext',
+    rollupOptions: {output: {importAttributesKey: 'with'}}}, plugins: [catalogPlugin(mode === 'development')]}));

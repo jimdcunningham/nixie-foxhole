@@ -30,6 +30,16 @@ They reuse verified cached files. These ignored inputs stay out of commits and
 the extension archive. Ordinary runtime images/models are fetched by Studio's
 verified asset cache as needed, so initial media use needs network access.
 
+For a local asset preview, put a complete `catalog.v1.json` and a `resources.json`
+array of qualified model or texture resource IDs in
+`extensions/foxhole-planner/.tmp/local-asset-catalog`. Put each listed file in the
+`resources` subfolder as `<catalog SHA-256>.glb` or `<catalog SHA-256>.webp`.
+The dev watcher verifies these files against the catalog and packages them with
+each rebuild. Other catalog resources still use their catalog delivery paths.
+Use `npm run build -- --mode development` for a one-off preview build. Remove
+`resources.json` and rebuild to switch back to the normal catalog. The default
+production build uses the pinned publication catalog.
+
 ## Load Your Build in Studio
 
 1. Open Editor Settings and search for Extensions.
