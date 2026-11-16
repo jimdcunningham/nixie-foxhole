@@ -4,10 +4,17 @@ import path from 'node:path';
 import {brotliDecompressSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+async function resolveDestination(destination){
+ try{return await fs.realpath(destination);}
+ catch(error){
+  if(error.code!=='ENOENT')throw error;
+  return path.join(await resolveDestination(path.dirname(destination)),path.basename(destination));
+ }
+}
 /** Explicit local bundle cleanup: quarantine old immutable content outside the served assets. */
 export async function retireUnusedWorldContent({target,retired,runtimeRoots=worldRuntimePublicationRoots()}){
- const root=await fs.realpath(target),destination=path.resolve(retired);
- if(destination===root||destination.startsWith(root+path.sep))throw Error('Retired content must be outside the served world directory');
+ const root=await fs.realpath(target),destination=await resolveDestination(path.resolve(retired)),relativeDestination=path.relative(root,destination);
+ if(!relativeDestination||(!path.isAbsolute(relativeDestination)&&relativeDestination!=='..'&&!relativeDestination.startsWith('..'+path.sep)))throw Error('Retired content must be outside the served world directory');
  const index=JSON.parse(await fs.readFile(path.join(root,'index.json'),'utf8'));
  if(index.version!==1||index.format!=='compact-recipes-v1')throw Error('Unsupported world index');
  const live=new Set();
