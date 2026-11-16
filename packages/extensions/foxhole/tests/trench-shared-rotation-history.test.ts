@@ -21,6 +21,7 @@ const script = ts.transpileModule(`class FoxholeSplineConnectorNode extends PIXI
     getTrenchEndAttachment(role) { return this.boardState[role + 'Attachment']; }
     getTrenchRotationPartner() { return this.partner ? { node: this.partner, role: 'start' } : null; }
     findBoardNodeById(id) { return this.partner?.boardId === id ? this.partner : null; }
+    isInteractiveRoadCandidateValid() { return true; }
     usesSocketSnapping() { return true; }
     restoreLiveAttachmentPreview() {}
     patchBoardState(patch) { Object.assign(this.boardState, patch); }

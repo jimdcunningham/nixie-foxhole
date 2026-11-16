@@ -5,6 +5,7 @@ import ts from 'typescript';
 import * as PIXI from 'pixi.js';
 import { resolveFoxholeModificationTextureAnchor, resolveFoxholeModificationTexturePosition } from '../app/plugins/foxhole/nixie/modification-anchor.ts';
 import { createFoxholeBarbedWireSplineGeometry, createFoxholeSandbagSplineGeometry, resolveFoxholeEmplacementModificationSplineEnd } from '../app/plugins/foxhole/nixie/modification-spline.ts';
+import { isFoxholeRoofModification } from '../app/plugins/foxhole/nixie/modification-render-order.ts';
 import { resolveFoxholeContactShadowCenter } from '../app/plugins/foxhole/nixie/contact-shadow.ts';
 import { sampleTextureMesh } from '../../../../extensions/foxhole-planner/tests/helpers/sample-texture-mesh.ts';
 
@@ -16,9 +17,9 @@ const methods = ['createModificationTextureVisual', 'createModificationSplineTex
     nodeClass.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name)!.getText(source));
 const code = ts.transpile(`class Methods { ${methods.join('\n')} }; return Methods.prototype;`, { target: ts.ScriptTarget.ES2022 });
 const prototype = new Function('PIXI', 'FOXHOLE_BOARD_SPRITE_SCALE', 'resolveFoxholeModificationTextureAnchor',
-    'resolveFoxholeModificationTexturePosition', 'createFoxholeBarbedWireSplineGeometry', 'createFoxholeSandbagSplineGeometry', 'resolveFoxholeEmplacementModificationSplineEnd', 'resolveFoxholeContactShadowCenter', code)(
+    'resolveFoxholeModificationTexturePosition', 'createFoxholeBarbedWireSplineGeometry', 'createFoxholeSandbagSplineGeometry', 'resolveFoxholeEmplacementModificationSplineEnd', 'resolveFoxholeContactShadowCenter', 'isFoxholeRoofModification', code)(
     PIXI, 0.5, resolveFoxholeModificationTextureAnchor, resolveFoxholeModificationTexturePosition,
-    createFoxholeBarbedWireSplineGeometry, createFoxholeSandbagSplineGeometry, resolveFoxholeEmplacementModificationSplineEnd, resolveFoxholeContactShadowCenter);
+    createFoxholeBarbedWireSplineGeometry, createFoxholeSandbagSplineGeometry, resolveFoxholeEmplacementModificationSplineEnd, resolveFoxholeContactShadowCenter, isFoxholeRoofModification);
 const manifest = JSON.parse(readFileSync(new URL('../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
 
 for (const variantId of ['barbedwire', 'sandbags']) {

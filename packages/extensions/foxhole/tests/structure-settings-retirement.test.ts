@@ -81,7 +81,7 @@ test('map controller tolerates retired user settings without changing saved proj
     const { source, declaration } = parseClass('../app/plugins/foxhole/nixie/map/controller.ts', 'FoxholeMapViewportPlugin');
     const field = declaration.members.find(member => ts.isPropertyDeclaration(member) && member.name.getText(source) === 'mapSettings') as ts.PropertyDeclaration;
     const initializer = field.initializer!.getText(source).replaceAll('this.settingsStore', 'store').replaceAll('this.pluginContext.projectStore.settings', 'project');
-    const create = new Function('computed', 'readFoxholeMapSettings', 'store', 'project', `return ${initializer};`);
+    const create = new Function('computed', 'readFoxholeMapSettings', 'store', 'project', `return function () { return ${initializer}; };`);
     const definitions = reactive(new Map([[FOXHOLE_MAP_SETTING_KEYS.hourlyCasualties, false]]));
     const project = { [FOXHOLE_MAP_SETTING_KEYS.enabled]: true, [FOXHOLE_MAP_SETTING_KEYS.regionKeys]: 'DeadLandsHex' };
     const before = structuredClone(project);
@@ -96,7 +96,7 @@ test('map controller tolerates retired user settings without changing saved proj
             return definitions.has(id) ? definitions.get(id) : fallback;
         },
     };
-    const settings = create(computed, readFoxholeMapSettings, store, project);
+    const settings = create(computed, readFoxholeMapSettings, store, project).call({ pluginContext: {} });
     assert.equal(settings.value.hourlyCasualties, false);
     definitions.clear();
     assert.equal(settings.value.hourlyCasualties, true, 'unregistered user values use map defaults');

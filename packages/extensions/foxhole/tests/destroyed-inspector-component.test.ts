@@ -38,6 +38,7 @@ function harness(foxholeKey: string, appearance: Record<string, boolean> = {}) {
         isFoxholeStructureDestroyed, resolveFoxholeStructureDestroyedMutation,
         normalizeFoxholeColorHex, normalizeFoxholeFaction,
         useNixieInspectorFormSectionTab,
+        useNixieEditorDocumentSessionOptional: () => null,
         useNixieRuntime: () => runtime,
         useNixieSidebarAssetHoverCard: () => null,
         useNixieSettingsStore: () => ({ getValue: () => false }),

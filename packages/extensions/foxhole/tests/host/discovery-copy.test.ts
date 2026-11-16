@@ -21,6 +21,7 @@ test('signed-out native Discovery copies select a local destination and retain r
     let imported: Record<string, unknown> | undefined;
     const copy = loadCopy({
         readProjectExtensionReleases,
+        getNixieAlternateProjectArchiveImporter: () => null,
         useSupabaseUser: () => ({ value: null }),
         NixieProjectArchive: { readProjectArchive: async () => archive },
         prepareDiscoveryProjectExtensions: async () => {},
@@ -115,7 +116,10 @@ for (const phase of ['upload', 'persist', 'icon', 'navigation', 'cleanup']) {
     test(`native copy lifecycle preserves ownership at ${phase} failure`, async () => {
         const deleted: string[] = [];
         const copy = loadCopy({
-            createProjectRecord: async () => 'new-project',
+            createProjectRecord: async (_options: unknown, setImportToken: (token: string) => void) => {
+                setImportToken('fixture-token');
+                return 'new-project';
+            },
             importArchiveAssets: async () => {
                 if (phase === 'upload' || phase === 'cleanup') {
                     throw new Error('Upload failed');
@@ -124,14 +128,17 @@ for (const phase of ['upload', 'persist', 'icon', 'navigation', 'cleanup']) {
             },
             importArchiveDocuments: async () => ({ assets: [], assetContents: {} }),
             NixieProjectArchive: { replaceArchiveAssetPaths: async (document: unknown) => document },
-            $fetch: async (url: string, options: { method: string; body?: unknown; }) => {
+            $fetch: async (url: string, options: { method: string; headers?: Record<string, string>; body?: unknown; }) => {
                 if (options.method === 'DELETE') {
                     deleted.push(url);
                     if (phase === 'cleanup') {
                         throw new Error('Delete failed');
                     }
-                } else if (phase === 'persist') {
-                    throw new Error('Persist failed');
+                } else {
+                    assert.equal(options.headers?.['x-nixie-project-import'], 'fixture-token');
+                    if (phase === 'persist') {
+                        throw new Error('Persist failed');
+                    }
                 }
             },
             uploadNixieProjectIconFile: async () => {

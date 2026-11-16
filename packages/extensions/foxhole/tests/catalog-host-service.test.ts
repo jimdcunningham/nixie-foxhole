@@ -95,8 +95,12 @@ test('SDK products request transforms without a registered bundled capability po
             assert.ok(!capabilities.includes('mirror'), item.product.id);
         }
     }
-    for (const product of manifest.contributes.products ?? []) {
-        if (product.components.some(component => component.ownerId === manifest.id && component.componentId === 'asset')) {
+    const products = manifest.contributes.products ?? [];
+    const powerline = products.find(product => product.id === 'planning.powerline');
+    assert.ok(powerline?.drawing?.dragToCreate);
+    assert.ok(powerline.components.some(component => component.componentId === 'spline-connector'));
+    for (const product of products) {
+        if (product.id !== powerline.id && product.components.some(component => component.ownerId === manifest.id && component.componentId === 'asset')) {
             assert.deepEqual(product.interactionProfile, { move: true, rotate: true }, product.id);
         }
     }

@@ -7,7 +7,7 @@ import { isFoxholeRoofModification } from '../app/plugins/foxhole/nixie/modifica
 function createRoofHoverHost() {
     const source = ts.createSourceFile('structure.ts', readFileSync(new URL('../app/plugins/nixie/board/types/foxhole-structure.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
     const nodeClass = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'FoxholeStructureNode') as ts.ClassDeclaration;
-    const names = ['createModificationTextureVisual', 'getStructureTextureVisualAlpha', 'applyBunkerRoofHoverAlpha'];
+    const names = ['createModificationTextureVisual', 'getStructureTextureVisualAlpha', 'applyBunkerRoofHoverAlpha', 'syncBunkerSpotlightGlowAlpha'];
     const methods = names.map(name => nodeClass.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name)!.getText(source));
     class Sprite {
         alpha = 1;
@@ -22,6 +22,7 @@ function createRoofHoverHost() {
     return Object.assign(Object.create(prototype), {
         structureRoofTextureOverlay: { alpha: 1 },
         roofModificationTextureOverlay: { alpha: 1 },
+        bunkerSpotlightOverlay: { children: [] },
         offLaneRoofSprites: new Set(),
         offLaneRoofModificationSprites: new Set(),
         modificationTextureAlphas: new WeakMap(),

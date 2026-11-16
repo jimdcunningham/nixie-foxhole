@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import * as PIXI from 'pixi.js';
+import { getFoxholeManifestRevision } from '../app/plugins/foxhole/nixie/manifest.ts';
 import { loadBoardUrlTexture } from '../../../nixie/app/plugins/nixie/board/utils/url-texture.ts';
 import { setActiveNixieSelectionIds, subscribeToNixieSelectionState } from '../../../nixie/app/plugins/nixie/runtime/shared-state.ts';
 
@@ -19,8 +20,8 @@ const methods = declaration.members.filter(member => ts.isMethodDeclaration(memb
 const code = ts.transpileModule(`class Host { ${methods.replaceAll('import.meta.dev', 'false')} } return Host;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const Host = new Function('PIXI', 'watch', 'subscribeToNixieSelectionState', 'loadFoxholeTexture', code)(
-    PIXI, () => () => {}, subscribeToNixieSelectionState, loadBoardUrlTexture,
+const Host = new Function('PIXI', 'watch', 'subscribeToNixieSelectionState', 'loadFoxholeTexture', 'getFoxholeManifestRevision', code)(
+    PIXI, () => () => {}, subscribeToNixieSelectionState, loadBoardUrlTexture, getFoxholeManifestRevision,
 );
 
 function setup(id: string) {

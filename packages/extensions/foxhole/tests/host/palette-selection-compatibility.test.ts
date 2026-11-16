@@ -11,8 +11,9 @@ test('saved selections pass real-project dependency and placement scenarios', as
     const environment = { ...process.env };
     delete environment.NODE_TEST_CONTEXT;
     const { stdout } = await promisify(execFile)(process.execPath, [
-        '--import', hostSourceUrl('../../../../nixie/tests/nixie/node-test-hooks.mjs', import.meta.url).href,
+        '--experimental-transform-types',
         '--import', hostSourceUrl('../host-hooks.mjs', import.meta.url).href,
+        '--import', hostSourceUrl('../../../../nixie/tests/nixie/node-test-hooks.mjs', import.meta.url).href,
         '--test', '--test-reporter=spec', '--test-isolation=none',
         fileURLToPath(hostSourceUrl('./palette-selection-compatibility-cases.ts', import.meta.url)),
     ], { cwd: fileURLToPath(hostSourceUrl('../../../../nixie/', import.meta.url)), maxBuffer: 1024 * 1024, env: environment });

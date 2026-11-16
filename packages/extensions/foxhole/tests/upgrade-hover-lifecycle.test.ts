@@ -9,7 +9,7 @@ const script = file.slice(file.indexOf('>') + 1, file.indexOf('</script>'));
 const source = ts.createSourceFile('inspector.ts', script, ts.ScriptTarget.Latest, true);
 const names = ['selectTierAsset', 'showRelationshipHoverCard', 'showUpgradeHoverCard'];
 const declarations = names.map(name => source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name)!.getText(source));
-const code = ts.transpile(`const { canEdit, foxholeKey, activeExperimentalModificationGroupKey, pendingSelectionKey,
+const code = ts.transpile(`const { canEditTiers, isSceneV2Batch, foxholeKey, activeExperimentalModificationGroupKey, pendingSelectionKey,
     props, asset, getTierSelectionKey, setActiveNixieStructureModificationHoverPreview,
     isSelectedRelationshipTarget, showHoverEntry, createTierHoverEntry, showTierAssetHoverCard,
     isSelectedUpgradeVariant, createUpgradeHoverEntry, catalog, state, selectionMap, reconcileFoxholeAssetCargoPatch, reconcileFoxholeTierModificationSelections } = context;
@@ -22,7 +22,7 @@ function harness(selectedUpgrade = true) {
         catalog: {value:{}}, state: {value:{}}, selectionMap: {value:{}},
         reconcileFoxholeAssetCargoPatch: (_catalog:unknown, _state:unknown, patch:unknown) => patch,
         reconcileFoxholeTierModificationSelections: () => ({}),
-        canEdit: { value: true }, foxholeKey: { value: 'fortt3' }, asset: { value: {} },
+        canEditTiers: { value: true }, isSceneV2Batch: { value: false }, foxholeKey: { value: 'fortt3' }, asset: { value: {} },
         activeExperimentalModificationGroupKey: { value: null }, pendingSelectionKey: { value: null },
         props: { node: { id: 'bunker', targetIds: ['bunker', 'second-bunker'] }, patchNode: async (_patch: unknown, _reason: string) => {} },
         getTierSelectionKey: (asset: { foxholeKey: string }) => asset.foxholeKey,
