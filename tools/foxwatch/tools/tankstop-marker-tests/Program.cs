@@ -33,4 +33,16 @@ Check(JsonSerializer.Serialize(preview)==before, "preview tree remains unchanged
 Check(sceneMethod.Invoke(null,[structure,preview,"spanalt4"])==null, "unknown variant cannot invent geometry");
 structure.Id="minespline";
 Check(((IReadOnlyList<string>)idsMethod.Invoke(null,[structure])!).SequenceEqual(new[]{"span","spanalt"}), "mine layer behavior preserved");
+var clipMethod = typeof(FoxWatchRenderSceneGenerator).GetMethod("GetClipFloorOverrideForRenderLayer", flags)!;
+foreach (var id in new[] { "minespline", "infantryminespline", "tankminespline", "waterminespline", "surfacewaterminespline" })
+{
+    var land = !id.Contains("water", StringComparison.Ordinal);
+    var mine = new FoxWatchManifestStructure { Id = id, ClipFloor = land };
+    foreach (var layer in new[] { "span", "spanalt" })
+    {
+        Check((bool?)clipMethod.Invoke(null, [mine, layer]) == land, $"{id} {layer} inherits the asset floor setting");
+    }
+}
+Check((bool?)clipMethod.Invoke(null, [new FoxWatchManifestStructure { Id = "tankstopsplinet3", ClipFloor = true }, "span"]) == false,
+    "other interval markers keep their component floor policy");
 Console.WriteLine(JsonSerializer.Serialize(new { passed, failed=0 }));

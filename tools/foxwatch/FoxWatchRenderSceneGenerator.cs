@@ -2895,6 +2895,13 @@ public sealed class FoxWatchRenderSceneGenerator
 
     private static bool? GetClipFloorOverrideForRenderLayer(FoxWatchManifestStructure structure, string layerId)
     {
+        if (IsMineSplineStructure(structure) && layerId is "span" or "spanalt")
+        {
+            // Land mine markers retain their buried placement in the component scene.
+            // Water mines and buoys inherit the assembled asset's unclipped setting.
+            return GetClipFloor(structure);
+        }
+
         // Bridge and pier ramps keep their assembled transforms in the component scenes.
         // Trim their buried ends at the same plane as the assembled icon.
         return IsFieldBridgeOrPierStructure(structure)
