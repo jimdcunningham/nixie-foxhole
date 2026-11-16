@@ -14,7 +14,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "test": "node --import ./tools/legacy-plans/register-nixie-imports.mjs --test --test-isolation=none ./tests/**/*.test.ts ./server/**/*.test.mjs",
+    "test": "node ./tools/test-host.mjs --test-isolation=none ./tests/**/*.test.ts ./server/**/*.test.mjs",
     "test:host": "node ./tools/test-host.mjs",
     "test:legacy-plans": "node ./tools/legacy-plans/run-fixture-tests.mjs",
     "legacy:download-presets": "node ./tools/legacy-plans/download-presets.mjs",
