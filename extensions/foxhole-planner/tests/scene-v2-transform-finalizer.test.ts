@@ -3,6 +3,8 @@ import test from 'node:test';
 import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
 import { isFoxholePowerSocketConnectionAvailable } from '../src/power-socket-capacity.ts';
+import { withFoxholeSceneV2TransformProposal } from '../src/scene-v2-core-transforms.ts';
+import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 
 test('power capacity counts endpoint records rather than distinct connector IDs and allows an endpoint to retain its slot', () => {
     const connections = ['line-a', 'line-b'].flatMap(connectorNodeId => ['BackSocket', 'FrontSocket'].map(connectorSocketName => ({
@@ -701,9 +703,34 @@ test('first power-line snap keeps a short preview pointed out of the selected so
         context: { contractVersion: 1, entities: [line, building] } });
     const patch = result.transaction?.operations.find(op => op.entityId === line.entityId);
     assert.ok(patch?.op === 'patch');
-    const { startX, startY, startRotation, endX, endY } = patch.set!;
+    const { startX, startY, startRotation, endX, endY } = { ...line.components[1]!.data, ...patch.set };
     assert.equal(patch.set?.startAttachmentSocketName, 'PowerSocket');
     assert.ok(Math.abs(Number(endX) - Number(startX) - 32 * Math.cos(Number(startRotation))) < 1e-6);
     assert.ok(Math.abs(Number(endY) - Number(startY) - 32 * Math.sin(Number(startRotation))) < 1e-6);
     assert.equal(patch.set?.minLength, undefined);
+});
+
+test('moving the pointer over the same power socket host preserves both spatial preview endpoints', () => {
+    const line = pipe('line', 0), building = structure('building', 500);
+    Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', minLength: 3.2, endX: 32 });
+    building.components[1]!.data.assetId = 'facilityrefinery1';
+    function preview(x: number, y: number, z: number) {
+        const transform = { x, y, rotation: 0, scaleX: 1, scaleY: 1 };
+        const draft = withFoxholeSceneV2TransformProposal(line, transform, z);
+        const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
+            interaction: 'placement', transform,
+            geometryGesture: { phase: 'preview', handleId: 'start', snappingEnabled: true, worldPoint: { x, y, z },
+                hoveredEntityIds: [building.entityId] },
+            context: { contractVersion: 1, entities: [draft, building] } });
+        const patch = result.transaction?.operations.find(op => op.entityId === line.entityId && op.op === 'patch');
+        assert.ok(patch?.op === 'patch');
+        assert.equal(patch.set?.startAttachmentSocketName, 'PowerSocket');
+        const placed = withFoxholeSceneV2TransformProposal(draft, result.transform, result.transform.elevation);
+        const geometry = { ...draft.components[1]!.data, ...patch.set };
+        const projection = createFoxholeSpatialProjection([placed, building]);
+        return projection.toWorld(placed, [Number(geometry.endX), Number(geometry.endY), 0]);
+    }
+    const first = preview(500, 100, 20);
+    const second = preview(515, 120, 70);
+    assert.ok(first.every((value, axis) => Math.abs(value - second[axis]!) < 1e-6), `${first} moved to ${second}`);
 });

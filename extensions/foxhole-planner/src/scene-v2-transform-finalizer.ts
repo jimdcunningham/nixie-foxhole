@@ -257,7 +257,7 @@ function facingCorrection(moving: WorldSocket, target: WorldSocket): number {
 }
 
 function socketSnapPose(request: NixieTransformFinalizeRequestV1, moved: NixieComponentEntitySnapshotV1,
-    moving: WorldSocket, target: WorldSocket, directional = true) {
+    moving: WorldSocket, target: WorldSocket, directional = true, snapElevation = directional) {
     const entities = request.context.entities;
     const staged = withFoxholeSceneV2TransformProposal(moved, request.transform);
     const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId === moved.entityId ? staged : entity));
@@ -270,7 +270,7 @@ function socketSnapPose(request: NixieTransformFinalizeRequestV1, moved: NixieCo
     const rotate = ([x, y, z]: SpatialPoint): SpatialPoint => [x * cos - y * sin, x * sin + y * cos, z];
     const offset = rotate(moving.world.map((value, axis) => value - origin[axis]!) as SpatialPoint);
     const desired: SpatialPoint = [target.world[0] - offset[0], target.world[1] - offset[1],
-        directional ? target.world[2] - offset[2] : origin[2]];
+        snapElevation ? target.world[2] - offset[2] : origin[2]];
     const local = toParent(desired);
     if (!local.every(Number.isFinite)) return null;
     const localHeading = (entity: NixieComponentEntitySnapshotV1, localOrigin: SpatialPoint, worldOrigin: SpatialPoint, heading: number) => {
@@ -697,7 +697,17 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
             if (!pose) continue;
             finalizedTransform = pose.transform;
         } else {
-            const patch = connectorEndpointPatch(moved, endpoint.role, best.target, matrix, projection);
+            let endpointProjection = projection;
+            if (power && placingFirstEnd) {
+                // Keep the free preview end at the socket's height as the pointer crosses uneven model surfaces.
+                const snap = socketSnapPose(request, moved, moving, best.target, false, gesture.worldPoint.z !== undefined);
+                if (snap) {
+                    finalizedTransform = snap.transform;
+                    const posed = withFoxholeSceneV2TransformProposal(moved, { ...request.transform, ...snap.transform }, snap.transform.elevation);
+                    endpointProjection = createFoxholeSpatialProjection(entities.map(entity => entity === moved ? posed : entity));
+                }
+            }
+            const patch = connectorEndpointPatch(moved, endpoint.role, best.target, matrix, endpointProjection);
             if (!patch) {
                 continue;
             }
