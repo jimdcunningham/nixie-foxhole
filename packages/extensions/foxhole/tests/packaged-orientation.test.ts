@@ -5,8 +5,7 @@ import { Container, Texture } from 'pixi.js';
 import { NixieSceneV2ComponentHost } from '../../../nixie/desktop-extensions/scene-v2-component-host.ts';
 import { NIXIE_SCENE_V2_CORE_COMPONENTS } from '../../../nixie/desktop-extensions/scene-v2-core-components.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
-import { buildNixieSceneV2InspectorPatches } from '../../../nixie/app/utils/nixie-scene-v2-inspector.ts';
-import { registerNixieSceneV2StateAdapter } from '../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
+import { applyFoxholeAppearanceChoice } from './host/scene-v2-appearance-choices.ts';
 import { NixieExtensionRenderPlanHost } from '../../../nixie/app/plugins/nixie/scene-v2/render-plan-host.ts';
 import { applyTransform } from '../../../nixie/app/plugins/nixie/board/types/primitives/shared.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
@@ -35,17 +34,14 @@ function near(actual: number, expected: number) {
 
 for (const degrees of [0, 90, 37]) {
     test(`aircraft packaging Inspector edits preserve identity and transform at ${degrees} degrees through undo and redo`, () => {
-        registerNixieSceneV2StateAdapter(owner, foxholeSceneV2StateAdapter);
         const { host, id } = aircraft(degrees * Math.PI / 180);
         const before = host.exportDocument();
         const initial = host.readEntity(id);
         const retained = initial.components.filter(component => component.componentId !== 'appearance');
         const normalPlan = renderFoxholeSceneV2Entity(initial);
         const edit = (packaged: boolean) => {
-            const updates = buildNixieSceneV2InspectorPatches(host.readEntity(id), { packaged });
-            assert.ok(updates.length > 0);
-            host.applyEditorComponentPatches(updates.map(update => ({ ...update, entityId: id })));
-            const current = host.readEntity(id);
+            const current = applyFoxholeAppearanceChoice(host, id, manifest.contributes.inspectorProviders[0],
+                packaged ? 'Packaged' : 'Default');
             assert.equal(current.entityId, initial.entityId);
             assert.deepEqual(current.components.filter(component => component.componentId !== 'appearance'), retained);
             assert.equal(foxholeSceneV2StateAdapter.project(current)!.state.packaged === true, packaged);

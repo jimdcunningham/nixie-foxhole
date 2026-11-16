@@ -8,8 +8,7 @@ import { createFoxholeStructureTextureKey } from '../app/plugins/foxhole/nixie/t
 import { NixieSceneV2ComponentHost } from '../../../nixie/desktop-extensions/scene-v2-component-host.ts';
 import { NIXIE_SCENE_V2_CORE_COMPONENTS } from '../../../nixie/desktop-extensions/scene-v2-core-components.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
-import { buildNixieSceneV2InspectorPatches } from '../../../nixie/app/utils/nixie-scene-v2-inspector.ts';
-import { registerNixieSceneV2StateAdapter } from '../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
+import { applyFoxholeAppearanceChoice } from './host/scene-v2-appearance-choices.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 import { foxholeSceneV2StateAdapter } from '../app/plugins/foxhole/nixie/scene-v2-state-adapter.ts';
 import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
@@ -45,7 +44,6 @@ test('paired destroyed appearances use the published wreck texture, dimensions a
 
 for (const [wreckKey, intactAssets] of Object.entries(groups).filter(([, assets]) => assets!.length > 1)) {
     test(`all intact types sharing ${wreckKey} retain identity and wreck geometry through toggles and history`, () => {
-        registerNixieSceneV2StateAdapter('nixie.foxhole-planner', foxholeSceneV2StateAdapter);
         const wreckFixture = fixture(wreckKey);
         const wreckEntity = wreckFixture.host.readEntity(wreckFixture.id);
         const nativeWreckBounds = foxholeSceneV2StateAdapter.selectionLocalBounds!(wreckEntity, 1);
@@ -57,12 +55,8 @@ for (const [wreckKey, intactAssets] of Object.entries(groups).filter(([, assets]
             const retained = initial.components.filter(component => component.componentId !== 'appearance');
             const normalPlan = renderFoxholeSceneV2Entity(initial);
             const edit = (destroyed: boolean) => {
-                const state = foxholeSceneV2StateAdapter.project(host.readEntity(id))!.state;
-                const patch = resolveFoxholeStructureDestroyedMutation(catalog, state, destroyed);
-                assert.ok(patch, intact.foxholeKey);
-                const updates = buildNixieSceneV2InspectorPatches(host.readEntity(id), patch);
-                host.applyEditorComponentPatches(updates.map(update => ({ ...update, entityId: id })));
-                const current = host.readEntity(id);
+                const current = applyFoxholeAppearanceChoice(host, id, manifest.contributes.inspectorProviders[0],
+                    destroyed ? 'Demolished' : 'Default');
                 const projected = foxholeSceneV2StateAdapter.project(current)!.state;
                 assert.equal(current.entityId, initial.entityId);
                 assert.equal(projected.foxholeKey, intact.foxholeKey);
@@ -133,22 +127,19 @@ test('shared wrecks without a matching declared rebuild target stay unresolved i
 });
 
 test('Blueprint and Demolished edits remain exclusive through Scene V2 conversion and undo', () => {
-    registerNixieSceneV2StateAdapter('nixie.foxhole-planner', foxholeSceneV2StateAdapter);
     const { host, id } = fixture('facilityrefinery1');
-    const apply = (patch: Record<string, unknown>) => {
-        const updates = buildNixieSceneV2InspectorPatches(host.readEntity(id), patch);
-        host.applyEditorComponentPatches(updates.map(update => ({ ...update, entityId: id })));
-        return foxholeSceneV2StateAdapter.project(host.readEntity(id))!.state;
-    };
+    const apply = (label: string) => foxholeSceneV2StateAdapter.project(
+        applyFoxholeAppearanceChoice(host, id, manifest.contributes.inspectorProviders[0], label),
+    )!.state;
     const original = host.exportDocument();
-    const blueprint = apply({ blueprint: true });
+    const blueprint = apply('Blueprint');
     assert.equal(blueprint.blueprint, true);
     const blueprintDocument = host.exportDocument();
-    const demolished = apply(resolveFoxholeStructureDestroyedMutation(catalog, blueprint, true)!);
+    const demolished = apply('Demolished');
     assert.equal(demolished.destroyed, true);
     assert.equal(demolished.blueprint, false);
     const demolishedDocument = host.exportDocument();
-    const rebuilt = apply({ blueprint: true, destroyed: false });
+    const rebuilt = apply('Blueprint');
     assert.equal(rebuilt.blueprint, true);
     assert.equal(rebuilt.destroyed, false);
     host.undo();
