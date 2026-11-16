@@ -3,7 +3,7 @@ import type { FoxholeSceneV2ConnectorMetadata } from './scene-v2-asset-metadata.
 import { isTrenchConnector } from './trench-connector.ts';
 
 const PIXELS_PER_CENTIMETER = 32 / 100;
-export const FOXHOLE_POWERLINE_PREVIEW_LENGTH = 32;
+export const FOXHOLE_POWERLINE_PREVIEW_LENGTH = 96;
 function pixels(value: number | undefined, fallback: number): number {
     return (typeof value === 'number' && Number.isFinite(value) ? value : fallback) * PIXELS_PER_CENTIMETER;
 }

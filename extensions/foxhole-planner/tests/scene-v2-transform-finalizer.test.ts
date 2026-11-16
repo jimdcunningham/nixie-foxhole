@@ -691,7 +691,7 @@ test('placing the first pipe endpoint points the draft straight out of the snapp
     assert.ok(Math.abs(Number(geometry.endY) - Number(geometry.startY) - 48) < 1e-8);
 });
 
-test('first power-line snap keeps a short preview pointed out of the selected socket', () => {
+test('first power-line snap points the 3-metre preview out of the selected socket', () => {
     const line = pipe('line', 0), building = structure('building', 500);
     Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', minLength: 3.2, endX: 32, endY: 0 });
     building.components[1]!.data.assetId = 'facilityrefinery1';
@@ -705,8 +705,8 @@ test('first power-line snap keeps a short preview pointed out of the selected so
     assert.ok(patch?.op === 'patch');
     const { startX, startY, startRotation, endX, endY } = { ...line.components[1]!.data, ...patch.set };
     assert.equal(patch.set?.startAttachmentSocketName, 'PowerSocket');
-    assert.ok(Math.abs(Number(endX) - Number(startX) - 32 * Math.cos(Number(startRotation))) < 1e-6);
-    assert.ok(Math.abs(Number(endY) - Number(startY) - 32 * Math.sin(Number(startRotation))) < 1e-6);
+    assert.ok(Math.abs(Number(endX) - Number(startX) - 96 * Math.cos(Number(startRotation))) < 1e-6);
+    assert.ok(Math.abs(Number(endY) - Number(startY) - 96 * Math.sin(Number(startRotation))) < 1e-6);
     assert.equal(patch.set?.minLength, undefined);
 });
 
