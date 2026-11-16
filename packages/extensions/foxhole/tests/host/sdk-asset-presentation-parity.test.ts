@@ -51,10 +51,7 @@ test('SDK library icons and hover text preserve the visible authored Native asse
         if (asset.description) {
             assert.equal(metadata.description, strings[asset.description]?.trim() || undefined);
         }
-        const color = asset.colors?.[0];
-        const colorHex = color?.hex?.replace(/^#/, '').toLowerCase();
-        const previewSource = asset.previewUrl ?? (asset.isItem ? asset.icons.rendered ?? asset.icons.default
-            : color?.previewUrl ?? `/foxhole/assets/types/${asset.isVehicle ? 'vehicles' : 'structures'}/${asset.id}/${asset.id}.preview${colorHex ? `.${colorHex}` : ''}.webp`);
+        const previewSource = asset.icons.rendered ?? asset.icons.default;
         for (const [image, source] of [[metadata.browserIcon, asset.icons.default], [metadata.browserPreview, previewSource]] as const) {
             assert.ok(image);
             const resource = resolveNixieResourceV1(extension.contributes.resources ?? [],
@@ -77,15 +74,15 @@ test('SDK library icons and hover text preserve the visible authored Native asse
     }
 });
 
-test('base factory and Forge use published card previews separately from library icons', async () => {
+test('base factory and Forge use rendered artwork for their card previews', async () => {
     const manifest = JSON.parse(await readFile(hostSourceUrl('../../public/foxhole/assets/manifest.v1.json', import.meta.url), 'utf8'));
     const generated = createFoxholeSceneV2AssetMetadata(manifest);
     const factory = generated.assets.facilityrefinery1!;
     const forge = factory.modifications.UpgradeSlotComponent!.variants.forge!;
     const source = (image: NonNullable<typeof factory.browserIcon>) => generated.browserImageSources[
         Number(image.resourceId.split('.').at(-1)) * 64 + image.frame.y / 256 * 8 + image.frame.x / 256];
-    assert.equal(source(factory.browserPreview!), '/foxhole/assets/types/structures/facilityrefinery1/facilityrefinery1.preview.webp');
-    assert.equal(source(forge.browserPreview!), '/foxhole/assets/types/structures/facilityrefinery1/modifications/forge/forge.preview.webp');
+    assert.equal(source(factory.browserPreview!), '/foxhole/assets/types/structures/facilityrefinery1/facilityrefinery1.icon.rendered.webp');
+    assert.equal(source(forge.browserPreview!), '/foxhole/assets/types/structures/facilityrefinery1/modifications/forge/forge.icon.rendered.webp');
     assert.notDeepEqual(factory.browserIcon, factory.browserPreview);
     assert.notDeepEqual(forge.browserIcon, forge.browserPreview);
 });

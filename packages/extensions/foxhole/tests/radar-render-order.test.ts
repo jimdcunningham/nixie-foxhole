@@ -46,7 +46,13 @@ test('representative non-radar structures retain their published order within ea
         assert.equal(orderFoxholeStructureRenderLayers(asset.renderLayers, asset.codeName), asset.renderLayers);
         const groups = Object.groupBy(plan.root.children.filter(node => node.id.startsWith('structure-layer-')), node => node.laneId ?? 'default');
         for (const [lane, nodes] of Object.entries(groups)) {
-            const actual = nodes!.map(node => node.id);
+            const contactShadow = lane === FOXHOLE_STRUCTURE_RENDER_LANES.contactShadow.laneId;
+            const actual = nodes!.map(node => {
+                if (!contactShadow) return node.id;
+                assert.ok(node.presentation?.excludeFromBounds, node.id);
+                assert.ok(node.id.endsWith('-contact-shadow'), node.id);
+                return node.id.slice(0, -'-contact-shadow'.length);
+            });
             const ids = new Set(actual);
             const expected = asset.renderLayers.map(layer => `structure-layer-${layer.id}`).filter(id => ids.has(id));
             assert.deepEqual(actual, expected, `${key}:${lane}`);

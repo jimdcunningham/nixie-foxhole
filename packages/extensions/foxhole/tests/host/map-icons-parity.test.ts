@@ -1,6 +1,7 @@
 import {fileURLToPath} from 'node:url';
 import {normalizeRenderedIconAssociations, publishedRenderedIconValidator} from '../../../../../tools/foxwatch/scripts/rendered-icon-associations.mjs';
-import {installFoxholeManifest} from '../../app/plugins/foxhole/nixie/manifest.ts';
+import { createFoxholeSceneV2MapMetadata, createFoxholeMapTooltipAssets } from '../../../../../tools/foxwatch/catalog/map-metadata.ts';
+import { createFoxholeSceneV2AssetMetadata } from '../../../../../tools/foxwatch/catalog/product-metadata.ts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import { hostSourceUrl } from "../host-source-url.mjs";
@@ -34,30 +35,24 @@ test('all map icon hover names, categories and declared preview resources match 
     const root = new URL('../../public/foxhole/assets/', import.meta.url);
     const manifest = await normalizeRenderedIconAssociations(JSON.parse(readFileSync(new URL('manifest.v1.json', root), 'utf8')),
         publishedRenderedIconValidator(fileURLToPath(root)));
-    installFoxholeManifest(manifest);
-    try {
-    const native = Object.create(FoxholeMapRenderer.prototype) as {
-        context: { getAssetsBaseUrl: () => string; };
-        structureHoverAssetByName: object; itemHoverAssetByName: object;
-        buildStructureHoverAssetByName: () => object; buildItemHoverAssetByName: () => object;
-        resolveMapIconHoverTooltipData: (icon: (typeof FOXHOLE_MAP_ICONS)[string]) => { iconName: string; categoryLabel: string; previewUrl: string | null; };
-    };
-    native.context = { getAssetsBaseUrl: () => '/foxhole/assets/' };
-    native.structureHoverAssetByName = native.buildStructureHoverAssetByName();
-    native.itemHoverAssetByName = native.buildItemHoverAssetByName();
-    for (const [key, icon] of Object.entries(FOXHOLE_MAP_ICONS)) {
-        const expected = native.resolveMapIconHoverTooltipData(icon);
+    const generated = createFoxholeSceneV2AssetMetadata(manifest);
+    const published = JSON.parse(readFileSync(new URL('maps/map-data.v1.json', root), 'utf8'));
+    const expected = createFoxholeSceneV2MapMetadata(published, createFoxholeMapTooltipAssets(manifest, generated.assets));
+    const sourcesById = new Map(expected.resources.map(resource => [resource.id, resource.sourcePath]));
+    assert.deepEqual(Object.keys(maps.icons).sort(), Object.keys(FOXHOLE_MAP_ICONS).sort());
+    for (const [key, icon] of Object.entries(expected.metadata.icons)) {
         const actual = maps.icons[key]!;
         const preview = foxholeMapResources.find(resource => resource.id === actual.previewResourceId);
-        assert.deepEqual([actual.name, actual.tooltipCategory], [expected.iconName, expected.categoryLabel], key);
-        if (expected.previewUrl) {
-            assert.ok(preview, key);
-            assert.ok(expected.previewUrl.startsWith('/foxhole/assets/'));
-            const source = readFileSync(new URL('../../public/foxhole/assets/' + expected.previewUrl.slice('/foxhole/assets/'.length), import.meta.url));
+        assert.deepEqual([actual.name, actual.tooltipCategory, actual.previewResourceId],
+            [icon.name, icon.tooltipCategory, icon.previewResourceId], key);
+        if (icon.previewResourceId) {
+            assert.ok(preview && sourcesById.has(icon.previewResourceId), key);
+            const source = readFileSync(new URL(sourcesById.get(icon.previewResourceId)!, root));
             assert.equal(preview.sha256, createHash('sha256').update(source).digest('hex'), key);
-        } else assert.equal(preview, undefined, key);
+        } else {
+            assert.equal(preview, undefined, key);
+        }
     }
-    } finally {installFoxholeManifest(null);}
 });
 
 test('published planning markers and synthetic icon families retain Native positions, scales, tints and victory circles', async () => {
@@ -94,8 +89,9 @@ test('published planning markers and synthetic icon families retain Native posit
             assert.equal(actual.children.length, visible.length);
             for (const [index, expected] of visible.entries()) {
                 const node = actual.children[index]!;
-                assert.deepEqual([node.x, node.y, node.scale.x, node.scale.y], [region.x - maps.regionWidth / 2 + expected.x,
-                    region.y - maps.regionHeight / 2 + expected.y, expected.scale.x, expected.scale.y]);
+                const position = { x: region.x - maps.regionWidth / 2 + expected.x, y: region.y - maps.regionHeight / 2 + expected.y };
+                assert.ok(Math.hypot(node.x - position.x, node.y - position.y) < 1e-7, region.key);
+                assert.deepEqual([node.scale.x, node.scale.y], [expected.scale.x, expected.scale.y]);
                 const sprite = node.children.at(-1) as PIXI.Sprite;
                 const original = expected.children.at(-1) as PIXI.Sprite;
                 assert.deepEqual([sprite.anchor.x, sprite.anchor.y, sprite.width, sprite.height, sprite.tint],

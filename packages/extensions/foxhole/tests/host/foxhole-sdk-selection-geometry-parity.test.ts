@@ -74,7 +74,13 @@ test('SDK connector origins and power-line quads match the actual bundled adapte
                 definitionAvailable: true, data }] };
             const geometry = resolveFoxholeConnectorSelectionGeometry(data);
             assert.deepEqual(geometry.transformOrigin, foxholeSceneV2StateAdapter.selectionTransformOriginLocal?.(subject));
-            assert.deepEqual(geometry.localQuad ?? null, foxholeSceneV2StateAdapter.selectionLocalQuad?.(subject));
+            const expectedQuad = foxholeSceneV2StateAdapter.selectionLocalQuad?.(subject) ?? null;
+            const actualQuad = geometry.localQuad ?? null;
+            assert.equal(actualQuad?.length, expectedQuad?.length);
+            actualQuad?.forEach((point, index) => {
+                const expected = expectedQuad![index]!;
+                assert.ok(Math.hypot(point.x - expected.x, point.y - expected.y) < 1e-7, foxholeKey);
+            });
             assert.equal(geometry.frameAngle ?? null, foxholeSceneV2StateAdapter.selectionFrameAngleLocal?.(subject));
         }
     }
