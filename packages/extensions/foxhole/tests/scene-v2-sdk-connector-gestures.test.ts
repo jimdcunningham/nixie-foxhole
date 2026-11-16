@@ -15,6 +15,9 @@ import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-plann
 import { buildNixieSceneV2GeometryWheelUpdates } from '../../../nixie/desktop-extensions/scene-v2-geometry-wheel.ts';
 import assets from '../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
 import type { NixieGeometryGestureV1 } from '@nixiejs/extension-sdk';
+import { unregisterFoxholeSceneV2TestPolicy } from './host-hooks.mjs';
+
+unregisterFoxholeSceneV2TestPolicy();
 
 test('Planner placement and endpoint gestures run through the SDK without the Nuxt integration', async () => {
     const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));

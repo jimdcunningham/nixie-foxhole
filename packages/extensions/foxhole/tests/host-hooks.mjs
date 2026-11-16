@@ -54,7 +54,7 @@ const { registerFoxholeLegacyDiscoveryProfile } = await import('../app/utils/leg
 registerFoxholeLegacyDiscoveryProfile();
 
 const { registerFoxholeSceneV2HostPolicy } = await import('../app/utils/scene-v2-host-policy.ts');
-registerFoxholeSceneV2HostPolicy();
+export const unregisterFoxholeSceneV2TestPolicy = registerFoxholeSceneV2HostPolicy();
 const { readFileSync } = await import('node:fs');
 const { parseNixieExtensionManifestV1 } = await import('@nixiejs/extension-sdk');
 const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
