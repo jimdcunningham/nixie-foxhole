@@ -70,7 +70,7 @@ test('importLegacyPlanClipboardText converts sample clipboard to foxhole assets'
     assert.ok(Math.abs(actualDeg - expectedDeg) < 1e-6, `expected ${expectedDeg}deg, got ${actualDeg}`);
 });
 
-test('legacy clipboard import applies image-origin corrections before paste', async () => {
+test('legacy clipboard import only applies calibrated image-origin corrections', async () => {
     const clipboard = serializeLegacyPlanClipboardText({
         version: '1.0.5',
         entities: [
@@ -99,8 +99,9 @@ test('legacy clipboard import applies image-origin corrections before paste', as
     assert.equal((refinery.snapshot.state as FoxholeStructureState).x, 111);
     assert.equal((refinery.snapshot.state as FoxholeStructureState).y, 185);
     assert.equal((coalRefinery.snapshot.state as FoxholeStructureState).foxholeKey, 'facilityrefinerycoal');
-    assert.equal((coalRefinery.snapshot.state as FoxholeStructureState).x, 97);
-    assert.equal((coalRefinery.snapshot.state as FoxholeStructureState).y, 199);
+    // The current coal refinery sprite no longer matches the old calibration.
+    assert.equal((coalRefinery.snapshot.state as FoxholeStructureState).x, 100);
+    assert.equal((coalRefinery.snapshot.state as FoxholeStructureState).y, 200);
 });
 
 test('clipboard snapshot generator emits a valid legacy payload', () => {

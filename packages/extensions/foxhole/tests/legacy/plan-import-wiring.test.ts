@@ -301,7 +301,7 @@ test('importer aligns base and upgraded oil refineries from legacy plans', async
     assert.ok(Math.abs(Number(byId.get('legacy-5')?.state.y) - 11) < 1e-9);
 });
 
-test('importer aligns base and upgraded coal refineries from legacy plans', async () => {
+test('importer applies coal refinery origin offsets only to the calibrated sprites', async () => {
     const save: LegacyPlanSave = {
         version: '1.0.5',
         entities: [
@@ -312,7 +312,24 @@ test('importer aligns base and upgraded coal refineries from legacy plans', asyn
             { id: 5, key: 'coal_refinery_liquifier', x: 512, y: 0, rotation: 90 },
         ],
     };
-    const result = await new LegacyPlanImporter({ structureCatalog, itemCatalog }).importSave(save);
+    const current = await new LegacyPlanImporter({ structureCatalog, itemCatalog }).importSave(save);
+    assert.deepEqual(current.boardSnapshots.map(snapshot => [snapshot.state.x, snapshot.state.y]),
+        [[0, 0], [128, 0], [256, 0], [384, 0], [512, 0]]);
+
+    const refinery = structuredClone(structureCatalog.structureByKey.facilityrefinerycoal!);
+    Object.assign(refinery.sprite, { width: 344, height: 742, offsetX: 21.021, offsetY: 1.623 });
+    for (const slot of refinery.modificationSlots) {
+        for (const [id, variant] of Object.entries(slot.variants)) {
+            if (id === 'cokefurnace') {
+                Object.assign(variant.sprite!, { width: 312, height: 742, offsetX: 4.854, offsetY: 1.623 });
+            } else if (id === 'coalliquefier' || id === 'advcoalliquefier') {
+                Object.assign(variant.sprite!, { width: 404, height: 742, offsetX: 50.765, offsetY: 1.623 });
+            }
+        }
+    }
+    const calibrated = { ...structureCatalog,
+        structureByKey: { ...structureCatalog.structureByKey, facilityrefinerycoal: refinery } };
+    const result = await new LegacyPlanImporter({ structureCatalog: calibrated, itemCatalog }).importSave(save);
     const byId = new Map(result.boardSnapshots.map(snapshot => [snapshot.id, snapshot]));
 
     assert.deepEqual([byId.get('legacy-1')?.state.x, byId.get('legacy-1')?.state.y], [-9, -1]);
