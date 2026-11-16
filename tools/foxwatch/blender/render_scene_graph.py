@@ -2,6 +2,7 @@ import os
 import json
 
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 from render_scene_common import (
@@ -241,13 +242,80 @@ def create_trench_berm_object(node_document, primitive_document, collection, par
     return berm_object
 
 
-def create_primitive_object(node_document, collection, parent_object):
+def create_spatial_reference_surface(node, surface, collection, parent_object, search_roots):
+    texture_path = resolve_asset_path(surface["texture"], search_roots)
+    if texture_path is None:
+        raise FileNotFoundError(surface["texture"])
+    source = bpy.data.images.load(texture_path, check_existing=True)
+    width, height = source.size
+    pixels = np.empty(width * height * 4, dtype=np.float32)
+    source.pixels.foreach_get(pixels)
+    pixels = pixels.reshape(height, width, 4)
+    half = surface["width"] / 2
+    z = surface["z"]
+    vertices = [(-half, -half, z), (half, -half, z), (half, half, z), (-half, half, z)]
+    faces = [(0, 1, 2, 3)]
+    if surface.get("plate"):
+        # The game's inventory glyph identifies a planner marker for an item without a model.
+        pixels[:, :, :3] = pixels[:, :, :3] * pixels[:, :, 3:4] + 0.23 * (1 - pixels[:, :, 3:4])
+        pixels[:, :, 3] = 1
+        vertices.extend((x, y, 0) for x, y, _ in vertices[:4])
+        faces.extend([(7, 6, 5, 4), (4, 5, 1, 0), (5, 6, 2, 1), (6, 7, 3, 2), (7, 4, 0, 3)])
+    else:
+        pixels[:, :, 3] = pixels[:, :, surface["maskChannel"]]
+        pixels[:, :, :3] = 0.10
+
+    image = bpy.data.images.new(node["name"], width=width, height=height, alpha=True)
+    image.pixels.foreach_set(pixels.ravel())
+    image.update()
+    material = bpy.data.materials.new(node["name"])
+    material.use_nodes = True
+    material.use_backface_culling = True
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    texture = nodes.new("ShaderNodeTexImage")
+    texture.image = image
+    surface_output = nodes.get("Material Output").inputs["Surface"]
+    # The map decal and printed icons retain their authored colors under editor lighting.
+    color_output = texture.outputs["Color"]
+    if not surface.get("plate"):
+        material.surface_render_method = "BLENDED"
+        transparent = nodes.new("ShaderNodeBsdfTransparent")
+        blend = nodes.new("ShaderNodeMixShader")
+        links.new(texture.outputs["Alpha"], blend.inputs[0])
+        links.new(transparent.outputs[0], blend.inputs[1])
+        links.new(color_output, blend.inputs[2])
+        color_output = blend.outputs[0]
+    links.new(color_output, surface_output)
+
+    mesh = bpy.data.meshes.new(node["name"])
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    uv = mesh.uv_layers.new()
+    for loop, coordinates in zip(mesh.polygons[0].loop_indices, [(0, 0), (1, 0), (1, 1), (0, 1)]):
+        uv.data[loop].uv = coordinates
+    mesh.materials.append(material)
+    if surface.get("plate"):
+        backing = bpy.data.materials.new("Planner marker sides")
+        backing.use_nodes = True
+        backing.node_tree.nodes.get("Principled BSDF").inputs["Base Color"].default_value = (0.035, 0.035, 0.035, 1)
+        mesh.materials.append(backing)
+        for polygon in mesh.polygons[1:]:
+            polygon.material_index = 1
+    obj = bpy.data.objects.new(node["name"], mesh)
+    collection.objects.link(obj)
+    obj.parent = parent_object
+    return obj
+
+
+def create_primitive_object(node_document, collection, parent_object, search_roots):
     primitive_document = node_document.get("primitive") or {}
     primitive_type = (primitive_document.get("type") or "").lower()
     if primitive_type == "trench_barbed_wire":
         return create_trench_barbed_wire_object(node_document, primitive_document, collection, parent_object)
     if primitive_type == "trench_berm":
         return create_trench_berm_object(node_document, primitive_document, collection, parent_object)
+    if primitive_type == "spatial_reference_surface":
+        return create_spatial_reference_surface(node_document, primitive_document, collection, parent_object, search_roots)
     return None
 
 
@@ -288,7 +356,7 @@ def instantiate_node(node_document, collection, mesh_assets_by_id, search_roots,
     node_object.hide_render = not node_document.get("visible", True)
 
     create_debug_marker(node_document, collection, node_object)
-    create_primitive_object(node_document, collection, node_object)
+    create_primitive_object(node_document, collection, node_object, search_roots)
 
     mesh_id = node_document.get("meshId")
     child_parent_object = node_object

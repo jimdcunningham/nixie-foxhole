@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { prepareSpatialStructureScene, prepareSpatialStructureModifications, spatialStructureProfile } from './spatial-structure-profiles.mjs';
 import { spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
+import { prepareSpatialReferenceScene } from './spatial-reference-models.mjs';
 import { pruneUnusedStaticGltfUvs } from './spatial-gltf-geometry.mjs';
 import { compressSpatialMeshopt } from './spatial-meshopt.mjs';
 import { optimizeSpatialGeometry } from './spatial-geometry.mjs';
@@ -58,7 +59,7 @@ export async function createSpatialModelExporter(options) {
         .map(name => resolve(foxwatchRoot, 'blender', name));
     sourceFiles.push(...['spatial-model-engine.mjs', 'spatial-model-paths.mjs', 'spatial-shared-parts.mjs', 'spatial-export-catalog.mjs',
         'spatial-export-policy.mjs', 'spatial-blueprint-lights.mjs', 'spatial-structure-profiles.mjs', 'spatial-trench-profiles.mjs',
-        'spatial-connector-profiles.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs', 'modification-storage-policy.mjs']
+        'spatial-connector-profiles.mjs', 'spatial-reference-models.mjs', 'spatial-geometry.mjs', 'spatial-meshopt.mjs', 'spatial-gltf-geometry.mjs', 'modification-storage-policy.mjs']
         .map(name => resolve(foxwatchRoot, 'scripts', name)));
     const versions = { blender: blenderVersion, sharp: sharp.versions,
         meshoptimizer: JSON.parse(await readFile(resolve(repositoryRoot, 'node_modules/meshoptimizer/package.json'), 'utf8')).version };
@@ -97,7 +98,10 @@ export async function createSpatialModelExporter(options) {
     }
     function meshCount(document, mode) {
         let count = 0;
-        const visit = node => { if (node.meshId || node.primitive?.type === 'trench_berm') count++; node.children.forEach(visit); };
+        const visit = node => {
+            if (node.meshId || ['trench_berm', 'spatial_reference_surface'].includes(node.primitive?.type)) count++;
+            node.children.forEach(visit);
+        };
         filteredScene(document, mode).scene.roots.forEach(visit);
         return count;
     }
@@ -129,6 +133,15 @@ export async function createSpatialModelExporter(options) {
         const jsonLength = bytes.readUInt32LE(12);
         const document = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8'));
         const binary = bytes.subarray(28 + jsonLength);
+        // The crate's source albedo is opaque. The shared Unreal material's
+        // packed mask is used for tint/overlap, not for cutting holes in the crate.
+        if (id === 'crate') {
+            const material = document.materials?.find(material => material.name === 'War/Content/Materials/AmmoCrate');
+            if (material?.alphaMode === 'MASK') {
+                delete material.alphaMode;
+                delete material.alphaCutoff;
+            }
+        }
         // A model made entirely of shared placements still has a valid empty buffer.
         document.buffers ??= [{ byteLength: 0 }];
         document.bufferViews ??= [];
@@ -152,7 +165,9 @@ export async function createSpatialModelExporter(options) {
             view.byteOffset = length; view.byteLength = content.length; length += content.length;
         }
         chunks.push(Buffer.alloc((4 - length % 4) % 4));
-        const compression = geometryProfile === 'lossless'
+        // Preserve authored triangle order on alpha-blended surfaces such as decals.
+        const hasBlendedMaterials = document.materials?.some(material => material.alphaMode === 'BLEND');
+        const compression = geometryProfile === 'lossless' || hasBlendedMaterials
             ? await compressSpatialMeshopt(document, Buffer.concat(chunks))
             : await optimizeSpatialGeometry(document, Buffer.concat(chunks), geometryProfile);
         const packed = compression.binary;
@@ -241,6 +256,7 @@ export async function createSpatialModelExporter(options) {
             for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
             return { asset: manifest.assets[id] ?? null, resources: manifest.resources, timing };
         }
+        scene = prepareSpatialReferenceScene(id, scene);
         if (!meshCount(scene, 'whole')) {
             timing.status = 'skipped'; timing.reason = 'Scene has no visible static mesh';
             delete manifest.assets[id];

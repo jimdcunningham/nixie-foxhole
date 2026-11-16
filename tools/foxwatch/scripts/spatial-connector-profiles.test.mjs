@@ -37,3 +37,17 @@ test('road cap roles follow their exported positions when mesh order changes', (
         span: { meshIndex: 1, origin: [144, 0, 1.6] },
     });
 });
+
+test('Dragon’s Teeth export fills in marker prototypes missing from the sample scene', () => {
+    const input = { scene: { roots: [] }, assets: { meshes: [] } };
+    const prepared = prepareSpatialConnectorScene('tankstopsplinet3', input);
+    const names = ['TankStopT3_1', 'TankStopT3_2', 'TankStopT3_3', 'TankStopT3_4'];
+    assert.deepEqual(prepared.scene.roots.map(node => node.name), names);
+    assert.deepEqual(prepared.assets.meshes.map(mesh => mesh.sourcePath), names.map(name => `War/Content/Meshes/Pickups/${name}.glb`));
+    assert.deepEqual(input.scene.roots, []);
+    const document = { meshes: names.toReversed().map(name => ({ name: name + '.001' })),
+        nodes: names.toReversed().map((name, mesh) => ({ name, mesh })) };
+    const exported = { meshParts: names.map(name => ({ name, origin: [0, 0, 0] })) };
+    assert.deepEqual(Object.values(spatialConnectorProfile('tankstopsplinet3', document, exported).parts)
+        .map(part => part.meshIndex), [3, 2, 1, 0]);
+});

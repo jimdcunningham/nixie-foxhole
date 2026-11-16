@@ -44,6 +44,16 @@ export class SpatialDependencies {
     async scene(document) {
         const dependencies = {};
         const add = async (label, file) => { dependencies[label] = file ? [file, hash(await readFile(file))] : null; };
+        const nodes = [...(document.scene?.roots ?? [])];
+        for (const node of nodes) {
+            if (node.visible === false) continue;
+            nodes.push(...(node.children ?? []));
+            if (node.primitive?.type !== 'spatial_reference_surface') continue;
+            const source = node.primitive.texture;
+            const path = await this.asset(source);
+            if (!path) throw new Error(`Missing spatial surface texture: ${source}`);
+            await add(`surface:${source}`, path);
+        }
         const names = new Set();
         for (const mesh of document.assets?.meshes ?? []) {
             const source = mesh.exportUrl || mesh.sourcePath;

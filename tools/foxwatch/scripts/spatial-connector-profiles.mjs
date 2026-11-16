@@ -1,4 +1,16 @@
 const clean = name => (name ?? '').replace(/(?:\.\d{3})+$/, '').toLowerCase();
+const tankStopMeshes = ['TankStopT3_1', 'TankStopT3_2', 'TankStopT3_3', 'TankStopT3_4'];
+const mineMeshes = {
+    minespline: ['CraterS'],
+    infantryminespline: ['InfantryMinePickup', 'CraterS'],
+    tankminespline: ['AntiTankMinePickup', 'CraterS'],
+    waterminespline: ['Seamines', 'Bouy01'],
+    surfacewaterminespline: ['SmallSeaMine'],
+};
+const sandbagMeshes = {
+    sandbaghalfspline: ['SandbagSpline01', 'SandbagSpline02', 'SandbagSpline03', 'SandbagSpline04'],
+    sandbagfullspline: ['SandbagFullSpline01', 'SandbagFullSpline02', 'SandbagFullSpline03', 'SandbagFullSpline04'],
+};
 
 /** Resolve authored roles against actual exported mesh indices, never assumed Blender order. */
 export function spatialConnectorProfile(id, document, exported, scene) {
@@ -47,6 +59,23 @@ export function spatialConnectorProfile(id, document, exported, scene) {
         profile.parts.endWire = part(['BarbedWireFence03']);
         profile.parts.post = part(['BarbedWireFencePillar03']);
         profile.parts.middle = part(['BarbedWireFencePillar01']);
+    } else if (id === 'trenchconnectorbuildsite') {
+        const caps = [part(['TrenchBuildsite02Side01']), part(['TrenchBuildsite02Side01'], 1)]
+            .sort((a, b) => a.origin[0] - b.origin[0]);
+        const ropes = [part(['TrenchBuildsite02SideRope01']), part(['TrenchBuildsite02SideRope01'], 1)]
+            .sort((a, b) => a.origin[1] - b.origin[1]);
+        [profile.parts.start, profile.parts.end] = caps;
+        [profile.parts.leftRope, profile.parts.rightRope] = ropes;
+    } else if (id === 'tankstopsplinet3' || Object.hasOwn(mineMeshes, id)) {
+        const markers = id === 'tankstopsplinet3' ? tankStopMeshes : mineMeshes[id];
+        markers.forEach((name, index) => {
+            profile.parts[`marker${index + 1}`] = part([name]);
+        });
+    } else if (Object.hasOwn(sandbagMeshes, id)) {
+        sandbagMeshes[id].forEach((name, index) => {
+            profile.parts[`marker${index + 1}`] = part([name]);
+        });
+        if (id === 'sandbagfullspline') profile.parts.start = part(['SandbagSpline01']);
     } else return undefined;
     return profile;
 }
@@ -62,6 +91,22 @@ export function prepareSpatialConnectorScene(id, input) {
         (node.children ?? []).forEach(normalize);
     };
     scene.scene.roots.forEach(normalize);
+    if (id === 'tankstopsplinet3') {
+        const existing = new Set();
+        const visit = node => {
+            if (node.meshId && node.visible !== false) existing.add(clean(node.name));
+            (node.children ?? []).forEach(visit);
+        };
+        scene.scene.roots.forEach(visit);
+        for (const [index, name] of tankStopMeshes.entries()) {
+            if (existing.has(clean(name))) continue;
+            const meshId = `spatial-tank-stop-${index + 1}`;
+            const sourcePath = `War/Content/Meshes/Pickups/${name}.glb`;
+            scene.assets.meshes.push({ id: meshId, sourcePath, exportUrl: sourcePath });
+            scene.scene.roots.push({ id: `${id}:${meshId}`, name, visible: true, meshId, children: [],
+                unrealLocationCentimeters: [375 * index, 0, 0], unrealRotationDegrees: [0, 0, 0], scale: [1, 1, 1] });
+        }
+    }
     if (id !== 'barbedwirewallspline') return scene;
     const sourcePath = 'War/Content/Meshes/Environment/Splines/BarbedWireFencePillar01.glb';
     const meshId = 'spatial-fence-middle';

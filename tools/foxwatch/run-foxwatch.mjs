@@ -1,6 +1,7 @@
 import { runAssetPublicationCommand } from './scripts/asset-pack-publisher.mjs';
 import { worldRefreshArguments } from './scripts/world-refresh.mjs';
 import { runAssetGenerationStages } from './scripts/asset-generation-stages.mjs';
+import { spatialReferencePackages } from './scripts/spatial-reference-models.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import nativeFs from 'node:fs';
@@ -339,7 +340,7 @@ if (command === 'refresh') {
             detail: 'Exporting the decoded meshes, materials, textures, and icons needed for rendering.',
             overallPercent: 40,
         });
-        await runDeepAssetCacheExport(assetExportRun, deepExtractionCache, parsedArgs);
+        await runDeepAssetCacheExport(assetExportRun, deepExtractionCache, parsedArgs, refreshExecution.onlyIds);
         await commitDeepExtractionCache(deepExtractionCache);
     }
     await runAssetGenerationStages({
@@ -1003,12 +1004,21 @@ function createDeepAssetExportRun() {
     };
 }
 
-async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
+async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs, onlyIds) {
     const plan = await readJson(runContext.planPath);
-    const meshCount = plan?.meshPackagePaths?.length ?? 0;
+    const references = spatialReferencePackages(onlyIds);
+    const missingPackages = async (packages, extension) => (await Promise.all(packages.map(async source => (
+        await pathExists(path.join(cacheContext.assetOutputRoot, `${source}.${extension}`)) ? null : source
+    )))).filter(Boolean);
+    const [referenceMeshes, referenceTextures] = await Promise.all([
+        missingPackages(references.meshPackagePaths, 'glb'),
+        missingPackages(references.texturePackagePaths, 'png'),
+    ]);
+    const meshPackagePaths = [...new Set([...(plan?.meshPackagePaths ?? []), ...referenceMeshes])];
+    const meshCount = meshPackagePaths.length;
     const explicitMaterialPaths = plan?.materialPackagePaths ?? [];
-    if (meshCount + explicitMaterialPaths.length === 0) {
-        console.log('Deep asset cache is complete; no mesh or material export jobs are required.');
+    if (meshCount + explicitMaterialPaths.length + referenceTextures.length === 0) {
+        console.log('Deep asset cache is complete; no asset export jobs are required.');
         return;
     }
 
@@ -1022,7 +1032,7 @@ async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
         const geometryPlanPath = path.join(runContext.runRoot, 'geometry-export-plan.v1.json');
         await writeJsonAtomic(geometryPlanPath, {
             schemaVersion: 1,
-            meshPackagePaths: plan.meshPackagePaths,
+            meshPackagePaths,
             materialPackagePaths: [],
             texturePackagePaths: [],
         });
@@ -1071,6 +1081,7 @@ async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
         );
     }
 
+    const referencedTexturePaths = new Set(referenceTextures);
     if (referencedMaterialPaths.size > 0) {
         const materialPlanPath = path.join(runContext.runRoot, 'material-export-plan.v1.json');
         await writeJsonAtomic(materialPlanPath, {
@@ -1114,7 +1125,7 @@ async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
         await assertAssetWorkerCompletion(resultPaths, referencedMaterialPaths.size, 'material');
         stageRoots.push(...materialStageRoots);
 
-        const referencedTexturePaths = new Set();
+        const textureCountBeforeMaterials = referencedTexturePaths.size;
         for (const resultPath of resultPaths) {
             const result = await readJson(resultPath);
             for (const texturePath of result?.referencedTexturePackagePaths ?? []) {
@@ -1122,58 +1133,58 @@ async function runDeepAssetCacheExport(runContext, cacheContext, parsedArgs) {
             }
         }
         console.log(
-            `Deep asset cache material phase discovered ${referencedTexturePaths.size} unique texture package(s).`,
+            `Deep asset cache material phase discovered ${referencedTexturePaths.size - textureCountBeforeMaterials} additional texture package(s).`,
         );
+    }
 
-        if (referencedTexturePaths.size > 0) {
-            const texturePlanPath = path.join(runContext.runRoot, 'texture-export-plan.v1.json');
-            await writeJsonAtomic(texturePlanPath, {
-                schemaVersion: 1,
-                meshPackagePaths: [],
-                materialPackagePaths: [],
-                texturePackagePaths: [...referencedTexturePaths].sort((left, right) => left.localeCompare(right)),
-            });
-            const textureWorkerCount = Math.min(
-                resolveTextureWorkerCount(
-                    process.env.FOXWATCH_TEXTURE_WORKERS,
-                    process.env.FOXWATCH_ASSET_WORKERS,
-                    workerCount,
-                ),
-                referencedTexturePaths.size,
-            );
-            const textureStageRoots = Array.from(
-                { length: textureWorkerCount },
-                (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}`),
-            );
-            const resultPaths = textureStageRoots.map(
-                (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}.result.json`),
-            );
-            const claimDirectory = path.join(runContext.runRoot, 'texture-claims');
-            console.log(
-                `Deep asset cache texture phase: exporting ${referencedTexturePaths.size} unique texture package(s) `
-                + `with ${textureWorkerCount} isolated worker(s).`,
-            );
-            await Promise.all(textureStageRoots.map((stageRoot, workerIndex) => run('dotnet', [
-                dllPath,
-                'export-asset-cache',
-                '--plan',
-                texturePlanPath,
-                '--output-dir',
-                stageRoot,
-                '--result',
-                resultPaths[workerIndex],
-                '--pak-path',
-                pakArgument,
-                '--worker-index',
-                String(workerIndex),
-                '--worker-count',
-                String(textureWorkerCount),
-                '--claim-dir',
-                claimDirectory,
-            ])));
-            await assertAssetWorkerCompletion(resultPaths, referencedTexturePaths.size, 'texture');
-            stageRoots.push(...textureStageRoots);
-        }
+    if (referencedTexturePaths.size > 0) {
+        const texturePlanPath = path.join(runContext.runRoot, 'texture-export-plan.v1.json');
+        await writeJsonAtomic(texturePlanPath, {
+            schemaVersion: 1,
+            meshPackagePaths: [],
+            materialPackagePaths: [],
+            texturePackagePaths: [...referencedTexturePaths].sort((left, right) => left.localeCompare(right)),
+        });
+        const textureWorkerCount = Math.min(
+            resolveTextureWorkerCount(
+                process.env.FOXWATCH_TEXTURE_WORKERS,
+                process.env.FOXWATCH_ASSET_WORKERS,
+                workerCount,
+            ),
+            referencedTexturePaths.size,
+        );
+        const textureStageRoots = Array.from(
+            { length: textureWorkerCount },
+            (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}`),
+        );
+        const resultPaths = textureStageRoots.map(
+            (_, index) => path.join(runContext.runRoot, `texture-worker-${index + 1}.result.json`),
+        );
+        const claimDirectory = path.join(runContext.runRoot, 'texture-claims');
+        console.log(
+            `Deep asset cache texture phase: exporting ${referencedTexturePaths.size} unique texture package(s) `
+            + `with ${textureWorkerCount} isolated worker(s).`,
+        );
+        await Promise.all(textureStageRoots.map((stageRoot, workerIndex) => run('dotnet', [
+            dllPath,
+            'export-asset-cache',
+            '--plan',
+            texturePlanPath,
+            '--output-dir',
+            stageRoot,
+            '--result',
+            resultPaths[workerIndex],
+            '--pak-path',
+            pakArgument,
+            '--worker-index',
+            String(workerIndex),
+            '--worker-count',
+            String(textureWorkerCount),
+            '--claim-dir',
+            claimDirectory,
+        ])));
+        await assertAssetWorkerCompletion(resultPaths, referencedTexturePaths.size, 'texture');
+        stageRoots.push(...textureStageRoots);
     }
 
     const mergeMetrics = await mergeAssetCacheStages(
