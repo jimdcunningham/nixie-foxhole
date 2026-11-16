@@ -34,7 +34,7 @@ import { resolveFoxholeBunkerSpotlightLights, showFoxholeBunkerSpotlightGlow } f
 import { createFoxholeSpotlightBeamGraphics } from './spotlight-beam.ts';
 import { renderFoxholeConnectorGuides } from './scene-v2-connector-guides.ts';
 import { renderFoxholeConnectorSocketOverlays, renderFoxholeConnectorSpatialMarkers } from './scene-v2-connector-socket-overlays.ts';
-import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers, resolveFoxholeSocketDisplayKind } from './scene-v2-socket-overlays.ts';
+import { renderFoxholeStructureSocketOverlays, renderFoxholeSpatialSocketMarkers, resolveFoxholeSocketDisplayKind, resolveOccupiedSockets } from './scene-v2-socket-overlays.ts';
 import type {
     NixieComponentEntitySnapshotV1,
     NixieComponentJsonObjectV1,
@@ -488,9 +488,12 @@ export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieCom
         ? resolveFoxholeTrenchSelectionBounds(spriteBounds, Object.values(assetMetadata.renderLayers)) : null;
     const powerPorts = new Map<string, { id: string; local: { x: number; y: number; z?: number; }; }>();
     if (!appearance.destroyed && !appearance.packaged && !assetMetadata.isDestroyed) {
+        const attachments = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+            && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+        const occupied = resolveOccupiedSockets(assetMetadata, modifications.map(entry => entry.variant), attachments);
         for (const socket of resolveFoxholeEntityStructureSockets(entity, assetMetadata)) {
             const id = socket.name.toLowerCase();
-            if (/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 128
+            if (!occupied.has(socket.name) && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 128
                 && resolveFoxholeSocketDisplayKind({ ...socket, socketTags: socket.socketTags ?? [] }) === 'power') {
                 powerPorts.set(id, { id, local: { x: socket.x, y: socket.y, ...(socket.z === undefined ? {} : { z: socket.z }) } });
             }

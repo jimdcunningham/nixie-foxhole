@@ -55,6 +55,23 @@ test('power cable follows real pole and facility sockets, retains heights and re
     assert.equal(planar.commands.find(command => command.op === 'stroke')?.color, FOXHOLE_POWERLINE_INVALID_COLOR);
 });
 
+test('power structures only advertise sockets with free connection slots', () => {
+    const subject = product('powerbox');
+    const sockets = subject.components.find(component => component.componentId === 'socket-attachments')!;
+    const ports = () => renderFoxholeSceneV2Entity(subject).selectionGeometry?.connectionPorts?.points ?? [];
+    const freePort = ports().find(port => port.id === 'powersocket');
+    assert.ok(freePort);
+    const limit = assets.powerbox!.powerSocketMaxConnections!;
+    const rows = Array.from({ length: limit }, (_, index) =>
+        ({ localSocketName: 'PowerSocket', targetEntityId: `cable-${index}`, targetSocketName: 'BackSocket' }));
+    sockets.data.attachments = rows.slice(1);
+    assert.ok(ports().some(port => port.id === freePort.id));
+    sockets.data.attachments = rows;
+    assert.ok(!ports().some(port => port.id === freePort.id));
+    sockets.data.attachments = rows.slice(1);
+    assert.ok(ports().some(port => port.id === freePort.id), 'removing a cable reopens the port');
+});
+
 test('spatial socket projection handles parent elevation, tilt, and connector scale without changing 2D state', () => {
     const pole = product('powerpole'), cable = product('powerline');
     const parent: Entity = { entityId: 'parent', revision: 1, components: [

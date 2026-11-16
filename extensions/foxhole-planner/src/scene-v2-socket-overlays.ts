@@ -13,7 +13,7 @@ export const FOXHOLE_POWER_SOCKET_COLOR = 0xFFD800;
 export const FOXHOLE_PIPE_SOCKET_COLORS = { input: 0xFF2A2A, output: 0x3DDC4E, bidirectional: 0x3D8BFF };
 
 /** A power socket remains available until all of its connection slots are used. */
-function resolveOccupiedSockets(asset: FoxholeSceneV2AssetMetadata,
+export function resolveOccupiedSockets(asset: FoxholeSceneV2AssetMetadata,
     variants: readonly FoxholeSceneV2ModificationVariantMetadata[], attachments: unknown): Set<string> {
     const rows = Array.isArray(attachments) ? attachments : [];
     const counts = new Map<string, number>();
