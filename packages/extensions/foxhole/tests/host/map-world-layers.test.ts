@@ -22,6 +22,7 @@ test('terrain surfaces are device-local and invalid values retain detailed terra
  const key='foxhole.map.terrainSurface';assert.equal(isFoxholeMapUserSettingKey(key),true);
  assert.equal(foxholeMapUserSettings.find(d=>d.id===key)?.persist,'local');
  assert.equal(readFoxholeMapSettings({}).terrainSurface,'native');
- for(const value of ['plain','map','native'])assert.equal(readFoxholeMapSettings({},id=>id===key?value:undefined).terrainSurface,value);
+ for(const value of ['map','native'])assert.equal(readFoxholeMapSettings({},id=>id===key?value:undefined).terrainSurface,value);
  assert.equal(readFoxholeMapSettings({},id=>id===key?'invalid':undefined).terrainSurface,'native');
+ assert.equal(readFoxholeMapSettings({},id=>id===key?'plain':undefined).terrainSurface,'native');
 });

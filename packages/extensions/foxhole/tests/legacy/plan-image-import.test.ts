@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { NIXIE_URL_SPRITE_NODE_TYPE } from '#nixie/plugins/nixie/contributions/assets/shared/url-sprite.ts';
 import {
@@ -13,34 +10,37 @@ import {
 } from '../../app/plugins/foxhole/legacy/plan-image-mapper.ts';
 import { LegacyPlanImporter } from '../../app/plugins/foxhole/legacy/plan-importer.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE = path.join(
-    __dirname,
-    '../fixtures/legacy-plans/raw/bp-0ad7d5b9-6b12-47d4-ae00-9bae9f6e59f2.zip',
-);
+const filename = 'fixture.gif';
+const asset = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
+async function imageArchive() {
+    const zip = new JSZip();
+    zip.file('project.json', JSON.stringify({ version: '1.0.5', entities: [{
+        id: 1, type: 'image', textureFile: filename, width: 228, height: 221, rotation: 90, shapeStyle: { alpha: 0.5 },
+    }] }));
+    zip.file(`assets/${filename}`, asset);
+    return zip.generateAsync({ type: 'nodebuffer' });
+}
 
 test('image mapper resolves archive textureFile into a File', async () => {
-    const zip = await JSZip.loadAsync(readFileSync(FIXTURE));
+    const zip = await JSZip.loadAsync(await imageArchive());
     const project = JSON.parse(await zip.file('project.json')!.async('string'));
-    const assetBytes = await zip.file('assets/warden.jpg')!.async('uint8array');
+    const assetBytes = await zip.file(`assets/${filename}`)!.async('uint8array');
     const pending = collectLegacyPlanPendingImages(project.entities);
     assert.equal(pending.length, 1);
-    assert.equal(pending[0]?.textureFile, 'warden.jpg');
+    assert.equal(pending[0]?.textureFile, filename);
     assert.ok(Math.abs(Number(pending[0]?.alpha) - 0.5) < 1e-9);
 
-    const assets = [{ path: 'assets/warden.jpg', bytes: assetBytes }];
-    assert.ok(findLegacyPlanArchiveAsset(assets, 'warden.jpg'));
+    const assets = [{ path: `assets/${filename}`, bytes: assetBytes }];
+    assert.ok(findLegacyPlanArchiveAsset(assets, filename));
     const fileResult = createLegacyPlanImageFile({ pending: pending[0]!, assets });
     assert.ok(!('unresolved' in fileResult));
-    assert.equal(fileResult.file.name, 'warden.jpg');
-    assert.ok(fileResult.file.size > 0);
+    assert.equal(fileResult.file.name, filename);
+    assert.deepEqual(Buffer.from(await fileResult.file.arrayBuffer()), asset);
 });
 
 test('importer collects pending images from fixture archives', async () => {
-    const bytes = readFileSync(FIXTURE);
-    const result = await new LegacyPlanImporter({
-        fixtureName: path.basename(FIXTURE),
-    }).importArchive(bytes);
+    const result = await new LegacyPlanImporter({ fixtureName: 'image-fixture.plan' }).importArchive(await imageArchive());
 
     assert.equal(result.pendingImages.length, 1);
     assert.equal(result.report.unresolvedImageKeys.length, 0);
@@ -51,9 +51,9 @@ test('importer collects pending images from fixture archives', async () => {
         projectId: 'local-test',
         asset: {
             id: 'asset-1',
-            displayName: 'warden.jpg',
-            originalFilename: 'warden.jpg',
-            mimeType: 'image/jpeg',
+            displayName: filename,
+            originalFilename: filename,
+            mimeType: 'image/gif',
             width: 228,
             height: 221,
         },

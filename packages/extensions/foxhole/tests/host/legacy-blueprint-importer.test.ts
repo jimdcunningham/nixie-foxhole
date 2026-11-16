@@ -6,20 +6,23 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
 test('a refreshed discovery consumer retains the importer registered by loaded contributions', async () => {
-    const source = readFileSync(hostSourceUrl('../../../../nixie/app/plugins/nixie/legacy-blueprint-import.ts', import.meta.url), 'utf8');
-    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const compile = (file: string) => ts.transpileModule(
+        readFileSync(hostSourceUrl('../../../../nixie/app/plugins/nixie/' + file, import.meta.url), 'utf8'),
+        { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+    ).outputText;
     const sharedModules = new Map<string, unknown>();
-    function loadConsumer() {
+    function loadConsumer(file = 'legacy-blueprint-import.ts') {
         const exports: Record<string, any> = {};
-        runInNewContext(code, {
+        runInNewContext(compile(file), {
             exports,
             require: (specifier: string) => {
+                if (specifier === './legacy-blueprint-reuse.ts') return loadConsumer('legacy-blueprint-reuse.ts');
+                if (specifier === './discovery-required-extensions.ts') return { prepareDiscoveryRequiredExtensions: async () => {} };
                 if (specifier.endsWith('/extensions/index.ts')) return { getNixieExtension: () => ({ id: 'foxhole' }), ensureNixieExtensionContributions: async () => {} };
                 if (specifier.endsWith('/legacy-blueprint-importer.ts')) {
                     if (!sharedModules.has(specifier)) {
-                        const registrySource = readFileSync(hostSourceUrl('../../../../nixie/app/plugins/nixie/legacy-blueprint-importer.ts', import.meta.url), 'utf8');
                         const registryExports = {};
-                        runInNewContext(ts.transpileModule(registrySource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: registryExports });
+                        runInNewContext(compile('legacy-blueprint-importer.ts'), { exports: registryExports });
                         sharedModules.set(specifier, registryExports);
                     }
                     return sharedModules.get(specifier);
