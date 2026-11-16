@@ -486,13 +486,13 @@ export function resolveFoxholeSceneV2StructureSelectionGeometry(entity: NixieCom
         maxX: Math.max(...points.map(point => point.x)), maxY: Math.max(...points.map(point => point.y)) };
     const trenchBounds = !shapes.length && !appearance.destroyed && !appearance.packaged && !replacement && /^trencht[12]$/i.test(assetMetadata.codeName)
         ? resolveFoxholeTrenchSelectionBounds(spriteBounds, Object.values(assetMetadata.renderLayers)) : null;
-    const powerPorts = new Map<string, { id: string; local: { x: number; y: number; }; }>();
+    const powerPorts = new Map<string, { id: string; local: { x: number; y: number; z?: number; }; }>();
     if (!appearance.destroyed && !appearance.packaged && !assetMetadata.isDestroyed) {
         for (const socket of resolveFoxholeEntityStructureSockets(entity, assetMetadata)) {
             const id = socket.name.toLowerCase();
             if (/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 128
                 && resolveFoxholeSocketDisplayKind({ ...socket, socketTags: socket.socketTags ?? [] }) === 'power') {
-                powerPorts.set(id, { id, local: { x: socket.x, y: socket.y } });
+                powerPorts.set(id, { id, local: { x: socket.x, y: socket.y, ...(socket.z === undefined ? {} : { z: socket.z }) } });
             }
         }
     }
