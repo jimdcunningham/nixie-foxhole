@@ -7,8 +7,9 @@ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 async function resolveDestination(destination){
  try{return await fs.realpath(destination);}
  catch(error){
-  if(error.code!=='ENOENT')throw error;
-  return path.join(await resolveDestination(path.dirname(destination)),path.basename(destination));
+  const parent=path.dirname(destination);
+  if(error.code!=='ENOENT'||parent===destination)throw error;
+  return path.join(await resolveDestination(parent),path.basename(destination));
  }
 }
 /** Explicit local bundle cleanup: quarantine old immutable content outside the served assets. */
