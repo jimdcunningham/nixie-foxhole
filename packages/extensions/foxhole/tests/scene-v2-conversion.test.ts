@@ -76,6 +76,27 @@ test('old defense splines gain their published endpoint names during conversion'
     }
 });
 
+test('spline conversion ignores redundant endpoints and defaults while reporting unsupported state', () => {
+    const state = {
+        foxholeKey: 'barbedwirespline',
+        start: { x: 10, y: 20, rotation: 0 }, end: { x: 160, y: 20, rotation: 1 },
+        startX: 0, startY: 0, startRotation: 0, endX: 96, endY: 0, endRotation: 0,
+        destroyed: false, packaged: false, anchorX: 0.5, anchorY: 0.5, faction: null, colorHex: null,
+        markedItemCodenames: [], productionOrders: [],
+    };
+    const convert = (overrides = {}) => convertNixieSceneV1ToV2([{
+        id: 'wire', type: 'foxholeSplineConnector', state: { ...state, ...overrides }, children: [],
+    }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
+    assert.deepEqual(convert().report.issues, []);
+    const result = convert({ destroyed: true, endX: 200 });
+    assert.deepEqual(result.report.issues.map(issue => [issue.code, issue.message]), [[
+        'unmapped-state', 'Retained 1 unmapped state field in legacy source data: destroyed.',
+    ]]);
+    const components = result.content.entities[0]!.components;
+    assert.equal(components.find(component => component.componentId === 'spline-connector')?.data.endX, 160);
+    assert.equal(JSON.parse(String(components.find(component => component.componentId === 'legacy-source')?.data.snapshotJson)).state.endX, 200);
+});
+
 function capabilityIds(entity: { components: Array<{ ownerId: string; componentId: string; }>; }): string[] {
     return entity.components
         .filter(component => (

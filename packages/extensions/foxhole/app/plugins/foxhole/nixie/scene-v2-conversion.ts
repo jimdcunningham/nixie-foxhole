@@ -149,6 +149,15 @@ const SPLINE_CONNECTOR_STATE_KEYS = [
     'tint',
     'brightness',
 ] as const;
+const SPLINE_ENDPOINT_ALIASES = ['startX', 'startY', 'startRotation', 'endX', 'endY', 'endRotation'] as const;
+const SPLINE_LEGACY_SCALAR_DEFAULTS = {
+    destroyed: false,
+    packaged: false,
+    anchorX: 0.5,
+    anchorY: 0.5,
+    faction: null,
+    colorHex: null,
+};
 const RANGE_STATE_KEYS = [
     'points',
     'sweepAngle',
@@ -1133,6 +1142,13 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             // Older imports copied this flag onto connectors, which contribute no production or power.
             handledStateKeys: [
                 ...SPLINE_CONNECTOR_STATE_KEYS,
+                // V1 reads the nested endpoints. Older files also carry stale flat defaults.
+                ...(converted.data ? SPLINE_ENDPOINT_ALIASES : []),
+                ...Object.entries(SPLINE_LEGACY_SCALAR_DEFAULTS).filter(([key, value]) => node.state[key] === value).map(([key]) => key),
+                ...['markedItemCodenames', 'productionOrders'].filter(key => {
+                    const value = node.state[key];
+                    return Array.isArray(value) && value.length === 0;
+                }),
                 ...(typeof node.state.disableProduction === 'boolean' ? ['disableProduction'] : []),
             ],
             issues: converted.issues,
