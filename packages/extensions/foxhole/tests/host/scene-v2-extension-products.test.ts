@@ -5,6 +5,7 @@ import test from 'node:test';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { parseNixieProductResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieSceneV2ComponentHost } from '../../../../nixie/desktop-extensions/scene-v2-component-host.ts';
+import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
 import { NIXIE_SCENE_V2_CORE_COMPONENTS, NIXIE_SCENE_V2_CORE_OWNER_ID } from '../../../../nixie/desktop-extensions/scene-v2-core-components.ts';
 import { listFoxholeSceneV2Products, matchesFoxholeSceneV2ProductFilters } from '../../../../../extensions/foxhole-planner/src/scene-v2-products.ts';
 import foxholeAssets from '../../../../../extensions/foxhole-planner/src/scene-v2-assets-node.ts';
@@ -30,7 +31,20 @@ for (const { name, listProducts } of [
                 const host = new NixieSceneV2ComponentHost();
                 host.registerExtension(NIXIE_SCENE_V2_CORE_OWNER_ID, NIXIE_SCENE_V2_CORE_COMPONENTS);
                 host.registerExtension(manifest.id, manifest.contributes.components);
-                assert.doesNotThrow(() => host.instantiateProduct(`product-${checked}`, item.product), item.product.id);
+                if (item.product.primitiveAssembly) {
+                    const runtime = new NixieSceneV2EditorRuntimeController();
+                    runtime.setEditable(true);
+                    runtime.attachPersistence({ isAttached: () => true, canUndo: false, canRedo: false,
+                        undo: () => false, redo: () => false, applyEntityMutations: () => true });
+                    const loaded = runtime.load({ type: 'scene-v2', contractVersion: 1, entities: [] },
+                        [{ ownerId: manifest.id, contribution: manifest.contributes.components! }]);
+                    assert.equal(loaded.ok, true, loaded.error);
+                    const result = runtime.instantiateProduct(item.product, manifest.id, undefined, id => `assembly:${id}`);
+                    assert.equal(result.ok, true, `${item.product.id}: ${result.error}`);
+                    assert.ok(runtime.entities.length > 1, 'Assembly materializes separate entities.');
+                } else {
+                    assert.doesNotThrow(() => host.instantiateProduct(`product-${checked}`, item.product), item.product.id);
+                }
                 checked += 1;
             }
         }

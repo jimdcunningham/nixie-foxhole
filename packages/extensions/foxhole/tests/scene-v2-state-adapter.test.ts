@@ -1,4 +1,6 @@
 import { prepareFoxholePreviewAssets } from '../app/utils/scene-v2-preview-assets.ts';
+import { projectNixieInspectorSubjectV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { inspectFoxholeSceneV2Structure } from '../../../../extensions/foxhole-planner/src/scene-v2-inspector.ts';
 import { setActiveNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
 import { buildFoxholeSceneV2RenderPreview } from '../app/plugins/foxhole/nixie/scene-v2-inspector-preview.ts';
 import { renderFoxholeSceneV2Entity } from '../../../../extensions/foxhole-planner/src/scene-v2-renderers.ts';
@@ -371,7 +373,10 @@ function fixture(type = 'foxholeAsset', state: Record<string, unknown> = { foxho
         assert.deepEqual([...result.handledKeys].sort(), Object.keys(patch).sort());
         host.applyEditorComponentPatches(result.updates.map(update => ({ ...update, entityId: id })));
     };
-    return { source, host, id, apply, manifest, project: () => foxholeSceneV2StateAdapter.project(host.readEntity(id))! };
+    const definitions = new Map<string, NixieComponentDefinitionV1>(
+        manifest.contributes.components.components.map((component: NixieComponentDefinitionV1) => [manifest.id + '\0' + component.id, component]),
+    );
+    return { source, host, id, apply, manifest, definitions, project: () => foxholeSceneV2StateAdapter.project(host.readEntity(id))! };
 }
 
 test('asset switches reconcile stored cargo with the destination hold', () => {
@@ -552,22 +557,27 @@ test('pipeline wheel writes reject stale, locked, read-only, detached and failed
 });
 
 test('range selection reuses V1 bounds and its authored origin from current typed points', () => {
-    const { host, id, apply } = fixture('foxholeRange', {
+    const { host, id } = fixture('foxholeRange', {
         points: [20, 30, 180, 30], sweepAngle: 90, showRadius: false, showAngle: false,
     });
     const initial = host.readEntity(id);
     const before = host.exportDocument();
     const range = initial.components.find(component => component.componentId === 'range')!;
+    const geometry = renderFoxholeSceneV2Entity(initial).selectionGeometry!;
+    const bounds = geometry.localBounds!;
+    const padding = geometry.boundsPadding!;
+    const padded = { minX: bounds.minX - padding, minY: bounds.minY - padding, maxX: bounds.maxX + padding, maxY: bounds.maxY + padding };
     for (const renderScale of [0.25, 1, 2]) {
-        assert.deepEqual(foxholeSceneV2StateAdapter.selectionLocalBounds!(initial, renderScale),
-            getFoxholeRangeSelectionLocalBounds(resolveFoxholeRangeState(range.data as Partial<FoxholeRangeState>), renderScale));
+        assert.deepEqual(padded, getFoxholeRangeSelectionLocalBounds(resolveFoxholeRangeState(range.data as Partial<FoxholeRangeState>), renderScale));
     }
-    assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(initial), { x: 20, y: 30 });
+    assert.deepEqual(geometry.transformOrigin, { x: 20, y: 30 });
     assert.deepEqual(host.exportDocument(), before);
-    apply({ points: [-40, 25, 120, 25] });
+    host.applyEditorComponentPatch({ entityId: id, ownerId: 'nixie.foxhole-planner', componentId: 'range',
+        set: { points: [-40, 25, 120, 25] } });
     const edited = host.readEntity(id);
-    assert.deepEqual(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(edited), { x: -40, y: 25 });
-    assert.notDeepEqual(foxholeSceneV2StateAdapter.selectionLocalBounds!(edited, 1), foxholeSceneV2StateAdapter.selectionLocalBounds!(initial, 1));
+    const editedGeometry = renderFoxholeSceneV2Entity(edited).selectionGeometry!;
+    assert.deepEqual(editedGeometry.transformOrigin, { x: -40, y: 25 });
+    assert.notDeepEqual(editedGeometry.localBounds, bounds);
     assert.deepEqual(edited.components.find(component => component.componentId === 'legacy-source')!.data,
         initial.components.find(component => component.componentId === 'legacy-source')!.data);
 });
@@ -587,33 +597,33 @@ test('range selection adapters ignore unresolved definitions and other owners', 
     assert.equal(foxholeSceneV2StateAdapter.selectionTransformOriginLocal!(unresolved), null);
 });
 
-test('range endpoint preview and accepted center reanchoring share V1 geometry without rewriting preserved data', () => {
-    const { host, id } = fixture('foxholeRange', { x: -120, points: [0, 0, 160, 0], showRadius: false, showAngle: false });
+test('typed range endpoint edits and previews preserve the authored transform and legacy data', () => {
+    const { host, id, definitions } = fixture('foxholeRange', { x: -120, points: [0, 0, 160, 0], showRadius: false, showAngle: false });
     const before = host.exportDocument();
     const initial = host.readEntity(id);
-    assert.deepEqual(getNixieSceneV2EditableHandles(initial), getPolylineEditableLocalHandles([0, 0, 160, 0], { canDeleteVertex: () => false }));
+    assert.deepEqual(getNixieSceneV2EditableHandles(initial, definitions), getPolylineEditableLocalHandles([0, 0, 160, 0], { idPrefix: 'polyline-vertex' }));
     assert.deepEqual(movePolylineLocalVertex([0, 0, 160, 0], 1, { x: 200, y: 20 }), [0, 0, 200, 20]);
-    const updates = buildNixieSceneV2EditableHandleUpdates(initial, 'point-1', { x: 200, y: 20 }, false)!;
+    const updates = buildNixieSceneV2EditableHandleUpdates(initial, 'polyline-vertex-1', { x: 200, y: 20 }, false, definitions)!;
     const preview = previewNixieSceneV2EditableHandleUpdates(initial, updates);
     assert.deepEqual(preview.components.find(component => component.componentId === 'range')!.data.points, [0, 0, 200, 20]);
     assert.deepEqual(host.exportDocument(), before, 'preview does not write to the host or its history');
-    const center = buildNixieSceneV2EditableHandleUpdates(initial, 'point-0', { x: 20, y: 20 }, true)!;
+    const center = buildNixieSceneV2EditableHandleUpdates(initial, 'polyline-vertex-0', { x: 20, y: 20 }, true, definitions)!;
     host.applyEditorComponentPatches(center.map(update => ({ ...update, entityId: id })));
     const changed = host.readEntity(id);
-    assert.deepEqual(changed.components.find(component => component.componentId === 'range')!.data.points, [0, 0, 140, -20]);
+    assert.deepEqual(changed.components.find(component => component.componentId === 'range')!.data.points, [20, 20, 160, 0]);
     const transform = changed.components.find(component => component.componentId === 'transform')!.data;
-    assert.deepEqual([transform.x, transform.y], [-100, 20]);
+    assert.deepEqual([transform.x, transform.y], [-120, 0]);
     assert.deepEqual(changed.components.find(component => component.componentId === 'legacy-source')!.data,
         initial.components.find(component => component.componentId === 'legacy-source')!.data);
     host.undo();
     assert.deepEqual(host.exportDocument(), before);
-    assert.equal(buildNixieSceneV2EditableHandleUpdates(initial, 'missing', { x: 20, y: 20 }, true), null);
-    assert.equal(buildNixieSceneV2EditableHandleUpdates(initial, 'point-0', { x: Number.NaN, y: 20 }, true), null);
+    assert.equal(buildNixieSceneV2EditableHandleUpdates(initial, 'missing', { x: 20, y: 20 }, true, definitions), null);
+    assert.equal(buildNixieSceneV2EditableHandleUpdates(initial, 'polyline-vertex-0', { x: Number.NaN, y: 20 }, true, definitions), null);
 });
 
 test('range geometry commits are atomic, revision guarded, capability checked and recover from rejected persistence', () => {
     for (const scenario of ['accepted', 'stale', 'locked', 'no-capability', 'read-only', 'invalid', 'rejected'] as const) {
-        const { host, id, manifest } = fixture('foxholeRange', { x: -120, points: [0, 0, 160, 0] });
+        const { host, id, manifest, definitions } = fixture('foxholeRange', { x: -120, points: [0, 0, 160, 0] });
         const document = host.exportDocument();
         if (scenario === 'locked') {
             document.entities[0]!.components.find(component => component.componentId === 'locking')!.data.locked = true;
@@ -631,7 +641,7 @@ test('range geometry commits are atomic, revision guarded, capability checked an
         assert.equal(controller.load(document, [{ ownerId: 'nixie.foxhole-planner', name: 'Foxhole',
             contribution: manifest.contributes.components }]).ok, true);
         const initial = controller.entities[0]!;
-        const updates = buildNixieSceneV2EditableHandleUpdates(initial, 'point-0', { x: 20, y: 20 }, true)!;
+        const updates = buildNixieSceneV2EditableHandleUpdates(initial, 'polyline-vertex-0', { x: 20, y: 20 }, true, definitions)!;
         if (scenario === 'invalid') {
             updates.find(update => update.componentId === 'range')!.set!.points = [0, 'invalid', 140, -20];
         }
@@ -653,23 +663,23 @@ test('range geometry commits are atomic, revision guarded, capability checked an
 test('point-provider handles edit typed geometry with shared V1 indices and preserve unrelated state', () => {
     const cases = [
         { type: 'foxholeTacticalLine', component: 'tactical-line', field: 'points', points: [0, 0, 80, -20, 180, 40],
-            handleId: 'point-1', expected: [0, 0, 115, 2, 180, 40], point: { x: 115, y: 2 } },
+            handleId: 'polyline-vertex-1', expected: [0, 0, 115, 2, 180, 40], point: { x: 115, y: 2 } },
         { type: 'foxholeBinocularLine', component: 'binocular-line', field: 'points', points: [0, 0, 160, 0, 240, 40],
-            handleId: 'point-1', expected: [0, 0, 195, 22, 240, 40], point: { x: 195, y: 22 } },
+            handleId: 'polyline-vertex-1', expected: [0, 0, 195, 22, 240, 40], point: { x: 195, y: 22 } },
         { type: 'foxholeTriangulation', component: 'triangulation', field: 'edgePoints', points: [60, 0, -30, 52, -30, -52],
-            handleId: 'edge-0', expected: [95, 22, -30, 52, -30, -52], point: { x: 95, y: 22 } },
+            handleId: 'polyline-vertex-0', expected: [95, 22, -30, 52, -30, -52], point: { x: 95, y: 22 } },
     ];
     for (const scenario of cases) {
-        const { host, id } = fixture(scenario.type, { x: -120, y: 20, [scenario.field]: scenario.points });
+        const { host, id, definitions } = fixture(scenario.type, { x: -120, y: 20, [scenario.field]: scenario.points });
         const before = host.exportDocument();
         const initial = host.readEntity(id);
-        assert.deepEqual(getNixieSceneV2EditableHandles(initial), getPolylineEditableLocalHandles(scenario.points,
-            scenario.field === 'edgePoints' ? { idPrefix: 'edge', minimumPointCount: 3 } : {}));
-        const updates = buildNixieSceneV2EditableHandleUpdates(initial, scenario.handleId, scenario.point, false)!;
+        assert.deepEqual(getNixieSceneV2EditableHandles(initial, definitions), getPolylineEditableLocalHandles(scenario.points,
+            { idPrefix: 'polyline-vertex', minimumPointCount: scenario.field === 'edgePoints' ? 3 : 2 }));
+        const updates = buildNixieSceneV2EditableHandleUpdates(initial, scenario.handleId, scenario.point, false, definitions)!;
         const preview = previewNixieSceneV2EditableHandleUpdates(initial, updates);
         assert.deepEqual(preview.components.find(component => component.componentId === scenario.component)!.data[scenario.field], scenario.expected);
         assert.deepEqual(host.exportDocument(), before);
-        const committed = buildNixieSceneV2EditableHandleUpdates(initial, scenario.handleId, scenario.point, true)!;
+        const committed = buildNixieSceneV2EditableHandleUpdates(initial, scenario.handleId, scenario.point, true, definitions)!;
         assert.deepEqual(committed, updates, 'these providers retain their local points on serialization');
         host.applyEditorComponentPatches(committed.map(update => ({ ...update, entityId: id })));
         const changed = host.readEntity(id);
@@ -679,8 +689,8 @@ test('point-provider handles edit typed geometry with shared V1 indices and pres
         assert.deepEqual(host.exportDocument(), before);
         const unresolved = structuredClone(initial);
         unresolved.components.find(component => component.componentId === scenario.component)!.definitionAvailable = false;
-        assert.deepEqual(getNixieSceneV2EditableHandles(unresolved), []);
-        assert.equal(buildNixieSceneV2EditableHandleUpdates(unresolved, scenario.handleId, scenario.point, true), null);
+        assert.deepEqual(getNixieSceneV2EditableHandles(unresolved, definitions), []);
+        assert.equal(buildNixieSceneV2EditableHandleUpdates(unresolved, scenario.handleId, scenario.point, true, definitions), null);
     }
 });
 
@@ -794,7 +804,7 @@ test('tier changes carry compatible modifications through canonical SDK state an
     }
 });
 
-test('power handle hover targets a building socket away from its point and detaches in the free preview', () => {
+test('legacy power handle projection snaps to a hovered building and detaches in the free preview', () => {
     const { host } = fixture();
     const converted = convertNixieSceneV1ToV2([
         { id: 'plant', type: 'foxholeAsset', state: { foxholeKey: 'facilitypowerdiesel', x: 0, y: 0 }, children: [] },
@@ -809,20 +819,22 @@ test('power handle hover targets a building socket away from its point and detac
     const socket = collectNixieSceneV2FoxholeSockets(context).find(socket => socket.nodeId === building.entityId && socket.socketName.includes('PowerSocket'))!;
     assert.ok(Math.hypot(socket.x - context.worldPoint.x, socket.y - context.worldPoint.y) > 32);
     const before = host.exportDocument();
-    const updates = buildNixieSceneV2EditableHandleUpdates(line, 'end', context.worldPoint, false, undefined, context)!;
-    const preview = previewNixieSceneV2EditableHandleUpdates(line, updates);
+    const previewHandle = (entity: typeof line, hover: typeof context) => {
+        const patch = foxholeSceneV2StateAdapter.editableHandlePatch!(entity, 'end', hover.worldPoint, false, hover);
+        assert.ok(patch);
+        return previewNixieSceneV2EditableHandleUpdates(entity, foxholeSceneV2StateAdapter.patch(entity, patch).updates);
+    };
+    const preview = previewHandle(line, context);
     const geometry = preview.components.find(component => component.componentId === 'spline-connector')!.data;
     assert.equal(geometry.endAttachmentNodeId, building.entityId);
     assert.equal(geometry.endAttachmentSocketName, socket.socketName);
     assert.ok(Math.abs(Number(geometry.endX) - socket.x) < 1e-8);
     assert.ok(Math.abs(Number(geometry.endY) - socket.y) < 1e-8);
     const away = { ...context, entities: [building, preview], hoveredEntityIds: [], worldPoint: { x: 500, y: 400 } };
-    const detached = previewNixieSceneV2EditableHandleUpdates(preview,
-        buildNixieSceneV2EditableHandleUpdates(preview, 'end', away.worldPoint, false, undefined, away)!);
+    const detached = previewHandle(preview, away);
     assert.equal(detached.components.find(component => component.componentId === 'spline-connector')!.data.endAttachmentNodeId, undefined);
     const disabled = { ...context, isSettingEnabled: () => false };
-    const unsnapped = previewNixieSceneV2EditableHandleUpdates(line,
-        buildNixieSceneV2EditableHandleUpdates(line, 'end', context.worldPoint, false, undefined, disabled)!);
+    const unsnapped = previewHandle(line, disabled);
     assert.equal(unsnapped.components.find(component => component.componentId === 'spline-connector')!.data.endAttachmentNodeId, undefined);
     assert.deepEqual(host.exportDocument(), before, 'hover and drag previews do not persist');
 });
@@ -1034,7 +1046,8 @@ test('maintenance preview edits remain detached and create the typed component f
             return true;
         } } as never);
     const before = runtime.exportDocument();
-    assert.equal(runtime.patchPlacementInspectorNodes(['maintenance-draft'], { maintenanceFilters: { range: 30, exclusions: ['facility'] } }), true, runtime.actionError);
+    assert.equal(runtime.updatePlacementInspectorComponents([{ entityId: 'maintenance-draft', ownerId: manifest.id,
+        componentId: 'maintenance-supply', set: { range: 30, exclusions: ['facility'] }, createIfMissing: true }]), true, runtime.actionError);
     assert.deepEqual(foxholeSceneV2StateAdapter.project(draft.entities[0]!)!.state.maintenanceFilters, { range: 30, exclusions: ['facility'] });
     assert.deepEqual(runtime.exportDocument(), before);
     assert.deepEqual(runtime.selection.ids, [id]);
@@ -1088,8 +1101,16 @@ test('Inspector preview projection follows hover lifecycle and never changes the
  }finally{setActiveNixieStructureModificationHoverPreview(null);(await prepareFoxholePreviewAssets(null))();}
 });
 
-test('Scene V2 bracket tier edits use typed finalized updates and one persistence batch', async () => {
-    const { buildFoxholeSceneV2SelectionTierUpdates } = await import('../app/plugins/foxhole/nixie/scene-v2-tier-commands.ts');
+function sdkTierUpdates(runtime: NixieSceneV2EditorRuntimeController, direction: 'up' | 'down', manifest: ReturnType<typeof fixture>['manifest']) {
+    const label = direction === 'up' ? 'Tier Up' : 'Tier Down';
+    return runtime.entities.filter(entity => runtime.selection.ids.includes(entity.entityId)).flatMap(entity => {
+        const request = projectNixieInspectorSubjectV1(entity, manifest.id, manifest.contributes.inspectorProviders[0]);
+        const action = inspectFoxholeSceneV2Structure(request).layout?.actions?.find(candidate => candidate.label.startsWith(label));
+        return action?.patches?.map(patch => ({ ...patch, ownerId: manifest.id, entityId: entity.entityId })) ?? [];
+    });
+}
+
+test('Scene V2 SDK tier actions use typed updates and one persistence batch', async () => {
     const { host, id, manifest } = fixture('foxholeAsset', { foxholeKey: 'trencht1', x: 123, y: -47, rotation: 0.75 });
     const runtime = new NixieSceneV2EditorRuntimeController();
     let writes = 0;
@@ -1100,25 +1121,24 @@ test('Scene V2 bracket tier edits use typed finalized updates and one persistenc
         contribution: manifest.contributes.components }]).ok, true);
     runtime.selection.set([id]);
     for (const [direction, target] of [['up', 'trencht2'], ['up', 'trencht3'], ['down', 'trencht2'], ['down', 'trencht1']] as const) {
-        const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, direction);
+        const updates = sdkTierUpdates(runtime, direction, manifest);
         assert.ok(updates.length);
         assert.equal((await runtime.updateEntityComponentsFinalized(updates)).ok, true);
         const entity = runtime.entities.find(entity => entity.entityId === id)!;
         assert.equal(foxholeSceneV2StateAdapter.project(entity)!.state.foxholeKey, target);
         assert.equal(entity.components.find(component => component.componentId === 'model')!.data.resourceId, 'foxhole.model.' + target);
         assert.deepEqual(runtime.selection.ids, [id]);
-        if (target === 'trencht3') assert.deepEqual(buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up'), []);
+        if (target === 'trencht3') assert.deepEqual(sdkTierUpdates(runtime, 'up', manifest), []);
     }
     assert.equal(writes, 4);
 
     runtime.setEditable(false);
     const before = runtime.exportDocument();
-    assert.equal((await runtime.updateEntityComponentsFinalized(buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up'))).ok, false);
+    assert.equal((await runtime.updateEntityComponentsFinalized(sdkTierUpdates(runtime, 'up', manifest))).ok, false);
     assert.deepEqual(runtime.exportDocument(), before);
 });
 
 test('Scene V2 tier commands batch mixed selections and reject locked tier targets', async () => {
-    const { buildFoxholeSceneV2SelectionTierUpdates } = await import('../app/plugins/foxhole/nixie/scene-v2-tier-commands.ts');
     const { manifest } = fixture();
     for (const locked of [false, true]) {
         const content = convertNixieSceneV1ToV2([
@@ -1132,8 +1152,14 @@ test('Scene V2 tier commands batch mixed selections and reject locked tier targe
             applyEntityMutations: () => { writes++; return true; } });
         assert.equal(runtime.load(content, [{ ownerId: manifest.id, name: manifest.name, contribution: manifest.contributes.components }]).ok, true);
         runtime.selection.set(runtime.entities.map(entity => entity.entityId));
-        const updates = buildFoxholeSceneV2SelectionTierUpdates(runtime, 'up');
-        if (locked) { assert.deepEqual(updates, []);continue; }
+        const updates = sdkTierUpdates(runtime, 'up', manifest);
+        if (locked) {
+            const before = runtime.exportDocument();
+            assert.equal((await runtime.updateEntityComponentsFinalized(updates)).ok, false);
+            assert.deepEqual(runtime.exportDocument(), before);
+            assert.equal(writes, 0);
+            continue;
+        }
         assert.equal(new Set(updates.map(update => update.entityId)).size, 2);
         assert.equal((await runtime.updateEntityComponentsFinalized(updates)).ok, true);
         assert.equal(writes, 1);

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveNixieInternalSpatialPresentation } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
+import { foxholeSceneV2HostPolicy } from '../../app/utils/scene-v2-host-policy.ts';
 import { FOXHOLE_SCENE_FACTION_SETTING_ID } from '../../app/utils/scene-faction.ts';
 import factionContribution from '../../app/plugins/nixie/contributions/foxhole/scene-faction.contrib.ts';
 
-// The host hooks register the real compiled integration, independently of map loading.
 test('saved faction preferences still select the correct flag atlas row', () => {
     assert.equal(FOXHOLE_SCENE_FACTION_SETTING_ID, 'nixie.scene.foxholeFaction');
     const setting = factionContribution.settings![0]!;
@@ -12,8 +12,9 @@ test('saved faction preferences still select the correct flag atlas row', () => 
     assert.equal(setting.persist, 'local');
     assert.equal(setting.viewpoint, true);
     for (const [value, expected] of [['colonial', 0], ['warden', 1], ['asset-default', undefined], ['invalid', undefined], [null, undefined]] as const) {
-        const presentation = resolveNixieInternalSpatialPresentation(id => id === setting.id ? value : undefined);
-        assert.equal(presentation.flagAtlasRow, expected, String(value));
+        const readSetting = (id: string) => id === setting.id ? value : undefined;
+        assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(readSetting).flagAtlasRow, expected, String(value));
+        assert.deepEqual(resolveNixieInternalSpatialPresentation(readSetting), {});
     }
 });
 
@@ -26,10 +27,10 @@ test('spotlights require nighttime and the enabled overlay with roofs visible', 
                     'foxhole.ranges.poweredSpotlights': spotlights,
                     'foxhole.structure.hideRoofs': hideRoofs,
                 };
-                assert.equal(resolveNixieInternalSpatialPresentation(id => settings[id]).poweredSpotlights,
+                assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(id => settings[id]).poweredSpotlights,
                     nighttime && spotlights && !hideRoofs);
             }
         }
     }
-    assert.equal(resolveNixieInternalSpatialPresentation(() => undefined).poweredSpotlights, false);
+    assert.equal(foxholeSceneV2HostPolicy.spatialPresentation!(() => undefined).poweredSpotlights, false);
 });

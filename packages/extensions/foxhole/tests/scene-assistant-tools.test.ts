@@ -79,8 +79,8 @@ test('place_foxhole_structure queues foxhole.scene.mutate', () => {
     assert.equal(payload.found, true);
     assert.equal(payload.foxholeKey, 'facilityrefineryoil');
     const actions = extractNixieAssistantClientActionsFromToolResult(payload);
-    assert.equal(actions.length, 1);
-    assert.equal(actions[0]?.type, 'foxhole.scene.mutate');
+    assert.deepEqual(actions, [], 'Studio ignores the legacy mutation protocol');
+    assert.equal((payload.clientActions as Array<{ type: string }>)[0]?.type, 'foxhole.scene.mutate');
 });
 
 test('connect_foxhole_power queues powerline op', () => {
@@ -97,10 +97,8 @@ test('connect_foxhole_power queues powerline op', () => {
         return;
     }
     const actions = extractNixieAssistantClientActionsFromToolResult(result.result);
-    assert.equal(actions[0]?.type, 'foxhole.scene.mutate');
-    if (actions[0]?.type === 'foxhole.scene.mutate') {
-        assert.equal(actions[0].ops[0]?.op, 'connectPower');
-    }
+    assert.deepEqual(actions, [], 'Studio ignores the legacy mutation protocol');
+    assert.equal((result.result as { clientActions: Array<{ ops: Array<{ op: string }> }> }).clientActions[0]?.ops[0]?.op, 'connectPower');
 });
 
 test('create_foxhole_binocular_line queues points', () => {
@@ -119,13 +117,10 @@ test('create_foxhole_binocular_line queues points', () => {
         return;
     }
     const actions = extractNixieAssistantClientActionsFromToolResult(result.result);
-    assert.equal(actions[0]?.type, 'foxhole.scene.mutate');
-    if (actions[0]?.type === 'foxhole.scene.mutate') {
-        assert.equal(actions[0].ops[0]?.op, 'createBinocularLine');
-        if (actions[0].ops[0]?.op === 'createBinocularLine') {
-            assert.deepEqual(actions[0].ops[0].points, [1, 2, 3, 4]);
-        }
-    }
+    assert.deepEqual(actions, [], 'Studio ignores the legacy mutation protocol');
+    const payload = result.result as { clientActions: Array<{ ops: Array<{ op: string; points?: number[] }> }> };
+    assert.equal(payload.clientActions[0]?.ops[0]?.op, 'createBinocularLine');
+    assert.deepEqual(payload.clientActions[0]?.ops[0]?.points, [1, 2, 3, 4]);
 });
 
 test('resolve_region_edge returns coordinates', () => {

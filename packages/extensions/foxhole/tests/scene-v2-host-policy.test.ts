@@ -17,7 +17,7 @@ test('Planner spline parameters become private handle policy without rewriting t
     assert.deepEqual(data, { foxholeKey: 'facilitypipe', maxBuffer: 20, curveT: 0.5 });
 });
 
-test('the active bundled policy translates exported lamps without host product identities', async () => {
+test('legacy lamp translation remains available outside the Scene V2 host', async () => {
     const { registerFoxholeSceneV2HostPolicy } = await import('../app/utils/scene-v2-host-policy.ts');
     const { resolveNixieInternalModelLightHints } = await import('#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts');
     const document = { nodes: [{ name: 'lamp', extras: { nixieBlueprintLight: {
@@ -25,7 +25,8 @@ test('the active bundled policy translates exported lamps without host product i
     } } }] };
     const unregister = registerFoxholeSceneV2HostPolicy();
     try {
-        assert.deepEqual(resolveNixieInternalModelLightHints(document).get('lamp'), { shadows: true, poweredIntensity: 1473.84 });
+        assert.deepEqual(foxholeSceneV2HostPolicy.modelLightHints!(document).get('lamp'), { shadows: true, poweredIntensity: 1473.84 });
+        assert.equal(resolveNixieInternalModelLightHints(document).size, 0);
     } finally { unregister(); }
     assert.equal(resolveNixieInternalModelLightHints(document).size, 0);
 });

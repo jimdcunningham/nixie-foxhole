@@ -97,7 +97,7 @@ test('older structure range plans retain Native fallback drawing and visibility'
     assert.deepEqual({ entity, plan }, original);
 });
 
-test('private presentation is owner-qualified, resolves extension nodes and awaits its drawing', async () => {
+test('Scene V2 ignores private presentation registration while direct presentation resolves nodes and awaits drawing', async () => {
     const entity: NixieComponentEntitySnapshotV1 = { entityId: 'shape', revision: 4, components: [] };
     const plan: NixieExtensionRenderPlanV1 = { schemaVersion: 1, root: { id: 'root', kind: 'group', children: [{ id: 'label', kind: 'group', children: [] }] } };
     let release!: () => void;
@@ -105,25 +105,24 @@ test('private presentation is owner-qualified, resolves extension nodes and awai
         release = resolve;
     });
     let applied = false;
-    const settings = { 'presentation-test.overlay': true };
-    registerNixieSceneV2RenderPresentationAdapter('presentation-test.owner', (subject, source, scale, capturedSettings) => {
-        assert.equal(subject, entity);
-        assert.equal(source, plan);
-        assert.equal(scale, 2);
-        assert.deepEqual(capturedSettings, settings);
-        return { plan: source, async apply(resolveNode) {
+    registerNixieSceneV2RenderPresentationAdapter('presentation-test.owner', () => {
+        assert.fail('Scene V2 must not execute private presentation');
+    }, ['presentation-test.overlay']);
+    assert.deepEqual(getNixieSceneV2RenderPresentationSettingIds('unrelated.owner'), []);
+    assert.deepEqual(getNixieSceneV2RenderPresentationSettingIds('presentation-test.owner'), []);
+    assert.equal(prepareNixieSceneV2RenderPresentation('unrelated.owner', entity, plan, 2), null);
+    assert.equal(prepareNixieSceneV2RenderPresentation('presentation-test.owner', entity, plan, 2), null);
+    const presentation: Parameters<typeof applyNixieSceneV2RenderPresentation>[0] = {
+        plan,
+        async apply(resolveNode) {
             await ready;
             assert.equal(resolveNode('missing'), null);
             const layer = resolveNode('label')!;
             assert.equal(layer.label, 'extension.1');
             layer.addChild(new PIXI.Graphics().rect(0, 0, 12, 8).fill(0xFFFFFF));
             applied = true;
-        } };
-    }, ['presentation-test.overlay', 'presentation-test.overlay']);
-    assert.deepEqual(getNixieSceneV2RenderPresentationSettingIds('unrelated.owner'), []);
-    assert.deepEqual(getNixieSceneV2RenderPresentationSettingIds('presentation-test.owner'), ['presentation-test.overlay']);
-    assert.equal(prepareNixieSceneV2RenderPresentation('unrelated.owner', entity, plan, 2), null);
-    const presentation = prepareNixieSceneV2RenderPresentation('presentation-test.owner', entity, plan, 2, settings)!;
+        },
+    };
     const host = new NixieExtensionRenderPlanHost({ loadTexture: async () => PIXI.Texture.EMPTY });
     const root = await host.replace(composeNixieSceneV2RenderPlans(plan, presentation.plan)!);
     const completion = applyNixieSceneV2RenderPresentation(presentation, root);
