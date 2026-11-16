@@ -4,6 +4,62 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import { trenchFloorPolygon } from './trench-connector-pieces.ts';
 import { sceneV2TrenchLayers, sceneV2TrenchPieces, trenchConnectedEnds } from './scene-v2-trench-pieces.ts';
 import type { TrenchPiece, TrenchPieceFrame } from './trench-connector-pieces.ts';
+
+/** The native dig-site GLB has two rigid end frames and two axial ropes. */
+export function renderSpatialTrenchDigSite(data: FoxholeSceneV2SplineConnectorData & {
+    startZ?: number;
+    endZ?: number;
+    endpointBindings?: NixieSpatialEndpointBindingsV1;
+}, asset?: FoxholeSceneV2AssetMetadata): NixieSpatialPlanV1 | undefined {
+    const model = asset?.model;
+    if (!model) return undefined;
+    const start = { x: data.startX, y: data.startY, z: data.startZ ?? 0, rotation: data.startRotation };
+    const end = { x: data.endX, y: data.endY, z: data.endZ ?? 0, rotation: data.endRotation };
+    const dx = end.x - start.x, dy = end.y - start.y;
+    if (Math.hypot(dx, dy) < 1e-6) return undefined;
+    const heading = Math.atan2(dy, dx), length = Math.hypot(dx, dy, end.z - start.z);
+    const common = { kind: 'model-path' as const, resourceId: model.resourceId, unitsPerMetre: 32 };
+    const bindings = data.endpointBindings?.start || data.endpointBindings?.end
+        ? { endpointBindings: data.endpointBindings }
+        : {};
+    const parts = model.pathProfile?.parts;
+    const points = [start.x, start.y, start.z, end.x, end.y, end.z];
+    const nodes: NixieSpatialNodeV1[] = [
+        { ...common, id: 'dig-site-start', meshIndex: parts?.start?.meshIndex ?? 1,
+            points, ...bindings,
+            sourceOrigin: parts?.start?.origin ?? [-38.4, 0, 0],
+            instances: [{ distance: 0, rotation: relativeAngle(start.rotation, heading) }] },
+        { ...common, id: 'dig-site-end', meshIndex: parts?.end?.meshIndex ?? 0,
+            points, ...bindings,
+            sourceOrigin: parts?.end?.origin ?? [38.4, 0, 0],
+            instances: [{ distance: length, rotation: relativeAngle(end.rotation, heading) }] },
+    ];
+    // The authored posts are 200 cm to either side of the frame pivots.
+    // The ropes meet the posts about 42.5 cm outward from those pivots.
+    const corner = (endpoint: typeof start, beyond: number, side: number) => ({
+        x: endpoint.x + Math.cos(endpoint.rotation) * beyond - Math.sin(endpoint.rotation) * side,
+        y: endpoint.y + Math.sin(endpoint.rotation) * beyond + Math.cos(endpoint.rotation) * side,
+    });
+    for (const [index, role] of ['leftRope', 'rightRope'].entries()) {
+        const part = parts?.[role];
+        const side = part?.origin[1] ?? (index === 0 ? -64 : 64);
+        const first = corner(start, -13.6, side), last = corner(end, 13.6, side);
+        const ropeX = last.x - first.x, ropeY = last.y - first.y;
+        const ropeLength = Math.hypot(ropeX, ropeY);
+        if (ropeLength < 1e-6) continue;
+        // The sweep is centered on the chord while the source rope carries
+        // its native lateral offset. Move the chord so the mesh meets the posts.
+        const offsetX = ropeY * side / ropeLength, offsetY = -ropeX * side / ropeLength;
+        nodes.push({ ...common, id: `dig-site-rope-${index + 1}`, meshIndex: part?.meshIndex ?? index + 2,
+            points: [first.x + offsetX, first.y + offsetY, start.z, last.x + offsetX, last.y + offsetY, end.z] });
+    }
+    return { contractVersion: 1, nodes };
+}
+
+function relativeAngle(angle: number, heading: number): number {
+    return Math.atan2(Math.sin(angle - heading), Math.cos(angle - heading));
+}
+
 /** Native V1 pieces and independently rotated handles, with the actual source mesh/materials. */
 export function renderSpatialTrench(entity: NixieComponentEntitySnapshotV1, data: FoxholeSceneV2SplineConnectorData & {
     startZ?: number;

@@ -10,7 +10,7 @@ import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_P
 import { resolveIntervalMarkerSamples, resolveMeshConfigIntervalMarkerSamples, resolveCenteredMeshConfigIntervalBoundarySamples, resolveMineSplineMarkerSample } from './interval-connector-path.ts';
 import { isExtensionPipeGeometryViable } from './pipe-extension-path.ts';
 import type { FoxholeSceneV2AssetMetadata, FoxholeSceneV2VisualMetadata } from './scene-v2-asset-metadata.ts';
-import { requiresStraightConnectorSocketAlignment, resolveConnectorBehavior } from './connector-behavior.ts';
+import { isFoxholeReferenceRoad, requiresStraightConnectorSocketAlignment, resolveConnectorBehavior } from './connector-behavior.ts';
 import { resolveIntervalMarkerVariantIds } from './interval-marker-variants.ts';
 import { isBarbedWireFence, resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';
 import { isWaterWallSpline, resolveWaterWallBuoys, resolveWaterWallNetInsets } from './water-wall-spline.ts';
@@ -250,7 +250,7 @@ function buildIntervalMarkers(data: FoxholeSceneV2SplineConnectorData, asset: Fo
 
 function resolveVisualData(data: FoxholeSceneV2SplineConnectorData, asset?: FoxholeSceneV2AssetMetadata): FoxholeSceneV2SplineConnectorData {
     const key = data.foxholeKey.toLowerCase();
-    const referenceRoad = ['dirtroad', 'gravelroad', 'greatmarchroad', 'packeddirtroad', 'snowdirtroad', 'snowgravelroad', 'snowpackeddirtroad'].includes(key);
+    const referenceRoad = isFoxholeReferenceRoad(key);
     const { start, end } = foxholeSceneV2ConnectorEndpoints(data);
     const constraints = foxholeSceneV2ConnectorConstraints(data, asset);
     const behavior = resolveConnectorBehavior(data.foxholeKey, asset?.connector);

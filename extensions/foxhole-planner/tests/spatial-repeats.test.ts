@@ -12,6 +12,96 @@ const endpointBindings = { start: { entityId: 'anchor', point: [0,0,0] as [numbe
 const rails = ['railtrackspline', 'railtracksplinebiarc', 'railtracksplinefoundation', 'railtracksplinetown',
     'smallrailtrackspline', 'smallrailtracksplinebiarc', 'smallrailtracksplinefoundation'];
 
+test('Dragon’s Teeth cycle four rigid spatial variants on the authored interval', () => {
+    const id = 'tankstopsplinet3';
+    const asset = assets[id]!;
+    assert.ok(asset.model);
+    const model = { ...asset.model, pathProfile: { version: 1 as const, parts: Object.fromEntries(
+        [0, 1, 2, 3].map(index => [`marker${index + 1}`, { meshIndex: index, origin: [120 * index, 0, 0] as [number, number, number] }]),
+    ) } };
+    const data = createFoxholeSceneV2SplineProductData(id, asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
+    data.endX = data.maxLength;
+    const plan = parseNixieSpatialPlanV1(renderFoxholeSpatialConnector(entity, data, { ...asset, model }));
+    assert.equal(plan.nodes.length, 4);
+    const positions = plan.nodes.flatMap(node => {
+        assert.ok(node.kind === 'model-path' && node.instances);
+        return node.instances.map(instance => [Math.round(instance.distance), node.meshIndex]);
+    }).sort((a, b) => a[0]! - b[0]!);
+    assert.deepEqual(positions, [[0, 0], [120, 1], [240, 2], [360, 3], [480, 0]]);
+});
+
+test('minefield spatial recipes repeat each prototype with deterministic stagger and native height', () => {
+    for (const id of ['minespline', 'infantryminespline', 'tankminespline', 'waterminespline', 'surfacewaterminespline']) {
+        const asset = assets[id]!;
+        assert.ok(asset.model);
+        const variants = asset.renderLayers.spanalt ? 2 : 1;
+        const model = { ...asset.model, pathProfile: { version: 1 as const, parts: Object.fromEntries(
+            Array.from({ length: variants }, (_, index) => [`marker${index + 1}`,
+                { meshIndex: index, origin: [0, 32, index ? -3.2 : 0] as [number, number, number] }]),
+        ) } };
+        const data = createFoxholeSceneV2SplineProductData(id, asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
+        Object.assign(data, { endX: data.maxLength, startZ: 4, endZ: 36 });
+        const plan = parseNixieSpatialPlanV1(renderFoxholeSpatialConnector(entity, data, { ...asset, model }));
+        assert.equal(plan.nodes.length, variants, id);
+        for (const [index, node] of plan.nodes.entries()) {
+            assert.ok(node.kind === 'model-path' && node.instances && node.instances.length >= 3);
+            assert.equal(node.points[2], 4);
+            assert.equal(node.points.at(-1), 36);
+            assert.deepEqual(node.instances.slice(0, 2).map(instance => instance.offset?.[1]), [32, -32]);
+            assert.equal(node.instances[1]!.offset![2], index ? -3.2 : 0);
+        }
+    }
+});
+
+test('sandbag splines place rigid variants along the path with the full wall lead-in', () => {
+    for (const id of ['sandbaghalfspline', 'sandbagfullspline']) {
+        const asset = assets[id]!;
+        assert.ok(asset.model);
+        const parts = Object.fromEntries([0, 1, 2, 3].map(index =>
+            [`marker${index + 1}`, { meshIndex: index, origin: [0, 0, 0] as [number, number, number] }]));
+        if (id === 'sandbagfullspline') parts.start = { meshIndex: 4, origin: [0, 0, 0] };
+        const model = { ...asset.model, pathProfile: { version: 1 as const, parts } };
+        const data = createFoxholeSceneV2SplineProductData(id, asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
+        data.endX = data.maxLength;
+        const plan = parseNixieSpatialPlanV1(renderFoxholeSpatialConnector(entity, data, { ...asset, model }));
+        const instances = plan.nodes.flatMap(node => {
+            assert.ok(node.kind === 'model-path' && node.instances);
+            return node.instances.map(instance => ({ mesh: node.meshIndex, distance: instance.distance }));
+        }).sort((a, b) => a.distance - b.distance);
+        const full = id === 'sandbagfullspline';
+        const step = asset.connector!.meshConfigs[0]!.interval;
+        assert.deepEqual(instances.slice(0, 6).map(instance => instance.mesh), full ? [4, 0, 1, 2, 3, 0] : [0, 1, 2, 3, 0, 1]);
+        assert.ok(instances.every((instance, index) => Math.abs(instance.distance - index * step) < .001));
+    }
+});
+
+test('all seven reference roads overlap the visible parts of native tiles', () => {
+    for (const id of ['dirtroad', 'gravelroad', 'greatmarchroad', 'packeddirtroad',
+        'snowdirtroad', 'snowgravelroad', 'snowpackeddirtroad']) {
+        const asset = assets[id]!;
+        const data = createFoxholeSceneV2SplineProductData(id, asset.connector!) as unknown as FoxholeSceneV2SplineConnectorData;
+        Object.assign(data, { endX: data.maxLength * .75, endY: 96, endRotation: .3, curveT: 1, startZ: 8, endZ: 32 });
+        const plan = parseNixieSpatialPlanV1(renderFoxholeSpatialConnector(entity, data, asset));
+        const [road] = plan.nodes;
+        assert.ok(plan.nodes.length > 1, id);
+        assert.ok(road?.kind === 'model-path');
+        assert.equal(road.resourceId, asset.model!.resourceId);
+        assert.equal(road.meshIndex, 0);
+        assert.ok(road.points.length > 6);
+        assert.deepEqual(road.points.slice(0, 3), [0, 0, 8]);
+        assert.deepEqual(road.points.slice(-3), [data.endX, 96, 32]);
+        const pitch = Math.min(asset.connector!.meshConfigs[0]!.interval, asset.model!.width * 0.75);
+        for (const [index, node] of plan.nodes.entries()) {
+            assert.ok(node.kind === 'model-path');
+            assert.ok(Math.abs(node.startInset! - index * pitch) < 0.001);
+            assert.equal(node.resourceId, asset.model!.resourceId);
+        }
+        const last = plan.nodes.at(-1);
+        assert.ok(last?.kind === 'model-path');
+        assert.equal(last.endInset, 0);
+    }
+});
+
 test('all rail profiles preserve the authored path and rigid sleepers through serialization', () => {
     for (const id of rails) {
         const asset = assets[id]!;

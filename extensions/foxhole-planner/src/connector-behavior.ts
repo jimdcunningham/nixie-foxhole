@@ -41,6 +41,10 @@ export function normalizeConnectorFoxholeKey(value?: string): string {
     return String(value ?? '').trim().toLowerCase();
 }
 
+export function isFoxholeReferenceRoad(key: string): boolean {
+    return /^(?:snow)?(?:dirt|gravel|packeddirt)road$/u.test(key) || key === 'greatmarchroad';
+}
+
 /** These blueprints publish BackSocket/FrontSocket but omit the connector endpoint fields. */
 const DEFENSE_SPLINE_ENDPOINT_KEYS = new Set(['barbedwirespline', 'barbedwirewallspline', 'sandbaghalfspline', 'sandbagfullspline', 'waterwallsplinet1']);
 

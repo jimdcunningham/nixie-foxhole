@@ -26,14 +26,21 @@ for (const key of ['trenchconnectort1', 'trenchconnectort2', 'trenchconnectort3'
         assert.deepEqual(before.selectionGeometry?.geometryHandles?.map(handle => handle.id),
             ['start', 'end', 'start-rotation', 'end-rotation']);
         if (key === 'trenchconnectorbuildsite') {
-            assert.equal(before.spatial?.model, null);
+            assert.deepEqual(before.spatial?.nodes.map(node => node.id), [
+                'dig-site-start', 'dig-site-end', 'dig-site-rope-1', 'dig-site-rope-2',
+            ]);
             const mesh = before.root.children.find(node => node.id === 'trench-dig-site');
             assert.equal(mesh?.kind, 'mesh');
             connector.data.endRotation = -.2;
-            const rotated = render().root.children.find(node => node.id === 'trench-dig-site');
+            const after = render();
+            const rotated = after.root.children.find(node => node.id === 'trench-dig-site');
             assert.ok(mesh?.kind === 'mesh' && rotated?.kind === 'mesh');
             assert.deepEqual(mesh.positions.slice(0, 16), rotated.positions.slice(0, 16));
             assert.notDeepEqual(mesh.positions.slice(16), rotated.positions.slice(16));
+            assert.deepEqual(before.spatial?.nodes[0], after.spatial?.nodes[0]);
+            assert.notDeepEqual(before.spatial?.nodes[1], after.spatial?.nodes[1]);
+            assert.notDeepEqual(before.spatial?.nodes[2], after.spatial?.nodes[2]);
+            assert.notDeepEqual(before.spatial?.nodes[3], after.spatial?.nodes[3]);
             return;
         }
         const mesh = (plan: typeof before, id: string) => {

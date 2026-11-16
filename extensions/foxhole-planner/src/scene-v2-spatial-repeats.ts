@@ -1,7 +1,10 @@
 import type { NixieSpatialNodeV1, NixieSpatialPlanV1,
     NixieSpatialEndpointBindingsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
-import { resolveMeshConfigIntervalMarkerDistances } from './interval-marker-distances.ts';
+import { resolveIntervalMarkerDistances, resolveMeshConfigIntervalMarkerDistances } from './interval-marker-distances.ts';
+import { resolveMineSplineMarkerSample } from './interval-connector-path.ts';
+import { resolveIntervalMarkerVariantIds } from './interval-marker-variants.ts';
+import { isFoxholeReferenceRoad, resolveConnectorBehavior } from './connector-behavior.ts';
 import { resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
@@ -11,7 +14,8 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     endpointBindings?: NixieSpatialEndpointBindingsV1; }, asset?: FoxholeSceneV2AssetMetadata): NixieSpatialPlanV1 | undefined {
     const profile = asset?.model?.pathProfile;
     const road = data.foxholeKey === 'facilityroad';
-    if (!asset?.model || (!road && !profile)) return undefined;
+    const referenceRoad = isFoxholeReferenceRoad(data.foxholeKey.toLowerCase());
+    if (!asset?.model || (!road && !referenceRoad && !profile)) return undefined;
     const path = sampleFoxholeSceneV2Connector(data, asset);
     if (path.totalLength <= 1e-6) return undefined;
     const points = path.points.flatMap((point, i) => [point.x, point.y,
@@ -20,6 +24,25 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     const distance3D = (distance: number) => Math.max(0, Math.min(length, distance / path.totalLength * length));
     const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points,
         ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) };
+    if (referenceRoad) {
+        // The bounds include the sloped shoulders and the texture fades at the
+        // ends. Overlap a quarter of the tile when the authored pitch is wider.
+        const tileLength = asset.model.width;
+        const pitch = asset.connector?.meshConfigs[0]?.interval ?? tileLength;
+        const step = Math.min(tileLength * 0.75, Math.max(1, pitch));
+        // Overlong saved paths can exceed the spatial plan's 64-node limit.
+        // Render those with the ordinary single-node sweep.
+        if (length > tileLength + 63 * step) {
+            return { contractVersion: 1, nodes: [{ ...common, id: 'reference-road-0', meshIndex: 0 }] };
+        }
+        const nodes: NixieSpatialNodeV1[] = [];
+        for (let start = 0; start < length; start += step) {
+            const end = Math.min(length, start + tileLength);
+            nodes.push({ ...common, id: `reference-road-${nodes.length}`, meshIndex: 0, startInset: start, endInset: length - end });
+            if (end === length) break;
+        }
+        return { contractVersion: 1, nodes };
+    }
     if (road) {
         // The original exported road GLB already contains the back cap, body and front cap in this order.
         const back = profile?.parts.start?.meshIndex ?? 0;
@@ -45,14 +68,51 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
         const part = profile.parts[role];
         if (part && instances.length) nodes.push({ ...common, id, meshIndex: part.meshIndex, sourceOrigin: part.origin, instances });
     };
-    const interval = (index: number) => {
+    const rawIntervalConfig = (index: number) => {
         const config = asset.connector?.meshConfigs[index];
+        return config && { ...config, interval: config.interval / .32,
+            startOffset: config.startOffset / .32, endOffset: config.endOffset / .32 };
+    };
+    const interval = (index: number) => {
+        const config = rawIntervalConfig(index);
         if (!config) return [];
-        return resolveMeshConfigIntervalMarkerDistances({ ...config, interval: config.interval / .32,
-            startOffset: config.startOffset / .32, endOffset: config.endOffset / .32 }, path.totalLength)
+        return resolveMeshConfigIntervalMarkerDistances(config, path.totalLength)
             .filter(sample => sample.distance <= path.totalLength).map(sample => ({ distance: distance3D(sample.distance) }));
     };
-    if (/^(?:small)?railtrackspline(?:biarc|foundation|town)?$/.test(data.foxholeKey)) {
+    const behavior = resolveConnectorBehavior(data.foxholeKey, asset.connector);
+    const sandbag = /^sandbag(?:half|full)spline$/u.test(data.foxholeKey);
+    if ((behavior.tankStop || sandbag) && asset.connector) {
+        const roles = ['marker1', 'marker2', 'marker3', 'marker4'];
+        if (!roles.every(role => profile.parts[role])) return undefined;
+        const meshConfigs = asset.connector.meshConfigs.map((_config, index) => rawIntervalConfig(index)!);
+        const markers = resolveIntervalMarkerDistances({ meshConfigs }, path.totalLength, asset.connector.pathStyle, roles.length)
+            .filter(marker => marker.distance <= path.totalLength + .001);
+        const prefix = sandbag ? 'sandbag' : 'tank-stop';
+        if (sandbag && profile.parts.start && markers.length) {
+            // The full wall starts with a half-height lead-in on the first station.
+            rigid('sandbag-start', 'start', [{ distance: distance3D(markers.shift()!.distance) }]);
+            for (const [index, marker] of markers.entries()) marker.meshIndex = index % roles.length;
+        }
+        for (const [index, role] of roles.entries()) {
+            rigid(`${prefix}-${index + 1}`, role, markers.filter(marker => marker.meshIndex === index)
+                .map(marker => ({ distance: distance3D(marker.distance) })));
+        }
+    } else if (behavior.mineSpline && asset.connector?.pathStyle === 'interval') {
+        const layers = resolveIntervalMarkerVariantIds(Object.keys(asset.renderLayers), false);
+        const roles = layers.map((_layer, index) => `marker${index + 1}`);
+        if (!roles.every(role => profile.parts[role])) return undefined;
+        for (const [index, role] of roles.entries()) {
+            const config = rawIntervalConfig(index) ?? rawIntervalConfig(0);
+            const part = profile.parts[role]!;
+            const markers = resolveMeshConfigIntervalMarkerDistances(config, path.totalLength)
+                .filter(marker => marker.distance <= path.totalLength + .001);
+            rigid(`mine-marker-${index + 1}`, role, markers.map(({ distance, meshIndex }, markerIndex) => {
+                const placement = resolveMineSplineMarkerSample({ x: 0, y: 0, rotation: 0, meshIndex }, config, markerIndex);
+                return { distance: distance3D(distance), rotation: placement.rotation,
+                    offset: [placement.x, placement.y, part.origin[2]] };
+            }));
+        }
+    } else if (/^(?:small)?railtrackspline(?:biarc|foundation|town)?$/.test(data.foxholeKey)) {
         span('rail-bed', 'bed'); span('rail-span', 'rail');
         rigid('rail-sleepers', 'sleeper', [...interval(0), ...interval(1)]);
     } else if (data.foxholeKey === 'barbedwirespline') {

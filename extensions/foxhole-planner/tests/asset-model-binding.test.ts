@@ -35,6 +35,23 @@ test('asset changes to flat artwork suppress an obsolete model while retaining t
     assert.ok(plan.root.children.length > 0);
 });
 
+test('a saved planar asset can use a newly cataloged model without a scene edit', () => {
+    const subject = entity('crate');
+    subject.components = subject.components.filter(component => component.componentId !== 'model');
+    const before = structuredClone(subject);
+    const asset = metadata.crate!;
+    const existingModel = asset.model;
+    const newModel = { ...metadata.fortt2!.model!, resourceId: 'foxhole.model.crate' };
+    asset.model = newModel;
+    try {
+        assert.deepEqual(renderFoxholeSceneV2Entity(subject).spatial?.model, getFoxholeSceneV2ModelComponentData(newModel));
+        assert.deepEqual(subject, before);
+    } finally {
+        if (existingModel) asset.model = existingModel;
+        else delete asset.model;
+    }
+});
+
 test('Demolished takes priority over repairing an obsolete intact tier model', () => {
     const plan = renderFoxholeSceneV2Entity(entity('fortt3', true));
     const asset = metadata.fortt3!;

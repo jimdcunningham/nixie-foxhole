@@ -99,6 +99,9 @@ export const FOXHOLE_SCENE_V2_ENTITY_RENDERER_SYSTEM_ID = 'render.entity';
 const interiorBunkerUpgrade = /^(?:engineroom|ammoroom|fortflame|fortfirepit|medicalroom|fortartilleryshelter)t[123]$/i;
 
 const assetMetadataById = foxholeSceneV2Assets as Record<string, FoxholeSceneV2AssetMetadata>;
+const previouslyPlanarReferences = new Set([
+    'crate', 'excavation', 'flamebackpackammo', 'oilfield', 'prototypekit', 'reservepower', 'shippable',
+]);
 const itemAssetIdByCodeName = new Map(Object.entries(assetMetadataById).flatMap(([assetId, metadata]) => (
     metadata.codeName ? [[metadata.codeName.toLocaleLowerCase(), assetId] as const] : []
 )));
@@ -836,10 +839,12 @@ function renderFoxholeSceneV2EntityPlan(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, waterStencils };
     }
     if (groundCutouts.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, groundCutouts };
-    // Older inspector edits changed the asset without updating its saved model.
+    // A saved asset may predate its model or have an obsolete model from a tier change.
     const boundModel = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'model' && component.definitionAvailable);
     const baseModel = assetMetadata.model && getFoxholeSceneV2ModelComponentData(assetMetadata.model);
+    const needsBaseModel = boundModel ? boundModel.data.resourceId !== baseModel?.resourceId
+        : baseModel && previouslyPlanarReferences.has(assetId) && !appearance.packaged;
     // Shipped Transfer Point assemblies identify the complete insulated mesh as an add-on.
     const insulatedTransferPoint = assetId === 'facilitypipetransfer' && !appearance.destroyed && !appearance.packaged
         && selectedFoxholeSceneV2Modifications(entity, assetMetadata)
@@ -847,7 +852,7 @@ function renderFoxholeSceneV2EntityPlan(
     if (baseModel && insulatedTransferPoint) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial,
             model: { ...baseModel, resourceId: baseModel.resourceId + '.upgrade.insulation' } };
-    } else if (boundModel && boundModel.data.resourceId !== baseModel?.resourceId) {
+    } else if (needsBaseModel) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, model: baseModel ?? null };
     }
     if (appearance.destroyed && !appearance.packaged) {
