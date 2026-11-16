@@ -6,6 +6,7 @@ import { hostSourceUrl } from '../host-source-url.mjs';
 import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
+import { resolveNixieSceneV2Transforms } from '../../../../nixie/desktop-extensions/scene-v2-transforms.ts';
 import { NixieSceneV2ViewSession } from '../../../../nixie/app/utils/nixie-scene-v2-view-session.ts';
 
 import { registerNixieSceneV2StateAdapter } from '../../../../nixie/app/utils/nixie-scene-v2-state-adapter-registry.ts';
@@ -106,6 +107,17 @@ function fixture(context: TestContext, snapping = true) {
     function inspect(id: string) {
         const provider = manifest.contributes.inspectorProviders!.find(candidate => candidate.componentIds.includes('asset'))!;
         const request = projectNixieInspectorSubjectV1(entity(id), ownerId, provider);
+        if (provider.related) {
+            const allowed = new Set(provider.related.componentIds);
+            const subjectLinks = data(id, 'socket-attachments')?.attachments;
+            const related = Array.isArray(subjectLinks) ? subjectLinks.flatMap(link => {
+                if (!link || typeof link !== 'object' || Array.isArray(link) || typeof link.targetEntityId !== 'string') return [];
+                const target = entity(link.targetEntityId);
+                return target ? [{ ...target, components: target.components.filter(component =>
+                    component.ownerId === ownerId && component.definitionAvailable && allowed.has(component.componentId)) }] : [];
+            }) : [];
+            request.related = { entities: related, truncated: false };
+        }
         const result = inspectFoxholeSceneV2Structure(request);
         validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
         return result;
@@ -182,7 +194,7 @@ test('isolated SDK tier actions preserve reciprocal connected-trench links throu
     f.changed();
     const choices = f.inspect('a').components.find(component => component.componentId === 'modification')!.fields.find(field => field.path[0] === 'selections')!.choices!;
     const wire = choices.options.find(option => /barbed wire/i.test(option.label));
-    assert.ok(wire, 'the real SDK must offer a compatible Barbed Wire placement');
+    assert.ok(wire, `the real SDK must offer a compatible Barbed Wire placement: ${JSON.stringify(choices.options.map(option => [option.label, option.value]))}`);
     assert.equal(f.controller.updateEntityComponents([{ entityId: 'a', ownerId, componentId: 'modification', set: { selections: [wire.value] } }]).ok, true);
     f.changed();
     const updates = ['a', 'b'].flatMap(entityId => {
@@ -204,7 +216,7 @@ test('isolated modification-only pipe ports snap, carry authored endpoints and c
     f.create('facilityrefinery1', 'factory');
     const choices = f.inspect('factory').components.find(component => component.componentId === 'modification')!.fields.find(field => field.path[0] === 'selections')!.choices!;
     const forge = choices.options.find(option => typeof option.value === 'object' && option.value !== null && option.value.variantId === 'forge');
-    assert.ok(forge);
+    assert.ok(forge, `the SDK must offer the Forge port upgrade: ${JSON.stringify(choices.options.map(option => [option.label, option.value]))}`);
     await f.atomic(() => f.controller.updateEntityComponentsFinalized([
         { entityId: 'factory', ownerId, componentId: 'modification', set: { selections: [forge.value] } },
         { entityId: 'factory', ownerId: 'nixie.core', componentId: 'transform', set: { x: 1000, y: 0 } },
@@ -222,14 +234,21 @@ test('isolated modification-only pipe ports snap, carry authored endpoints and c
     assert.equal(f.data('pipe', 'spline-connector').startAttachmentSocketName, port.name);
     const reciprocal = f.data('factory', 'socket-attachments').attachments;
     assert.deepEqual(reciprocal, [{ localSocketName: port.name, targetEntityId: 'pipe', targetSocketName: 'BackSocket' }]);
-    const beforeMove = structuredClone(f.data('pipe', 'spline-connector'));
+    const worldEndpoint = (end: 'start' | 'end') => {
+        const data = f.data('pipe', 'spline-connector');
+        const { a, b, c, d, tx, ty } = resolveNixieSceneV2Transforms(f.controller.entities).get('pipe')!.world;
+        const x = Number(data[end + 'X']), y = Number(data[end + 'Y']);
+        return { x: a * x + c * y + tx, y: b * x + d * y + ty };
+    };
+    const beforeStart = worldEndpoint('start');
+    const beforeEnd = worldEndpoint('end');
     await f.atomic(() => f.controller.updateEntityComponentsFinalized([
         { entityId: 'factory', ownerId: 'nixie.core', componentId: 'transform', set: { x: 1040, y: 20 } },
     ], { finalizeEntityIds: ['factory'] }));
-    assert.ok(Math.abs(Number(f.data('pipe', 'spline-connector').startX) - Number(beforeMove.startX) - 40) < 1e-8);
-    assert.ok(Math.abs(Number(f.data('pipe', 'spline-connector').startY) - Number(beforeMove.startY) - 20) < 1e-8);
-    assert.equal(f.data('pipe', 'spline-connector').endX, beforeMove.endX);
-    assert.equal(f.data('pipe', 'spline-connector').endY, beforeMove.endY);
+    const start = worldEndpoint('start');
+    const end = worldEndpoint('end');
+    assert.ok(Math.hypot(start.x - beforeStart.x - 40, start.y - beforeStart.y - 20) < 1e-8);
+    assert.ok(Math.hypot(end.x - beforeEnd.x, end.y - beforeEnd.y) < 1e-8);
     await f.atomic(() => f.controller.deleteEntities(['factory']));
     assert.equal(f.data('pipe', 'spline-connector').startAttachmentNodeId, undefined);
 });
