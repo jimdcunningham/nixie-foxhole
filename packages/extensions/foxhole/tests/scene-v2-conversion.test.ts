@@ -1,17 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerFoxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
-import { prepareNixieSceneV2Snapshots } from '../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
+import { prepareNixieSceneV1Import, prepareNixieSceneV2Snapshots } from '../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
 import { registerNixieSceneV1NodeConverter } from '../../../nixie/app/utils/nixie-scene-v2-converter-registry.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 import { createFoxholeSplineConnectorSnapshot } from '../app/plugins/foxhole/nixie/spline-connector-snapshot.ts';
+import { readFileSync } from 'node:fs';
+import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { getFoxholeManifest } from '../app/plugins/foxhole/nixie/manifest.ts';
 import { readNixieSceneV2EditableSpline } from '../../../nixie/desktop-extensions/scene-v2-spline-editing.ts';
 import { LegacyPlanImporter } from '../app/plugins/foxhole/legacy/plan-importer.ts';
 import { buildFoxholeItemCatalog, buildFoxholeStructureCatalog } from '../app/plugins/foxhole/nixie/catalog.ts';
 
 registerFoxholeSceneV2HostPolicy();
+const manifest = parseNixieExtensionManifestV1(JSON.parse(readFileSync(new URL('../../../../extensions/foxhole-planner/nixie.extension.json', import.meta.url), 'utf8')));
 
 test('production opt-outs survive import and conversion only for assets with production or power', async () => {
     const manifest = getFoxholeManifest('/foxhole/assets/');
@@ -58,8 +61,10 @@ test('authored Wall Tier 1 remains insertable with the implemented spline handle
     assert.equal(converted.report.preservedOnlyNodeCount, 0);
     assert.deepEqual(converted.report.issues.filter(issue => issue.code !== 'unmapped-state'), []);
     const entity = converted.content.entities[0]!;
+    const definitions = new Map(manifest.contributes.components!.components.map(component => [manifest.id + '\0' + component.id, component]));
     const spline = readNixieSceneV2EditableSpline({ ...entity,
-        components: entity.components.map(component => ({ ...component, definitionAvailable: true })) });
+        components: entity.components.map(component => ({ ...component, definitionAvailable: true })) }, definitions);
+    assert.ok(capabilityIds(entity).includes('capability-geometry-reshape'));
     assert.equal(spline?.componentId, 'spline-connector');
     assert.equal(entity.components.find(component => component.componentId === 'spline-connector')?.data.foxholeKey, 'wallsplinet1');
     assert.deepEqual(snapshot, original);
@@ -884,7 +889,8 @@ test('Scene V2 preparation permits preserved legacy metadata but rejects malform
     const baseUpgrades = ['legacy-upgrade'];
     const source = { ...attachmentTarget(), state: { ...attachmentTarget().state, maintenanceFilters, baseUpgrades } };
     const warnings: Array<{ message: string; severity?: string; }> = [];
-    const draft = prepareNixieSceneV2Snapshots([source], undefined, { onWarnings: entries => warnings.push(...entries) });
+    assert.throws(() => prepareNixieSceneV2Snapshots([source]), /snapshot authoring is unavailable/i);
+    const draft = prepareNixieSceneV1Import([source], undefined, { onWarnings: entries => warnings.push(...entries) });
     assert.equal(warnings.length, 2);
     assert.ok(warnings.some(issue => issue.severity === 'warning' && issue.message.includes('maintenance filters')));
     assert.ok(warnings.some(issue => issue.severity === 'warning' && issue.message.includes('legacy base upgrades')));
@@ -892,7 +898,7 @@ test('Scene V2 preparation permits preserved legacy metadata but rejects malform
     const saved = JSON.parse(String(legacy?.data.snapshotJson));
     assert.deepEqual(saved.state.maintenanceFilters, maintenanceFilters);
     assert.deepEqual(saved.state.baseUpgrades, baseUpgrades);
-    assert.throws(() => prepareNixieSceneV2Snapshots([{ ...source, state: { ...source.state, socketAttachments: [] } }]), /socket attachments are malformed/i);
+    assert.throws(() => prepareNixieSceneV1Import([{ ...source, state: { ...source.state, socketAttachments: [] } }]), /socket attachments are malformed/i);
 });
 
 test('invalid socket topology still blocks insertion rather than claiming parity', () => {

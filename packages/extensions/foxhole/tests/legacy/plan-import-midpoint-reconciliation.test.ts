@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
 import { LegacyPlanImporter } from '../../app/plugins/foxhole/legacy/plan-importer.ts';
 import { buildFoxholeItemCatalog, buildFoxholeStructureCatalog } from '../../app/plugins/foxhole/nixie/catalog.ts';
 import { getFoxholeManifest } from '../../app/plugins/foxhole/nixie/manifest.ts';
@@ -177,15 +176,16 @@ test('cascades a pipe-side correction through connected small structures', async
 });
 
 test('keeps a facility fixed while cascading a corrected pipe midpoint through a valve', async () => {
-    const fixture = JSON.parse(readFileSync(new URL('../fixtures/legacy-plans/extracted/bp-077c528c-7ae1-489b-82eb-4f8e04c62155.json', import.meta.url), 'utf8')) as LegacyPlanSave;
-    const ids = new Set([13, 45, 49, 53]);
-    const entities = (fixture.entities ?? []).filter(entity => ids.has(entity.id)).map(entity => ({
-        ...entity,
-        connections: Object.fromEntries(Object.entries(entity.connections ?? {}).flatMap(([socket, peers]) => {
-            const kept = Object.fromEntries(Object.entries(peers ?? {}).filter(([id]) => ids.has(Number(id))));
-            return Object.keys(kept).length ? [[socket, kept]] : [];
-        })),
-    }));
+    const entities: NonNullable<LegacyPlanSave['entities']> = [
+        { id: 45, key: 'stationary_harvester_coal', x: 0, y: 0, rotation: 0, connections: { 0: { 13: 0 } } },
+        { id: 13, key: 'pipeline', x: 100, y: 100, rotation: 0,
+            bezier: [{ x: 0, y: 0, rotation: 180 }, { x: 200, y: 0, rotation: 0 }],
+            connections: { 0: { 45: 0 }, 1: { 49: 0 } } },
+        { id: 49, key: 'pipeline_valve', x: 0, y: 200, rotation: 0, connections: { 0: { 13: 1 }, 1: { 53: 3 } } },
+        { id: 53, key: 'pipeline', x: 150, y: 250, rotation: 0,
+            bezier: [{ x: 0, y: 0, rotation: 180 }, { x: 140, y: 0, rotation: 0 }],
+            connections: { 3: { 49: 1 } } },
+    ];
     const importer = new LegacyPlanImporter({ structureCatalog, itemCatalog });
     const result = await importer.importSave({ version: '1.0.5', entities });
     const baseline = await importer.importSave({ version: '1.0.5', entities: entities.map(entity => ({ ...entity, connections: {} })) });

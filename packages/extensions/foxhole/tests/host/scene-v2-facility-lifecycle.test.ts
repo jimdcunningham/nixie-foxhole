@@ -7,7 +7,7 @@ import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import type { BoardNodeSnapshot } from '../../../../nixie/app/plugins/nixie/board/types/node.ts';
 import { NixieYjsProjectSession } from '../../../../nixie/app/utils/nixie-yjs-session.ts';
 import { NixieSceneV2EditorRuntimeController } from '../../../../nixie/app/utils/nixie-scene-v2-editor-runtime.ts';
-import { createNixieSceneV2Snapshots } from '../../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
+import { prepareNixieSceneV1Import } from '../../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
 import { registerNixieSceneV1NodeConverter } from '../../../../nixie/app/utils/nixie-scene-v2-converter-registry.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 
@@ -48,7 +48,8 @@ test('connected facility insertion is atomic and editable through undo, redo and
     const scene = project.createSceneV2View({ id: 'scene', content: { type: 'scene-v2', contractVersion: 1, entities: [] } });
     const c = client(project, scene.id);
     const source = facility(), original = structuredClone(source);
-    const inserted = createNixieSceneV2Snapshots(c.runtime, source, capabilities);
+    const inserted = c.runtime.importSceneDocument(prepareNixieSceneV1Import(source, capabilities),
+        id => `imported:${id}`, { createLayerWhenMissing: true });
     assert.equal(inserted.ok, true, inserted.error);
     assert.equal(inserted.value!.length, 6);
     const placed = project.getSceneV2Content(scene.id)!;
@@ -82,7 +83,9 @@ for (const sameEntity of [false, true]) {
         const first = new NixieYjsProjectSession({ projectId: 'facility-peers' });
         const scene = first.createSceneV2View({ id: 'scene', content: { type: 'scene-v2', contractVersion: 1, entities: [] } });
         const a = client(first, scene.id);
-        assert.equal(createNixieSceneV2Snapshots(a.runtime, facility(), capabilities).ok, true);
+        const imported = a.runtime.importSceneDocument(prepareNixieSceneV1Import(facility(), capabilities),
+            id => `imported:${id}`, { createLayerWhenMissing: true });
+        assert.equal(imported.ok, true, imported.error);
         a.editor.destroy();
         const peerDoc = new Y.Doc();
         Y.applyUpdate(peerDoc, first.document.encodeStateAsUpdate());
