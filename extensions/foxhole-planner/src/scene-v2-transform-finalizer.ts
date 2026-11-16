@@ -700,7 +700,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
             let endpointProjection = projection;
             if (power && placingFirstEnd) {
                 // Keep the free preview end at the socket's height as the pointer crosses uneven model surfaces.
-                const snap = socketSnapPose(request, moved, moving, best.target, false, gesture.worldPoint.z !== undefined);
+                const snap = socketSnapPose(request, moved, moving, best.target, false, true);
                 if (snap) {
                     finalizedTransform = snap.transform;
                     const posed = withFoxholeSceneV2TransformProposal(moved, { ...request.transform, ...snap.transform }, snap.transform.elevation);

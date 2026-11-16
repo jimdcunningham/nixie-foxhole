@@ -714,7 +714,7 @@ test('moving the pointer over the same power socket host preserves both spatial 
     const line = pipe('line', 0), building = structure('building', 500);
     Object.assign(line.components[1]!.data, { foxholeKey: 'powerline', minLength: 3.2, endX: 32 });
     building.components[1]!.data.assetId = 'facilityrefinery1';
-    function preview(x: number, y: number, z: number) {
+    function preview(x: number, y: number, z?: number) {
         const transform = { x, y, rotation: 0, scaleX: 1, scaleY: 1 };
         const draft = withFoxholeSceneV2TransformProposal(line, transform, z);
         const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: line.entityId,
@@ -733,4 +733,7 @@ test('moving the pointer over the same power socket host preserves both spatial 
     const first = preview(500, 100, 20);
     const second = preview(515, 120, 70);
     assert.ok(first.every((value, axis) => Math.abs(value - second[axis]!) < 1e-6), `${first} moved to ${second}`);
+    const withoutSurfaceHeight = preview(515, 120);
+    assert.ok(first.every((value, axis) => Math.abs(value - withoutSurfaceHeight[axis]!) < 1e-6),
+        `missing surface height moved the free end from ${first} to ${withoutSurfaceHeight}`);
 });
