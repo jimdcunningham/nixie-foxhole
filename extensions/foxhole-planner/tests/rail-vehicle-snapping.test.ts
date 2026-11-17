@@ -92,6 +92,47 @@ test('the large locomotive supplies a forward simulation path over a straight-to
     assert.ok(path.frames.some(frame => Math.abs(frame.modelNodeTransforms[0]!.rotation[1]) > 0.04));
 });
 
+test('Tempest playback keeps both bogies on separate rails while crossing the joint', () => {
+    const approach = track('railtrackspline', 'approach');
+    const bend = track('railtrackspline', 'bend');
+    Object.assign(approach.components[0]!.data, { x: -900 });
+    Object.assign(approach.components.at(-1)!.data, { endX: 900 });
+    Object.assign(bend.components.at(-1)!.data, { endX: 980, endY: 260, endRotation: 0.58,
+        startAttachmentNodeId: 'approach', startAttachmentSocketName: 'FrontSocket' });
+    const proposal = request('trainlrartillery', [approach, bend]);
+    Object.assign(proposal.transform, { x: -520, y: 0, rotation: 0 });
+    const operation = finalizeFoxholeRailVehicleSnap(proposal).transaction?.operations[0];
+    if (operation?.op !== 'add') assert.fail('Expected a snapped rail attachment');
+    const path = parseNixieSimulationPathV1(operation.data.simulationPath);
+    assert.deepEqual(path.sources, ['approach', 'bend']);
+    const frame = path.frames.find(frame => frame.position[0] > 20 && frame.position[0] < 80);
+    assert.ok(frame);
+    const centerlines = [
+        [{ x: -900, y: 0 }, { x: 0, y: 0 }],
+        sampleFoxholeSceneV2Connector(bend.components.at(-1)!.data as unknown as FoxholeSceneV2SplineConnectorData,
+            assets.railtrackspline).points,
+    ];
+    const railsUnderWheels = new Set<number>();
+    for (const bogie of foxholeRailVehicleBogies.trainlrartillery!) {
+        const pose = frame.modelNodeTransforms.find(node => node.nodeName === bogie.nodeName);
+        assert.ok(pose);
+        assert.ok(Math.abs(pose.rotation[1]) > 0.02);
+        for (const axle of bogie.wheelOffsets) {
+            const [x, y] = frame.position;
+            const along = 32 * (bogie.pivot + pose.translation[0] + Math.cos(pose.rotation[1]) * axle);
+            const lateral = 32 * (pose.translation[2] - Math.sin(pose.rotation[1]) * axle);
+            const contact = { x: x + Math.cos(frame.heading) * along - Math.sin(frame.heading) * lateral,
+                y: y + Math.sin(frame.heading) * along + Math.cos(frame.heading) * lateral };
+            const distances = centerlines.map(points => Math.min(...points.slice(1)
+                .map((end, i) => nearestPointOnSegment(contact, points[i]!, end).distance)));
+            const closest = Math.min(...distances);
+            assert.ok(closest < 0.7, `${bogie.nodeName} axle was ${closest} units off the rail`);
+            railsUnderWheels.add(distances.indexOf(closest));
+        }
+    }
+    assert.equal(railsUnderWheels.size, 2);
+});
+
 test('coupler placement advances from the existing car along a curved rail', () => {
     const curved = track('railtrackspline');
     Object.assign(curved.components.at(-1)!.data, { endX: 450, endY: 300, endRotation: Math.PI / 2 });

@@ -274,12 +274,13 @@ function railModelNodeTransforms(bogies: NonNullable<(typeof foxholeRailVehicleB
     return transforms.length ? transforms : undefined;
 }
 
-/** Sample a short forward run for the large locomotive using the fitted chassis and rear wheel contacts. */
-function buildLocomotiveSimulationPath(rails: RunningRail[], start: RailLocation, direction: number) {
-    const assetId = 'trainengine';
+/** Sample a forward run using the fitted chassis and each independently sampled wheel group. */
+function buildRailVehicleSimulationPath(assetId: 'trainengine' | 'trainlrartillery', rails: RunningRail[], start: RailLocation, direction: number) {
     const bogies = foxholeRailVehicleBogies[assetId]!;
-    const clearance = 110;
+    const clearance = Math.max((foxholeRailWheelbase(assetId) ?? 0) / 2,
+        ...bogies.flatMap(bogie => bogie.wheelOffsets.map(offset => Math.abs(bogie.pivot + offset) * UNITS_PER_METRE))) + 6;
     const stride = 12;
+    const compact = (vector: FoxholeSpatialPoint): FoxholeSpatialPoint => vector.map(value => Number(value.toFixed(5))) as FoxholeSpatialPoint;
     const sources = new Set([start.rail.entityId]);
     const frames: NixieSimulationPathV1['frames'] = [];
     for (let index = 0; index < NIXIE_SIMULATION_PATH_MAX_FRAMES; index++) {
@@ -297,12 +298,13 @@ function buildLocomotiveSimulationPath(rails: RunningRail[], start: RailLocation
             return [dx * cosine + dy * sine, -dx * sine + dy * cosine, z - point[2]];
         };
         const posed = railModelNodeTransforms(bogies, chassis, toLocal) ?? [];
-        if (!posed.some(node => node.nodeName === bogies[0]!.nodeName)) break;
+        if (bogies.some(bogie => !posed.some(node => node.nodeName === bogie.nodeName))) break;
         if (!posed.some(node => node.nodeName === 'rail-body')) {
             posed.push({ nodeName: 'rail-body', translation: [0, 0, 0], rotation: [0, 0, 0] });
         }
         for (const id of traversed) sources.add(id);
-        frames.push({ distance, position: point, heading: Math.atan2(sine, cosine), modelNodeTransforms: posed });
+        frames.push({ distance, position: compact(point), heading: Math.atan2(sine, cosine),
+            modelNodeTransforms: posed.map(node => ({ ...node, translation: compact(node.translation), rotation: compact(node.rotation) })) });
     }
     return frames.length >= 2 ? { contractVersion: 1 as const, speed: 96, sources: [...sources],
         frames: frames.map(frame => ({ ...frame, modelNodeTransforms: frame.modelNodeTransforms.map(node => ({ ...node })) })) } : undefined;
@@ -320,7 +322,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     if (!original || !gauge) return unchanged;
 
     const saved = data(original, ATTACHMENT_COMPONENT);
-    const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: ReturnType<typeof buildLocomotiveSimulationPath>): Result['transaction'] => {
+    const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: ReturnType<typeof buildRailVehicleSimulationPath>): Result['transaction'] => {
         if (!location && !saved) return undefined;
         const set = location && { rail: location.rail.entityId, station: location.station, reversed, route,
             ...(simulationPath ? { [NIXIE_SIMULATION_PATH_PROPERTY]: simulationPath } : {}) };
@@ -354,7 +356,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
     const simulationPath = (location: RailLocation, step: number) =>
-        assetId === 'trainengine' ? buildLocomotiveSimulationPath(rails, location, step) : undefined;
+        assetId === 'trainengine' || assetId === 'trainlrartillery' ? buildRailVehicleSimulationPath(assetId, rails, location, step) : undefined;
     const fitBody = (location: RailLocation, step = 1, route?: ReadonlySet<string>) => {
         const { point: center, heading } = resolveRailChassis(assetId, rails, location, step, { route });
         const local = toParent(center);
