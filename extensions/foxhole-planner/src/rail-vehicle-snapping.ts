@@ -3,6 +3,7 @@ import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRe
     NixieTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy } from './rail-path-sockets.ts';
+import { fitFoxholeRailWheelbase, foxholeRailWheelbase } from './rail-wheelbase.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
@@ -121,7 +122,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const origin = projection.toWorld(subject, [0, 0, 0]);
     const parent = entities.find(entity => entity.entityId === data(subject, 'hierarchy', 'nixie.core')?.parentId);
     const toParent = (point: FoxholeSpatialPoint) => parent ? projection.toLocal(parent, point) : point;
-    let best: { distance: number; heightDifference: number; point: FoxholeSpatialPoint; angle: number } | undefined;
+    let best: { distance: number; heightDifference: number; point: FoxholeSpatialPoint; heading: number } | undefined;
 
     const rails = request.context.entities.flatMap(track => {
         const component = data(track, 'spline-connector');
@@ -132,14 +133,22 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const points = sampleRailCenterline(spline, assets[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
         return points.length >= 2 ? [points] : [];
     });
+    const wheelbase = foxholeRailWheelbase(String(asset?.assetId));
+    const fitBody = (point: FoxholeSpatialPoint, heading: number) => {
+        const body = wheelbase && fitFoxholeRailWheelbase(wheelbase, distance => followRailFromCoupler(rails, point,
+            [point[0] + distance * Math.cos(heading), point[1] + distance * Math.sin(heading), point[2]])?.point);
+        const center = body ? body.point : point;
+        const direction = body ? body.heading : heading;
+        const local = toParent(center);
+        const ahead = toParent([center[0] + Math.cos(direction), center[1] + Math.sin(direction), center[2]]);
+        return { local, angle: Math.atan2(ahead[1] - local[1], ahead[0] - local[0]) };
+    };
     if (request.geometryGesture?.handleId === 'product-placement-port') {
         if (!request.geometryGesture.snappingEnabled || request.interaction !== 'placement') return unchanged;
         const source = request.geometryGesture.worldPoint;
         const result = followRailFromCoupler(rails, [source.x, source.y, source.z ?? origin[2]], origin);
         if (!result) return unchanged;
-        const point = toParent(result.point);
-        const ahead = toParent([result.point[0] + Math.cos(result.heading), result.point[1] + Math.sin(result.heading), result.point[2]]);
-        const outward = Math.atan2(ahead[1] - point[1], ahead[0] - point[0]);
+        const { local: point, angle: outward } = fitBody(result.point, result.heading);
         const baseHeading = Math.atan2(origin[1] - source.y, origin[0] - source.x);
         const forward = projection.toWorld(subject, [1, 0, 0]);
         const reversed = Math.cos(Math.atan2(forward[1] - origin[1], forward[0] - origin[0]) - baseHeading) < 0;
@@ -155,16 +164,16 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
             const height = start[2] + (end[2] - start[2]) * nearest.t;
             const heightDifference = Math.abs(height - origin[2]);
             if (best && nearest.distance === best.distance && heightDifference >= best.heightDifference) continue;
-            const a = toParent(start), b = toParent(end);
-            if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6) continue;
-            best = { distance: nearest.distance, heightDifference, point: toParent([nearest.x, nearest.y, height]),
-                angle: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+            if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 1e-6) continue;
+            best = { distance: nearest.distance, heightDifference, point: [nearest.x, nearest.y, height],
+                heading: Math.atan2(end[1] - start[1], end[0] - start[0]) };
         }
     }
 
     if (!best) return unchanged;
     // Either heading fits the track. Keep the vehicle facing the nearer direction.
-    const turn = Math.atan2(Math.sin(best.angle - rotation), Math.cos(best.angle - rotation));
+    const { local: point, angle } = fitBody(best.point, best.heading);
+    const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
     const heading = Math.abs(turn) > Math.PI / 2 ? rotation + turn - Math.sign(turn) * Math.PI : rotation + turn;
-    return { contractVersion: 1, transform: { x: best.point[0], y: best.point[1], elevation: best.point[2], rotation: heading } };
+    return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: heading } };
 }

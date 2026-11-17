@@ -5,6 +5,7 @@ import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } 
 import { matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap } from '../src/rail-vehicle-snapping.ts';
+import { fitFoxholeRailWheelbase } from '../src/rail-wheelbase.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 
@@ -73,6 +74,21 @@ test('coupler placement advances from the existing car along a curved rail', () 
     assert.ok(result.rotation! > 0.1);
     proposal.transform.x = 2000;
     assert.equal(finalizeFoxholeRailVehicleSnap(proposal).transform.elevation, undefined);
+});
+
+test('the axle chord keeps both axle centers on a curve at the authored spacing', () => {
+    const radius = 180, wheelbase = 163.2;
+    const sample = (distance: number): [number, number, number] => [
+        radius * Math.sin(distance / radius), radius * (1 - Math.cos(distance / radius)), 42,
+    ];
+    const pose = fitFoxholeRailWheelbase(wheelbase, sample);
+    assert.ok(pose);
+    assert.ok(pose.point[1] > 15, 'a tangent centered on the spline leaves both axles outside the curve');
+    for (const direction of [-1, 1]) {
+        const axleX = pose.point[0] + direction * wheelbase / 2 * Math.cos(pose.heading);
+        const axleY = pose.point[1] + direction * wheelbase / 2 * Math.sin(pose.heading);
+        assert.ok(Math.abs(Math.hypot(axleX, axleY - radius) - radius) < 0.1);
+    }
 });
 
 test('large cranes snap to crane rails and locomotives ignore them', () => {
