@@ -1,5 +1,5 @@
 import native from '../authoring/native-foliage-masks.json' with {type:'json'};
-// Repair legacy RGB-only foliage before decoding; new prepared exports already carry alpha.
+// Repair legacy RGB-only cutouts before decoding; new prepared exports already carry alpha.
 export function restoreNativeFoliageMasks(doc,baseUrl){
  const resources=[];
  for(const material of doc.materials||[]){
@@ -11,7 +11,7 @@ export function restoreNativeFoliageMasks(doc,baseUrl){
   const textureIndex=doc.textures.push({...texture,source:imageIndex})-1;
   material.pbrMetallicRoughness.baseColorTexture={...binding,index:textureIndex};
   material.alphaMode='MASK';material.alphaCutoff=rule.cutoff;
-  material.extras={...material.extras,foxholeOpacitySource:rule.source,foxholeOpacityChannel:'B'};
+  material.extras={...material.extras,foxholeOpacitySource:rule.source,foxholeOpacityChannel:rule.channel??'B'};
   resources.push(rule.resource);
  }
  return resources;

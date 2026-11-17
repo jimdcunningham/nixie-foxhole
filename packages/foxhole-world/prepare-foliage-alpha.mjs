@@ -3,28 +3,18 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync,brotliDecompressSync,constants} from 'node:zlib';
 import sharp from 'sharp';
-
-// Qualified native GrassBlades instances: Use Alpha selects Materiality blue.
-// Its albedo is DXT1/RGB, so merely declaring glTF MASK leaves the cards solid.
-const rules=[{
- material:'War/Content/Materials/Environment/Props/BirchBushSnow.uasset',
- albedo:'War/Content/Textures/Foliage/BirchBushSnowA.BirchBushSnowA',
- mask:'Textures/Foliage/BirchBushSnowM.png',source:'War/Content/Textures/Foliage/BirchBushSnowM.BirchBushSnowM',channel:2,cutoff:.333,
-},{
- material:'War/Content/Materials/Environment/Props/BirchBushSmall.uasset',
- albedo:'War/Content/Textures/Foliage/BirchBushThinA.BirchBushThinA',
- mask:'Textures/Foliage/BirchBranchThinM.png',source:'War/Content/Textures/Foliage/BirchBranchThinM.BirchBranchThinM',channel:2,cutoff:.333,
-}];
+import {nativeCutoutRules} from './authoring/native-cutout-rules.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const compressed=bytes=>brotliCompressSync(bytes,{params:{[constants.BROTLI_PARAM_QUALITY]:6}});
 
 /** Preserve decoded colour bytes and import the authored linear cutout channel. */
-export async function packFoliageAlpha(albedo,mask,channel){
+export async function packFoliageAlpha(albedo,mask,channel,resizeMask=false){
  const color=await sharp(albedo).ensureAlpha().raw().toBuffer({resolveWithObject:true});
- const opacity=await sharp(mask).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ const maskImage=sharp(mask).extractChannel(channel);
+ if(resizeMask)maskImage.resize(color.info.width,color.info.height,{fit:'fill'});
+ const opacity=await maskImage.raw().toBuffer({resolveWithObject:true});
  if(color.info.width!==opacity.info.width||color.info.height!==opacity.info.height)throw Error('Native foliage mask dimensions differ from albedo');
- if(!Number.isInteger(channel)||channel<0||channel>=opacity.info.channels)throw Error('Invalid foliage mask channel');
- for(let i=0;i<color.info.width*color.info.height;i++)color.data[i*4+3]=opacity.data[i*opacity.info.channels+channel];
+ for(let i=0;i<color.info.width*color.info.height;i++)color.data[i*4+3]=opacity.data[i];
  return sharp(color.data,{raw:{width:color.info.width,height:color.info.height,channels:4}}).png().toBuffer();
 }
 
@@ -44,19 +34,20 @@ export async function prepareNativeFoliageMasks({input,textureRoot}){
    if(replacement===undefined){
     const doc=JSON.parse(await read(entry.blob)),used=[];
     for(const material of doc.materials||[]){
-     const rule=rules.find(rule=>material.extras?.foxholeMaterialSource===rule.material&&material.extras?.foxholeAlbedoSource===rule.albedo);
+     const rule=nativeCutoutRules.find(rule=>material.extras?.foxholeMaterialSource===rule.material&&material.extras?.foxholeAlbedoSource===rule.albedo);
      if(!rule||material.extras?.foxholeOpacitySource)continue;
      const texture=doc.textures?.[material.pbrMetallicRoughness?.baseColorTexture?.index],image=doc.images?.[texture?.source];
      const match=image?.uri?.match(/^\/__asset_ab\/content\/B\/([a-f0-9]{64})\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/);
      if(!match)throw Error('Unsupported native foliage image reference');
-     let converted=textures.get(match[1]);
-     if(!converted){const bytes=await packFoliageAlpha(await read(match[1]),await fs.readFile(path.join(textureRoot,rule.mask)),rule.channel),hash=digest(bytes);converted={bytes,logical:'world-textures/'+hash+'.png',hash};textures.set(match[1],converted);}
+     const textureKey=match[1]+':'+rule.source+':'+rule.channel;
+     let converted=textures.get(textureKey);
+     if(!converted){const bytes=await packFoliageAlpha(await read(match[1]),await fs.readFile(path.join(textureRoot,rule.mask)),rule.channel,rule.resizeMask),hash=digest(bytes);converted={bytes,logical:'world-textures/'+hash+'.png',hash};textures.set(textureKey,converted);}
      // Clone the binding so a solid material sharing this colour image stays solid.
      const imageIndex=doc.images.push({...image,uri:`/__asset_ab/content/B/${converted.hash}/${converted.hash}/asset.png`})-1;
      const textureIndex=doc.textures.push({...texture,source:imageIndex})-1;
      material.pbrMetallicRoughness.baseColorTexture={...material.pbrMetallicRoughness.baseColorTexture,index:textureIndex};
      material.alphaMode='MASK';material.alphaCutoff=rule.cutoff;
-     material.extras={...material.extras,foxholeOpacitySource:rule.source,foxholeOpacityChannel:'B'};
+     material.extras={...material.extras,foxholeOpacitySource:rule.source,foxholeOpacityChannel:'RGBA'[rule.channel]};
      used.push(converted);changedMaterials++;
     }
     replacement=used.length?{bytes:compressed(Buffer.from(JSON.stringify(doc))),used}:null;

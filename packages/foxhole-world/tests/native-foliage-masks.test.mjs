@@ -10,3 +10,14 @@ test('legacy bush restoration preserves geometry, UV binding, sampler and unrela
  assert.deepEqual(doc.images[0],before.images[0]);assert.deepEqual(doc.materials[1],before.materials[1]);assert.deepEqual(doc.meshes,before.meshes);assert.deepEqual(doc.accessors,before.accessors);
  assert.equal(material.extras.foxholeOpacitySource,rule.source);assert.deepEqual(restoreNativeFoliageMasks(doc,'https://fixture.test/world/'),[],'already-normalized exports retain their own alpha');
 });
+
+for (const [name, channel] of [['PineBranchDead', 'B'], ['PineBranch02Dead', 'B'], ['StreetLamp', 'A']]) {
+ const rule=native.materials.find(row=>row.material.endsWith('/'+name+'.uasset'));
+ test('legacy '+name+' restores its authored '+channel+' cutout',()=>{
+  const material={name,pbrMetallicRoughness:{baseColorTexture:{index:0}},extras:{foxholeMaterialSource:rule.material,foxholeAlbedoSource:rule.albedo}};
+  const doc={materials:[material],images:[{uri:'rgb.webp'}],textures:[{source:0}]};
+  assert.deepEqual(restoreNativeFoliageMasks(doc,'https://fixture.test/world/'),[rule.resource]);
+  assert.equal(material.alphaMode,'MASK');
+  assert.equal(material.extras.foxholeOpacityChannel,channel);
+ });
+}

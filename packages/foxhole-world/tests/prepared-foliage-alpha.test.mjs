@@ -16,6 +16,14 @@ test('native foliage uses linear packed blue while preserving decoded RGB exactl
  assert.deepEqual([...result],[23,71,124,0,200,150,100,173]);
  await assert.rejects(packFoliageAlpha(color,await sharp({create:{width:1,height:1,channels:3,background:'#fff'}}).png().toBuffer(),2),/dimensions/);
 });
+test('native lamps use packed alpha and pines accept higher-resolution blue masks',async()=>{
+ const color=await png([23,71,124,255,200,150,100,255]),mask=await png([0,255,255,0,0,255,0,192]);
+ const lamp=await sharp(await packFoliageAlpha(color,mask,3)).raw().toBuffer();
+ assert.deepEqual([...lamp],[23,71,124,0,200,150,100,192]);
+ const large=await sharp({create:{width:4,height:2,channels:3,background:{r:0,g:0,b:170}}}).png().toBuffer();
+ const pine=await sharp(await packFoliageAlpha(color,large,2,true)).raw().toBuffer();
+ assert.deepEqual([...pine],[23,71,124,170,200,150,100,170]);
+});
 for(const [name,colorName,maskName] of [['BirchBushSnow','BirchBushSnowA','BirchBushSnowM'],['BirchBushSmall','BirchBushThinA','BirchBranchThinM']])test(name+' normalization shares the cutout, preserves solids and geometry, and is idempotent',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'foxhole-foliage-'));
  try{

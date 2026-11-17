@@ -12,6 +12,45 @@
         "decodedHash": "a94bd14911ccef6d6cc74e8601dcb85c02e5a02b8e8b4a4da138211712372316",
         "bytes": 40968
       }
+    },
+    {
+      "material": "War/Content/Materials/Environment/Props/PineBranchDead.uasset",
+      "albedo": "War/Content/Textures/Props/PineBranchDeadA.PineBranchDeadA",
+      "source": "War/Content/Textures/Props/PineBranchDeadM.PineBranchDeadM",
+      "channel": "B",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/e9f5642f4e069c2c0acb8de6f5983d292acec3e64758acf10524b3d8d44c3094/asset.webp",
+        "hash": "e9f5642f4e069c2c0acb8de6f5983d292acec3e64758acf10524b3d8d44c3094",
+        "decodedHash": "e9f5642f4e069c2c0acb8de6f5983d292acec3e64758acf10524b3d8d44c3094",
+        "bytes": 44654
+      }
+    },
+    {
+      "material": "War/Content/Materials/Environment/Props/PineBranch02Dead.uasset",
+      "albedo": "War/Content/Textures/Props/PineBranch02DeadA.PineBranch02DeadA",
+      "source": "War/Content/Textures/Props/PineBranch02DeadM.PineBranch02DeadM",
+      "channel": "B",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/15bd48f794db7a1bc44d532a3df66685a1b7047210cbcb3f2b8308a1a0d948f7/asset.webp",
+        "hash": "15bd48f794db7a1bc44d532a3df66685a1b7047210cbcb3f2b8308a1a0d948f7",
+        "decodedHash": "15bd48f794db7a1bc44d532a3df66685a1b7047210cbcb3f2b8308a1a0d948f7",
+        "bytes": 63290
+      }
+    },
+    {
+      "material": "War/Content/Materials/Environment/Props/StreetLamp.uasset",
+      "albedo": "War/Content/Textures/Props/StreetlampA.StreetlampA",
+      "source": "War/Content/Textures/Props/StreetlampM.StreetlampM",
+      "channel": "A",
+      "cutoff": 0.3333,
+      "resource": {
+        "path": "content/raw/a6899a013f81e5607d710f3f017bab78952bddfb10133eac17a6abe01138e917/asset.webp",
+        "hash": "a6899a013f81e5607d710f3f017bab78952bddfb10133eac17a6abe01138e917",
+        "decodedHash": "a6899a013f81e5607d710f3f017bab78952bddfb10133eac17a6abe01138e917",
+        "bytes": 53720
+      }
     }
   ]
 }
