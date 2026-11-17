@@ -95,23 +95,34 @@ test('translation can snap at the end of a track and never alters explicit trans
     assert.deepEqual(finalizeFoxholeRailVehicleSnap({ ...proposal, movingEntityIds: ['vehicle', 'other'] }).transform, unchanged);
 });
 
-test('track render plans expose a locomotive-sized placement box only for the matching gauge', () => {
-    for (const [key, engine] of [['railtracksplinefoundation', 'trainengine'], ['smallrailtrackspline', 'smalltrainengine']] as const) {
+test('rails remain selectable and do not contribute a product placement menu', () => {
+    for (const key of ['railtracksplinefoundation', 'smallrailtrackspline', 'cranerailtrackspline']) {
         const entity = track(key);
-        const baseContext = { contractVersion: 1 as const, entities: [entity] };
-        const compatiblePlan = renderFoxholeSceneV2Entity(entity, baseContext);
-        assert.ok(compatiblePlan.spatial, 'a host without the hint still receives the full spatial rail');
-        assert.equal(compatiblePlan.selectionGeometry?.pathPlacement, undefined);
-        const context = { ...baseContext, settings: { 'nixie.scene.pathPlacement': true } };
-        const path = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, context)).selectionGeometry?.pathPlacement;
-        assert.ok(path);
-        assert.deepEqual(path.productIds, [`asset.${engine}`]);
-        assert.equal(path.size.length, assets[engine]!.model!.width);
-        assert.equal(path.points[0]?.x, 0);
-        assert.equal(path.points[0]?.z, (engine === 'smalltrainengine' ? 20 : 36) * 0.32);
-        assert.equal(path.points.at(-1)?.x, 400);
+        const plan = renderFoxholeSceneV2Entity(entity, { contractVersion: 1, entities: [entity],
+            settings: { 'nixie.scene.productPlacementPorts': true, 'nixie.scene.pathPlacement': true } });
+        assert.ok(plan.spatial);
+        assert.equal(plan.selectionGeometry?.pathPlacement, undefined);
+        assert.equal(plan.selectionGeometry?.productPlacementPorts, undefined);
     }
-    const craneTrack = track('cranerailtrackspline');
-    assert.equal(renderFoxholeSceneV2Entity(craneTrack, { contractVersion: 1, entities: [craneTrack],
-        settings: { 'nixie.scene.pathPlacement': true } }).selectionGeometry?.pathPlacement, undefined);
+});
+
+test('vehicle couplers offer all and only the matching gauge with per-car docking poses', () => {
+    const vehicles = Object.entries(assets).filter(([, asset]) => asset.category === 'trains');
+    for (const [id] of vehicles) {
+        const entity = request(id, []).context.entities[0]!;
+        const base = { contractVersion: 1 as const, entities: [entity] };
+        const enabled = { ...base, settings: { 'nixie.scene.productPlacementPorts': true } };
+        assert.equal(renderFoxholeSceneV2Entity(entity, base).selectionGeometry?.productPlacementPorts, undefined);
+        const ports = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, enabled)).selectionGeometry?.productPlacementPorts;
+        assert.equal(ports?.length, 2, id);
+        const compatible = vehicles.filter(([other]) => other.startsWith('smalltrain') === id.startsWith('smalltrain'))
+            .map(([other]) => `asset.${other}`).sort();
+        for (const port of ports!) {
+            assert.deepEqual(Object.keys(port.products).sort(), compatible, id);
+            const nextCenter = port.products[`asset.${id}`]!;
+            assert.equal(Math.sign(nextCenter.x), Math.sign(port.point.x), id);
+            assert.ok(Math.abs(nextCenter.x) > Math.abs(port.point.x), id);
+            assert.equal(nextCenter.z, 0);
+        }
+    }
 });

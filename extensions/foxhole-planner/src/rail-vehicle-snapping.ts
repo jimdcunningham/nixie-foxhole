@@ -1,6 +1,6 @@
 import { nearestPointOnSegment } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
-    NixieTransformFinalizeResultV1 as Result, NixiePathPlacementV1 } from '@nixiejs/extension-sdk/scene-v2';
+    NixieTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy } from './rail-path-sockets.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
@@ -18,7 +18,9 @@ const vehicleGauge = new Map<string, 'standard' | 'small' | 'crane'>([['largecra
 for (const [id, asset] of Object.entries(assets)) {
     if (asset.isRailVehicle) vehicleGauge.set(id, id.startsWith('smalltrain') ? 'small' : 'standard');
 }
-const locomotiveIds = ['trainengine', 'smalltrainengine'];
+export function foxholeRailVehicleGauge(assetId: string) {
+    return vehicleGauge.get(assetId);
+}
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
@@ -35,21 +37,6 @@ function sampleRailCenterline(spline: FoxholeSceneV2SplineConnectorData & { star
     const railHeight = gauge ? RAIL_Z_OFFSET_CM[gauge] * 0.32 : 0;
     return path.points.map(({ x, y }, index) => ({ x, y,
         z: railHeight + spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength }));
-}
-
-export function locomotivePlacementPath(spline: FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number },
-    metadata: Record<string, FoxholeSceneV2AssetMetadata>): NixiePathPlacementV1 | undefined {
-    const key = spline.foxholeKey.toLowerCase();
-    const gauge = trackGauge(key);
-    if (!gauge || gauge === 'crane') return undefined;
-    const locomotives = locomotiveIds.filter(id => vehicleGauge.get(id) === gauge && metadata[id]?.model);
-    const model = locomotives[0] && metadata[locomotives[0]]?.model;
-    if (!model) return undefined;
-    const points = sampleRailCenterline(spline, metadata[key]);
-    if (points.length < 2) return undefined;
-    const stride = Math.ceil((points.length - 1) / 255);
-    return { points: points.filter((_, index) => index % stride === 0 || index === points.length - 1),
-        size: { length: model.width, width: model.depth, height: model.height }, productIds: locomotives.map(id => `asset.${id}`) };
 }
 
 export const foxholeRailTrackFinalizers = Object.fromEntries(

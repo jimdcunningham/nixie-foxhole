@@ -21,7 +21,7 @@ import { isTrenchConnector } from './trench-connector.ts';
 import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
-import { locomotivePlacementPath } from './rail-vehicle-snapping.ts';
+import { foxholeRailCouplerPlacementPorts } from './rail-coupler-placement.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
     FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
@@ -654,8 +654,6 @@ function renderFoxholeSceneV2EntityPlan(
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
         const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, settings ?? {}, context.entities) : undefined;
-        const pathPlacement = spatial && settings['nixie.scene.pathPlacement'] === true && settings['foxhole.viewport.socketSnapping'] !== false
-            ? locomotivePlacementPath(spatialResolved, assetMetadataById) : undefined;
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, settings ?? {});
         }
@@ -674,7 +672,6 @@ function renderFoxholeSceneV2EntityPlan(
         return {
             schemaVersion: 1,
             selectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles,
-                ...(pathPlacement ? { pathPlacement } : {}),
                 ...(wheel ? { geometryWheelControl: wheel } : {}) },
             ...(spatial ? { spatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,
@@ -787,8 +784,12 @@ function renderFoxholeSceneV2EntityPlan(
     if (asset?.data.catalogId !== 'foxhole.structures' || !assetMetadata) {
         throw new Error('The Foxhole Scene V2 renderer does not support this entity.');
     }
-    const selectionGeometry = resolveFoxholeSceneV2StructureSelectionGeometry(entity, assetMetadata);
     const appearance = readFoxholeSceneV2Appearance(entity);
+    const ports = settings['nixie.scene.productPlacementPorts'] === true && settings['foxhole.viewport.socketSnapping'] !== false
+        && assetMetadata.isRailVehicle && !appearance.destroyed && !appearance.packaged
+        ? foxholeRailCouplerPlacementPorts(assetId, assetMetadataById) : [];
+    const selectionGeometry = { ...resolveFoxholeSceneV2StructureSelectionGeometry(entity, assetMetadata),
+        ...(ports.length ? { productPlacementPorts: ports } : {}) };
     const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, settings, context.entities);
     const structural = assetMetadata.model?.structuralProfile;
     const spatialRendered = structural ? renderFoxholeSceneV2Asset(entity, assetId, assetMetadata,
