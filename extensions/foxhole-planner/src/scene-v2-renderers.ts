@@ -654,7 +654,7 @@ function renderFoxholeSceneV2EntityPlan(
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
         const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, settings ?? {}, context.entities) : undefined;
-        const pathPlacement = spatial && settings?.['foxhole.viewport.socketSnapping'] !== false
+        const pathPlacement = spatial && settings['nixie.scene.pathPlacement'] === true && settings['foxhole.viewport.socketSnapping'] !== false
             ? locomotivePlacementPath(spatialResolved, assetMetadataById) : undefined;
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, settings ?? {});

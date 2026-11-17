@@ -86,7 +86,11 @@ test('translation can snap at the end of a track and never alters explicit trans
 test('track render plans expose a locomotive-sized placement box only for the matching gauge', () => {
     for (const [key, engine] of [['railtracksplinefoundation', 'trainengine'], ['smallrailtrackspline', 'smalltrainengine']] as const) {
         const entity = track(key);
-        const context = { contractVersion: 1 as const, entities: [entity] };
+        const baseContext = { contractVersion: 1 as const, entities: [entity] };
+        const compatiblePlan = renderFoxholeSceneV2Entity(entity, baseContext);
+        assert.ok(compatiblePlan.spatial, 'a host without the hint still receives the full spatial rail');
+        assert.equal(compatiblePlan.selectionGeometry?.pathPlacement, undefined);
+        const context = { ...baseContext, settings: { 'nixie.scene.pathPlacement': true } };
         const path = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, context)).selectionGeometry?.pathPlacement;
         assert.ok(path);
         assert.deepEqual(path.productIds, [`asset.${engine}`]);
@@ -95,5 +99,6 @@ test('track render plans expose a locomotive-sized placement box only for the ma
         assert.equal(path.points.at(-1)?.x, 400);
     }
     const craneTrack = track('cranerailtrackspline');
-    assert.equal(renderFoxholeSceneV2Entity(craneTrack, { contractVersion: 1, entities: [craneTrack] }).selectionGeometry?.pathPlacement, undefined);
+    assert.equal(renderFoxholeSceneV2Entity(craneTrack, { contractVersion: 1, entities: [craneTrack],
+        settings: { 'nixie.scene.pathPlacement': true } }).selectionGeometry?.pathPlacement, undefined);
 });
