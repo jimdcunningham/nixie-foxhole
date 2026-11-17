@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "materials": [
+    {
+      "material": "War/Content/Materials/Structures/Howitzer01.uasset",
+      "albedo": "War/Content/Textures/Structures/HowitzerA01.HowitzerA01",
+      "packed": "War/Content/Textures/Structures/HowitzerS01.HowitzerS01",
+      "resource": {
+        "path": "content/raw/4f240d44e249914bd718910eb3196ccd717d11f0c46d454cae78bff640f906ab/asset.webp",
+        "hash": "4f240d44e249914bd718910eb3196ccd717d11f0c46d454cae78bff640f906ab",
+        "decodedHash": "4f240d44e249914bd718910eb3196ccd717d11f0c46d454cae78bff640f906ab",
+        "bytes": 131716
+      }
+    },
+    {
+      "material": "War/Content/Materials/Structures/Howitzer02.uasset",
+      "albedo": "War/Content/Textures/Structures/HowitzerA02.HowitzerA02",
+      "packed": "War/Content/Textures/Structures/HowitzerS02.HowitzerS02",
+      "resource": {
+        "path": "content/raw/dce18d84774b840224b034e9d96207769395e39a05542548ccbd1a8dd5bdc4b0/asset.webp",
+        "hash": "dce18d84774b840224b034e9d96207769395e39a05542548ccbd1a8dd5bdc4b0",
+        "decodedHash": "dce18d84774b840224b034e9d96207769395e39a05542548ccbd1a8dd5bdc4b0",
+        "bytes": 128662
+      }
+    },
+    {
+      "material": "War/Content/Materials/Structures/Howitzer03.uasset",
+      "albedo": "War/Content/Textures/Structures/HowitzerA03.HowitzerA03",
+      "packed": "War/Content/Textures/Structures/HowitzerS03.HowitzerS03",
+      "resource": {
+        "path": "content/raw/ab0a34cfb1e6557b9eae11ab8c3e5ba54dc02bc334340f3d9da30218e5c1e380/asset.webp",
+        "hash": "ab0a34cfb1e6557b9eae11ab8c3e5ba54dc02bc334340f3d9da30218e5c1e380",
+        "decodedHash": "ab0a34cfb1e6557b9eae11ab8c3e5ba54dc02bc334340f3d9da30218e5c1e380",
+        "bytes": 131880
+      }
+    }
+  ]
+}
