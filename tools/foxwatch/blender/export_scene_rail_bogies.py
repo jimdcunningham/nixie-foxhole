@@ -25,6 +25,16 @@ ENGINE_LINKS = {
     "wheelconnection": "coupling",
     "connectingrod": "rod",
     "lowerpiston": "slider",
+    "wheelflyingcrank": "return-crank",
+    "eccentricrod": "eccentric",
+    "expansionlink": "expansion",
+    "radiusrod": "radius",
+    "unionlink": "union",
+    "combinationlink": "combination",
+    "combinationlink_head": "combination-head",
+    "upperpiston": "valve-stem",
+    "liftinglink": "hanger-upper",
+    "liftinglink_end": "hanger-lower",
 }
 
 
