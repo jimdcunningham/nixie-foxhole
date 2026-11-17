@@ -215,7 +215,11 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
 test('an existing mixed eleven-vehicle train is rebuilt as one drive with its original facing and spacing', () => {
     const main = track('railtrackspline', 'main');
     Object.assign(main.components.at(-1)!.data, { endX: 9500, maxLength: 10000 });
-    const proposal = request('trainengine', [main]);
+    const branch = track('railtrackspline', 'branch');
+    Object.assign(branch.components[0]!.data, { x: 6650 });
+    Object.assign(branch.components.at(-1)!.data, { endX: 4800, endY: 950, endRotation: .3, maxLength: 5200,
+        startAttachmentNodeId: 'main', startAttachmentSocketName: 'RailPath-7000-f' });
+    const proposal = request('trainengine', [main, branch]);
     proposal.interaction = 'planar-translation';
     Object.assign(proposal.transform, { x: 4100, y: 0, rotation: 0 });
     const subject = proposal.context.entities[0]!;
@@ -242,8 +246,17 @@ test('an existing mixed eleven-vehicle train is rebuilt as one drive with its or
         component('rail-attachment', { rail: 'main', station: station - 420, reversed: false }),
     ] });
     const result = parseNixieTransformFinalizeResultV1(finalizeFoxholeRailVehicleSnap(proposal));
-    const operations = result.transaction!.operations;
+    const operations = result.transaction!.operations.filter(operation => operation.componentId === 'rail-attachment');
     assert.equal(operations.length, 11);
+    const routes = result.transaction!.operations.flatMap(operation =>
+        operation.op === 'add' && operation.componentId === 'rail-simulation-routing'
+            ? parseNixieSimulationRoutingV1(operation.data.simulationRouting) : []);
+    assert.equal(routes.length, 11);
+    for (const route of routes) {
+        assert.deepEqual(route.start, routes[0]!.start);
+        assert.equal(route.frames.at(-1)!.distance, routes[0]!.frames.at(-1)!.distance);
+        assert.ok(route.frames.at(-1)!.position[1] > 30);
+    }
     const paths = operations.map(operation => {
         assert.equal(operation.op, 'patch');
         const path = parseNixieSimulationPathV1(operation.set!.simulationPath);

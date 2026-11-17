@@ -586,7 +586,9 @@ function packRailFrames(frames: SimulationFrame[]) {
     return {
         ...(nodes.length ? { modelNodes: nodes.map(node => node.name) } : {}),
         frames: frames.map(frame => ({
-            distance: frame.distance - first, position: frame.position, heading: frame.heading, modelNodeTransforms: [],
+            distance: frame.distance - first,
+            position: frame.position.map(value => Number(value.toFixed(3))) as FoxholeSpatialPoint,
+            heading: Math.max(-Math.PI, Math.min(Math.PI, Number(frame.heading.toFixed(6)))), modelNodeTransforms: [],
             ...(nodes.length ? { modelOffsets: nodes.flatMap(({ index }) => {
                 const node = frame.modelNodeTransforms[index]!;
                 return [...node.translation, ...node.rotation].map(value => Number(value.toFixed(4)));
@@ -687,31 +689,37 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
     const drive = { leader: leader.entity.entityId, acceleration: 65_000 / mass * UNITS_PER_METRE,
         braking: 100_000 / mass * UNITS_PER_METRE, manual: { startDistance: -samples[0]![0]!.distance, loop } };
     const encoder = new TextEncoder();
-    for (const tolerance of [1, 2, 4, 8]) {
-        const paths = members.map((member, index) => {
-            const frames = samples[index]!;
-            const selected = simplifyConsistFrames(frames, frames, tolerance);
-            if (!selected.includes(backward.length)) selected.push(backward.length);
-            selected.sort((a, b) => a - b);
-            return { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE, drive,
-                sources: [...sources, ...members.filter(other => other !== member).map(other => other.entity.entityId)],
-                ...packRailFrames(selected.map(i => frames[i]!)) } satisfies NixieSimulationPathV1;
-        });
+    const before = Math.max(...members.map(member => member.offset)) + 192;
+    const after = -Math.min(...members.map(member => member.offset)) + 192;
+    const shouldRoute = (!closed || loop) && rails.some(rail => rail.endpointSockets?.some(socket => readRailPathSocket(socket)));
+    const pack = (member: (typeof members)[number], index: number, tolerance: number) => {
+        const frames = samples[index]!;
+        const selected = simplifyConsistFrames(frames, frames, tolerance);
+        if (!selected.includes(backward.length)) selected.push(backward.length);
+        selected.sort((a, b) => a - b);
+        return { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE, drive,
+            sources: [...sources, ...members.filter(other => other !== member).map(other => other.entity.entityId)],
+            ...packRailFrames(selected.map(i => frames[i]!)) } satisfies NixieSimulationPathV1;
+    };
+    let fallback: ((typeof members)[number] & { path: ReturnType<typeof pack>; routes: NixieSimulationRouteV1[]; })[] | undefined;
+    for (const tolerance of [1, 2, 4, 8, 12, 16]) {
+        const paths = members.map((member, index) => pack(member, index, tolerance));
         const bytes = encoder.encode(JSON.stringify(paths)).byteLength;
         if (paths.some(entry => entry.frames.length > NIXIE_SIMULATION_PATH_MAX_FRAMES
             || encoder.encode(JSON.stringify(entry)).byteLength > NIXIE_COMPONENT_MAX_DATA_BYTES - 1024)
             || bytes > NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - 16_384) continue;
-        const before = Math.max(...members.map(member => member.offset)) + 192;
-        const after = -Math.min(...members.map(member => member.offset)) + 192;
-        const routing = rails.some(rail => rail.endpointSockets?.some(socket => readRailPathSocket(socket)))
-            && (!closed || loop) ? buildConsistRoutes(rails, line, leader.location, paths[0]!, NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - bytes - 16_384,
+        const routing = shouldRoute ? buildConsistRoutes(rails, line, leader.location, paths[0]!, NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - bytes - 16_384,
                 members.length, (rail, station) => {
                     const frames = sample(rail, station, station);
                     return frames.every((frame): frame is SimulationFrame => !!frame) ? frames : undefined;
-                }, { before, after, room: Math.max(before, after) + 180 })
+                }, { before, after, room: Math.max(before, after) + 180 }, tolerance)
             : undefined;
-        return members.map((member, index) => ({ ...member, path: paths[index]!, routes: routing?.[index] ?? [] }));
+        const plan = members.map((member, index) => ({ ...member, path: paths[index]!, routes: routing?.routes[index] ?? [] }));
+        if (!routing?.overBudget || routing.routes[0]!.length) return plan;
+        // Try fitting the primary line and the turnout together before discarding the turnout.
+        fallback ??= plan;
     }
+    return fallback;
 }
 
 function routePiece(geometry: RouteGeometry, from: number, to: number): FoxholeSpatialPoint[] {
@@ -732,7 +740,7 @@ function routePiece(geometry: RouteGeometry, from: number, to: number): FoxholeS
 function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRunningLine>,
     engineStart: DirectedRailLocation, primary: NixieSimulationPathV1, byteBudget: number, vehicleCount: number,
     sample: (path: RunningRail, station: number) => SimulationFrame[] | undefined,
-    handoff = { before: 192, after: 800, room: 900 }) {
+    handoff = { before: 192, after: 800, room: 900 }, tolerance = 1) {
     const makePath = (entityId: string): RunningRail => ({ entityId, points: [], stations: [], endpointLinks: ['', ''] });
     const mainPath = makePath('');
     const mainSpans = appendRouteSpans(mainPath, line.spans);
@@ -750,6 +758,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
     const result: NixieSimulationRouteV1[][] = Array.from({ length: vehicleCount }, () => []);
     // Leave room for the entire consist on either side of a switch handoff.
     const fittingRoom = handoff.room;
+    let overBudget = false;
     const station = (span: RouteSpan, fraction: number) =>
         span.offset + routeLength(span.rail) * (span.step > 0 ? fraction : 1 - fraction);
     const connection = (geometry: RouteGeometry, span: RouteSpan, name: string, point: number, transfer: number): NixieSimulationRouteConnectionV1 => ({
@@ -829,7 +838,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         const end = direction > 0 ? merge : junction;
         const routes = result.map((_, vehicle): NixieSimulationRouteV1 => {
             const frames = poses.map(row => row[vehicle]!);
-            const indices = simplifyConsistFrames(frames);
+            const indices = simplifyConsistFrames(frames, frames, tolerance);
             return { id: branch.entityId, ...(start ? { start } : {}), ...(end ? { end } : {}),
                 sources: [...visited].map(rail => rail.entityId),
                 ...packRailFrames(indices.map(index => frames[index]!)) };
@@ -837,13 +846,16 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         const size = encoder.encode(JSON.stringify(routes)).byteLength;
         if (size > remaining || routes.some((route, index) => route.frames.length > NIXIE_SIMULATION_PATH_MAX_FRAMES
             || routingDataBytes([route]) > NIXIE_COMPONENT_MAX_DATA_BYTES
-            || routeBank([...result[index]!, route]).length > ROUTING_COMPONENTS.length)) continue;
+            || routeBank([...result[index]!, route]).length > ROUTING_COMPONENTS.length)) {
+            overBudget = true;
+            continue;
+        }
         remaining -= size;
         routes.forEach((route, index) => result[index]!.push(route));
         for (const rail of visited) used.add(rail);
         geometries.push({ path, spans, first: firstPose, last: poses.at(-1)![0]!.distance, loop: false });
     }
-    return result;
+    return { routes: result, overBudget };
 }
 
 function routingDataBytes(routes: NixieSimulationRouteV1[]) {
@@ -970,7 +982,7 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
             const engineFrame = railSimulationFrame(engineId, consist.fixed, at);
             const cannonFrame = railSimulationFrame(cannonId, consist.coupled, at);
             if (engineFrame && cannonFrame) return [engineFrame, cannonFrame];
-        })
+        }).routes
         : undefined;
     return { location: initial.location, engine, cannon, routes };
 }
