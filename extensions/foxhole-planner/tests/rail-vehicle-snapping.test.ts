@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationPathV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
+    parseNixieTransformFinalizerV1, parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
 import { foxholeRailVehicleBogies } from '../src/rail-vehicle-rigs.ts';
@@ -131,6 +132,37 @@ test('Tempest playback keeps both bogies on separate rails while crossing the jo
         }
     }
     assert.equal(railsUnderWheels.size, 2);
+});
+
+test('a turnout along an open line bakes matching alternate poses for both vehicles', () => {
+    const main = track('railtrackspline', 'main');
+    Object.assign(main.components[0]!.data, { x: -1400 });
+    Object.assign(main.components.at(-1)!.data, { endX: 3600, maxLength: 4000 });
+    const branch = track('railtrackspline', 'branch');
+    Object.assign(branch.components[0]!.data, { x: 400 });
+    Object.assign(branch.components.at(-1)!.data, { endX: 1300, endY: 360, endRotation: .4,
+        startAttachmentNodeId: 'main', startAttachmentSocketName: 'RailPath-5000-f' });
+    const proposal = request('trainengine', [main, branch]);
+    proposal.context.entities.push({ entityId: 'cannon', revision: 1, components: [
+        component('asset', { catalogId: 'foxhole.structures', assetId: 'trainlrartillery' }),
+        component('transform', { x: -840, y: 0, rotation: 0 }, 'nixie.core'),
+        component('rail-attachment', { rail: 'main', station: 560, reversed: false }),
+    ] });
+    Object.assign(proposal.transform, { x: -288, y: 0, rotation: 0 });
+    proposal.geometryGesture = { handleId: 'product-placement-port', phase: 'commit', snappingEnabled: true,
+        worldPoint: { x: -477, y: 0, z: 77.44 }, hoveredEntityIds: ['cannon'] };
+    const result = parseNixieTransformFinalizeResultV1(finalizeFoxholeRailVehicleSnap(proposal));
+    const routes = result.transaction?.operations.flatMap(operation => operation.op === 'add'
+        && operation.componentId === 'rail-simulation-routing' ? parseNixieSimulationRoutingV1(operation.data.simulationRouting) : []) ?? [];
+    assert.equal(routes.length, 2);
+    const [engine, cannon] = routes;
+    assert.equal(engine!.id, 'branch');
+    assert.deepEqual(engine!.start, cannon!.start);
+    assert.equal(engine!.start?.id, 'main:RailPath-5000-f');
+    assert.equal(engine!.end, undefined);
+    assert.equal(engine!.frames.at(-1)!.distance, cannon!.frames.at(-1)!.distance);
+    assert.ok(engine!.frames.at(-1)!.position[1] > 200);
+    assert.ok(cannon!.frames.at(-1)!.position[1] > 40);
 });
 
 test('a Black Bolt added at the Tempest front coupler drives both vehicles through a curve', () => {
