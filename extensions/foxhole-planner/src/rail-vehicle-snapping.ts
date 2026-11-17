@@ -14,7 +14,10 @@ import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
 // RailZOffset on the standard and small-gauge RailTrackSpline blueprint CDOs (cm).
-const RAIL_Z_OFFSET_CM = { standard: 36, small: 20, crane: 0 };
+const RAIL_Z_OFFSET_CM = { standard: 36, small: 20 };
+// The crane track blueprint has no RailZOffset. Use the exported railhead
+// height as a fallback when the catalog does not include the spatial model.
+const CRANE_RAILHEAD_HEIGHT_CM = 26.506;
 const vehicleGauge = new Map<string, 'standard' | 'small' | 'crane'>([['largecrane', 'crane']]);
 for (const [id, asset] of Object.entries(assets)) {
     if (asset.isRailVehicle) vehicleGauge.set(id, id.startsWith('smalltrain') ? 'small' : 'standard');
@@ -35,7 +38,10 @@ function sampleRailCenterline(spline: FoxholeSceneV2SplineConnectorData & { star
     const path = sampleFoxholeSceneV2Connector(spline, asset);
     if (!(path.totalLength > 0)) return [];
     const gauge = trackGauge(spline.foxholeKey.toLowerCase());
-    const railHeight = gauge ? RAIL_Z_OFFSET_CM[gauge] * 0.32 : 0;
+    const model = asset?.model;
+    const railHeight = gauge === 'crane'
+        ? (model ? model.offsetZ + model.height / 2 : CRANE_RAILHEAD_HEIGHT_CM * 0.32)
+        : (gauge ? RAIL_Z_OFFSET_CM[gauge] * 0.32 : 0);
     return path.points.map(({ x, y }, index) => ({ x, y,
         z: railHeight + spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength }));
 }

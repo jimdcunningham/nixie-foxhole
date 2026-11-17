@@ -97,11 +97,25 @@ test('large cranes snap to crane rails and locomotives ignore them', () => {
     const pose = finalizeFoxholeRailVehicleSnap(request('largecrane', [track('railtrackspline', 'wrong', 10), craneTrack])).transform;
     assert.equal(pose.x, 173);
     assert.equal(pose.y, 0);
-    assert.equal(pose.elevation, 32);
+    // The crane's model is grounded at its wheels. The track mesh puts the
+    // running surface 26.506 cm above the spline origin.
+    const railHeight = 26.506 * 0.32;
+    assert.ok(Math.abs(pose.elevation! - (32 + railHeight)) < 0.001);
     for (const id of ['trainengine', 'smalltrainengine']) {
         assert.deepEqual(finalizeFoxholeRailVehicleSnap(request(id, [craneTrack])).transform, { x: 173, y: 10 });
     }
     assert.deepEqual(finalizeFoxholeRailVehicleSnap(request('largecrane', [track('smallrailtrackspline')])).transform, { x: 173, y: 10 });
+});
+
+test('an attached large crane keeps its running height when the track is raised', () => {
+    const craneTrack = track('cranerailtrackspline');
+    const proposal = request('largecrane', [craneTrack]);
+    const attachment = finalizeFoxholeRailVehicleSnap(proposal).transaction?.operations[0];
+    if (attachment?.op !== 'add') assert.fail('Expected a crane rail attachment.');
+    proposal.context.entities[0]!.components.push(component('rail-attachment', attachment.data));
+    craneTrack.components.find(component => component.componentId === 'spatial-transform')!.data.elevation = 80;
+    const pose = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'transform', followedEntityId: craneTrack.entityId }).transform;
+    assert.ok(Math.abs(pose.elevation! - (80 + 26.506 * 0.32)) < 0.001);
 });
 
 test('locomotives align with their gauge even when a closer track has the wrong gauge', () => {
