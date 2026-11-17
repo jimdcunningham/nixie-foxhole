@@ -201,7 +201,11 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         indexLoader: delivery?.loadIndex ?? (async () => {throw new Error('No selected world catalog.');}),
         loadRegion: async (options: Parameters<typeof import('@nixiejs/foxhole-world')['loadCompactRegion']>[0]) => { const scene = await (await import('@nixiejs/foxhole-world')).loadCompactRegion({...options,scheduleModelTask:context.scheduleModelTask,renderer:context.app.renderer,prepareTerrain:async source=>{if(context.prepareTextureSource)await context.prepareTextureSource(source);else if('gpu' in context.app.renderer)context.app.renderer.texture.initSource(source);}}); scene.prepareFirstFrame?.(context.app.renderer); return scene; },
     });
-    const createWorld = () => new FoxholeRegionSceneController({ ...worldOptions(), deferTerrainDetail: true, previewConcurrency: 6 });
+    const createWorld = () => {
+        const controller = new FoxholeRegionSceneController({ ...worldOptions(), deferTerrainDetail: true, previewConcurrency: 6 });
+        controller.cullOffscreenPasses = true;
+        return controller;
+    };
     world = createWorld();
     const roadTour = import.meta.dev && context.cameraPose && context.setCameraPose ? createPlannerRoadTour({
         canvas: context.app.canvas,

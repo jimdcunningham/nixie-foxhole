@@ -116,6 +116,13 @@ export async function loadCompactRegion({baseUrl,entry,signal:externalSignal,fra
  function order(){let index=0;for(const label of ['Water','Region Shell']){const child=root.children.find(c=>c.label===label);if(child)root.setChildIndex(child,index++);}}
  const publishBatch=progressive?build=>reveal.run(()=>{signal.throwIfAborted();const batch=build();prepareNode(batch);revealedBatches++;scene.prepareFirstFrame(renderer,batch);return batch;}):build=>build();
  const scene={root,passes,whenDisposed:()=>disposal,combinedPasses:{terrain:passes[0],shoulders:passes[1]},sharedPasses:{surfaceDecals:passes[2],ambientOcclusion:passes[3],colorFinish:passes[4]},metrics:provider.metrics,get environment(){return environment;},get sites(){return [...modelGroups.values()].flatMap(group=>group.world?.sites||[]);},scene:{get counts(){const counts={failed:[],lodFailures:[],byCategory:{},catalog:{visible:0,byAsset:{}}};for(const [key,group]of modelGroups){if(key==='bridges')continue;for(const [name,value]of Object.entries(group.world?.counts||{})){if(name==='minY')counts.minY=Math.min(counts.minY??Infinity,value);else if(name==='maxY')counts.maxY=Math.max(counts.maxY??-Infinity,value);else if(typeof value==='number')counts[name]=(counts[name]||0)+value;else if(Array.isArray(value))counts[name]=[...(counts[name]||[]),...value];else if(name==='byCategory')Object.assign(counts.byCategory,value);else if(name==='catalog'){counts.catalog.visible+=value.visible||0;for(const [asset,n]of Object.entries(value.byAsset||{}))counts.catalog.byAsset[asset]=(counts.catalog.byAsset[asset]||0)+n;}}}return counts;}},
+  get renderBounds(){
+   if(!frame)return null;
+   // Include the region shell and give structures and effects room beyond the terrain.
+   const pad=256,halfWidth=(WIDTH/2+pad)*frame.scale,halfHeight=(HEIGHT/2+pad)*frame.scale;
+   return {minX:frame.x-halfWidth,maxX:frame.x+halfWidth,minY:-frame.y-halfHeight,maxY:-frame.y+halfHeight,
+    minZ:-pad*frame.scale,maxZ:(Math.max(0,sourceMaxHeight)+pad)*frame.scale};
+  },
   async createRoadTour(){
    signal.throwIfAborted();const source=await json(region+'/roads/tour-source.json');signal.throwIfAborted();
    const batches=[...modelGroups.values()].flatMap(group=>group.world?.clearanceBatches||group.world?.batches||[]);

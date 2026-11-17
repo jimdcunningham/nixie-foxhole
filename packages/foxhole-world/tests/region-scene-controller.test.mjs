@@ -1,7 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {Camera3D,Vector3} from '@pixi/3d';
 import {FoxholeRegionSceneController,selectedSpatialRegions,regionShellEdges} from '../../extensions/foxhole/app/plugins/foxhole/nixie/map/region-scene-controller.mjs';
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
+
+test('3D map passes suspend after an offscreen delay and resume immediately',()=>{
+ const camera=new Camera3D({mode:'orthographic',orthographicSize:100});
+ camera.position.set(0,0,100);
+ camera.lookAt(new Vector3(0,0,0),new Vector3(0,1,0));
+ const otherPass={name:'editor'},mapPass={name:'map'};
+ const controller=new FoxholeRegionSceneController({baseUrl:'https://world.test/',loadRegion:async()=>null});
+ controller.cullOffscreenPasses=true;
+ controller.frustumCulling=true;
+ controller.view={camera,width:800,height:600,passes:[otherPass]};
+ const scene={passes:[mapPass],renderBounds:{minX:1000,maxX:1020,minY:-10,maxY:10,minZ:0,maxZ:20}};
+ controller.records.set('map',{scene,position:{x:0,y:0}});
+ controller.reconcile();
+ controller.syncPassVisibility('3d',0);
+ controller.syncPassVisibility('3d',179);
+ assert.deepEqual(controller.view.passes,[otherPass,mapPass]);
+ controller.syncPassVisibility('3d',180);
+ assert.deepEqual(controller.view.passes,[otherPass]);
+ assert.equal(controller.records.get('map').scene,scene);
+ camera.position.x=1010;
+ controller.syncPassVisibility('3d',181);
+ assert.deepEqual(controller.view.passes,[otherPass,mapPass]);
+ camera.position.x=0;
+ controller.syncPassVisibility('3d',182);
+ controller.syncPassVisibility('3d',362);
+ assert.deepEqual(controller.view.passes,[otherPass]);
+ controller.syncPassVisibility('2d',363);
+ assert.deepEqual(controller.view.passes,[otherPass,mapPass]);
+});
 
 test('only enabled, loaded terrain supplies ground and excavation follows the current region',async()=>{
  const cuts=[],view={passes:[],root:{addChild(){}},camera:{position:{x:0,y:0,z:100}},height:600,width:800};

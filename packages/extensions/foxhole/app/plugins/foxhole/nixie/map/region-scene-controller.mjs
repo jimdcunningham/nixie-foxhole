@@ -1,5 +1,7 @@
+import {Box,Frustum,Matrix4} from '@pixi/3d';
 const shadowAppearanceKey=Symbol.for('foxhole.world.shadow-appearance');
 const lightingProfileKey=Symbol.for('nixie.spatial.lighting-profile');
+const offscreenPassDelayMs=180;
 
 // Softer direct light and indirect fill retain detail and colour on shaded models.
 // Saved scene controls still animate the host sun and moon.
@@ -26,6 +28,14 @@ export function summarizeTerrainTransfers(records){
 }
 /** Region residency follows explicit selection. Only preparation is queued. */
 export class FoxholeRegionSceneController {
+ cullOffscreenPasses=false;
+ offscreenPassesSuspended=false;
+ offscreenSince=null;
+ #frustum=new Frustum();
+ #projection=new Matrix4();
+ #cameraView=new Matrix4();
+ #viewProjection=new Matrix4();
+ #box=new Box();
  constructor({baseUrl,loadRegion,indexLoader=null,fetcher=fetch,onStatus=null,concurrency=2,manageEnvironment=true,deferTerrainDetail=false,previewConcurrency=concurrency}){if(!Number.isInteger(concurrency)||concurrency<1)throw new RangeError('Region preparation concurrency must be a positive integer');Object.assign(this,{baseUrl,loadRegion,indexLoader,onStatus,concurrency,manageEnvironment,deferTerrainDetail,previewConcurrency});this.fetcher=(...args)=>fetcher(...args);this.records=new Map();this.attachedPasses=[];this.combinedPasses=new Map();this.destroyedScenes=new WeakSet();this.retiringScenes=new Set();this.disposal=new Promise(resolve=>{this.resolveDisposal=resolve;});this.view=null;this.index=null;this.indexLoad=null;this.indexController=new AbortController();this.loading=new Set();this.layerQueue=[];this.activeLayerLoads=0;this.mapImageRetirements=new Set();this.disposed=false;this.selectionKey='';this.selectionGeneration=0;this.cutouts=[];this.waterStencils=[];}
  disposeScene(scene){
   if(!scene||this.destroyedScenes.has(scene))return;this.destroyedScenes.add(scene);
@@ -41,7 +51,7 @@ export class FoxholeRegionSceneController {
  reconcile(){
   if(!this.view||this.view.destroyed)return;
   const scenes=[...this.records.values()].map(r=>r.scene).filter(Boolean),shared=new Map(),combined=new Map(),passes=[];
-  for(const scene of scenes){const common=new Set([...Object.values(scene.sharedPasses||{}),...Object.values(scene.combinedPasses||{})]);passes.push(...scene.passes.filter(pass=>!common.has(pass)));for(const [key,pass]of Object.entries(scene.sharedPasses||{}))if(!shared.has(key))shared.set(key,pass);for(const [key,pass]of Object.entries(scene.combinedPasses||{})){if(!combined.has(key))combined.set(key,[]);combined.get(key).push(pass);}}
+  for(const scene of this.offscreenPassesSuspended?[]:scenes){const common=new Set([...Object.values(scene.sharedPasses||{}),...Object.values(scene.combinedPasses||{})]);passes.push(...scene.passes.filter(pass=>!common.has(pass)));for(const [key,pass]of Object.entries(scene.sharedPasses||{}))if(!shared.has(key))shared.set(key,pass);for(const [key,pass]of Object.entries(scene.combinedPasses||{})){if(!combined.has(key))combined.set(key,[]);combined.get(key).push(pass);}}
   for(const [key,owners]of combined){let cached=this.combinedPasses.get(key);if(!cached||owners.length!==cached.owners.length||owners.some((owner,i)=>owner!==cached.owners[i])){cached={owners,pass:combineRegionPasses(owners)};this.combinedPasses.set(key,cached);}passes.push(cached.pass);}
   for(const key of this.combinedPasses.keys())if(!combined.has(key))this.combinedPasses.delete(key);
   passes.push(...shared.values());
@@ -51,6 +61,31 @@ export class FoxholeRegionSceneController {
   if(environment&&!this.ownsEnvironment){this.previousEnvironment=this.view.environment;this.ownsEnvironment=true;}
   if(this.ownsEnvironment)this.view.environment=environment||this.previousEnvironment;
   if(!environment)this.ownsEnvironment=false;
+ }
+ syncPassVisibility(mode,now){
+  const view=this.view,camera=view?.camera;
+  let offscreen=false;
+  if(this.cullOffscreenPasses&&this.frustumCulling&&mode==='3d'&&camera?.computeProjection&&camera.getGlobalTransform){
+   const width=view.width*(camera.viewport?.width??1),height=view.height*(camera.viewport?.height??1);
+   if(width>0&&height>0){
+    camera.computeProjection(width/height,this.#projection);
+    this.#cameraView.getInverse(camera.getGlobalTransform(this.#cameraView));
+    this.#frustum.setFromProjectionMatrix(this.#viewProjection.multiplyMatrices(this.#projection,this.#cameraView));
+    const scenes=[...this.records.values()].map(record=>record.scene).filter(Boolean);
+    offscreen=scenes.length>0&&scenes.every(scene=>{
+     const bounds=scene.renderBounds;
+     if(!bounds)return false;
+     this.#box.min.set(bounds.minX,bounds.minY,bounds.minZ);
+     this.#box.max.set(bounds.maxX,bounds.maxY,bounds.maxZ);
+     return !this.#frustum.intersectsBox(this.#box);
+    });
+   }
+  }
+  this.offscreenSince=offscreen?(this.offscreenSince??now):null;
+  const suspend=this.offscreenSince!==null&&now-this.offscreenSince>=offscreenPassDelayMs;
+  if(suspend===this.offscreenPassesSuspended)return;
+  this.offscreenPassesSuspended=suspend;
+  this.reconcile();
  }
  releaseMapImages(record,keep){for(const image of record.terrainMapImages||[]){if(image===keep)continue;record.terrainMapImages.delete(image);const pending=Promise.resolve().then(()=>image.release?.());this.mapImageRetirements.add(pending);void pending.catch(error=>console.error('Map image release failed',error)).finally(()=>{this.mapImageRetirements.delete(pending);this.checkDisposed();});}}
  updateMapImage(record,source){
@@ -64,7 +99,7 @@ export class FoxholeRegionSceneController {
  applyLighting(view){if(!this.lightingView){this.lightingView=view;this.previousToneMapping=view.toneMapping;this.hadLightingProfile=Object.hasOwn(view,lightingProfileKey);this.previousLightingProfile=view[lightingProfileKey];}view[lightingProfileKey]=worldLightingProfile(view);view.toneMapping='aces';}
  restoreShadows(){if(!this.shadowView)return;const view=this.shadowView;if(this.previousShadowAppearance===undefined)delete view[shadowAppearanceKey];else view[shadowAppearanceKey]=this.previousShadowAppearance;view._invalidateMaterialShaders?.();this.shadowView=null;}
  applyShadows(view){if(!this.shadowView){this.shadowView=view;this.previousShadowAppearance=view[shadowAppearanceKey];}const a=view[shadowAppearanceKey];if(!a||a.soft!==this.softShadows||a.strength!==this.shadowStrength){view[shadowAppearanceKey]={soft:this.softShadows,strength:this.shadowStrength};view._invalidateMaterialShaders?.();}}
- retire(){for(const record of [...this.records.values()])this.remove(record);this.selectionKey='';this.restoreShadows();this.restoreLighting();}
+ retire(){for(const record of [...this.records.values()])this.remove(record);this.selectionKey='';this.offscreenSince=null;this.offscreenPassesSuspended=false;this.restoreShadows();this.restoreLighting();}
  retryFailed(){if(this.disposed)return false;const failed=[...this.records.values()].filter(record=>record.state.phase==='error'&&this.canRetry(record));if(!failed.length)return false;for(const record of failed)this.remove(record);this.pump();return true;}
  retryLoading(){
   if(this.disposed)return false;const active=[...this.records.values()].filter(record=>this.canRetry(record)&&record.started&&!record.retired&&!['Ready','error'].includes(record.state.phase));if(!active.length)return false;
@@ -85,7 +120,7 @@ export class FoxholeRegionSceneController {
  sync({view,settings,mode,regions,position={x:0,y:0},deltaMS,wind,warState}){
   if(this.disposed)return;
   // One monotonic clock keeps newly resident regions on the same gust front.
-  const windTime=performance.now()/1000;
+  const now=performance.now(),windTime=now/1000;
   if(!this.terrainOverlays||this.terrainOverlays.rdz!==(settings.terrainRdz===true)||this.terrainOverlays.topo!==(settings.terrainTopo===true)||this.terrainOverlays.borders!==(settings.borders===true)||this.terrainOverlays.divisions!==(settings.voronoi===true)||this.terrainOverlays.faction!==(settings.faction===true)||this.terrainOverlays.grid!==(settings.grid===true)||this.terrainOverlays.front!==!!(settings.frontline||settings.frontAlt)||this.terrainOverlays.hotspots!==(settings.hotspots===true))this.terrainOverlays={rdz:settings.terrainRdz===true,topo:settings.terrainTopo===true,borders:settings.borders===true,divisions:settings.voronoi===true,faction:settings.faction===true,grid:settings.grid===true,front:!!(settings.frontline||settings.frontAlt),hotspots:settings.hotspots===true};
   this.softShadows=settings.softShadows!==false;this.shadowStrength=['medium','strong'].includes(settings.shadowStrength)?settings.shadowStrength:'light';this.waterReflections=settings.waterReflections!==false;this.vegetationShadows=settings.vegetationShadows!==false;this.vegetationWind=settings.vegetationWind!==false;this.layers=settings.worldLayers;this.frustumCulling=settings.frustumCulling!==false;this.ambientOcclusion=settings.ambientOcclusion!==false;const solidMap=settings.solidMap===true,vegetationDensity=['reduced','minimal'].includes(settings.vegetationDensity)?settings.vegetationDensity:'full',adaptiveStreaming=settings.adaptiveStreaming===true,modelLod=settings.modelLod===true,terrainLod=settings.terrainLod===true,adaptiveTextures=settings.adaptiveTextures===true,terrainSurface=['plain','map'].includes(settings.terrainSurface)?settings.terrainSurface:'native';
   const previewOnly=this.deferTerrainDetail&&terrainSurface==='map'&&!solidMap&&this.layers?.terrain===true
@@ -100,6 +135,7 @@ export class FoxholeRegionSceneController {
   for(const [id,source]of desired){let record=this.records.get(id);if(!record){record={...source,id,controller:new AbortController(),state:{phase:'Queued',downloadBytes:0},scene:null,retired:false,started:false};this.records.set(id,record);}this.updateMapImage(record,source.terrainMapImage);record.warState=source.warState;record.planningOverlays=source.planningOverlays;if(record.preparing&&record.preparing!==record.scene)record.preparing.setLayers?.(this.detailLayers(record));if(record.preparing){record.preparing.setFrustumCulling?.(this.frustumCulling);record.preparing.setAmbientOcclusion?.(this.ambientOcclusion);record.preparing.setWaterReflections?.(this.waterReflections);record.preparing.setVegetationShadows?.(this.vegetationShadows);record.preparing.setVegetationWind?.(this.vegetationWind);record.preparing.setPlanningOverlays?.({...this.terrainOverlays,...record.planningOverlays});}
    if(record.scene){record.scene.setPlanningOverlays?.({...this.terrainOverlays,...record.planningOverlays});record.scene.setAmbientOcclusion?.(this.ambientOcclusion);record.scene.setWaterReflections?.(this.waterReflections);record.scene.setVegetationShadows?.(this.vegetationShadows);record.scene.setVegetationWind?.(this.vegetationWind);record.scene.setFrustumCulling?.(this.frustumCulling);record.scene.setWarState?.(record.warState);record.scene.setLayers?.(this.detailLayers(record));const camera=view.camera,cp=camera?.position,scale=32;if(cp)record.scene.update?.({deltaMS,wind,time:windTime,camera:{position:[(cp.x-record.position.x)/scale,cp.z/scale,(cp.y+record.position.y)/scale],height:view.height,fov:camera.fov||45,planes:camera.frustum?.planesData,orthographicHeight:camera.mode==='orthographic'?2*camera.orthographicSize*camera.zoom*view.height/view.width/scale:null}});}
   }
+  this.syncPassVisibility(mode,now);
   this.pump();this.refineNearbyTerrain();if((selectionChanged||positionChanged)&&desired.size)this.report();if(!desired.size)this.onStatus?.({phase:'idle'});
  }
  report(){
