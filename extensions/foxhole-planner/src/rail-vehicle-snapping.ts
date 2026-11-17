@@ -1,8 +1,9 @@
 import { nearestPointOnSegment } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
-    NixieTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
+    NixieTransformFinalizeResultV1 as Result, NixieEntityRendererContextV1 as Context, NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy } from './rail-path-sockets.ts';
+import { foxholeRailVehicleBogies } from './rail-vehicle-rigs.ts';
 import { fitFoxholeRailWheelbase, foxholeRailWheelbase } from './rail-wheelbase.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
@@ -13,6 +14,7 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
+const UNITS_PER_METRE = 32;
 // RailZOffset on the standard and small-gauge RailTrackSpline blueprint CDOs (cm).
 const RAIL_Z_OFFSET_CM = { standard: 36, small: 20 };
 // The crane track blueprint has no RailZOffset. Use the exported railhead
@@ -151,6 +153,94 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
     return { ...location, step };
 }
 
+function sampleRunningRails(context: Context, gauge: NonNullable<ReturnType<typeof foxholeRailVehicleGauge>>,
+    projection: ReturnType<typeof createFoxholeSpatialProjection>, metadata: Record<string, FoxholeSceneV2AssetMetadata>,
+    boundRailId?: string) {
+    return context.entities.flatMap(track => {
+        const component = data(track, 'spline-connector');
+        const key = String(component?.foxholeKey ?? '').toLowerCase();
+        if (!component || trackGauge(key) !== gauge || (track.entityId !== boundRailId
+            && data(track, 'visibility', 'nixie.core')?.visible === false)) return [];
+        const spline = resolveFoxholeSpatialSplineAttachments(track, component as unknown as FoxholeSceneV2SplineConnectorData,
+            context, metadata, projection);
+        const points = sampleRailCenterline(spline, metadata[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
+        if (points.length < 2) return [];
+        const stations = [0];
+        for (let index = 1; index < points.length; index++) {
+            stations.push(stations[index - 1]! + railDistance(points[index - 1]!, points[index]!));
+        }
+        return [{ entityId: track.entityId, points, stations }];
+    });
+}
+
+function resolveRailChassis(assetId: string, rails: RunningRail[], location: RailLocation, step: number) {
+    const bogies = foxholeRailVehicleBogies[assetId];
+    const pivots = bogies?.length === 2 ? bogies.map(bogie => bogie.pivot * UNITS_PER_METRE) : [];
+    const pivotCentre = pivots.length ? (pivots[0]! + pivots[1]!) / 2 : 0;
+    const wheelbase = pivots.length ? Math.abs(pivots[0]! - pivots[1]!) : foxholeRailWheelbase(assetId);
+    const sample = (offset: number) => advanceOnRail(rails, location, step * offset)?.point;
+    const fit = wheelbase && fitFoxholeRailWheelbase(wheelbase, distance => sample(pivotCentre + distance));
+    if (!fit || !wheelbase) return { point: location.point, heading: location.heading + (step < 0 ? Math.PI : 0),
+        pitch: 0, sample, railOffset: (offset: number) => offset };
+    const horizontalShift = pivotCentre * Math.cos(fit.pitch);
+    const point: FoxholeSpatialPoint = [fit.point[0] - horizontalShift * Math.cos(fit.heading),
+        fit.point[1] - horizontalShift * Math.sin(fit.heading), fit.point[2] - pivotCentre * Math.sin(fit.pitch)];
+    const stretch = 2 * fit.halfSpan / wheelbase;
+    return { point, heading: fit.heading, pitch: fit.pitch, sample, railOffset: (offset: number) => pivotCentre + (offset - pivotCentre) * stretch };
+}
+
+/** Model-local deltas for the wheel groups split around the original pivots by FoxWatch. */
+export function poseFoxholeRailBogies(entity: Entity, assetId: string, context: Context,
+    metadata = assets): NixieSpatialPlanV1['modelNodeTransforms'] {
+    const bogies = foxholeRailVehicleBogies[assetId];
+    const attachment = data(entity, ATTACHMENT_COMPONENT);
+    const gauge = foxholeRailVehicleGauge(assetId);
+    if (!bogies || !gauge || typeof attachment?.rail !== 'string' || typeof attachment.station !== 'number') return undefined;
+
+    const projection = createFoxholeSpatialProjection(context.entities);
+    const rails = sampleRunningRails(context, gauge, projection, metadata, attachment.rail);
+    const rail = rails.find(rail => rail.entityId === attachment.rail);
+    const location = rail && locationAtStation(rail, attachment.station);
+    if (!location) return undefined;
+    const { sample, point, heading, pitch, railOffset } = resolveRailChassis(assetId, rails, location, attachment.reversed ? -1 : 1);
+    const localAt = (distance: number) => {
+        const point = sample(distance);
+        return point && projection.toLocal(entity, point);
+    };
+    const transforms: NonNullable<NixieSpatialPlanV1['modelNodeTransforms']> = [];
+    // Find each truck's rail chord from its own axle contacts. On a single
+    // axle, a short chord estimates the local tangent without depending on the chassis yaw.
+    for (const { nodeName, pivot, wheelOffsets: [rear, front] } of bogies) {
+        const x = pivot * UNITS_PER_METRE;
+        const axleCentre = (front + rear) / 2 * UNITS_PER_METRE;
+        const centreOffset = railOffset(x + axleCentre);
+        const wheelbase = (front - rear) * UNITS_PER_METRE;
+        const fit = wheelbase > 0 ? fitFoxholeRailWheelbase(wheelbase, delta => sample(centreOffset + delta)) : undefined;
+        const half = fit?.halfSpan ?? Math.max(0.15 * UNITS_PER_METRE, wheelbase / 2);
+        const back = localAt(centreOffset - half);
+        const ahead = localAt(centreOffset + half);
+        if (!back || !ahead || ![...back, ...ahead].every(Number.isFinite)) continue;
+        const [dx, dy, dz] = ahead.map((value, axis) => value - back[axis]!) as FoxholeSpatialPoint;
+        const axleDirection = Math.hypot(dx, dy, dz);
+        if (axleDirection < 1e-6) continue;
+        const centre = back.map((value, axis) => (value + ahead[axis]!) / 2);
+        const pivotX = centre[0]! - axleCentre * dx / axleDirection;
+        const pivotY = centre[1]! - axleCentre * dy / axleDirection;
+        const pivotZ = centre[2]! - axleCentre * dz / axleDirection;
+        transforms.push({ nodeName,
+            translation: [(pivotX - x) / UNITS_PER_METRE, pivotZ / UNITS_PER_METRE, pivotY / UNITS_PER_METRE],
+            rotation: [0, -Math.atan2(dy, dx), Math.atan2(dz, Math.hypot(dx, dy))] });
+    }
+    const origin = projection.toLocal(entity, point);
+    const forward = projection.toLocal(entity, [point[0] + Math.cos(heading) * Math.cos(pitch),
+        point[1] + Math.sin(heading) * Math.cos(pitch), point[2] + Math.sin(pitch)]);
+    const bodyPitch = Math.atan2(forward[2] - origin[2], Math.hypot(forward[0] - origin[0], forward[1] - origin[1]));
+    if (Number.isFinite(bodyPitch) && Math.abs(bodyPitch) > 1e-6) {
+        transforms.push({ nodeName: 'rail-body', translation: [0, 0, 0], rotation: [0, 0, bodyPitch] });
+    }
+    return transforms.length ? transforms : undefined;
+}
+
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const { x, y, rotation } = request.transform;
     const unchanged: Result = { contractVersion: 1, transform: { x, y } };
@@ -190,29 +280,11 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const toParent = (point: FoxholeSpatialPoint) => parent ? projection.toLocal(parent, point) : point;
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
-    const rails = request.context.entities.flatMap(track => {
-        const component = data(track, 'spline-connector');
-        const key = String(component?.foxholeKey ?? '').toLowerCase();
-        if (!component || trackGauge(key) !== gauge || (track.entityId !== request.followedEntityId
-            && data(track, 'visibility', 'nixie.core')?.visible === false)) return [];
-        const spline = resolveFoxholeSpatialSplineAttachments(track, component as unknown as FoxholeSceneV2SplineConnectorData,
-            request.context, assets, projection);
-        const points = sampleRailCenterline(spline, assets[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
-        if (points.length < 2) return [];
-        const stations = [0];
-        for (let index = 1; index < points.length; index++) {
-            stations.push(stations[index - 1]! + railDistance(points[index - 1]!, points[index]!));
-        }
-        return [{ entityId: track.entityId, points, stations }];
-    });
-    const wheelbase = foxholeRailWheelbase(String(asset?.assetId));
+    const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
     const fitBody = (location: RailLocation, step = 1) => {
-        const heading = location.heading + (step < 0 ? Math.PI : 0);
-        const body = wheelbase && fitFoxholeRailWheelbase(wheelbase, distance => advanceOnRail(rails, location, step * distance)?.point);
-        const center = body ? body.point : location.point;
-        const direction = body ? body.heading : heading;
+        const { point: center, heading } = resolveRailChassis(String(asset?.assetId), rails, location, step);
         const local = toParent(center);
-        const ahead = toParent([center[0] + Math.cos(direction), center[1] + Math.sin(direction), center[2]]);
+        const ahead = toParent([center[0] + Math.cos(heading), center[1] + Math.sin(heading), center[2]]);
         return { local, angle: Math.atan2(ahead[1] - local[1], ahead[0] - local[0]) };
     };
     if (request.followedEntityId) {
@@ -220,9 +292,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const rail = rails.find(rail => rail.entityId === saved.rail);
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
-        const { local: point, angle } = fitBody(location);
-        const heading = angle + (saved.reversed ? Math.PI : 0);
-        const turn = Math.atan2(Math.sin(heading - rotation), Math.cos(heading - rotation));
+        const { local: point, angle } = fitBody(location, saved.reversed ? -1 : 1);
+        const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: rotation + turn } };
     }
 
@@ -231,13 +302,14 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const source = request.geometryGesture.worldPoint;
         const result = followRailFromCoupler(rails, [source.x, source.y, source.z ?? origin[2]], origin);
         if (!result) return unchanged;
-        const { local: point, angle: outward } = fitBody(result, result.step);
         const baseHeading = Math.atan2(origin[1] - source.y, origin[0] - source.x);
         const forward = projection.toWorld(subject, [1, 0, 0]);
         const reversed = Math.cos(Math.atan2(forward[1] - origin[1], forward[0] - origin[0]) - baseHeading) < 0;
-        const transaction = attachment(result, reversed !== (result.step < 0));
+        const step = reversed ? -result.step : result.step;
+        const { local: point, angle } = fitBody(result, step);
+        const transaction = attachment(result, step < 0);
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
-            rotation: reversed ? outward + Math.PI : outward }, ...(transaction ? { transaction } : {}) };
+            rotation: angle }, ...(transaction ? { transaction } : {}) };
     }
 
     for (const rail of rails) {
@@ -256,10 +328,9 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
 
     if (!best) return detach();
     // Either heading fits the track. Keep the vehicle facing the nearer direction.
-    const { local: point, angle } = fitBody(best);
-    const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
-    const reversed = Math.abs(turn) > Math.PI / 2;
-    const heading = reversed ? rotation + turn - Math.sign(turn) * Math.PI : rotation + turn;
+    const reversed = Math.cos(fitBody(best).angle - rotation) < 0;
+    const { local: point, angle } = fitBody(best, reversed ? -1 : 1);
+    const heading = rotation + Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
     const transaction = attachment(best, reversed);
     return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: heading },
         ...(transaction ? { transaction } : {}) };

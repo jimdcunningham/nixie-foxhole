@@ -1,3 +1,4 @@
+import { poseFoxholeRailBogies } from './rail-vehicle-snapping.ts';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
@@ -830,6 +831,12 @@ function renderFoxholeSceneV2EntityPlan(
     if (hiddenModelNodes.length) {
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
             ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes: [...new Set(hiddenModelNodes)] };
+    }
+    if (settings['nixie.scene.modelNodeTransforms'] === true && !appearance.destroyed && !appearance.packaged) {
+        const modelNodeTransforms = poseFoxholeRailBogies(entity, assetId, context, assetMetadataById);
+        if (modelNodeTransforms) {
+            placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, modelNodeTransforms };
+        }
     }
     const modelClips = structuralModelClips(assetMetadata, occupiedTags);
     if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],

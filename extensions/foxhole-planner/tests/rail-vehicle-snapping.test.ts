@@ -216,3 +216,30 @@ test('a shortened rail clamps the vehicle to the end and a reshaped rail changes
     Object.assign(rail.components.at(-1)!.data, { endX: 150, endY: 0, endRotation: 0 });
     assert.ok(Math.abs(finalizeFoxholeRailVehicleSnap(follow).transform.x - 150) < 1e-8);
 });
+
+test('long rolling stock steers the two bogies independently through the spatial render plan', () => {
+    for (const assetId of ['trainflatbed', 'trainhospital', 'trainlrartillery']) {
+        const curved = track('railtrackspline');
+        Object.assign(curved.components.at(-1)!.data, { endX: 1050, endY: 700, endRotation: Math.PI / 2 });
+        const proposal = request(assetId, [curved]);
+        const vehicle = proposal.context.entities[0]!;
+        vehicle.components.push(component('rail-attachment', { rail: 'track', station: 650, reversed: false }));
+        const { x, y, rotation, elevation } = finalizeFoxholeRailVehicleSnap({
+            ...proposal, interaction: 'transform', followedEntityId: 'track',
+        }).transform;
+        Object.assign(vehicle.components[1]!.data, { x, y, rotation });
+        vehicle.components.push(component('spatial-transform', { elevation: elevation! }, 'nixie.core'));
+        assert.equal(renderFoxholeSceneV2Entity(vehicle, proposal.context).spatial?.modelNodeTransforms, undefined);
+        const context = { ...proposal.context, settings: { 'nixie.scene.modelNodeTransforms': true } };
+        const poses = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(vehicle, context)).spatial?.modelNodeTransforms;
+        assert.equal(poses?.length, 2, assetId);
+        assert.deepEqual(poses?.map(pose => pose.nodeName), ['rail-bogie-front', 'rail-bogie-rear'], assetId);
+        assert.ok(poses![0]!.rotation[1] * poses![1]!.rotation[1] < 0, JSON.stringify({ assetId, poses }));
+
+        Object.assign(curved.components.at(-1)!.data, { endX: 1300, endY: 0, endRotation: 0 });
+        const straight = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'transform', followedEntityId: 'track' });
+        Object.assign(vehicle.components[1]!.data, straight.transform);
+        const straightPoses = renderFoxholeSceneV2Entity(vehicle, context).spatial?.modelNodeTransforms;
+        assert.ok(straightPoses?.every(pose => Math.abs(pose.rotation[1]) < 1e-6), assetId);
+    }
+});
