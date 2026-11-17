@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Container3D,parseGltf,BatchedMesh3D,RenderPassBit} from '@pixi/3d';
 import {loadWorldModels} from '../authoring/world-models.mjs';
-import {loadWorldDetails} from '../authoring/world-details.mjs';
+import {loadWorldDetails,visibleProjectedDecalChunk} from '../authoring/world-details.mjs';
 const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
 const triangle=async(names=['Paint'])=>{const p=new Float32Array([0,0,0,0,0,2,3,0,0]);return parseGltf({asset:{version:'2.0'},buffers:[{byteLength:p.byteLength}],bufferViews:[{buffer:0,byteLength:p.byteLength}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[3,0,2]}],materials:names.map(name=>({name})),meshes:[{primitives:names.map((_,material)=>({attributes:{POSITION:0},material}))}],nodes:[{mesh:0}],scenes:[{nodes:[0]}],scene:0},[p.buffer]);};
 
@@ -33,6 +33,17 @@ test('model category filtering skips other categories and their LOD resources be
 test('disabled detail types do not fetch geometry, recipes or textures',async()=>{
  const root=new Container3D(),requests=[],bit={name:'fixture',gpu:{fragment:{material:''}},gl:{fragment:{material:''}}};
  try{await loadWorldDetails({region:'fixture',root,layers:{decals:false,puddles:false,effects:false},hexBit:bit,json:async path=>{requests.push(path);assert.equal(path,'fixture/world-fixes/complete.json');return {};},texture:async()=>{throw Error('unexpected texture');},zipped:async()=>{throw Error('unexpected geometry');}});assert.equal(root.children.length,0);assert.deepEqual(requests,['fixture/world-fixes/complete.json']);}finally{root.destroy({children:true});}
+});
+
+test('projected ice stays on terrain while its model projections are omitted',()=>{
+ const ice='War/Content/Materials/Decals/IcePatch.IcePatch';
+ assert.equal(visibleProjectedDecalChunk({material:ice,category:'terrain'},true),true);
+ assert.equal(visibleProjectedDecalChunk({material:ice,category:'structures'},false),false);
+ assert.equal(visibleProjectedDecalChunk({material:ice,category:'rocks'},true),false);
+ assert.equal(visibleProjectedDecalChunk({material:'WaterLeaks02',category:'structures'},true),true);
+ const road='War/Content/Materials/Decals/RoadBlendDirt1.RoadBlendDirt1';
+ assert.equal(visibleProjectedDecalChunk({material:road,category:'terrain'},true),false);
+ assert.equal(visibleProjectedDecalChunk({material:road,category:'structures'},true),true);
 });
 
 test('vegetation shadow changes preserve colour passes and hidden actor state',async()=>{

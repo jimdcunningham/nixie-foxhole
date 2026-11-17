@@ -9,6 +9,13 @@ import {buildNativeParticleEmitter,persistentParticleEmitters,nativeEmitterModul
 import {effectOwnerLayer} from './world-effect-policy.mjs';
 import {Geometry3D,Material3D,Mesh3D,Matrix4,BatchedMesh3D} from '@pixi/3d';
 const isRoadBlend=key=>/\/(RoadBlend(?:Dirt(?:PackedDirt)?|Gravel(?:Dirt)?|PackedDirt)\d+)\.\1$/i.test(key);
+export function visibleProjectedDecalChunk(chunk,nativeRoadTransitions){
+ const terrain=!chunk.category||chunk.category==='terrain';
+ // Model projections of this ground ice leave hard-edged strips on the
+ // snowy shoreline meshes. Keep the terrain projection of the same decal.
+ if(!terrain&&chunk.material==='War/Content/Materials/Decals/IcePatch.IcePatch')return false;
+ return !nativeRoadTransitions||!terrain||!isRoadBlend(chunk.material);
+}
 const puddleBit={name:'nativePuddleTerrainIntersection',textures:['puddleBed'],bindings:{material:{puddleDepthScale:'f32'}},gpu:{fragment:{material:'let bedUV=vec2<f32>((input.vPosition.x+1092.0)/2184.0,(945.0-input.vPosition.z)/1890.0);let bed=samplePuddleBed(bedUV).rg;let bedHeight=dot(bed,vec2<f32>(65280.0,255.0))/65535.0*256.0-128.0;alpha*=smoothstep(0.0,0.2,max(0.0,input.vPosition.y-bedHeight)*material.puddleDepthScale);'}},gl:{fragment:{material:'vec2 bedUV=vec2((vPosition.x+1092.0)/2184.0,(945.0-vPosition.z)/1890.0);vec2 bed=samplePuddleBed(bedUV).rg;float bedHeight=dot(bed,vec2(65280.0,255.0))/65535.0*256.0-128.0;alpha*=smoothstep(0.0,0.2,max(0.0,vPosition.y-bedHeight)*material.puddleDepthScale);'}}};
 export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weatherSurfaceBit,weatherMaterial,groundBit,json:loadJson,zipped:loadZipped,bridgeRoadSeams,frame,layers={},nativeRoadTransitions=false,effectLayer,worldData,effectData,smokeCloudTexture}){
  if(region!=='deadlands')await loadJson(region+'/world-fixes/complete.json');
@@ -16,7 +23,7 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
  // Native road meshes blend adjacent materials, and the shoulder pass blends
  // their edges into terrain. The legacy projected RoadBlend paint duplicates
  // those transitions on a different receiver height, leaving bright strips.
- const chunks=nativeRoadTransitions?meta.chunks.filter(c=>c.category&&c.category!=='terrain'||!isRoadBlend(c.material)):meta.chunks;
+ const chunks=meta.chunks.filter(chunk=>visibleProjectedDecalChunk(chunk,nativeRoadTransitions));
  const materials=new Map(),materialKeys=[...new Set(chunks.map(c=>c.material))];let nextMaterial=0,materialFailed=false;
  // A region can have many independent surface materials. Bound parallel reads
  // and drain every started texture before the caller cleans up after a failure.
@@ -46,7 +53,7 @@ export async function loadWorldDetails({region,root,texture,geo,mat,hexBit,weath
  // slots detached until bridge-dependent geometry and materials are present.
  try{replaceVertices(vb,'independent');bridgeRoadSeams=await bridgeRoadSeams;replaceVertices(vb,'bridge');if(chunks.length)root.addChild(batch);else batch.destroy();}catch(error){batch.destroy();throw error;}
  const particleHex=structuredClone(hexBit);if(frame){particleHex.name+=':particle-frame:'+frame.x+':'+frame.y+':'+frame.scale;for(const backend of ['gpu','gl']){const p=backend==='gpu'?'input.vPosition':'vPosition',v=backend==='gpu'?'vec3<f32>':'vec3';particleHex[backend].fragment.material=particleHex[backend].fragment.material.replaceAll(p,`${v}((${p}.x-(${frame.x.toFixed(6)}))/${frame.scale.toFixed(6)},${p}.z/${frame.scale.toFixed(6)},(${p}.y+(${frame.y.toFixed(6)}))/${frame.scale.toFixed(6)})`);}}
- let actorVisible=()=>true,layerFlags={};const particles=[],summary={decalPlacements:meta.renderedPlacements,decalModelReceivers:meta.modelPlacements,decalTerrainReceivers:meta.terrainPlacements,decalTriangles:meta.triangles,decalChunks:chunks.length,replacedRoadBlendChunks:meta.chunks.length-chunks.length,particleComponents:0,particles:0,hiddenParticleComponents:0,unsupportedParticleComponents:0,unsupportedMaterialParticleComponents:0,transientParticleComponents:0,approximatedParticleComponents:0,unsupportedEffects:effects.unsupported};
+ let actorVisible=()=>true,layerFlags={};const particles=[],summary={decalPlacements:meta.renderedPlacements,decalModelReceivers:meta.modelPlacements,decalTerrainReceivers:meta.terrainPlacements,decalTriangles:meta.triangles,decalChunks:chunks.length,replacedRoadBlendChunks:nativeRoadTransitions?meta.chunks.filter(c=>(!c.category||c.category==='terrain')&&isRoadBlend(c.material)).length:0,particleComponents:0,particles:0,hiddenParticleComponents:0,unsupportedParticleComponents:0,unsupportedMaterialParticleComponents:0,transientParticleComponents:0,approximatedParticleComponents:0,unsupportedEffects:effects.unsupported};
  for(const placement of effectPlacements){
   if(!placement.visible||placement.hidden||!placement.autoActivate){summary.hiddenParticleComponents++;continue;}
   if(hideViewerParticleEffect(placement.system)){summary.unsupportedParticleComponents++;continue;}
