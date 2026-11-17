@@ -1,5 +1,5 @@
 import { finalizeFoxholeSurfacePlacement } from './surface-placement.ts';
-import { finalizeFoxholeRailVehicleSnap } from './rail-vehicle-snapping.ts';
+import { foxholeRailTrackFinalizers } from './rail-vehicle-snapping.ts';
 import { buildFoxholeStatisticsReport } from './statistics-report.ts';
 import { renderFoxholePlanningMap } from './scene-v2-map-renderer.ts';
 import { renderFoxholePlanningGrid } from './scene-v2-map-grid.ts';
@@ -36,9 +36,7 @@ const connection = await connectNixieExtension({
         },
         transformFinalizers: {
             'transforms.surface-placement': finalizeFoxholeSurfacePlacement,
-            'transforms.track-snapping-trainengine': finalizeFoxholeRailVehicleSnap,
-            'transforms.track-snapping-smalltrainengine': finalizeFoxholeRailVehicleSnap,
-            'transforms.track-snapping-largecrane': finalizeFoxholeRailVehicleSnap,
+            ...foxholeRailTrackFinalizers,
             [FOXHOLE_SCENE_V2_TRANSFORM_FINALIZER_SYSTEM_ID]: finalizeFoxholeSceneV2Transform,
             'transforms.spline-socket-snapping': finalizeFoxholeSceneV2Transform,
             'transforms.connector-socket-snapping': finalizeFoxholeSceneV2Transform,

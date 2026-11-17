@@ -37,13 +37,25 @@ function request(assetId: string, tracks: NixieComponentEntitySnapshotV1[]): Nix
 }
 
 test('the live socket setting gates a track-spline finalizer for each rail vehicle', () => {
-    for (const id of ['trainengine', 'smalltrainengine', 'largecrane']) {
+    const railVehicles = Object.entries(assets).filter(([, asset]) => asset.category === 'trains');
+    for (const id of [...railVehicles.map(([id]) => id), 'largecrane']) {
         const finalizer = manifest.contributes.transformFinalizers.map(parseNixieTransformFinalizerV1)
             .find(item => item.match.data?.assetId === id);
         assert.ok(finalizer, id);
         assert.equal(finalizer.enabledSettingId, 'foxhole.viewport.socketSnapping');
         assert.equal(finalizer.candidateQuery.match.componentId, 'spline-connector');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
+    }
+});
+
+test('every Locomotives asset snaps only to its own gauge', () => {
+    for (const [id, asset] of Object.entries(assets)) {
+        if (asset.category !== 'trains') continue;
+        const small = id.startsWith('smalltrain');
+        const own = track(small ? 'smallrailtrackspline' : 'railtrackspline');
+        const wrong = track(small ? 'railtrackspline' : 'smallrailtrackspline');
+        assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [own])).transform.elevation, 32, id);
+        assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [wrong])).transform.elevation, undefined, id);
     }
 });
 

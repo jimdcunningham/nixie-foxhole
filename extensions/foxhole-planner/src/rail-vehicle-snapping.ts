@@ -12,7 +12,11 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
-const vehicleGauge = new Map([['trainengine', 'standard'], ['smalltrainengine', 'small'], ['largecrane', 'crane']]);
+const vehicleGauge = new Map<string, 'standard' | 'small' | 'crane'>([['largecrane', 'crane']]);
+for (const [id, asset] of Object.entries(assets)) {
+    if (asset.isRailVehicle) vehicleGauge.set(id, id.startsWith('smalltrain') ? 'small' : 'standard');
+}
+const locomotiveIds = ['trainengine', 'smalltrainengine'];
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
@@ -34,15 +38,19 @@ export function locomotivePlacementPath(spline: FoxholeSceneV2SplineConnectorDat
     const key = spline.foxholeKey.toLowerCase();
     const gauge = trackGauge(key);
     if (!gauge || gauge === 'crane') return undefined;
-    const locomotives = [...vehicleGauge].filter(([id, vehicleTrackGauge]) => vehicleTrackGauge === gauge && metadata[id]?.model);
-    const model = locomotives[0] && metadata[locomotives[0][0]]?.model;
+    const locomotives = locomotiveIds.filter(id => vehicleGauge.get(id) === gauge && metadata[id]?.model);
+    const model = locomotives[0] && metadata[locomotives[0]]?.model;
     if (!model) return undefined;
     const points = sampleRailCenterline(spline, metadata[key]);
     if (points.length < 2) return undefined;
     const stride = Math.ceil((points.length - 1) / 255);
     return { points: points.filter((_, index) => index % stride === 0 || index === points.length - 1),
-        size: { length: model.width, width: model.depth, height: model.height }, productIds: locomotives.map(([id]) => `asset.${id}`) };
+        size: { length: model.width, width: model.depth, height: model.height }, productIds: locomotives.map(id => `asset.${id}`) };
 }
+
+export const foxholeRailTrackFinalizers = Object.fromEntries(
+    [...vehicleGauge.keys()].map(id => [`transforms.track-snapping-${id}`, finalizeFoxholeRailVehicleSnap]),
+);
 
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const { x, y, rotation } = request.transform;

@@ -39,7 +39,8 @@ test('declares real Planner migrations through the public SDK', async () => {
     )));
     assert.ok(socketFinalizer!.candidateQuery.worldRadius > largestSocketOffset * 2 + 20);
     assert.deepEqual(manifest.contributes.transformFinalizers?.map(finalizer => finalizer.match.componentId).sort(),
-        ['asset', 'asset', 'asset', 'asset', 'connector', 'socket-attachments', 'spline-connector']);
+        [...Array(Object.values(foxholeSceneV2Assets).filter(asset => asset.isRailVehicle).length + 2).fill('asset'),
+            'connector', 'socket-attachments', 'spline-connector']);
     assert.ok(manifest.contributes.resourceTemplates?.some(resource => resource.idPrefix === 'foxhole.icon.'));
     assert.ok(manifest.contributes.resourceTemplates?.some(resource => resource.idPrefix === 'foxhole.asset.'));
     assert.ok(manifest.contributes.renderers?.some(renderer => renderer.id === 'foxhole-icons'));
