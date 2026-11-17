@@ -6,7 +6,7 @@ import { createPlannerRoadTour } from './map/planner-road-tour.mjs';
 import { plannerRoadTourActions, plannerRoadTourOptions, plannerRoadTourStatus } from './map/road-tour-state.ts';
 import { resolveFoxholeMapFitCamera } from './map/camera-fit.ts';
 import { foxholeWorldAssetDelivery, hasSelectedFoxholeSpatialRegion } from '#foxhole/utils/asset-delivery.ts';
-import { FOXHOLE_MAP_REGIONS, getFoxholeRegionPosition } from './map/constants.ts';
+import { FOXHOLE_MAP_REGIONS, FOXHOLE_REGION_HEIGHT, FOXHOLE_REGION_WIDTH, getFoxholeRegionPosition } from './map/constants.ts';
 import { FoxholeRegionSceneController, regionIdForKey } from './map/region-scene-controller.mjs';
 import { bakeFoxholeRegion, regionBakeAction, type FoxholeRegionBakeScale } from './map/region-bake.ts';
 import { computed, shallowRef } from 'vue';
@@ -15,6 +15,12 @@ import { FOXHOLE_MAP_SETTING_KEYS, readFoxholeMapSettings } from './map-settings
 import { getFoxholeMapRegionBillboardGroups } from './map/region-annotations.ts';
 import { useNixieSettingsStore } from '#nixie/stores/settings.ts';
 import { getFoxholeMapActiveBounds, FoxholeMapViewportPlugin } from './map/controller.ts';
+
+// Authored winter regions. Transient snow, map overlays, and custom artwork do not define climate.
+const winterRegions = new Set([
+    'BasinSionnachHex', 'CallumsCapeHex', 'ClansheadValleyHex', 'HomeRegionW', 'HowlCountyHex',
+    'MorgensCrossingHex', 'NevishLineHex', 'ReachingTrailHex', 'SpeakingWoodsHex', 'WeatheredExpanseHex',
+]);
 
 /** Reuse the complete War map on the ECS-owned viewport; no copied scene graph. */
 export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContributionContext): NixieSceneV2CanvasContribution {
@@ -28,6 +34,9 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
         if (!regionKeys.length || (!devMultiRegion3d && regionKeys.length !== 1)) return [];
         return FOXHOLE_MAP_REGIONS.filter(region => (!region.standalone || hasSelectedFoxholeSpatialRegion(region.key)) && regionKeys.includes(region.key));
     });
+    const auroraRegions = computed(() => spatialRegions.value
+        .filter(region => winterRegions.has(region.key))
+        .map(region => ({ id: regionIdForKey(region.key), center: getFoxholeRegionPosition(region) })));
     const standalonePreview = computed(() => FOXHOLE_MAP_REGIONS.some(region => region.standalone && !hasSelectedFoxholeSpatialRegion(region.key) && mapSettings.value.regionKeys.includes(region.key)));
     let worldProgressJobId: string | null = null;
     let worldProgressErrorToastId: string | null = null;
@@ -347,6 +356,18 @@ export function createFoxholeSceneMapCanvas(context: NixieSceneV2CanvasContribut
             // Selected regions own the ground even while loading or hidden.
             // Disabling Terrain must not reveal the editor's camera-following floor.
             return !settings.enabled || context.viewMode() === 'flat' || spatialRegions.value.length === 0;
+        },
+        auroraAt(x, y) {
+            if (!mapSettings.value.enabled || !mapSettings.value.worldLayers.terrain || context.viewMode() !== '3d') return 0;
+            let strength = 0;
+            for (const { id, center } of auroraRegions.value) {
+                if (!world.records.get(id)?.scene) continue;
+                const north = Math.abs(y - center.y) / (FOXHOLE_REGION_HEIGHT / 2);
+                const east = Math.abs(x - center.x) / (FOXHOLE_REGION_WIDTH / 2);
+                const edge = 1 - Math.max(north, east + north / 2);
+                strength = Math.max(strength, Math.min(1, edge * 20));
+            }
+            return strength;
         },
         groundAvailable: () => world.active,
         groundElevation: (x, y) => world.sampleGround(x, y),

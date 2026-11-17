@@ -20,7 +20,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     const summaryGroups = [{ content: {}, anchor: { x: 10, y: 20 }, offset: 30, anchorHalfHeight: 10 }];
     const borders = { label: 'foxhole-map-borders' };
     const mask = {}, terrain = { label: 'foxhole-map-regions' }, icons = { label: 'foxhole-map-live-icons' };
-    const world = { sync(value: any) { spatialSyncs.push(value); }, active: false, sampleGround: () => null, setGroundCutouts() {}, destroy() {} };
+    const world = { sync(value: any) { spatialSyncs.push(value); }, active: false,
+        records: new Map<string, { scene: object; }>(), sampleGround: () => null, setGroundCutouts() {}, destroy() {} };
     let settingsReads = 0;
     const settings = reactive({ solidMap: false, regionKeys: ['WestgateHex'], worldLayers: { terrain: true }, enabled: true, background: true, lockCameraToMap: true, cropEnabled: true, cropX: -20, cropY: -30, cropWidth: 40, cropHeight: 60 });
     const root = { visible: true, destroyed: false, mask, children: [terrain, icons, background, summaries, borders, mask] }, runtime = { project: {}, projectStore: { settings: {} } };
@@ -33,7 +34,8 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
         selectedSpatialRegions, regionIdForKey,
         hasSelectedFoxholeSpatialRegion: (key: string) => key === 'HomeRegionC' && homeAvailable.value,
         plannerRoadTourActions: shallowRef(null), plannerRoadTourStatus: shallowRef({}),
-        FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"},{key:"HomeRegionC",standalone:true}],
+        FOXHOLE_MAP_REGIONS: [{key:"WestgateHex"},{key:"OriginHex"},{key:"HomeRegionC",standalone:true},{key:"BasinSionnachHex"}],
+        FOXHOLE_REGION_HEIGHT: 80, FOXHOLE_REGION_WIDTH: 100,
         getFoxholeRegionPosition: (region: any) => ({x:region.key === "WestgateHex" ? 10 : 20,y:0}),
         useRuntimeConfig: () => ({ app: { baseURL: '/' } }),
         foxholeWorldAssetDelivery: () => ({ baseUrl: '/foxhole/assets/world/', loadIndex: () => Promise.resolve({}) }),
@@ -107,6 +109,21 @@ test('the War map adapter uses ECS counts, pointer, camera and lifetime instead 
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
     mode = '2d';
     assert.equal(adapter.spatialLayers().some((layer: any) => layer.content === background), false);
+    settings.regionKeys = ['BasinSionnachHex'];
+    mode = '3d';
+    assert.equal(adapter.auroraAt(20, 0), 0, 'unloaded winter terrain has no aurora');
+    world.records.set(regionIdForKey('BasinSionnachHex'), { scene: {} });
+    assert.equal(adapter.auroraAt(20, 0), 1, 'loaded winter terrain enables the aurora inside the hex');
+    assert.equal(adapter.auroraAt(68, 38), 0, 'the rectangular corner outside the hex has no aurora');
+    settings.worldLayers.terrain = false;
+    assert.equal(adapter.auroraAt(20, 0), 0, 'hiding terrain disables the aurora');
+    settings.worldLayers.terrain = true;
+    mode = '2d';
+    assert.equal(adapter.auroraAt(20, 0), 0, 'aurora is restricted to full 3D');
+    mode = '3d';
+    settings.regionKeys = ['WestgateHex'];
+    world.records.set(regionIdForKey('WestgateHex'), { scene: {} });
+    assert.equal(adapter.auroraAt(10, 0), 0, 'loaded temperate terrain has no aurora');
     mode = 'flat';
 
     settings.regionKeys = ['WestgateHex', 'HomeRegionC'];
