@@ -21,4 +21,5 @@ export const nativeCutoutRules = [
     cutout('StreetLamp', 'Props', 'StreetlampA', 'StreetlampM', 3, .3333),
     cutout('GrassBladesSnow', 'Environment', 'GrassA', 'GrassM', 2, .333, false, 'Environment'),
     cutout('Hay', 'Props', 'HayRepeating01A', 'HayRepeating01M', 3, .3333, true),
+    cutout('Weathervein', 'Props', 'WeatherveinA', 'WeatherveinM', 3, .3333),
 ];

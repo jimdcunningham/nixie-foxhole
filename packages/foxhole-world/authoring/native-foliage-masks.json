@@ -77,6 +77,19 @@
         "decodedHash": "74ae9260781a9baad4a6b0dea71552fb13437f9609a3543e2168b45c69265f33",
         "bytes": 464150
       }
+    },
+    {
+      "material": "War/Content/Materials/Environment/Props/Weathervein.uasset",
+      "albedo": "War/Content/Textures/Props/WeatherveinA.WeatherveinA",
+      "source": "War/Content/Textures/Props/WeatherveinM.WeatherveinM",
+      "channel": "A",
+      "cutoff": 0.3333,
+      "resource": {
+        "path": "content/raw/fca5969f4a0c74ba044ac39f8f3d83fdf1a6ac028535a1be5a24a97af4e08a9f/asset.webp",
+        "hash": "fca5969f4a0c74ba044ac39f8f3d83fdf1a6ac028535a1be5a24a97af4e08a9f",
+        "decodedHash": "fca5969f4a0c74ba044ac39f8f3d83fdf1a6ac028535a1be5a24a97af4e08a9f",
+        "bytes": 20646
+      }
     }
   ]
 }

@@ -89,7 +89,7 @@ test('runtime roots protect repair textures outside region manifests and leave o
 });
 
 test('all known world runtime descriptors are detached, hash-addressed publication roots', () => {
-    const roots = worldRuntimePublicationRoots(); assert.equal(roots.length, 9);
+    const roots = worldRuntimePublicationRoots(); assert.equal(roots.length, 10);
     assert.ok(roots.some(r => r.id === 'smoke-cloud-mask')); assert.ok(roots.some(r => r.path.startsWith('world/content/raw/')));
     for (const root of roots) {assert.match(root.sha256 || root.hash, /^[a-f0-9]{64}$/); publicationPath(root.path);}
     roots[0].path = 'mutated'; assert.notEqual(worldRuntimePublicationRoots()[0].path, 'mutated');
