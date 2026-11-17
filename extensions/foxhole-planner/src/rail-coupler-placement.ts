@@ -1,27 +1,6 @@
 import type { NixieProductPlacementPortV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
-import { foxholeRailVehicleGauge } from './rail-vehicle-snapping.ts';
-
-const UNITS_PER_CM = 0.32;
-
-function railCouplers(asset: FoxholeSceneV2AssetMetadata, gauge: 'small' | 'standard') {
-    const model = asset.model;
-    if (!model) return [];
-    return (asset.overlayRailCouplers ?? []).flatMap(socket => {
-        if (socket.name !== 'FrontCoupler' && socket.name !== 'RearCoupler') return [];
-        const authoredX = Number(socket.x) * UNITS_PER_CM;
-        if (!Number.isFinite(authoredX) || authoredX === 0) return [];
-        const direction = Math.sign(authoredX);
-        const end = (model.offsetX ?? 0) + direction * model.width / 2;
-        const authoredZ = Number(socket.z) * UNITS_PER_CM + (model.blueprintOrigin?.z ?? 0);
-        // Some articulated exports keep their template markers on an internal
-        // segment. Put those ports on the matching end of the complete model.
-        const x = Math.abs(authoredX) >= Math.abs(end) * 0.75 ? authoredX : end;
-        const z = authoredZ > 0 ? authoredZ : gauge === 'small' ? 17.28 : 33.92;
-        return [{ name: socket.name, point: { x, y: Number(socket.y ?? 0) * UNITS_PER_CM, z },
-            rotation: direction > 0 ? 0 : Math.PI }];
-    });
-}
+import { foxholeRailVehicleGauge, railCouplers } from './rail-vehicle-snapping.ts';
 
 export function foxholeRailCouplerPlacementPorts(assetId: string,
     metadata: Record<string, FoxholeSceneV2AssetMetadata>): NixieProductPlacementPortV1[] {

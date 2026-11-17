@@ -27,6 +27,24 @@ for (const [id, asset] of Object.entries(assets)) {
 export function foxholeRailVehicleGauge(assetId: string) {
     return vehicleGauge.get(assetId);
 }
+
+export function railCouplers(asset: FoxholeSceneV2AssetMetadata, gauge: 'small' | 'standard') {
+    const model = asset.model;
+    if (!model) return [];
+    return (asset.overlayRailCouplers ?? []).flatMap(socket => {
+        if (socket.name !== 'FrontCoupler' && socket.name !== 'RearCoupler') return [];
+        const authoredX = Number(socket.x) * .32;
+        if (!Number.isFinite(authoredX) || authoredX === 0) return [];
+        const direction = Math.sign(authoredX);
+        const end = (model.offsetX ?? 0) + direction * model.width / 2;
+        const authoredZ = Number(socket.z) * .32 + (model.blueprintOrigin?.z ?? 0);
+        // Some articulated exports place the template marker on an inner segment.
+        const x = Math.abs(authoredX) >= Math.abs(end) * .75 ? authoredX : end;
+        const z = authoredZ > 0 ? authoredZ : gauge === 'small' ? 17.28 : 33.92;
+        return [{ name: socket.name, point: { x, y: Number(socket.y ?? 0) * .32, z },
+            rotation: direction > 0 ? 0 : Math.PI }];
+    });
+}
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
@@ -274,40 +292,181 @@ function railModelNodeTransforms(bogies: NonNullable<(typeof foxholeRailVehicleB
     return transforms.length ? transforms : undefined;
 }
 
-/** Sample a forward run using the fitted chassis and each independently sampled wheel group. */
-function buildRailVehicleSimulationPath(assetId: 'trainengine' | 'trainlrartillery', rails: RunningRail[], start: RailLocation, direction: number) {
+type PoweredTestVehicle = 'trainengine' | 'trainlrartillery';
+type RailChassis = ReturnType<typeof resolveRailChassis>;
+
+function railSimulationFrame(assetId: PoweredTestVehicle, chassis: RailChassis, distance: number) {
     const bogies = foxholeRailVehicleBogies[assetId]!;
     const clearance = Math.max((foxholeRailWheelbase(assetId) ?? 0) / 2,
         ...bogies.flatMap(bogie => bogie.wheelOffsets.map(offset => Math.abs(bogie.pivot + offset) * UNITS_PER_METRE))) + 6;
-    const stride = 12;
     const compact = (vector: FoxholeSpatialPoint): FoxholeSpatialPoint => vector.map(value => Number(value.toFixed(5))) as FoxholeSpatialPoint;
+    if (!chassis.sample(-clearance) || !chassis.sample(clearance)) return undefined;
+    const { point, heading } = chassis;
+    const cosine = Math.cos(heading), sine = Math.sin(heading);
+    const posed = railModelNodeTransforms(bogies, chassis, ([x, y, z]) => {
+        const dx = x - point[0], dy = y - point[1];
+        return [dx * cosine + dy * sine, -dx * sine + dy * cosine, z - point[2]];
+    }) ?? [];
+    if (bogies.some(bogie => !posed.some(node => node.nodeName === bogie.nodeName))) return undefined;
+    if (!posed.some(node => node.nodeName === 'rail-body')) {
+        posed.push({ nodeName: 'rail-body', translation: [0, 0, 0], rotation: [0, 0, 0] });
+    }
+    return { distance, position: compact(point), heading: Math.atan2(sine, cosine),
+        modelNodeTransforms: posed.map(node => ({ nodeName: node.nodeName, translation: compact(node.translation), rotation: compact(node.rotation) })) };
+}
+
+type SimulationFrame = NonNullable<ReturnType<typeof railSimulationFrame>>;
+
+/** Sample a forward run using the fitted chassis and each independently sampled wheel group. */
+function buildRailVehicleSimulationPath(assetId: PoweredTestVehicle, rails: RunningRail[], start: RailLocation, direction: number) {
+    const stride = 12;
     const sources = new Set([start.rail.entityId]);
-    const frames: NixieSimulationPathV1['frames'] = [];
+    const frames: SimulationFrame[] = [];
     for (let index = 0; index < NIXIE_SIMULATION_PATH_MAX_FRAMES; index++) {
         const distance = index * stride;
         const traversed = new Set<string>();
         const location = index === 0 ? { ...start, step: direction }
             : advanceOnRail(rails, start, distance * direction, { traversed });
         if (!location) break;
-        const chassis = resolveRailChassis(assetId, rails, location, location.step, { traversed });
-        if (!chassis.sample(-clearance) || !chassis.sample(clearance)) break;
-        const { point, heading } = chassis;
-        const cosine = Math.cos(heading), sine = Math.sin(heading);
-        const toLocal = ([x, y, z]: FoxholeSpatialPoint): FoxholeSpatialPoint => {
-            const dx = x - point[0], dy = y - point[1];
-            return [dx * cosine + dy * sine, -dx * sine + dy * cosine, z - point[2]];
-        };
-        const posed = railModelNodeTransforms(bogies, chassis, toLocal) ?? [];
-        if (bogies.some(bogie => !posed.some(node => node.nodeName === bogie.nodeName))) break;
-        if (!posed.some(node => node.nodeName === 'rail-body')) {
-            posed.push({ nodeName: 'rail-body', translation: [0, 0, 0], rotation: [0, 0, 0] });
-        }
+        const frame = railSimulationFrame(assetId, resolveRailChassis(assetId, rails, location, location.step, { traversed }), distance);
+        if (!frame) break;
+        sources.add(location.rail.entityId);
         for (const id of traversed) sources.add(id);
-        frames.push({ distance, position: compact(point), heading: Math.atan2(sine, cosine),
-            modelNodeTransforms: posed.map(node => ({ ...node, translation: compact(node.translation), rotation: compact(node.rotation) })) });
+        frames.push(frame);
     }
-    return frames.length >= 2 ? { contractVersion: 1 as const, speed: 96, sources: [...sources],
-        frames: frames.map(frame => ({ ...frame, modelNodeTransforms: frame.modelNodeTransforms.map(node => ({ ...node })) })) } : undefined;
+    return frames.length >= 2 ? { contractVersion: 1 as const, speed: 96, sources: [...sources], frames } : undefined;
+}
+
+interface DirectedRailLocation extends RailLocation {
+    step: number;
+}
+
+function couplerPoint(chassis: RailChassis, point: ReturnType<typeof railCouplers>[number]['point']): FoxholeSpatialPoint {
+    const { heading, pitch, point: origin } = chassis;
+    const along = point.x * Math.cos(pitch) - point.z * Math.sin(pitch);
+    return [origin[0] + along * Math.cos(heading) - point.y * Math.sin(heading),
+        origin[1] + along * Math.sin(heading) + point.y * Math.cos(heading),
+        origin[2] + point.x * Math.sin(pitch) + point.z * Math.cos(pitch)];
+}
+
+const engineId = 'trainengine';
+const cannonId = 'trainlrartillery';
+const drawbarLength = .5 * UNITS_PER_METRE;
+
+/** Solve the coupled centre station on the same running line as the anchor. */
+function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle, traversal: RailTraversal) {
+    const offsetDirection = anchorId === cannonId ? 1 : -1;
+    const otherId = anchorId === engineId ? cannonId : engineId;
+    const engineCoupler = railCouplers(assets[engineId]!, 'standard').find(coupler => coupler.name === 'RearCoupler')!;
+    const cannonCoupler = railCouplers(assets[cannonId]!, 'standard').find(coupler => coupler.name === 'FrontCoupler')!;
+    const anchorCoupler = anchorId === engineId ? engineCoupler : cannonCoupler;
+    const otherCoupler = anchorId === engineId ? cannonCoupler : engineCoupler;
+    const fixed = resolveRailChassis(anchorId, rails, anchor, anchor.step, traversal);
+    const fixedPoint = couplerPoint(fixed, anchorCoupler.point);
+    const separation = Math.abs(engineCoupler.point.x) + Math.abs(cannonCoupler.point.x);
+    const evaluate = (offset: number) => {
+        const location = advanceOnRail(rails, anchor, offsetDirection * offset * anchor.step, traversal);
+        if (!location) return undefined;
+        const facing = { ...location, step: location.step * offsetDirection };
+        const chassis = resolveRailChassis(otherId, rails, facing, facing.step, traversal);
+        const point = couplerPoint(chassis, otherCoupler.point);
+        const tangentDistance = offsetDirection * ((point[0] - fixedPoint[0]) * Math.cos(fixed.heading)
+            + (point[1] - fixedPoint[1]) * Math.sin(fixed.heading));
+        const gap = railDistance(point, fixedPoint);
+        return { facing, chassis, error: tangentDistance < 0 ? -gap - drawbarLength : gap - drawbarLength };
+    };
+    let low = separation - 96;
+    let high = separation + 96;
+    let best = evaluate(separation + drawbarLength);
+    if (best && Math.abs(best.error) <= .1) return { fixed, coupled: best.chassis, location: best.facing };
+    for (let i = 0; i < 17; i++) {
+        const mid = (low + high) / 2;
+        const sample = evaluate(mid);
+        if (!sample || sample.error > 0) high = mid;
+        else low = mid;
+        if (sample && (!best || Math.abs(sample.error) < Math.abs(best.error))) best = sample;
+    }
+    if (!best || Math.abs(best.error) > .1) return undefined;
+    return { fixed, coupled: best.chassis, location: best.facing };
+}
+
+function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFrame[]): number[] {
+    const indices = [0];
+    const error = (frames: SimulationFrame[], start: number, index: number, end: number) => {
+        const a = frames[start]!, b = frames[end]!, sample = frames[index]!;
+        const fraction = (sample.distance - a.distance) / (b.distance - a.distance);
+        const angleError = (from: number, to: number, value: number) => {
+            const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+            const difference = value - (from + delta * fraction);
+            return Math.abs(Math.atan2(Math.sin(difference), Math.cos(difference)));
+        };
+        const positionError = (from: number[], to: number[], value: number[]) =>
+            Math.hypot(...value.map((coordinate, axis) => coordinate - (from[axis]! + (to[axis]! - from[axis]!) * fraction)));
+        let ratio = Math.max(positionError(a.position, b.position, sample.position) / .6,
+            angleError(a.heading, b.heading, sample.heading) / .003);
+        for (const [node, pose] of sample.modelNodeTransforms.entries()) {
+            const from = a.modelNodeTransforms[node]!, to = b.modelNodeTransforms[node]!;
+            ratio = Math.max(ratio, positionError(from.translation, to.translation, pose.translation) / .015,
+                ...pose.rotation.map((angle, axis) => angleError(from.rotation[axis]!, to.rotation[axis]!, angle) / .005));
+        }
+        return ratio;
+    };
+    const retain = (start: number, end: number) => {
+        let split = start;
+        let worst = 1;
+        for (let index = start + 1; index < end; index++) {
+            const ratio = Math.max(error(engine, start, index, end), error(cannon, start, index, end));
+            if (ratio > worst) {
+                split = index;
+                worst = ratio;
+            }
+        }
+        if (split > start) {
+            retain(start, split);
+            retain(split, end);
+        } else {
+            indices.push(end);
+        }
+    };
+    retain(0, engine.length - 1);
+    return indices.slice(0, NIXIE_SIMULATION_PATH_MAX_FRAMES);
+}
+
+function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle,
+    engineEntityId: string, cannonEntityId: string) {
+    const initial = findCoupledChassis(rails, anchor, anchorId, {});
+    if (!initial) return undefined;
+    const engineStart = anchorId === engineId ? anchor : initial.location;
+    const frames: Record<PoweredTestVehicle, SimulationFrame[]> = { [engineId]: [], [cannonId]: [] };
+    const sources = new Set([engineStart.rail.entityId, anchor.rail.entityId]);
+    for (let distance = 0; distance <= 8192; distance += 12) {
+        const traversed = new Set<string>();
+        const traversal = { traversed };
+        const leader = distance === 0 ? engineStart : advanceOnRail(rails, engineStart, distance * engineStart.step, traversal);
+        if (!leader) break;
+        const consist = findCoupledChassis(rails, leader, engineId, traversal);
+        if (!consist) break;
+        const engine = railSimulationFrame(engineId, consist.fixed, distance);
+        const cannon = railSimulationFrame(cannonId, consist.coupled, distance);
+        if (!engine || !cannon) break;
+        traversed.add(leader.rail.entityId);
+        traversed.add(consist.location.rail.entityId);
+        if (sources.size + [...traversed].filter(id => !sources.has(id)).length >= 64) break;
+        for (const id of traversed) sources.add(id);
+        frames[engineId].push(engine);
+        frames[cannonId].push(cannon);
+    }
+    if (frames[engineId].length < 2) return undefined;
+    const indices = simplifyConsistFrames(frames[engineId], frames[cannonId]);
+    // Sandbox estimates in SI units. Traction and braking limits apply to the
+    // entire consist. Studio integrates the resulting longitudinal rates.
+    const massKg = 72_000 + 135_000;
+    const common = { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE,
+        drive: { leader: engineEntityId, acceleration: 65_000 / massKg * UNITS_PER_METRE,
+            braking: 100_000 / massKg * UNITS_PER_METRE } };
+    const engine = { ...common, sources: [...sources, cannonEntityId], frames: indices.map(index => frames[engineId][index]!) } satisfies NixieSimulationPathV1;
+    const cannon = { ...common, sources: [...sources, engineEntityId], frames: indices.map(index => frames[cannonId][index]!) } satisfies NixieSimulationPathV1;
+    return { location: initial.location, engine, cannon };
 }
 
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
@@ -376,11 +535,36 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     if (request.geometryGesture?.handleId === 'product-placement-port') {
         if (!request.geometryGesture.snappingEnabled || request.interaction !== 'placement') return unchanged;
         const source = request.geometryGesture.worldPoint;
-        const result = followRailFromCoupler(rails, [source.x, source.y, source.z ?? origin[2]], origin);
-        if (!result) return unchanged;
         const baseHeading = Math.atan2(origin[1] - source.y, origin[0] - source.x);
         const forward = projection.toWorld(subject, [1, 0, 0]);
         const reversed = Math.cos(Math.atan2(forward[1] - origin[1], forward[0] - origin[0]) - baseHeading) < 0;
+        const anchor = entities.find(entity => entity.entityId === request.geometryGesture!.hoveredEntityIds[0]);
+        const anchorAsset = anchor && data(anchor, 'asset')?.assetId;
+        if (anchor && ((assetId === engineId && anchorAsset === cannonId && !reversed)
+            || (assetId === cannonId && anchorAsset === engineId && reversed))) {
+            const anchorAttachment = data(anchor, ATTACHMENT_COMPONENT);
+            const anchorRail = rails.find(rail => rail.entityId === anchorAttachment?.rail);
+            const anchorLocation = anchorRail && typeof anchorAttachment?.station === 'number'
+                && locationAtStation(anchorRail, anchorAttachment.station);
+            const existingPath = anchorAttachment?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+            if (!anchorLocation || existingPath?.drive) return unchanged;
+            const anchorStep = anchorAttachment?.reversed ? -1 : 1;
+            const engineEntityId = assetId === engineId ? original.entityId : anchor.entityId;
+            const cannonEntityId = assetId === cannonId ? original.entityId : anchor.entityId;
+            const pair = buildRailConsist(rails, { ...anchorLocation, step: anchorStep }, anchorAsset as PoweredTestVehicle,
+                engineEntityId, cannonEntityId);
+            if (!pair || railDistance(pair.location.point, origin) > 100) return unchanged;
+            const { local: point, angle } = fitBody(pair.location, pair.location.step);
+            const transaction = attachment(pair.location, pair.location.step < 0,
+                buildRailRoute(assetId, rails, pair.location, pair.location.step), assetId === engineId ? pair.engine : pair.cannon);
+            if (!transaction) return unchanged;
+            transaction.operations.push({ op: 'patch', entityId: anchor.entityId, componentId: ATTACHMENT_COMPONENT,
+                set: { [NIXIE_SIMULATION_PATH_PROPERTY]: assetId === engineId ? pair.cannon : pair.engine } });
+            return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle }, transaction };
+        }
+        const railElevation = anchor ? projection.toWorld(anchor, [0, 0, 0])[2] : source.z ?? origin[2];
+        const result = followRailFromCoupler(rails, [source.x, source.y, railElevation], origin);
+        if (!result) return unchanged;
         const step = reversed ? -result.step : result.step;
         const { local: point, angle } = fitBody(result, step);
         const transaction = attachment(result, step < 0, buildRailRoute(assetId, rails, result, step), simulationPath(result, step));
