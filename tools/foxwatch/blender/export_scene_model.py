@@ -31,6 +31,7 @@ from render_scene_graph import import_render_scene
 from spatial_scene_slice import slice_spatial_scene
 from export_scene_model_geometry import bake_static_mesh_instances
 from export_scene_model_parts import extract_shared_model_parts
+from export_scene_rail_bogies import split_rail_bogies
 from mathutils import Vector
 from export_scene_lights import collect_blueprint_lights
 from export_scene_materials import prepare_gltf_base_colors
@@ -82,12 +83,23 @@ for light in blueprint_lights:
         semantic_members.setdefault(light["group"], [])
 
 bpy.ops.object.select_all(action="DESELECT")
+meshes, rail_bogies = split_rail_bogies(document["structure"]["id"], meshes, collection, low.z)
 replacements, shared_parts = extract_shared_model_parts(meshes, collection, center)
 for key, members in semantic_members.items():
     semantic_members[key] = list(dict.fromkeys(replacements.get(obj, obj) for obj in members))
 meshes = [obj for obj in meshes if obj not in replacements]
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
+for name, obj, pivot in rail_bogies:
+    group = bpy.data.objects.new(name, None)
+    collection.objects.link(group)
+    group.location = pivot - center
+    group.select_set(True)
+    bpy.context.view_layer.update()
+    world = obj.matrix_world.copy()
+    obj.parent = group
+    obj.matrix_world = world
+
 semantic_groups = {}
 for key, members in semantic_members.items():
     group = bpy.data.objects.new(key, None)
@@ -127,6 +139,7 @@ metadata = {
     "semanticGroups": semantic_groups,
     "blueprintLights": blueprint_lights,
     "bakedMeshCount": baked_mesh_count,
+    **({"railBogies": {name: list(pivot) for name, _, pivot in rail_bogies}} if rail_bogies else {}),
     "modelParts": {"version": 1, "parts": shared_parts} if shared_parts else None,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),
