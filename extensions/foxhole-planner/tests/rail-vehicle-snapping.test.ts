@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationPathV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap } from '../src/rail-vehicle-snapping.ts';
 import { foxholeRailVehicleBogies } from '../src/rail-vehicle-rigs.ts';
@@ -63,6 +63,33 @@ test('every Locomotives asset snaps only to its own gauge', () => {
         assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [own])).transform.elevation, 32 + (small ? 20 : 36) * 0.32, id);
         assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [wrong])).transform.elevation, undefined, id);
     }
+});
+
+test('the large locomotive supplies a forward simulation path over a straight-to-curved rail joint', () => {
+    const approach = track('railtrackspline', 'approach');
+    const bend = track('railtrackspline', 'bend');
+    Object.assign(approach.components[0]!.data, { x: -400 });
+    Object.assign(bend.components.at(-1)!.data, { endX: 650, endY: 240, endRotation: 0.6,
+        startAttachmentNodeId: 'approach', startAttachmentSocketName: 'FrontSocket' });
+    const proposal = request('trainengine', [approach, bend]);
+    Object.assign(proposal.transform, { x: -220, y: 0, rotation: 0 });
+    const result = finalizeFoxholeRailVehicleSnap(proposal);
+    const operation = result.transaction?.operations[0];
+    if (operation?.op !== 'add') assert.fail('Expected a snapped rail attachment');
+    const path = parseNixieSimulationPathV1(operation.data.simulationPath);
+    assert.deepEqual(path.sources, ['approach', 'bend']);
+    assert.ok(path.frames[0]!.position[0] < -200);
+    assert.ok(path.frames.at(-1)!.position[1] > 50);
+    const straddling = path.frames.find(frame => frame.position[0] > 20 && frame.position[0] < 80);
+    assert.ok(straddling, 'the chassis crosses the joint while its rear wheel contact remains on the approach');
+    const rear = straddling.modelNodeTransforms.find(node => node.nodeName === 'rail-bogie-rear')!;
+    const [x, y] = straddling.position;
+    const along = (-1.92332 + rear.translation[0] - 1.3397 * Math.cos(rear.rotation[1])) * 32;
+    const lateral = (rear.translation[2] + 1.3397 * Math.sin(rear.rotation[1])) * 32;
+    const contactX = x + Math.cos(straddling.heading) * along - Math.sin(straddling.heading) * lateral;
+    const contactY = y + Math.sin(straddling.heading) * along + Math.cos(straddling.heading) * lateral;
+    assert.ok(contactX < 0 && Math.abs(contactY) < 0.7, JSON.stringify({ contactX, contactY }));
+    assert.ok(path.frames.some(frame => Math.abs(frame.modelNodeTransforms[0]!.rotation[1]) > 0.04));
 });
 
 test('coupler placement advances from the existing car along a curved rail', () => {
