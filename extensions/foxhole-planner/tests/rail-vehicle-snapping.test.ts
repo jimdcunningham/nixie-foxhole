@@ -54,7 +54,7 @@ test('every Locomotives asset snaps only to its own gauge', () => {
         const small = id.startsWith('smalltrain');
         const own = track(small ? 'smallrailtrackspline' : 'railtrackspline');
         const wrong = track(small ? 'railtrackspline' : 'smallrailtrackspline');
-        assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [own])).transform.elevation, 32, id);
+        assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [own])).transform.elevation, 32 + (small ? 20 : 36) * 0.32, id);
         assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [wrong])).transform.elevation, undefined, id);
     }
 });
@@ -80,7 +80,7 @@ test('locomotives align with their gauge even when a closer track has the wrong 
         const pose = finalizeFoxholeRailVehicleSnap(proposal).transform;
         assert.ok(Math.abs(pose.x - 173) < 1e-8);
         assert.ok(Math.abs(pose.y) < 1e-8);
-        assert.equal(pose.elevation, 32);
+        assert.equal(pose.elevation, 32 + (asset === 'smalltrainengine' ? 20 : 36) * 0.32);
         assert.ok(Math.abs(pose.rotation! - Math.PI) < 1e-8);
         assert.deepEqual(finalizeFoxholeRailVehicleSnap(request(asset, [track(wrong)])).transform, { x: 173, y: 10 });
     }
@@ -108,6 +108,7 @@ test('track render plans expose a locomotive-sized placement box only for the ma
         assert.deepEqual(path.productIds, [`asset.${engine}`]);
         assert.equal(path.size.length, assets[engine]!.model!.width);
         assert.equal(path.points[0]?.x, 0);
+        assert.equal(path.points[0]?.z, (engine === 'smalltrainengine' ? 20 : 36) * 0.32);
         assert.equal(path.points.at(-1)?.x, 400);
     }
     const craneTrack = track('cranerailtrackspline');

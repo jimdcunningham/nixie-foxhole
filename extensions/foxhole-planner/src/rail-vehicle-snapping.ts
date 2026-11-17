@@ -12,6 +12,8 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
+// RailZOffset on the standard and small-gauge RailTrackSpline blueprint CDOs (cm).
+const RAIL_Z_OFFSET_CM = { standard: 36, small: 20, crane: 0 };
 const vehicleGauge = new Map<string, 'standard' | 'small' | 'crane'>([['largecrane', 'crane']]);
 for (const [id, asset] of Object.entries(assets)) {
     if (asset.isRailVehicle) vehicleGauge.set(id, id.startsWith('smalltrain') ? 'small' : 'standard');
@@ -29,8 +31,10 @@ function trackGauge(key: string) {
 function sampleRailCenterline(spline: FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number }, asset?: FoxholeSceneV2AssetMetadata) {
     const path = sampleFoxholeSceneV2Connector(spline, asset);
     if (!(path.totalLength > 0)) return [];
+    const gauge = trackGauge(spline.foxholeKey.toLowerCase());
+    const railHeight = gauge ? RAIL_Z_OFFSET_CM[gauge] * 0.32 : 0;
     return path.points.map(({ x, y }, index) => ({ x, y,
-        z: spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength }));
+        z: railHeight + spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength }));
 }
 
 export function locomotivePlacementPath(spline: FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number },
