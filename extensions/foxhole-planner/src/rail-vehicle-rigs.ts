@@ -38,10 +38,25 @@ export const foxholeRailVehicleBogies: Readonly<Record<string, readonly FoxholeB
 };
 
 // Rolling radii measured at the treads, outside the hub and inside the flange.
+const driveRate = (radiusMetres: number) => -1 / (32 * radiusMetres);
+const mainWheelRadius = .745;
 const roll = (name: string, radiusMetres: number) => ({
-    nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: -1 / (32 * radiusMetres),
+    nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });
 export const foxholeRailWheelRoll: Readonly<Record<string, NixieSpatialPlanV1['modelDistanceRotations']>> = {
-    trainengine: ['1', '2', '3'].map(name => roll(name, .745)).concat(roll('back', .555)),
+    trainengine: ['1', '2', '3'].map(name => roll(name, mainWheelRadius)).concat(roll('back', .555)),
     trainlrartillery: ['front', 'back'].flatMap(bogie => ['01', '02', '03'].map(axle => roll(`${axle}-${bogie}`, .409))),
+};
+
+const engineLinkNodes = (kind: string) => ['l', 'r'].map(side => `rail-link-${kind}-${side}`);
+export const foxholeRailLinkages: Readonly<Record<string, NixieSpatialPlanV1['modelDistanceLinkages']>> = {
+    trainengine: [{
+        radiansPerUnit: driveRate(mainWheelRadius),
+        // Rest crank pin and wrist pin measured from the authored Black Bolt rig.
+        crankOffset: [-.373353, 0],
+        rodLength: 3.572301,
+        couplingNodes: engineLinkNodes('coupling'),
+        rodNodes: engineLinkNodes('rod'),
+        sliderNodes: engineLinkNodes('slider'),
+    }],
 };
