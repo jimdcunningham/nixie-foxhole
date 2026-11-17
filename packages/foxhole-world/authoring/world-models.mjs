@@ -50,7 +50,15 @@ export async function loadWorldModels({region,json,status,root,solidMap=false,fl
  }
  function flatten(source,p,override){const model=new Model3D(source),parts=[],names=modelMaterialNames(source,p.materials?.map(material=>material.name));model.scale.z=-1;if(p.anchor)model.position.set(p.anchor.x,p.anchor.y,p.anchor.z);
   function visit(node,parent){node.updateLocalTransform();const matrix=parent.clone().multiply(node.localTransform);if(node instanceof Mesh3D){const g=node.geometry,replacement=override?.get(node.material),materialName=replacement?.name||names.get(node.material)||'';
-    if(hideViewerEffect(materialName)){counts.hiddenLightEffectParts++;for(const child of node.children)visit(child,matrix);return;}
+    // PinePatch is a native deferred decal. Its carrier mesh floats above the
+    // terrain and should not draw as a regular model surface.
+    const pineGroundDecal=materialName==='PinePatch'&&/\/Foliage\/Pine/i.test(p.path||'');
+    const hiddenEffect=hideViewerEffect(materialName);
+    if(hiddenEffect||pineGroundDecal){
+     if(hiddenEffect)counts.hiddenLightEffectParts++;
+     for(const child of node.children)visit(child,matrix);
+     return;
+    }
 
     const material=solidMap?solidMaterial(p):replacement?.material||override?.get(materialName)||node.material,keepColors=material.vertexColors;
     // Native model materials disable vertex colors; retain color data only

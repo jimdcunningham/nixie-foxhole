@@ -4,7 +4,26 @@ import {Container3D,parseGltf,BatchedMesh3D,RenderPassBit} from '@pixi/3d';
 import {loadWorldModels} from '../authoring/world-models.mjs';
 import {loadWorldDetails} from '../authoring/world-details.mjs';
 const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
-const triangle=async()=>{const p=new Float32Array([0,0,0,0,0,2,3,0,0]);return parseGltf({asset:{version:'2.0'},buffers:[{byteLength:p.byteLength}],bufferViews:[{buffer:0,byteLength:p.byteLength}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[3,0,2]}],materials:[{name:'Paint'}],meshes:[{primitives:[{attributes:{POSITION:0},material:0}]}],nodes:[{mesh:0}],scenes:[{nodes:[0]}],scene:0},[p.buffer]);};
+const triangle=async(names=['Paint'])=>{const p=new Float32Array([0,0,0,0,0,2,3,0,0]);return parseGltf({asset:{version:'2.0'},buffers:[{byteLength:p.byteLength}],bufferViews:[{buffer:0,byteLength:p.byteLength}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[3,0,2]}],materials:names.map(name=>({name})),meshes:[{primitives:names.map((_,material)=>({attributes:{POSITION:0},material}))}],nodes:[{mesh:0}],scenes:[{nodes:[0]}],scene:0},[p.buffer]);};
+
+test('native pine dirt carrier is omitted from full and coarse tree meshes',async()=>{
+ const saved=globalThis.location;globalThis.location={search:''};
+ const root=new Container3D(),sources=[];let world;
+ const names=['PineBark','PineBranch02Dead','PinePatch'];
+ const prototypes=[{name:'Pine02Dead',kind:'environment',category:'vegetation',file:'pine.gltf',
+  path:'War/Content/Meshes/Environment/Foliage/Pine02Dead.Pine02Dead',placements:[{actor:'pine',matrix:identity}]}];
+ try{
+  world=await loadWorldModels({region:'fixture',root,status(){},teamAt:()=> 'NONE',worldData:{prototypes},
+   json:async path=>path.endsWith('lod-manifest.json')?{assets:{'pine.gltf':{levels:[{file:'pine-lod1.gltf'},{file:'pine-lod2.gltf'}]}}}:{assets:{}},
+   loadModel:async()=>{const source=await triangle(names);sources.push(source);return source;}});
+  assert.deepEqual(world.counts.failed,[]);
+  assert.deepEqual(world.counts.lodFailures,[]);
+  assert.equal(world.counts.lodResources,2);
+  assert.equal(world.batches.length,3);
+  const visibleMaterials=[sources[0].material.PineBark,sources[0].material.PineBranch02Dead];
+  for(const batch of world.batches)assert.deepEqual(batch.items.map(item=>item.material),visibleMaterials);
+ }finally{world?.dispose();root.destroy({children:true});sources.forEach(source=>source.destroy());globalThis.location=saved;}
+});
 test('model category filtering skips other categories and their LOD resources before any model request',async()=>{
  const saved=globalThis.location;globalThis.location={search:''};const root=new Container3D(),sources=[],requests=[];let world;
  const prototypes=[{name:'House',kind:'building',category:'structures',file:'building.gltf'},{name:'Bush',kind:'environment',category:'vegetation',file:'bush.gltf'},{name:'StoneBridge',kind:'environment',category:'infrastructure',file:'bridge.gltf'}].map(p=>({...p,placements:[{actor:p.name,matrix:identity}]}));
