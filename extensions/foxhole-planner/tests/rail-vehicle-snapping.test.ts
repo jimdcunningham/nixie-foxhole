@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap } from '../src/rail-vehicle-snapping.ts';
+import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
+import assets from '../src/scene-v2-assets-node.ts';
 
 const ownerId = 'nixie.foxhole-planner';
 const component = (componentId: string, data: NixieComponentEntitySnapshotV1['components'][number]['data'], owner = ownerId) =>
@@ -78,4 +81,19 @@ test('translation can snap at the end of a track and never alters explicit trans
     const unchanged = { x: 408, y: 10 };
     assert.deepEqual(finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'transform' }).transform, unchanged);
     assert.deepEqual(finalizeFoxholeRailVehicleSnap({ ...proposal, movingEntityIds: ['vehicle', 'other'] }).transform, unchanged);
+});
+
+test('track render plans expose a locomotive-sized placement box only for the matching gauge', () => {
+    for (const [key, engine] of [['railtracksplinefoundation', 'trainengine'], ['smallrailtrackspline', 'smalltrainengine']] as const) {
+        const entity = track(key);
+        const context = { contractVersion: 1 as const, entities: [entity] };
+        const path = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, context)).selectionGeometry?.pathPlacement;
+        assert.ok(path);
+        assert.deepEqual(path.productIds, [`asset.${engine}`]);
+        assert.equal(path.size.length, assets[engine]!.model!.width);
+        assert.equal(path.points[0]?.x, 0);
+        assert.equal(path.points.at(-1)?.x, 400);
+    }
+    const craneTrack = track('cranerailtrackspline');
+    assert.equal(renderFoxholeSceneV2Entity(craneTrack, { contractVersion: 1, entities: [craneTrack] }).selectionGeometry?.pathPlacement, undefined);
 });

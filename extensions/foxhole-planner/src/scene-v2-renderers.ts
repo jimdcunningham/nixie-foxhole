@@ -21,6 +21,7 @@ import { isTrenchConnector } from './trench-connector.ts';
 import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
+import { locomotivePlacementPath } from './rail-vehicle-snapping.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
     FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
@@ -653,6 +654,8 @@ function renderFoxholeSceneV2EntityPlan(
         const rendered = powerlineObstructions.length ? { ...resolved, powerlineObstructed: true } : resolved;
         const spatialResolved = resolveFoxholeSpatialSplineAttachments(entity, rendered, context, assetMetadataById);
         const spatial = !appearance.destroyed ? renderFoxholeSpatialConnector(entity, spatialResolved, splineAsset, settings ?? {}, context.entities) : undefined;
+        const pathPlacement = spatial && settings?.['foxhole.viewport.socketSnapping'] !== false
+            ? locomotivePlacementPath(spatialResolved, assetMetadataById) : undefined;
         if (spatial) {
             spatial.markers = renderFoxholeConnectorSpatialMarkers(spatialResolved, splineAsset, attachments, settings ?? {});
         }
@@ -671,6 +674,7 @@ function renderFoxholeSceneV2EntityPlan(
         return {
             schemaVersion: 1,
             selectionGeometry: { ...resolveFoxholeConnectorSelectionGeometry(resolved, splineAsset, content), geometryHandles,
+                ...(pathPlacement ? { pathPlacement } : {}),
                 ...(wheel ? { geometryWheelControl: wheel } : {}) },
             ...(spatial ? { spatial: spatial } : {}),
             root: { id: 'root', kind: 'group', children: [...content, ...renderFoxholeConnectorGuides(resolved,

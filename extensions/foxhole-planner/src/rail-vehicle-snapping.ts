@@ -1,6 +1,6 @@
 import { nearestPointOnSegment } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
-    NixieTransformFinalizeResultV1 as Result } from '@nixiejs/extension-sdk/scene-v2';
+    NixieTransformFinalizeResultV1 as Result, NixiePathPlacementV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy } from './rail-path-sockets.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
@@ -9,6 +9,7 @@ import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attac
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import type { FoxholeSpatialPoint } from './scene-v2-spatial-transforms.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
+import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
 const vehicleGauge = new Map([['trainengine', 'standard'], ['smalltrainengine', 'small'], ['largecrane', 'crane']]);
@@ -19,6 +20,28 @@ function trackGauge(key: string) {
     if (key === 'cranerailtrackspline') return 'crane';
     if (!railPathSocketPolicy(key)) return undefined;
     return key.startsWith('small') ? 'small' : 'standard';
+}
+
+function sampleRailCenterline(spline: FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number }, asset?: FoxholeSceneV2AssetMetadata) {
+    const path = sampleFoxholeSceneV2Connector(spline, asset);
+    if (!(path.totalLength > 0)) return [];
+    return path.points.map(({ x, y }, index) => ({ x, y,
+        z: spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength }));
+}
+
+export function locomotivePlacementPath(spline: FoxholeSceneV2SplineConnectorData & { startZ: number; endZ: number },
+    metadata: Record<string, FoxholeSceneV2AssetMetadata>): NixiePathPlacementV1 | undefined {
+    const key = spline.foxholeKey.toLowerCase();
+    const gauge = trackGauge(key);
+    if (!gauge || gauge === 'crane') return undefined;
+    const locomotives = [...vehicleGauge].filter(([id, vehicleTrackGauge]) => vehicleTrackGauge === gauge && metadata[id]?.model);
+    const model = locomotives[0] && metadata[locomotives[0][0]]?.model;
+    if (!model) return undefined;
+    const points = sampleRailCenterline(spline, metadata[key]);
+    if (points.length < 2) return undefined;
+    const stride = Math.ceil((points.length - 1) / 255);
+    return { points: points.filter((_, index) => index % stride === 0 || index === points.length - 1),
+        size: { length: model.width, width: model.depth, height: model.height }, productIds: locomotives.map(([id]) => `asset.${id}`) };
 }
 
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
@@ -46,10 +69,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         if (!component || trackGauge(key) !== gauge || data(track, 'visibility', 'nixie.core')?.visible === false) continue;
         const spline = resolveFoxholeSpatialSplineAttachments(track, component as unknown as FoxholeSceneV2SplineConnectorData,
             request.context, assets, projection);
-        const path = sampleFoxholeSceneV2Connector(spline, assets[key]);
-        if (!(path.totalLength > 0)) continue;
-        const points = path.points.map((point, index) => projection.toWorld(track, [point.x, point.y,
-            spline.startZ + (spline.endZ - spline.startZ) * path.lengths[index]! / path.totalLength]));
+        const points = sampleRailCenterline(spline, assets[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
 
         for (let index = 1; index < points.length; index++) {
             const start = points[index - 1]!, end = points[index]!;
