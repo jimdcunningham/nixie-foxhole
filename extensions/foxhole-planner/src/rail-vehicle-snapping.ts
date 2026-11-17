@@ -1,4 +1,4 @@
-import { nearestPointOnSegment, NIXIE_SIMULATION_PATH_MAX_FRAMES, NIXIE_SIMULATION_PATH_PROPERTY } from '@nixiejs/extension-sdk/scene-v2';
+import { nearestPointOnSegment, NIXIE_COMPONENT_MAX_DATA_BYTES, NIXIE_SIMULATION_PATH_MAX_FRAMES, NIXIE_SIMULATION_PATH_PROPERTY } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
     NixieTransformFinalizeResultV1 as Result, NixieEntityRendererContextV1 as Context, NixieSimulationPathV1, NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
@@ -135,6 +135,21 @@ interface RailTraversal {
     traversed?: Set<string>;
 }
 
+function railContinuation(rails: RunningRail[], rail: RunningRail, step: number, point: FoxholeSpatialPoint,
+    heading: number, allowed: (candidate: RunningRail) => boolean) {
+    const linked = rail.endpointLinks[step > 0 ? 1 : 0];
+    return rails.filter(candidate => candidate !== rail && allowed(candidate)).flatMap(candidate => [1, -1].flatMap(sign => {
+        const index = sign > 0 ? 0 : candidate.points.length - 1;
+        const start = candidate.points[index]!, following = candidate.points[index + sign]!;
+        if (railDistance(point, start) > 3) return [];
+        const angle = Math.atan2(following[1] - start[1], following[0] - start[0]);
+        const alignment = Math.cos(angle - heading);
+        const connected = linked === candidate.entityId || candidate.endpointLinks[sign > 0 ? 0 : 1] === rail.entityId;
+        return alignment > 0 ? [{ candidate, index, sign, alignment, connected }] : [];
+    })).sort((a, b) => Number(b.connected) - Number(a.connected) || b.alignment - a.alignment
+        || a.candidate.entityId.localeCompare(b.candidate.entityId))[0];
+}
+
 function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: number, traversal?: RailTraversal) {
     let { rail, point, heading } = location;
     let remaining = Math.abs(delta);
@@ -160,19 +175,8 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
             continue;
         }
         // Prefer explicit rail connections, then least change in heading.
-        const connectedRail = rail.endpointLinks[step > 0 ? 1 : 0];
-        const continuations = rails.filter(candidate => !visited.has(candidate)
-            && (!traversal?.route || traversal.route.has(candidate.entityId))).flatMap(candidate => [1, -1].flatMap(sign => {
-            const index = sign > 0 ? 0 : candidate.points.length - 1;
-            const start = candidate.points[index]!, following = candidate.points[index + sign]!;
-            if (railDistance(point, start) > 3) return [];
-            const angle = Math.atan2(following[1] - start[1], following[0] - start[0]);
-            const alignment = Math.cos(angle - heading);
-            const connected = connectedRail === candidate.entityId || candidate.endpointLinks[sign > 0 ? 0 : 1] === rail.entityId;
-            return alignment > 0 ? [{ candidate, index, sign, alignment, connected }] : [];
-        })).sort((a, b) => Number(b.connected) - Number(a.connected) || b.alignment - a.alignment
-            || a.candidate.entityId.localeCompare(b.candidate.entityId));
-        const continuation = continuations[0];
+        const continuation = railContinuation(rails, rail, step, point, heading, candidate => !visited.has(candidate)
+            && (!traversal?.route || traversal.route.has(candidate.entityId)));
         if (!continuation) return undefined;
         rail = continuation.candidate;
         step = continuation.sign;
@@ -322,7 +326,7 @@ function buildRailVehicleSimulationPath(assetId: PoweredTestVehicle, rails: Runn
     const stride = 12;
     const sources = new Set([start.rail.entityId]);
     const frames: SimulationFrame[] = [];
-    for (let index = 0; index < NIXIE_SIMULATION_PATH_MAX_FRAMES; index++) {
+    for (let index = 0; index < 128; index++) {
         const distance = index * stride;
         const traversed = new Set<string>();
         const location = index === 0 ? { ...start, step: direction }
@@ -352,6 +356,7 @@ function couplerPoint(chassis: RailChassis, point: ReturnType<typeof railCoupler
 const engineId = 'trainengine';
 const cannonId = 'trainlrartillery';
 const drawbarLength = .5 * UNITS_PER_METRE;
+const drawbarSlack = .3 * UNITS_PER_METRE;
 
 /** Solve the coupled centre station on the same running line as the anchor. */
 function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle, traversal: RailTraversal) {
@@ -386,7 +391,7 @@ function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, 
         else low = mid;
         if (sample && (!best || Math.abs(sample.error) < Math.abs(best.error))) best = sample;
     }
-    if (!best || Math.abs(best.error) > .1) return undefined;
+    if (!best || Math.abs(best.error) > drawbarSlack) return undefined;
     return { fixed, coupled: best.chassis, location: best.facing };
 }
 
@@ -402,12 +407,12 @@ function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFram
         };
         const positionError = (from: number[], to: number[], value: number[]) =>
             Math.hypot(...value.map((coordinate, axis) => coordinate - (from[axis]! + (to[axis]! - from[axis]!) * fraction)));
-        let ratio = Math.max(positionError(a.position, b.position, sample.position) / .6,
-            angleError(a.heading, b.heading, sample.heading) / .003);
+        let ratio = Math.max(positionError(a.position, b.position, sample.position) / .9,
+            angleError(a.heading, b.heading, sample.heading) / .0045);
         for (const [node, pose] of sample.modelNodeTransforms.entries()) {
             const from = a.modelNodeTransforms[node]!, to = b.modelNodeTransforms[node]!;
-            ratio = Math.max(ratio, positionError(from.translation, to.translation, pose.translation) / .015,
-                ...pose.rotation.map((angle, axis) => angleError(from.rotation[axis]!, to.rotation[axis]!, angle) / .005));
+            ratio = Math.max(ratio, positionError(from.translation, to.translation, pose.translation) / .02,
+                ...pose.rotation.map((angle, axis) => angleError(from.rotation[axis]!, to.rotation[axis]!, angle) / .007));
         }
         return ratio;
     };
@@ -429,7 +434,28 @@ function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFram
         }
     };
     retain(0, engine.length - 1);
-    return indices.slice(0, NIXIE_SIMULATION_PATH_MAX_FRAMES);
+    return indices;
+}
+
+function closedRunningLine(rails: RunningRail[], start: DirectedRailLocation) {
+    const visited = new Set([start.rail]);
+    let { rail, step } = start;
+    let distance = 0;
+    for (let i = 0; i < rails.length; i++) {
+        distance += rail.stations.at(-1)!;
+        const end = step > 0 ? rail.points.length - 1 : 0;
+        const point = rail.points[end]!, previous = rail.points[end - step]!;
+        const heading = Math.atan2(point[1] - previous[1], point[0] - previous[0]);
+        const next = railContinuation(rails, rail, step, point, heading, () => true);
+        if (!next || railDistance(point, next.candidate.points[next.index]!) > .02) return undefined;
+        if (next.candidate === start.rail && next.sign === start.step) {
+            return { distance, rails: visited };
+        }
+        if (visited.has(next.candidate)) return undefined;
+        visited.add(next.candidate);
+        rail = next.candidate;
+        step = next.sign;
+    }
 }
 
 function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle,
@@ -437,35 +463,88 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
     const initial = findCoupledChassis(rails, anchor, anchorId, {});
     if (!initial) return undefined;
     const engineStart = anchorId === engineId ? anchor : initial.location;
-    const frames: Record<PoweredTestVehicle, SimulationFrame[]> = { [engineId]: [], [cannonId]: [] };
+    const line = closedRunningLine(rails, engineStart);
+    const route = line && new Set([...line.rails].map(rail => rail.entityId));
     const sources = new Set([engineStart.rail.entityId, anchor.rail.entityId]);
-    for (let distance = 0; distance <= 8192; distance += 12) {
+    const at = (leader: DirectedRailLocation, distance: number, limit?: ReadonlySet<string>) => {
         const traversed = new Set<string>();
-        const traversal = { traversed };
-        const leader = distance === 0 ? engineStart : advanceOnRail(rails, engineStart, distance * engineStart.step, traversal);
-        if (!leader) break;
+        const traversal = { traversed, route: limit };
         const consist = findCoupledChassis(rails, leader, engineId, traversal);
-        if (!consist) break;
+        if (!consist) return undefined;
         const engine = railSimulationFrame(engineId, consist.fixed, distance);
         const cannon = railSimulationFrame(cannonId, consist.coupled, distance);
-        if (!engine || !cannon) break;
+        if (!engine || !cannon) return undefined;
         traversed.add(leader.rail.entityId);
         traversed.add(consist.location.rail.entityId);
-        if (sources.size + [...traversed].filter(id => !sources.has(id)).length >= 64) break;
+        if (sources.size + [...traversed].filter(id => !sources.has(id)).length >= 64) return undefined;
         for (const id of traversed) sources.add(id);
-        frames[engineId].push(engine);
-        frames[cannonId].push(cannon);
+        return { engine, cannon };
+    };
+    const rest = at(engineStart, 0, route);
+    if (!rest) return undefined;
+    const sample = (direction: 1 | -1, length: number, limit?: ReadonlySet<string>) => {
+        const frames: NonNullable<ReturnType<typeof at>>[] = [];
+        let leader = engineStart;
+        for (let distance = 12; distance < length; distance += 12) {
+            const location = advanceOnRail(rails, leader, 12 * leader.step * direction, { route: limit });
+            if (!location) break;
+            leader = { ...location, step: location.step * direction };
+            const frame = at(leader, direction * distance, limit);
+            if (!frame) break;
+            frames.push(frame);
+        }
+        return frames;
+    };
+    const limit = Math.min(line?.distance ?? 8192, 40_000);
+    const forward = sample(1, limit, route);
+    let loop = !!line && line.distance === limit && (forward.at(-1)?.engine.distance ?? 0) >= limit - 12;
+    if (loop) forward.push({ engine: { ...rest.engine, distance: limit }, cannon: { ...rest.cannon, distance: limit } });
+    let backward = loop ? [] : sample(-1, Math.min(limit, 8192), route).reverse();
+    let pairs = [...backward, rest, ...forward];
+    if (pairs.length < 2) return undefined;
+    let indices = simplifyConsistFrames(pairs.map(pair => pair.engine), pairs.map(pair => pair.cannon));
+    if (loop && indices.length > NIXIE_SIMULATION_PATH_MAX_FRAMES) {
+        loop = false;
+        forward.pop(); // The last frame was a copy of the loop's start.
+        backward = sample(-1, 8192, route).reverse();
+        pairs = [...backward, rest, ...forward];
+        indices = simplifyConsistFrames(pairs.map(pair => pair.engine), pairs.map(pair => pair.cannon));
     }
-    if (frames[engineId].length < 2) return undefined;
-    const indices = simplifyConsistFrames(frames[engineId], frames[cannonId]);
+    if (!indices.includes(backward.length)) indices = [...indices, backward.length].sort((a, b) => a - b);
+    if (indices.length > NIXIE_SIMULATION_PATH_MAX_FRAMES) {
+        const startIndex = Math.max(0, indices.indexOf(backward.length) - 128);
+        indices = indices.slice(startIndex, startIndex + NIXIE_SIMULATION_PATH_MAX_FRAMES);
+    }
+    const initialDistance = pairs[indices[0]!]!.engine.distance;
     // Sandbox estimates in SI units. Traction and braking limits apply to the
     // entire consist. Studio integrates the resulting longitudinal rates.
     const massKg = 72_000 + 135_000;
     const common = { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE,
         drive: { leader: engineEntityId, acceleration: 65_000 / massKg * UNITS_PER_METRE,
-            braking: 100_000 / massKg * UNITS_PER_METRE } };
-    const engine = { ...common, sources: [...sources, cannonEntityId], frames: indices.map(index => frames[engineId][index]!) } satisfies NixieSimulationPathV1;
-    const cannon = { ...common, sources: [...sources, engineEntityId], frames: indices.map(index => frames[cannonId][index]!) } satisfies NixieSimulationPathV1;
+            braking: 100_000 / massKg * UNITS_PER_METRE, manual: { startDistance: 0 - initialDistance, loop } } };
+    const pack = (vehicle: 'engine' | 'cannon', peer: string) => {
+        const frames = indices.map(index => pairs[index]![vehicle]);
+        const nodes = rest[vehicle].modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))
+            .filter(({ index }) => frames.some(frame => {
+                const node = frame.modelNodeTransforms[index]!;
+                return [...node.translation, ...node.rotation].some(value => value !== 0);
+            }));
+        return {
+            ...common, sources: [...sources, peer],
+            ...(nodes.length ? { modelNodes: nodes.map(node => node.name) } : {}),
+            frames: frames.map(frame => ({
+                distance: frame.distance - initialDistance, position: frame.position,
+                heading: Math.min(Math.PI, Math.max(-Math.PI, Number(frame.heading.toFixed(6)))), modelNodeTransforms: [],
+                ...(nodes.length ? { modelOffsets: nodes.flatMap(({ index }) => {
+                    const node = frame.modelNodeTransforms[index]!;
+                    return [...node.translation, ...node.rotation].map(value => Number(value.toFixed(4)));
+                }) } : {}),
+            })),
+        } satisfies NixieSimulationPathV1;
+    };
+    const engine = pack('engine', cannonEntityId), cannon = pack('cannon', engineEntityId);
+    const encoder = new TextEncoder();
+    if ([engine, cannon].some(path => encoder.encode(JSON.stringify(path)).byteLength > NIXIE_COMPONENT_MAX_DATA_BYTES - 1024)) return;
     return { location: initial.location, engine, cannon };
 }
 
@@ -522,6 +601,31 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const ahead = toParent([center[0] + Math.cos(heading), center[1] + Math.sin(heading), center[2]]);
         return { local, angle: Math.atan2(ahead[1] - local[1], ahead[0] - local[0]) };
     };
+    const couple = (anchor: Entity, anchorAsset: PoweredTestVehicle, tolerance: number): Result | undefined => {
+        const anchorAttachment = data(anchor, ATTACHMENT_COMPONENT);
+        const anchorRail = rails.find(rail => rail.entityId === anchorAttachment?.rail);
+        const anchorLocation = anchorRail && typeof anchorAttachment?.station === 'number'
+            && locationAtStation(anchorRail, anchorAttachment.station);
+        if (!anchorLocation) return;
+        const directed = { ...anchorLocation, step: anchorAttachment?.reversed ? -1 : 1 };
+        const initial = findCoupledChassis(rails, directed, anchorAsset, {});
+        if (!initial || railDistance(initial.location.point, origin) > tolerance) return;
+        const engineEntityId = assetId === engineId ? original.entityId : anchor.entityId;
+        const cannonEntityId = assetId === cannonId ? original.entityId : anchor.entityId;
+        const pair = buildRailConsist(rails, directed, anchorAsset, engineEntityId, cannonEntityId);
+        if (!pair) return;
+        const { local: point, angle } = fitBody(pair.location, pair.location.step);
+        let transaction = attachment(pair.location, pair.location.step < 0,
+            buildRailRoute(assetId, rails, pair.location, pair.location.step), assetId === engineId ? pair.engine : pair.cannon);
+        const anchorPath = assetId === engineId ? pair.cannon : pair.engine;
+        if (JSON.stringify(anchorAttachment?.simulationPath) !== JSON.stringify(anchorPath)) {
+            transaction ??= { contractVersion: 1, transactionId: `rail-consist-${crypto.randomUUID()}`, operations: [] };
+            transaction.operations.push({ op: 'patch', entityId: anchor.entityId, componentId: ATTACHMENT_COMPONENT,
+                set: { [NIXIE_SIMULATION_PATH_PROPERTY]: anchorPath } });
+        }
+        return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle },
+            ...(transaction ? { transaction } : {}) };
+    };
     if (request.followedEntityId) {
         if (saved?.rail !== request.followedEntityId || typeof saved.station !== 'number') return unchanged;
         const rail = rails.find(rail => rail.entityId === saved.rail);
@@ -542,25 +646,9 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const anchorAsset = anchor && data(anchor, 'asset')?.assetId;
         if (anchor && ((assetId === engineId && anchorAsset === cannonId && !reversed)
             || (assetId === cannonId && anchorAsset === engineId && reversed))) {
-            const anchorAttachment = data(anchor, ATTACHMENT_COMPONENT);
-            const anchorRail = rails.find(rail => rail.entityId === anchorAttachment?.rail);
-            const anchorLocation = anchorRail && typeof anchorAttachment?.station === 'number'
-                && locationAtStation(anchorRail, anchorAttachment.station);
-            const existingPath = anchorAttachment?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
-            if (!anchorLocation || existingPath?.drive) return unchanged;
-            const anchorStep = anchorAttachment?.reversed ? -1 : 1;
-            const engineEntityId = assetId === engineId ? original.entityId : anchor.entityId;
-            const cannonEntityId = assetId === cannonId ? original.entityId : anchor.entityId;
-            const pair = buildRailConsist(rails, { ...anchorLocation, step: anchorStep }, anchorAsset as PoweredTestVehicle,
-                engineEntityId, cannonEntityId);
-            if (!pair || railDistance(pair.location.point, origin) > 100) return unchanged;
-            const { local: point, angle } = fitBody(pair.location, pair.location.step);
-            const transaction = attachment(pair.location, pair.location.step < 0,
-                buildRailRoute(assetId, rails, pair.location, pair.location.step), assetId === engineId ? pair.engine : pair.cannon);
-            if (!transaction) return unchanged;
-            transaction.operations.push({ op: 'patch', entityId: anchor.entityId, componentId: ATTACHMENT_COMPONENT,
-                set: { [NIXIE_SIMULATION_PATH_PROPERTY]: assetId === engineId ? pair.cannon : pair.engine } });
-            return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle }, transaction };
+            const existingPath = data(anchor, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+            if (existingPath?.drive) return unchanged;
+            return couple(anchor, anchorAsset as PoweredTestVehicle, 100) ?? unchanged;
         }
         const railElevation = anchor ? projection.toWorld(anchor, [0, 0, 0])[2] : source.z ?? origin[2];
         const result = followRailFromCoupler(rails, [source.x, source.y, railElevation], origin);
@@ -570,6 +658,16 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const transaction = attachment(result, step < 0, buildRailRoute(assetId, rails, result, step), simulationPath(result, step));
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
             rotation: angle }, ...(transaction ? { transaction } : {}) };
+    }
+
+    const previous = saved?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+    if (assetId === engineId && request.interaction === 'planar-translation' && previous?.drive?.leader === original.entityId) {
+        const cannon = entities.find(entity => previous.sources.includes(entity.entityId) && data(entity, 'asset')?.assetId === cannonId);
+        const cannonPath = cannon && data(cannon, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+        if (cannon && cannonPath?.drive?.leader === original.entityId) {
+            const refreshed = couple(cannon, cannonId, SNAP_DISTANCE);
+            if (refreshed) return refreshed;
+        }
     }
 
     for (const rail of rails) {

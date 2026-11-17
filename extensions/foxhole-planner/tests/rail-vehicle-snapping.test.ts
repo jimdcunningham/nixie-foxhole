@@ -157,6 +157,8 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
     const cannonPath = parseNixieSimulationPathV1(trailer.set?.simulationPath);
     assert.deepEqual(enginePath.drive, cannonPath.drive);
     assert.equal(enginePath.drive?.leader, 'vehicle');
+    assert.ok(enginePath.drive?.manual && enginePath.drive.manual.startDistance > 0);
+    assert.equal(enginePath.drive.manual.loop, false);
     assert.equal(enginePath.frames.length, cannonPath.frames.length);
     assert.ok(enginePath.frames.at(-1)!.position[1] > 40);
     const engineRear = railCouplers(assets.trainengine!, 'standard').find(port => port.name === 'RearCoupler')!.point;
@@ -168,8 +170,10 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
             - trailing.position[0] - cannonFront.x * Math.cos(trailing.heading);
         const dy = lead.position[1] + engineRear.x * Math.sin(lead.heading)
             - trailing.position[1] - cannonFront.x * Math.sin(trailing.heading);
-        assert.ok(Math.abs(Math.hypot(dx, dy) - 16) < .11);
-        assert.equal(trailing.modelNodeTransforms.length, 3);
+        const gap = Math.hypot(dx, dy);
+        const slack = lead.distance === enginePath.drive.manual.startDistance ? .11 : .3 * 32 + .02;
+        assert.ok(Math.abs(gap - 16) < slack, `coupler gap at station ${lead.distance}: ${gap}`);
+        assert.equal(trailing.modelOffsets?.length, cannonPath.modelNodes!.length * 6);
     }
 });
 
