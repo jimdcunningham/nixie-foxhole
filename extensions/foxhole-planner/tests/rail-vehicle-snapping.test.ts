@@ -50,7 +50,7 @@ test('the live socket setting gates a track-spline finalizer for each rail vehic
             .find(item => item.match.data?.assetId === id);
         assert.ok(finalizer, id);
         assert.equal(finalizer.enabledSettingId, 'foxhole.viewport.socketSnapping');
-        assert.equal(finalizer.candidateQuery.match.componentId, 'spline-connector');
+        assert.equal(finalizer.candidateQuery.match.componentId, id.startsWith('train') ? 'asset' : 'spline-connector');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
     }
 });
@@ -66,7 +66,7 @@ test('every Locomotives asset snaps only to its own gauge', () => {
     }
 });
 
-test('the large locomotive supplies a forward simulation path over a straight-to-curved rail joint', () => {
+test('the large locomotive supplies a manual drive over a straight-to-curved rail joint', () => {
     const approach = track('railtrackspline', 'approach');
     const bend = track('railtrackspline', 'bend');
     Object.assign(approach.components[0]!.data, { x: -400 });
@@ -79,18 +79,21 @@ test('the large locomotive supplies a forward simulation path over a straight-to
     if (operation?.op !== 'add') assert.fail('Expected a snapped rail attachment');
     const path = parseNixieSimulationPathV1(operation.data.simulationPath);
     assert.deepEqual(path.sources, ['approach', 'bend']);
-    assert.ok(path.frames[0]!.position[0] < -200);
+    assert.equal(path.drive?.leader, 'vehicle');
+    assert.ok(path.drive.manual);
+    assert.equal(path.frames.find(frame => frame.distance === path.drive!.manual!.startDistance)?.position[0], -220);
     assert.ok(path.frames.at(-1)!.position[1] > 50);
     const straddling = path.frames.find(frame => frame.position[0] > 20 && frame.position[0] < 80);
     assert.ok(straddling, 'the chassis crosses the joint while its rear wheel contact remains on the approach');
-    const rear = straddling.modelNodeTransforms.find(node => node.nodeName === 'rail-bogie-rear')!;
+    const rearIndex = path.modelNodes!.indexOf('rail-bogie-rear') * 6;
+    const rear = straddling.modelOffsets!.slice(rearIndex, rearIndex + 6);
     const [x, y] = straddling.position;
-    const along = (-1.92332 + rear.translation[0] - 1.3397 * Math.cos(rear.rotation[1])) * 32;
-    const lateral = (rear.translation[2] + 1.3397 * Math.sin(rear.rotation[1])) * 32;
+    const along = (-1.92332 + rear[0]! - 1.3397 * Math.cos(rear[4]!)) * 32;
+    const lateral = (rear[2]! + 1.3397 * Math.sin(rear[4]!)) * 32;
     const contactX = x + Math.cos(straddling.heading) * along - Math.sin(straddling.heading) * lateral;
     const contactY = y + Math.sin(straddling.heading) * along + Math.cos(straddling.heading) * lateral;
     assert.ok(contactX < 0 && Math.abs(contactY) < 0.7, JSON.stringify({ contactX, contactY }));
-    assert.ok(path.frames.some(frame => Math.abs(frame.modelNodeTransforms[0]!.rotation[1]) > 0.04));
+    assert.ok(path.frames.some(frame => Math.abs(frame.modelOffsets![rearIndex + 4]!) > 0.04));
 });
 
 test('Tempest playback keeps both bogies on separate rails while crossing the joint', () => {
@@ -180,7 +183,7 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
     ] };
     proposal.context.entities.push(cannon);
     Object.assign(proposal.transform, { x: -188, y: 0, rotation: 0 });
-    proposal.geometryGesture = { handleId: 'product-placement-port', phase: 'preview', snappingEnabled: true,
+    proposal.geometryGesture = { handleId: 'product-placement-port', phase: 'commit', snappingEnabled: true,
         worldPoint: { x: -377, y: 0, z: 77.44 }, hoveredEntityIds: ['cannon'] };
     const result = finalizeFoxholeRailVehicleSnap(proposal);
     const [engine, trailer] = result.transaction?.operations ?? [];
@@ -207,6 +210,71 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
         assert.ok(Math.abs(gap - 16) < slack, `coupler gap at station ${lead.distance}: ${gap}`);
         assert.equal(trailing.modelOffsets?.length, cannonPath.modelNodes!.length * 6);
     }
+});
+
+test('an existing mixed eleven-vehicle train is rebuilt as one drive with its original facing and spacing', () => {
+    const main = track('railtrackspline', 'main');
+    Object.assign(main.components.at(-1)!.data, { endX: 9500, maxLength: 10000 });
+    const proposal = request('trainengine', [main]);
+    proposal.interaction = 'planar-translation';
+    Object.assign(proposal.transform, { x: 4100, y: 0, rotation: 0 });
+    const subject = proposal.context.entities[0]!;
+    subject.components.push(component('rail-attachment', { rail: 'main', station: 4100, reversed: false }));
+    const cars = ['traincoal', 'trainflatbed', 'trainflatbed', 'trainflatbed', 'traincombatcarc',
+        'trainhospital', 'trainlrartillery', 'traininfantry', 'traincombatcarw', 'traincaboose'];
+    let station = 4100;
+    let rear = 188.8;
+    for (const [index, car] of cars.entries()) {
+        const reversed = car === 'trainhospital';
+        const sockets = railCouplers(assets[car]!, 'standard');
+        const towardEngine = sockets.find(socket => reversed ? socket.point.x < 0 : socket.point.x > 0)!;
+        station -= rear + Math.abs(towardEngine.point.x) + 2;
+        rear = Math.abs(sockets.find(socket => socket !== towardEngine)!.point.x);
+        proposal.context.entities.push({ entityId: `car-${index}`, revision: 1, components: [
+            component('asset', { catalogId: 'foxhole.structures', assetId: car }),
+            component('rail-attachment', { rail: 'main', station, reversed }),
+            component('transform', { x: station, y: 0, rotation: reversed ? Math.PI : 0 }, 'nixie.core'),
+        ] });
+    }
+    // Same gauge and track, with a free gap to the last coupler.
+    proposal.context.entities.push({ entityId: 'parked-car', revision: 1, components: [
+        component('asset', { catalogId: 'foxhole.structures', assetId: 'traincaboose' }),
+        component('rail-attachment', { rail: 'main', station: station - 420, reversed: false }),
+    ] });
+    const result = parseNixieTransformFinalizeResultV1(finalizeFoxholeRailVehicleSnap(proposal));
+    const operations = result.transaction!.operations;
+    assert.equal(operations.length, 11);
+    const paths = operations.map(operation => {
+        assert.equal(operation.op, 'patch');
+        const path = parseNixieSimulationPathV1(operation.set!.simulationPath);
+        return [operation.entityId, path] as const;
+    });
+    const leader = paths.find(([id]) => id === 'vehicle')![1];
+    const start = leader.drive!.manual!.startDistance;
+    for (const [id, path] of paths) {
+        assert.deepEqual(path.drive, leader.drive);
+        assert.equal(path.frames.at(-1)!.distance, leader.frames.at(-1)!.distance);
+        assert.equal(path.sources.length, 11);
+        const atRest = path.frames.find(frame => frame.distance === start)!;
+        const entity = proposal.context.entities.find(entry => entry.entityId === id)!;
+        const parked = entity.components.find(entry => entry.componentId === 'rail-attachment')!.data;
+        assert.ok(Math.abs(atRest.position[0] - Number(parked.station)) < .001);
+        assert.ok(Math.abs(Math.cos(atRest.heading) - (parked.reversed ? -1 : 1)) < 1e-8);
+        assert.ok(path.frames.at(-1)!.position[0] > atRest.position[0] + 100);
+    }
+
+    for (const operation of operations) {
+        assert.equal(operation.op, 'patch');
+        const entity = proposal.context.entities.find(entry => entry.entityId === operation.entityId)!;
+        Object.assign(entity.components.find(entry => entry.componentId === 'rail-attachment')!.data, operation.set);
+    }
+    const detached = finalizeFoxholeRailVehicleSnap({ ...proposal, entityId: 'car-1',
+        transform: { ...proposal.transform, y: 150 } }).transaction!.operations;
+    assert.ok(detached.some(operation => operation.entityId === 'car-1' && operation.op === 'remove'));
+    const remaining = detached.find(operation => operation.entityId === 'vehicle');
+    assert.equal(remaining?.op, 'patch');
+    assert.deepEqual(parseNixieSimulationPathV1(remaining.set!.simulationPath).sources, ['main', 'car-0']);
+    assert.equal(detached.filter(operation => operation.op === 'patch' && operation.unset?.includes('simulationPath')).length, 8);
 });
 
 test('coupler placement advances from the existing car along a curved rail', () => {

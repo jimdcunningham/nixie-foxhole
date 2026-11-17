@@ -79,6 +79,7 @@ interface RunningRail {
     stations: number[];
     endpointLinks: readonly [string, string];
     endpointSockets?: readonly [string, string];
+    loop?: boolean;
 }
 
 interface RailLocation {
@@ -168,6 +169,10 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
     const station = location.station + delta;
     if (station >= 0 && station <= rail.stations.at(-1)!) {
         const next = locationAtStation(rail, station);
+        return next && { ...next, step };
+    }
+    if (rail.loop) {
+        const next = locationAtStation(rail, wrapStation(station, routeLength(rail)));
         return next && { ...next, step };
     }
     if (rails.length === 1) return undefined;
@@ -317,8 +322,8 @@ function railModelNodeTransforms(bogies: NonNullable<(typeof foxholeRailVehicleB
 type PoweredTestVehicle = 'trainengine' | 'trainlrartillery';
 type RailChassis = ReturnType<typeof resolveRailChassis>;
 
-function railSimulationFrame(assetId: PoweredTestVehicle, chassis: RailChassis, distance: number) {
-    const bogies = foxholeRailVehicleBogies[assetId]!;
+function railSimulationFrame(assetId: string, chassis: RailChassis, distance: number) {
+    const bogies = foxholeRailVehicleBogies[assetId] ?? [];
     const clearance = Math.max((foxholeRailWheelbase(assetId) ?? 0) / 2,
         ...bogies.flatMap(bogie => bogie.wheelOffsets.map(offset => Math.abs(bogie.pivot + offset) * UNITS_PER_METRE))) + 6;
     const compact = (vector: FoxholeSpatialPoint): FoxholeSpatialPoint => vector.map(value => Number(value.toFixed(5))) as FoxholeSpatialPoint;
@@ -430,7 +435,7 @@ function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, 
     return { fixed, coupled: best.chassis, location: best.facing };
 }
 
-function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFrame[]): number[] {
+function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFrame[] = engine, tolerance = 1): number[] {
     const indices = [0];
     const error = (frames: SimulationFrame[], start: number, index: number, end: number) => {
         const a = frames[start]!, b = frames[end]!, sample = frames[index]!;
@@ -453,7 +458,7 @@ function simplifyConsistFrames(engine: SimulationFrame[], cannon: SimulationFram
     };
     const retain = (start: number, end: number) => {
         let split = start;
-        let worst = 1;
+        let worst = tolerance;
         for (let index = start + 1; index < end; index++) {
             const ratio = Math.max(error(engine, start, index, end), error(cannon, start, index, end));
             if (ratio > worst) {
@@ -554,13 +559,168 @@ function appendRouteSpans(path: RunningRail, spans: { rail: RunningRail; step: n
     });
 }
 
+interface ParkedRailVehicle {
+    entity: Entity;
+    assetId: string;
+    location: DirectedRailLocation;
+    chassis: RailChassis;
+}
+
+function railVehicleAt(entity: Entity, rails: RunningRail[]): ParkedRailVehicle | undefined {
+    const assetId = String(data(entity, 'asset')?.assetId);
+    const attachment = data(entity, ATTACHMENT_COMPONENT);
+    const rail = rails.find(entry => entry.entityId === attachment?.rail);
+    const location = rail && typeof attachment?.station === 'number' && locationAtStation(rail, attachment.station);
+    if (!location || vehicleGauge.get(assetId) !== 'standard') return;
+    const step = attachment?.reversed ? -1 : 1;
+    return { entity, assetId, location: { ...location, step }, chassis: resolveRailChassis(assetId, rails, location, step) };
+}
+
+function packRailFrames(frames: SimulationFrame[]) {
+    const first = frames[0]!.distance;
+    const nodes = frames[0]!.modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))
+        .filter(({ index }) => frames.some(frame => {
+            const node = frame.modelNodeTransforms[index]!;
+            return [...node.translation, ...node.rotation].some(value => value !== 0);
+        }));
+    return {
+        ...(nodes.length ? { modelNodes: nodes.map(node => node.name) } : {}),
+        frames: frames.map(frame => ({
+            distance: frame.distance - first, position: frame.position, heading: frame.heading, modelNodeTransforms: [],
+            ...(nodes.length ? { modelOffsets: nodes.flatMap(({ index }) => {
+                const node = frame.modelNodeTransforms[index]!;
+                return [...node.translation, ...node.rotation].map(value => Number(value.toFixed(4)));
+            }) } : {}),
+        })),
+    };
+}
+
+/** Reconstruct couplings from the saved socket poses on the same running line.
+ * Older scenes saved rail stations for socket placements, with no coupling links. */
+function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[], rails: RunningRail[], subjectId: string,
+    options?: { requireAdditionalCars?: boolean; portOwnerId?: string; }) {
+    const closed = closedRunningLine(rails, leader.location);
+    const line = closed ?? openRunningLine(rails, leader.location);
+    const path: RunningRail = { entityId: '', points: [], stations: [], endpointLinks: ['', ''], loop: !!closed };
+    const spans = appendRouteSpans(path, line.spans);
+    const length = routeLength(path);
+    const locate = ({ location }: ParkedRailVehicle) => {
+        const span = spans.find(entry => entry.rail === location.rail);
+        if (!span) return;
+        return { station: span.offset + (span.step > 0 ? location.station : routeLength(span.rail) - location.station),
+            facing: span.step * location.step };
+    };
+    const origin = locate(leader)!.station;
+    const candidates = [leader, ...vehicles.filter(vehicle => vehicle !== leader && vehicle.assetId !== engineId)].flatMap(vehicle => {
+        const parked = locate(vehicle);
+        if (!parked) return [];
+        const distance = parked.station - origin;
+        const offset = closed ? wrapStation(distance + length / 2, length) - length / 2 : distance;
+        const sockets = railCouplers(assets[vehicle.assetId]!, 'standard').map(socket => ({
+            point: couplerPoint(vehicle.chassis, socket.point),
+            side: Math.sign(socket.point.x) * parked.facing,
+        }));
+        return [{ ...vehicle, offset, facing: parked.facing, sockets }];
+    });
+    const members = [candidates[0]!];
+    const matched = new Set([leader.entity.entityId]);
+    const portOwnerId = options?.portOwnerId;
+    for (const side of [-1, 1]) {
+        let tail = members[0]!;
+        while (members.length < 32) {
+            const socket = tail.sockets.find(entry => entry.side === side);
+            if (!socket) break;
+            let nearest: typeof tail | undefined;
+            let score = 24;
+            for (const next of candidates) {
+                if (matched.has(next.entity.entityId) || (next.offset - tail.offset) * side <= 0) continue;
+                const mating = next.sockets.find(entry => entry.side === -side);
+                if (!mating) continue;
+                const distance = railDistance(socket.point, mating.point);
+                const fromPort = (tail.entity.entityId === portOwnerId && next.entity.entityId === subjectId)
+                    || (next.entity.entityId === portOwnerId && tail.entity.entityId === subjectId);
+                const candidateScore = fromPort && distance < 100 ? distance - 100 : distance;
+                if (candidateScore >= score) continue;
+                score = candidateScore;
+                nearest = next;
+            }
+            if (!nearest) break;
+            matched.add(nearest.entity.entityId);
+            members.push(nearest);
+            tail = nearest;
+        }
+    }
+    if (!matched.has(subjectId) || options?.requireAdditionalCars && members.length < 3) return;
+    const sources = [...line.rails].map(rail => rail.entityId);
+    if (sources.length + members.length > 65) return;
+    const sample = (rail: RunningRail, station: number, distance: number) => members.map(member => {
+        const target = station + member.offset;
+        if (!rail.loop && (target < 0 || target > routeLength(rail))) return;
+        const position = locationAtStation(rail, rail.loop ? wrapStation(target, routeLength(rail)) : target);
+        if (!position) return;
+        return railSimulationFrame(member.assetId, resolveRailChassis(member.assetId, [rail], position, member.facing), distance);
+    });
+    const samples: SimulationFrame[][] = members.map(() => []);
+    const pose = (distance: number) => {
+        const frames = sample(path, origin + distance, distance);
+        return frames.every((frame): frame is SimulationFrame => !!frame) ? frames : undefined;
+    };
+    const rest = pose(0);
+    if (!rest) return;
+    const walk = (side: number, limit: number) => {
+        const frames: SimulationFrame[][] = [];
+        for (let distance = 16; distance < limit; distance += 16) {
+            const row = pose(distance * side);
+            if (!row) break;
+            frames.push(row);
+        }
+        return frames;
+    };
+    const forward = walk(1, closed ? Math.min(length, 40_000) : Math.min(16_000, length - origin));
+    const loop = !!closed && length <= 40_000 && (forward.at(-1)?.[0]?.distance ?? 0) >= length - 16;
+    const backward = loop ? [] : walk(-1, Math.min(16_000, closed ? length - (forward.at(-1)?.[0]?.distance ?? 0) : origin)).reverse();
+    for (const row of [...backward, rest, ...forward, ...(loop ? [rest.map(frame => ({ ...frame, distance: length }))] : [])]) {
+        row.forEach((frame, index) => samples[index]!.push(frame));
+    }
+    if (samples[0]!.length < 2) return;
+    const mass = 72_000 + members.slice(1).reduce((total, member) => total + (member.assetId === cannonId ? 135_000 : 32_000), 0);
+    const drive = { leader: leader.entity.entityId, acceleration: 65_000 / mass * UNITS_PER_METRE,
+        braking: 100_000 / mass * UNITS_PER_METRE, manual: { startDistance: -samples[0]![0]!.distance, loop } };
+    const encoder = new TextEncoder();
+    for (const tolerance of [1, 2, 4, 8]) {
+        const paths = members.map((member, index) => {
+            const frames = samples[index]!;
+            const selected = simplifyConsistFrames(frames, frames, tolerance);
+            if (!selected.includes(backward.length)) selected.push(backward.length);
+            selected.sort((a, b) => a - b);
+            return { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE, drive,
+                sources: [...sources, ...members.filter(other => other !== member).map(other => other.entity.entityId)],
+                ...packRailFrames(selected.map(i => frames[i]!)) } satisfies NixieSimulationPathV1;
+        });
+        const bytes = encoder.encode(JSON.stringify(paths)).byteLength;
+        if (paths.some(entry => entry.frames.length > NIXIE_SIMULATION_PATH_MAX_FRAMES
+            || encoder.encode(JSON.stringify(entry)).byteLength > NIXIE_COMPONENT_MAX_DATA_BYTES - 1024)
+            || bytes > NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - 16_384) continue;
+        const before = Math.max(...members.map(member => member.offset)) + 192;
+        const after = -Math.min(...members.map(member => member.offset)) + 192;
+        const routing = rails.some(rail => rail.endpointSockets?.some(socket => readRailPathSocket(socket)))
+            && (!closed || loop) ? buildConsistRoutes(rails, line, leader.location, paths[0]!, NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - bytes - 16_384,
+                members.length, (rail, station) => {
+                    const frames = sample(rail, station, station);
+                    return frames.every((frame): frame is SimulationFrame => !!frame) ? frames : undefined;
+                }, { before, after, room: Math.max(before, after) + 180 })
+            : undefined;
+        return members.map((member, index) => ({ ...member, path: paths[index]!, routes: routing?.[index] ?? [] }));
+    }
+}
+
 function routePiece(geometry: RouteGeometry, from: number, to: number): FoxholeSpatialPoint[] {
     if (to < from) return routePiece(geometry, to, from).reverse();
     const { path, loop } = geometry;
     const length = routeLength(path);
     const origin = loop ? wrapStation(from, length) : from;
     const limit = origin + to - from;
-    if (origin < 0 || (!loop && limit > length)) return [];
+    if (origin < 0 || (!loop && limit > length) || (loop && to - from > length)) return [];
     const slice = (start: number, end: number) => [
         locationAtStation(path, start)!.point,
         ...path.points.filter((_, index) => path.stations[index]! > start && path.stations[index]! < end),
@@ -570,7 +730,9 @@ function routePiece(geometry: RouteGeometry, from: number, to: number): FoxholeS
 }
 
 function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRunningLine>,
-    engineStart: DirectedRailLocation, primary: NixieSimulationPathV1, byteBudget: number) {
+    engineStart: DirectedRailLocation, primary: NixieSimulationPathV1, byteBudget: number, vehicleCount: number,
+    sample: (path: RunningRail, station: number) => SimulationFrame[] | undefined,
+    handoff = { before: 192, after: 800, room: 900 }) {
     const makePath = (entityId: string): RunningRail => ({ entityId, points: [], stations: [], endpointLinks: ['', ''] });
     const mainPath = makePath('');
     const mainSpans = appendRouteSpans(mainPath, line.spans);
@@ -585,10 +747,9 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
     const used = new Set(line.rails);
     const encoder = new TextEncoder();
     let remaining = byteBudget;
-    const result: { engine: NixieSimulationRouteV1[]; cannon: NixieSimulationRouteV1[] } = { engine: [], cannon: [] };
-    // The handoff is early enough to give both wheelbases room before the switch and
-    // far enough past the merge that the trailing car has already cleared the points.
-    const fittingRoom = 900;
+    const result: NixieSimulationRouteV1[][] = Array.from({ length: vehicleCount }, () => []);
+    // Leave room for the entire consist on either side of a switch handoff.
+    const fittingRoom = handoff.room;
     const station = (span: RouteSpan, fraction: number) =>
         span.offset + routeLength(span.rail) * (span.step > 0 ? fraction : 1 - fraction);
     const connection = (geometry: RouteGeometry, span: RouteSpan, name: string, point: number, transfer: number): NixieSimulationRouteConnectionV1 => ({
@@ -599,7 +760,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         distance: geometry.loop ? wrapStation(transfer - geometry.first, primaryLength) : transfer - geometry.first,
     });
     for (const source of geometries) for (const span of source.spans) for (const branch of rails) {
-        if (used.has(branch) || result.engine.length >= 16) continue;
+        if (used.has(branch) || result[0]!.length >= 16) continue;
         const side = branch.endpointLinks.findIndex((id, i) => id === span.rail.entityId
             && readRailPathSocket(branch.endpointSockets?.[i] ?? ''));
         if (side < 0) continue;
@@ -607,7 +768,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         const entry = readRailPathSocket(socket)!;
         const direction = span.step * (entry.reverse ? -1 : 1);
         const fork = station(span, entry.fraction);
-        const startTransfer = fork - direction * (direction > 0 ? 192 : 800);
+        const startTransfer = fork - direction * (direction > 0 ? handoff.before : handoff.after);
         if (!source.loop && (startTransfer < source.first || startTransfer > source.last)) continue;
         const prefix = routePiece(source, startTransfer - direction * fittingRoom, fork);
         if (!prefix.length) continue;
@@ -629,7 +790,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
                 const targetSpan = target?.spans.find(entry => entry.rail.entityId === rail.endpointLinks[end]);
                 if (target && targetSpan && targetSpan.step * (location.reverse ? 1 : -1) === direction) {
                     const mergeAt = station(targetSpan, location.fraction);
-                    const transfer = mergeAt + direction * (direction > 0 ? 800 : 192);
+                    const transfer = mergeAt + direction * (direction > 0 ? handoff.after : handoff.before);
                     if (target.loop || (transfer >= target.first && transfer <= target.last)) {
                         suffix = routePiece(target, mergeAt, transfer + direction * fittingRoom);
                         if (suffix.length) merge = connection(target, targetSpan, socketName, mergeAt, transfer);
@@ -650,61 +811,37 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         const length = routeLength(path);
         const from = direction > 0 || merge ? fittingRoom : 0;
         const to = direction < 0 || merge ? length - fittingRoom : length;
-        const frames = (at: number) => {
-            const location = locationAtStation(path, at);
-            const consist = location && findCoupledChassis([path], { ...location, step: 1 }, engineId, { allowExtendedDrawbar: true });
-            if (!consist) return undefined;
-            const engine = railSimulationFrame(engineId, consist.fixed, at);
-            const cannon = railSimulationFrame(cannonId, consist.coupled, at);
-            if (engine && cannon) return { engine, cannon };
-        };
-        const poses: NonNullable<ReturnType<typeof frames>>[] = [];
+        const poses: SimulationFrame[][] = [];
         for (let at = from; at <= to; at += 12) {
-            const pair = frames(at);
-            if (pair) poses.push(pair);
+            const row = sample(path, at);
+            if (row) poses.push(row);
             else if (poses.length || (at === from && (direction > 0 || merge))) break;
         }
-        if (poses.length < 2 || (direction < 0 || merge) && poses.at(-1)!.engine.distance < to - 12) continue;
+        if (poses.length < 2 || (direction < 0 || merge) && poses.at(-1)![0]!.distance < to - 12) continue;
         if (direction < 0 || merge) {
-            const endPose = frames(to);
+            const endPose = sample(path, to);
             if (!endPose) continue;
-            if (poses.at(-1)!.engine.distance < to) poses.push(endPose);
+            if (poses.at(-1)![0]!.distance < to) poses.push(endPose);
         }
-        const firstPose = poses[0]!.engine.distance;
+        const firstPose = poses[0]![0]!.distance;
         const junction = connection(source, span, socket, fork, startTransfer);
         const start = direction > 0 ? junction : merge;
         const end = direction > 0 ? merge : junction;
-        const indices = simplifyConsistFrames(poses.map(pair => pair.engine), poses.map(pair => pair.cannon));
-        if (indices.length > NIXIE_SIMULATION_PATH_MAX_FRAMES) continue;
-        const pack = (vehicle: 'engine' | 'cannon'): NixieSimulationRouteV1 => {
-            const sampled = indices.map(index => poses[index]![vehicle]);
-            const nodes = sampled[0]!.modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))
-                .filter(({ index }) => sampled.some(frame => {
-                    const node = frame.modelNodeTransforms[index]!;
-                    return [...node.translation, ...node.rotation].some(value => value !== 0);
-                }));
+        const routes = result.map((_, vehicle): NixieSimulationRouteV1 => {
+            const frames = poses.map(row => row[vehicle]!);
+            const indices = simplifyConsistFrames(frames);
             return { id: branch.entityId, ...(start ? { start } : {}), ...(end ? { end } : {}),
                 sources: [...visited].map(rail => rail.entityId),
-                ...(nodes.length ? { modelNodes: nodes.map(node => node.name) } : {}),
-                frames: sampled.map(frame => ({
-                    distance: frame.distance - firstPose, position: frame.position, heading: frame.heading, modelNodeTransforms: [],
-                    ...(nodes.length ? { modelOffsets: nodes.flatMap(({ index }) => {
-                        const node = frame.modelNodeTransforms[index]!;
-                        return [...node.translation, ...node.rotation].map(value => Number(value.toFixed(4)));
-                    }) } : {}),
-                })) };
-        };
-        const engine = pack('engine'), cannon = pack('cannon');
-        const size = encoder.encode(JSON.stringify([engine, cannon])).byteLength;
-        if (size > remaining || routingDataBytes([engine]) > NIXIE_COMPONENT_MAX_DATA_BYTES
-            || routingDataBytes([cannon]) > NIXIE_COMPONENT_MAX_DATA_BYTES
-            || routeBank([...result.engine, engine]).length > ROUTING_COMPONENTS.length
-            || routeBank([...result.cannon, cannon]).length > ROUTING_COMPONENTS.length) continue;
+                ...packRailFrames(indices.map(index => frames[index]!)) };
+        });
+        const size = encoder.encode(JSON.stringify(routes)).byteLength;
+        if (size > remaining || routes.some((route, index) => route.frames.length > NIXIE_SIMULATION_PATH_MAX_FRAMES
+            || routingDataBytes([route]) > NIXIE_COMPONENT_MAX_DATA_BYTES
+            || routeBank([...result[index]!, route]).length > ROUTING_COMPONENTS.length)) continue;
         remaining -= size;
-        result.engine.push(engine);
-        result.cannon.push(cannon);
+        routes.forEach((route, index) => result[index]!.push(route));
         for (const rail of visited) used.add(rail);
-        geometries.push({ path, spans, first: firstPose, last: poses.at(-1)!.engine.distance, loop: false });
+        geometries.push({ path, spans, first: firstPose, last: poses.at(-1)![0]!.distance, loop: false });
     }
     return result;
 }
@@ -721,6 +858,19 @@ function routeBank(poses: NixieSimulationRouteV1[]) {
         else banks.push([route]);
     }
     return banks;
+}
+
+function routingOperations(entity: Entity, paths: NixieSimulationRouteV1[]): NonNullable<Result['transaction']>['operations'] {
+    const banks = routeBank(paths);
+    return ROUTING_COMPONENTS.flatMap((componentId, index): NonNullable<Result['transaction']>['operations'] => {
+        const routes = banks[index];
+        const existing = data(entity, componentId);
+        const component = { entityId: entity.entityId, componentId };
+        if (!routes) return existing ? [{ ...component, op: 'remove' }] : [];
+        const routing = { [NIXIE_SIMULATION_ROUTING_PROPERTY]: validateNixieComponentDataV1(
+            NIXIE_SIMULATION_ROUTING_SCHEMA_V1, { routes }) };
+        return [existing ? { ...component, op: 'patch', set: routing } : { ...component, op: 'add', data: routing }];
+    });
 }
 
 function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle,
@@ -813,7 +963,14 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
     const routeBudget = NIXIE_TRANSFORM_FINALIZER_MAX_BYTES
         - encoder.encode(JSON.stringify([engine, cannon])).byteLength - 4096;
     const routes = rails.some(rail => rail.endpointSockets?.some(socket => readRailPathSocket(socket)))
-        ? buildConsistRoutes(rails, line ?? openRunningLine(rails, engineStart), engineStart, engine, routeBudget)
+        ? buildConsistRoutes(rails, line ?? openRunningLine(rails, engineStart), engineStart, engine, routeBudget, 2, (path, at) => {
+            const location = locationAtStation(path, at);
+            const consist = location && findCoupledChassis([path], { ...location, step: 1 }, engineId, { allowExtendedDrawbar: true });
+            if (!consist) return;
+            const engineFrame = railSimulationFrame(engineId, consist.fixed, at);
+            const cannonFrame = railSimulationFrame(cannonId, consist.coupled, at);
+            if (engineFrame && cannonFrame) return [engineFrame, cannonFrame];
+        })
         : undefined;
     return { location: initial.location, engine, cannon, routes };
 }
@@ -830,6 +987,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     if (!original || !gauge) return unchanged;
 
     const saved = data(original, ATTACHMENT_COMPONENT);
+    const previous = saved?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+    const previousLeader = previous?.drive?.leader;
     const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: ReturnType<typeof buildRailVehicleSimulationPath>): Result['transaction'] => {
         if (!location && !saved) return undefined;
         const set = location && { rail: location.rail.entityId, station: location.station, reversed, route,
@@ -844,16 +1003,6 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
                     : { op: 'add', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT, data: set }
                 : { op: 'remove', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT }] };
     };
-    const detach = (): Result => {
-        const transaction = attachment();
-        return transaction ? { ...unchanged, transaction } : unchanged;
-    };
-    if (!request.followedEntityId && request.interaction !== 'placement' && request.interaction !== 'planar-translation') {
-        return request.interaction === 'transform' && !request.geometryGesture ? detach() : unchanged;
-    }
-
-    if (!request.followedEntityId && request.snappingEnabled === false) return detach();
-
     const subject = withFoxholeSceneV2TransformProposal(original, request.transform);
     const entities = request.context.entities.map(entity => entity === original ? subject : entity);
     const projection = createFoxholeSpatialProjection(entities);
@@ -864,7 +1013,64 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
     const simulationPath = (location: RailLocation, step: number) =>
-        assetId === 'trainengine' || assetId === 'trainlrartillery' ? buildRailVehicleSimulationPath(assetId, rails, location, step) : undefined;
+        assetId === cannonId && !previousLeader ? buildRailVehicleSimulationPath(assetId, rails, location, step) : undefined;
+    const attachTrain = (location?: RailLocation, step = 1, options?: { requireAdditionalCars?: boolean; portOwnerId?: string; }) => {
+        if (request.geometryGesture?.phase === 'preview') return;
+        const route = location ? buildRailRoute(assetId, rails, location, step) : [];
+        if (gauge !== 'standard') return attachment(location, step < 0, route);
+        const railData = location && { rail: location.rail.entityId, station: location.station, reversed: step < 0, route };
+        const parkedSubject = railData ? { ...subject, components: [
+            ...subject.components.filter(component => component.ownerId !== 'nixie.foxhole-planner' || component.componentId !== ATTACHMENT_COMPONENT),
+            { ownerId: 'nixie.foxhole-planner', componentId: ATTACHMENT_COMPONENT, version: 1, definitionAvailable: true, data: railData },
+        ] } : undefined;
+        const vehicles = entities.map(entity => {
+            const candidate = entity === subject ? parkedSubject : entity;
+            return candidate && railVehicleAt(candidate, rails);
+        })
+            .filter((vehicle): vehicle is ParkedRailVehicle => !!vehicle);
+        const lead = vehicles.filter(vehicle => vehicle.assetId === engineId);
+        const leaders = assetId === engineId ? lead.filter(vehicle => vehicle.entity.entityId === subject.entityId) : lead;
+        let train: ReturnType<typeof buildTrainDrive>;
+        if (location) for (const leader of leaders) {
+            train = buildTrainDrive(leader, vehicles, rails, subject.entityId, options);
+            if (train) break;
+        }
+        if (options?.requireAdditionalCars && !train) return;
+        const members = new Map(train?.map(member => [member.entity.entityId, member]));
+        if (previousLeader && previousLeader !== subject.entityId && !members.has(previousLeader)) {
+            const leader = lead.find(vehicle => vehicle.entity.entityId === previousLeader);
+            const remaining = vehicles.filter(vehicle => vehicle.entity.entityId !== subject.entityId && !members.has(vehicle.entity.entityId));
+            if (leader) for (const member of buildTrainDrive(leader, remaining, rails, previousLeader) ?? []) {
+                members.set(member.entity.entityId, member);
+            }
+        }
+        const own = members.get(subject.entityId);
+        const transaction = attachment(location, step < 0, route, own?.path ?? (location && simulationPath(location, step)))
+            ?? { contractVersion: 1, transactionId: `rail-consist-${crypto.randomUUID()}`, operations: [] };
+        for (const entity of entities) {
+            const member = members.get(entity.entityId);
+            const old = data(entity, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
+            if (entity === subject) {
+                transaction.operations.push(...routingOperations(entity, own?.routes ?? []));
+            } else if (member) {
+                transaction.operations.push({ op: 'patch', entityId: entity.entityId, componentId: ATTACHMENT_COMPONENT,
+                    set: { [NIXIE_SIMULATION_PATH_PROPERTY]: member.path } },
+                ...routingOperations(entity, member.routes));
+            } else if (previousLeader && old?.drive?.leader === previousLeader) {
+                transaction.operations.push({ op: 'patch', entityId: entity.entityId, componentId: ATTACHMENT_COMPONENT,
+                    unset: [NIXIE_SIMULATION_PATH_PROPERTY] }, ...routingOperations(entity, []));
+            }
+        }
+        return transaction.operations.length ? transaction : undefined;
+    };
+    const detach = (): Result => {
+        const transaction = attachTrain();
+        return transaction ? { ...unchanged, transaction } : unchanged;
+    };
+    if (!request.followedEntityId && request.interaction !== 'placement' && request.interaction !== 'planar-translation') {
+        return request.interaction === 'transform' && !request.geometryGesture ? detach() : unchanged;
+    }
+    if (!request.followedEntityId && request.snappingEnabled === false) return detach();
     const fitBody = (location: RailLocation, step = 1, route?: ReadonlySet<string>) => {
         const { point: center, heading } = resolveRailChassis(assetId, rails, location, step, { route });
         const local = toParent(center);
@@ -880,11 +1086,17 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const directed = { ...anchorLocation, step: anchorAttachment?.reversed ? -1 : 1 };
         const initial = findCoupledChassis(rails, directed, anchorAsset, {});
         if (!initial || railDistance(initial.location.point, origin) > tolerance) return;
+        const { local: point, angle } = fitBody(initial.location, initial.location.step);
+        if (request.geometryGesture?.phase === 'preview') {
+            return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle } };
+        }
+        const extended = attachTrain(initial.location, initial.location.step, { requireAdditionalCars: true, portOwnerId: anchor.entityId });
+        if (extended) return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle },
+            transaction: extended };
         const engineEntityId = assetId === engineId ? original.entityId : anchor.entityId;
         const cannonEntityId = assetId === cannonId ? original.entityId : anchor.entityId;
         const pair = buildRailConsist(rails, directed, anchorAsset, engineEntityId, cannonEntityId);
         if (!pair) return;
-        const { local: point, angle } = fitBody(pair.location, pair.location.step);
         let transaction = attachment(pair.location, pair.location.step < 0,
             buildRailRoute(assetId, rails, pair.location, pair.location.step), assetId === engineId ? pair.engine : pair.cannon);
         const anchorPath = assetId === engineId ? pair.cannon : pair.engine;
@@ -893,20 +1105,12 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
             transaction.operations.push({ op: 'patch', entityId: anchor.entityId, componentId: ATTACHMENT_COMPONENT,
                 set: { [NIXIE_SIMULATION_PATH_PROPERTY]: anchorPath } });
         }
-        for (const [entity, role] of [[original, assetId === engineId ? 'engine' : 'cannon'],
-            [anchor, assetId === engineId ? 'cannon' : 'engine']] as const) {
-            const banks = routeBank(pair.routes?.[role] ?? []);
-            for (const [index, componentId] of ROUTING_COMPONENTS.entries()) {
-                const routes = banks[index];
-                const existing = data(entity, componentId);
-                if (!routes && !existing) continue;
+        for (const [entity, index] of [[original, assetId === engineId ? 0 : 1],
+            [anchor, assetId === engineId ? 1 : 0]] as const) {
+            const operations = routingOperations(entity, pair.routes?.[index] ?? []);
+            if (operations.length) {
                 transaction ??= { contractVersion: 1, transactionId: `rail-consist-${crypto.randomUUID()}`, operations: [] };
-                const component = { entityId: entity.entityId, componentId };
-                const routing = { [NIXIE_SIMULATION_ROUTING_PROPERTY]: validateNixieComponentDataV1(
-                    NIXIE_SIMULATION_ROUTING_SCHEMA_V1, { routes: routes ?? [] }) };
-                transaction.operations.push(!routes ? { ...component, op: 'remove' }
-                    : existing ? { ...component, op: 'patch', set: routing }
-                        : { ...component, op: 'add', data: routing });
+                transaction.operations.push(...operations);
             }
         }
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle },
@@ -933,20 +1137,21 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         if (anchor && ((assetId === engineId && anchorAsset === cannonId && !reversed)
             || (assetId === cannonId && anchorAsset === engineId && reversed))) {
             const existingPath = data(anchor, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
-            if (existingPath?.drive) return unchanged;
-            return couple(anchor, anchorAsset as PoweredTestVehicle, 100) ?? unchanged;
+            if (!existingPath?.drive || existingPath.drive.leader === anchor.entityId) {
+                const coupled = couple(anchor, anchorAsset as PoweredTestVehicle, 100);
+                if (coupled) return coupled;
+            }
         }
         const railElevation = anchor ? projection.toWorld(anchor, [0, 0, 0])[2] : source.z ?? origin[2];
         const result = followRailFromCoupler(rails, [source.x, source.y, railElevation], origin);
         if (!result) return unchanged;
         const step = reversed ? -result.step : result.step;
         const { local: point, angle } = fitBody(result, step);
-        const transaction = attachment(result, step < 0, buildRailRoute(assetId, rails, result, step), simulationPath(result, step));
+        const transaction = attachTrain(result, step, { portOwnerId: anchor?.entityId });
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
             rotation: angle }, ...(transaction ? { transaction } : {}) };
     }
 
-    const previous = saved?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
     if (assetId === engineId && request.interaction === 'planar-translation' && previous?.drive?.leader === original.entityId) {
         const cannon = entities.find(entity => previous.sources.includes(entity.entityId) && data(entity, 'asset')?.assetId === cannonId);
         const cannonPath = cannon && data(cannon, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
@@ -976,7 +1181,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const { local: point, angle } = fitBody(best, reversed ? -1 : 1);
     const heading = rotation + Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
     const step = reversed ? -1 : 1;
-    const transaction = attachment(best, reversed, buildRailRoute(assetId, rails, best, step), simulationPath(best, step));
+    const transaction = attachTrain(best, step);
     return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: heading },
         ...(transaction ? { transaction } : {}) };
 }
