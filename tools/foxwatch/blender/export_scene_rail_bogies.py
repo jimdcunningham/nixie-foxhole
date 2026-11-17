@@ -1,6 +1,7 @@
 """Export rigid wheel groups around the authored bogie or axle pivots."""
 import bmesh
 import bpy
+import re
 from mathutils import Vector
 
 # Each family shares the same pivot names. Shaft/rod children of those
@@ -16,12 +17,16 @@ PIVOTS = {
                     ("Wheel_F", "Wheel_B")),
 }
 NAMES = ("rail-bogie-front", "rail-bogie-rear")
+WHEEL_PATTERNS = {
+    "trainengine": re.compile(r"wheel_(1|2|3|back)_[lr]$", re.IGNORECASE),
+    "trainlrartillery": re.compile(r"wheel(0[1-3]_(?:front|back))_[lr]$", re.IGNORECASE),
+}
 
 
 def split_rail_bogies(asset_id, meshes, collection, ground):
     if asset_id not in PIVOTS:
         return meshes, []
-    output, bogies = [], []
+    output, parts, wheel_parents = [], [], {}
     depsgraph = bpy.context.evaluated_depsgraph_get()
     for obj in meshes:
         modifier = next((m for m in obj.modifiers if m.type == "ARMATURE" and m.object), None)
@@ -35,8 +40,28 @@ def split_rail_bogies(asset_id, meshes, collection, ground):
         if not pivots_by_name:
             output.append(obj)
             continue
+        wheel_pattern = WHEEL_PATTERNS.get(asset_id)
+        wheels = {}
+        if wheel_pattern:
+            wheel_centres = {}
+            for bone in armature.pose.bones:
+                match = wheel_pattern.fullmatch(bone.name)
+                if not match:
+                    continue
+                name = "rail-wheel-" + match[1].lower().replace("_", "-")
+                wheels[bone.name] = name
+                wheel_centres.setdefault(name, []).append(armature.matrix_world @ bone.head)
+                ancestor = bone.parent
+                while ancestor and ancestor.name.casefold() not in pivots:
+                    ancestor = ancestor.parent
+                wheel_parents[name] = pivots[ancestor.name.casefold()] if ancestor else "rail-body"
+            for name, centres in wheel_centres.items():
+                pivots_by_name[name] = sum(centres, Vector((0, 0, 0))) / len(centres)
         groups = {}
         for vertex_group in obj.vertex_groups:
+            if vertex_group.name in wheels:
+                groups[vertex_group.index] = wheels[vertex_group.name]
+                continue
             bone = armature.data.bones.get(vertex_group.name)
             while bone:
                 if bone.name.casefold() in pivots:
@@ -83,9 +108,12 @@ def split_rail_bogies(asset_id, meshes, collection, ground):
             collection.objects.link(part)
             part.matrix_world = obj.matrix_world.copy()
             output.append(part)
-            bogies.append((name or "rail-body", part, pivots_by_name[name] if name else Vector((0, 0, ground))))
+            parts.append((name or "rail-body", part, pivots_by_name[name] if name else Vector((0, 0, ground))))
         bpy.data.meshes.remove(data)
         obj.hide_render = True
-    if {name for name, _, _ in bogies if name != "rail-body"} != {name for name, bone in zip(NAMES, PIVOTS[asset_id]) if bone}:
+    present = {name for name, _, _ in parts}
+    if not {name for name, bone in zip(NAMES, PIVOTS[asset_id]) if bone} <= present:
         raise RuntimeError(f"{asset_id}: expected rail pivot geometry is missing")
-    return output, bogies
+    if not set(wheel_parents) <= present:
+        raise RuntimeError(f"{asset_id}: expected wheel pivot geometry is missing")
+    return output, [(name, part, pivot, wheel_parents.get(name)) for name, part, pivot in parts]

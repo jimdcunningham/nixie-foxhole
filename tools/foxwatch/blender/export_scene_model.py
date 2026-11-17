@@ -90,12 +90,22 @@ for key, members in semantic_members.items():
 meshes = [obj for obj in meshes if obj not in replacements]
 depsgraph = bpy.context.evaluated_depsgraph_get()
 baked_mesh_count = bake_static_mesh_instances(meshes, center, depsgraph)
-for name, obj, pivot in rail_bogies:
+rail_groups = {}
+for name, _, pivot, _ in rail_bogies:
+    if name in rail_groups:
+        continue
     group = bpy.data.objects.new(name, None)
     collection.objects.link(group)
     group.location = pivot - center
     group.select_set(True)
-    bpy.context.view_layer.update()
+    rail_groups[name] = group
+bpy.context.view_layer.update()
+for name, obj, _, parent in rail_bogies:
+    group = rail_groups[name]
+    if parent and rail_groups.get(parent) and not group.parent:
+        world = group.matrix_world.copy()
+        group.parent = rail_groups[parent]
+        group.matrix_world = world
     world = obj.matrix_world.copy()
     obj.parent = group
     obj.matrix_world = world
@@ -139,7 +149,7 @@ metadata = {
     "semanticGroups": semantic_groups,
     "blueprintLights": blueprint_lights,
     "bakedMeshCount": baked_mesh_count,
-    **({"railBogies": {name: list(pivot) for name, _, pivot in rail_bogies}} if rail_bogies else {}),
+    **({"railBogies": {name: list(pivot) for name, _, pivot, parent in rail_bogies if not parent}} if rail_bogies else {}),
     "modelParts": {"version": 1, "parts": shared_parts} if shared_parts else None,
     "triangles": sum(len(obj.data.loop_triangles) for obj in meshes),
     "materials": sorted({slot.material.name for obj in meshes for slot in obj.material_slots if slot.material}),
