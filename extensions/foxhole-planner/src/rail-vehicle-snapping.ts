@@ -56,6 +56,7 @@ interface RunningRail {
     entityId: string;
     points: FoxholeSpatialPoint[];
     stations: number[];
+    endpointLinks: readonly [string, string];
 }
 
 interface RailLocation {
@@ -109,7 +110,14 @@ function followRailFromCoupler(rails: RunningRail[], source: FoxholeSpatialPoint
     return best && advanceOnRail(rails, best.location, distance * best.step);
 }
 
-function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: number) {
+interface RailTraversal {
+    /** Persisted rails permitted for an attached car. */
+    route?: ReadonlySet<string>;
+    /** Rails encountered while creating an attachment. */
+    traversed?: Set<string>;
+}
+
+function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: number, traversal?: RailTraversal) {
     let { rail, point, heading } = location;
     let remaining = Math.abs(delta);
     let step = delta < 0 ? -1 : 1;
@@ -133,15 +141,19 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
             next += step;
             continue;
         }
-        // At a joined end, prefer the continuation with the least change in heading.
-        const continuations = rails.filter(candidate => !visited.has(candidate)).flatMap(candidate => [1, -1].flatMap(sign => {
+        // Prefer explicit rail connections, then least change in heading.
+        const connectedRail = rail.endpointLinks[step > 0 ? 1 : 0];
+        const continuations = rails.filter(candidate => !visited.has(candidate)
+            && (!traversal?.route || traversal.route.has(candidate.entityId))).flatMap(candidate => [1, -1].flatMap(sign => {
             const index = sign > 0 ? 0 : candidate.points.length - 1;
             const start = candidate.points[index]!, following = candidate.points[index + sign]!;
             if (railDistance(point, start) > 3) return [];
             const angle = Math.atan2(following[1] - start[1], following[0] - start[0]);
             const alignment = Math.cos(angle - heading);
-            return alignment > 0 ? [{ candidate, index, sign, alignment }] : [];
-        })).sort((a, b) => b.alignment - a.alignment);
+            const connected = connectedRail === candidate.entityId || candidate.endpointLinks[sign > 0 ? 0 : 1] === rail.entityId;
+            return alignment > 0 ? [{ candidate, index, sign, alignment, connected }] : [];
+        })).sort((a, b) => Number(b.connected) - Number(a.connected) || b.alignment - a.alignment
+            || a.candidate.entityId.localeCompare(b.candidate.entityId));
         const continuation = continuations[0];
         if (!continuation) return undefined;
         rail = continuation.candidate;
@@ -149,6 +161,7 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
         point = rail.points[continuation.index]!;
         next = continuation.index + step;
         visited.add(rail);
+        traversal?.traversed?.add(rail.entityId);
     }
     return { ...location, step };
 }
@@ -169,16 +182,17 @@ function sampleRunningRails(context: Context, gauge: NonNullable<ReturnType<type
         for (let index = 1; index < points.length; index++) {
             stations.push(stations[index - 1]! + railDistance(points[index - 1]!, points[index]!));
         }
-        return [{ entityId: track.entityId, points, stations }];
+        return [{ entityId: track.entityId, points, stations,
+            endpointLinks: [String(component.startAttachmentNodeId ?? ''), String(component.endAttachmentNodeId ?? '')] as const }];
     });
 }
 
-function resolveRailChassis(assetId: string, rails: RunningRail[], location: RailLocation, step: number) {
+function resolveRailChassis(assetId: string, rails: RunningRail[], location: RailLocation, step: number, traversal?: RailTraversal) {
     const bogies = foxholeRailVehicleBogies[assetId];
     const pivots = bogies?.length === 2 ? bogies.map(bogie => bogie.pivot * UNITS_PER_METRE) : [];
     const pivotCentre = pivots.length ? (pivots[0]! + pivots[1]!) / 2 : 0;
     const wheelbase = pivots.length ? Math.abs(pivots[0]! - pivots[1]!) : foxholeRailWheelbase(assetId);
-    const sample = (offset: number) => advanceOnRail(rails, location, step * offset)?.point;
+    const sample = (offset: number) => advanceOnRail(rails, location, step * offset, traversal)?.point;
     const fit = wheelbase && fitFoxholeRailWheelbase(wheelbase, distance => sample(pivotCentre + distance));
     if (!fit || !wheelbase) return { point: location.point, heading: location.heading + (step < 0 ? Math.PI : 0),
         pitch: 0, sample, railOffset: (offset: number) => offset };
@@ -187,6 +201,29 @@ function resolveRailChassis(assetId: string, rails: RunningRail[], location: Rai
         fit.point[1] - horizontalShift * Math.sin(fit.heading), fit.point[2] - pivotCentre * Math.sin(fit.pitch)];
     const stretch = 2 * fit.halfSpan / wheelbase;
     return { point, heading: fit.heading, pitch: fit.pitch, sample, railOffset: (offset: number) => pivotCentre + (offset - pivotCentre) * stretch };
+}
+
+function sampleBogieAxles(bogie: (typeof foxholeRailVehicleBogies)[string][number],
+    chassis: ReturnType<typeof resolveRailChassis>) {
+    const [rear, front] = bogie.wheelOffsets;
+    const pivot = bogie.pivot * UNITS_PER_METRE;
+    const axleCentre = (front + rear) / 2 * UNITS_PER_METRE;
+    const centreOffset = chassis.railOffset(pivot + axleCentre);
+    const wheelbase = (front - rear) * UNITS_PER_METRE;
+    const fit = wheelbase > 0 ? fitFoxholeRailWheelbase(wheelbase, delta => chassis.sample(centreOffset + delta)) : undefined;
+    const half = fit?.halfSpan ?? Math.max(0.15 * UNITS_PER_METRE, wheelbase / 2);
+    return { pivot, axleCentre, back: chassis.sample(centreOffset - half), ahead: chassis.sample(centreOffset + half) };
+}
+
+function buildRailRoute(assetId: string, rails: RunningRail[], location: RailLocation, step: number) {
+    const traversed = new Set<string>();
+    const chassis = resolveRailChassis(assetId, rails, location, step, { traversed });
+    for (const bogie of foxholeRailVehicleBogies[assetId] ?? []) sampleBogieAxles(bogie, chassis);
+    return [...traversed].slice(0, 16);
+}
+
+function readRailRoute(value: unknown): ReadonlySet<string> | undefined {
+    return Array.isArray(value) ? new Set(value.filter((id): id is string => typeof id === 'string')) : undefined;
 }
 
 /** Model-local deltas for the wheel groups split around the original pivots by FoxWatch. */
@@ -202,24 +239,15 @@ export function poseFoxholeRailBogies(entity: Entity, assetId: string, context: 
     const rail = rails.find(rail => rail.entityId === attachment.rail);
     const location = rail && locationAtStation(rail, attachment.station);
     if (!location) return undefined;
-    const { sample, point, heading, pitch, railOffset } = resolveRailChassis(assetId, rails, location, attachment.reversed ? -1 : 1);
-    const localAt = (distance: number) => {
-        const point = sample(distance);
-        return point && projection.toLocal(entity, point);
-    };
+    const chassis = resolveRailChassis(assetId, rails, location, attachment.reversed ? -1 : 1,
+        { route: readRailRoute(attachment.route) });
+    const { point, heading, pitch } = chassis;
     const transforms: NonNullable<NixieSpatialPlanV1['modelNodeTransforms']> = [];
-    // Find each truck's rail chord from its own axle contacts. On a single
-    // axle, a short chord estimates the local tangent without depending on the chassis yaw.
-    for (const { nodeName, pivot, wheelOffsets: [rear, front] } of bogies) {
-        const x = pivot * UNITS_PER_METRE;
-        const axleCentre = (front + rear) / 2 * UNITS_PER_METRE;
-        const centreOffset = railOffset(x + axleCentre);
-        const wheelbase = (front - rear) * UNITS_PER_METRE;
-        const fit = wheelbase > 0 ? fitFoxholeRailWheelbase(wheelbase, delta => sample(centreOffset + delta)) : undefined;
-        const half = fit?.halfSpan ?? Math.max(0.15 * UNITS_PER_METRE, wheelbase / 2);
-        const back = localAt(centreOffset - half);
-        const ahead = localAt(centreOffset + half);
-        if (!back || !ahead || ![...back, ...ahead].every(Number.isFinite)) continue;
+    for (const bogie of bogies) {
+        const { pivot: x, axleCentre, back: rearContact, ahead: frontContact } = sampleBogieAxles(bogie, chassis);
+        if (!rearContact || !frontContact) continue;
+        const back = projection.toLocal(entity, rearContact), ahead = projection.toLocal(entity, frontContact);
+        if (![...back, ...ahead].every(Number.isFinite)) continue;
         const [dx, dy, dz] = ahead.map((value, axis) => value - back[axis]!) as FoxholeSpatialPoint;
         const axleDirection = Math.hypot(dx, dy, dz);
         if (axleDirection < 1e-6) continue;
@@ -227,7 +255,7 @@ export function poseFoxholeRailBogies(entity: Entity, assetId: string, context: 
         const pivotX = centre[0]! - axleCentre * dx / axleDirection;
         const pivotY = centre[1]! - axleCentre * dy / axleDirection;
         const pivotZ = centre[2]! - axleCentre * dz / axleDirection;
-        transforms.push({ nodeName,
+        transforms.push({ nodeName: bogie.nodeName,
             translation: [(pivotX - x) / UNITS_PER_METRE, pivotZ / UNITS_PER_METRE, pivotY / UNITS_PER_METRE],
             rotation: [0, -Math.atan2(dy, dx), Math.atan2(dz, Math.hypot(dx, dy))] });
     }
@@ -248,14 +276,16 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
 
     const original = request.context.entities.find(entity => entity.entityId === request.entityId);
     const asset = original && data(original, 'asset');
-    const gauge = asset?.catalogId === 'foxhole.structures' && vehicleGauge.get(String(asset.assetId));
+    const assetId = String(asset?.assetId);
+    const gauge = asset?.catalogId === 'foxhole.structures' && vehicleGauge.get(assetId);
     if (!original || !gauge) return unchanged;
 
     const saved = data(original, ATTACHMENT_COMPONENT);
-    const attachment = (location?: RailLocation, reversed = false): Result['transaction'] => {
+    const attachment = (location?: RailLocation, reversed = false, route: string[] = []): Result['transaction'] => {
         if (!location && !saved) return undefined;
-        const set = location && { rail: location.rail.entityId, station: location.station, reversed };
-        if (set && saved?.rail === set.rail && saved.station === set.station && saved.reversed === set.reversed) return undefined;
+        const set = location && { rail: location.rail.entityId, station: location.station, reversed, route };
+        if (set && saved?.rail === set.rail && saved.station === set.station && saved.reversed === set.reversed
+            && JSON.stringify(saved.route) === JSON.stringify(route)) return undefined;
         return { contractVersion: 1, transactionId: `rail-attachment-${crypto.randomUUID()}`,
             operations: [set
                 ? saved ? { op: 'patch', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT, set }
@@ -281,8 +311,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
-    const fitBody = (location: RailLocation, step = 1) => {
-        const { point: center, heading } = resolveRailChassis(String(asset?.assetId), rails, location, step);
+    const fitBody = (location: RailLocation, step = 1, route?: ReadonlySet<string>) => {
+        const { point: center, heading } = resolveRailChassis(assetId, rails, location, step, { route });
         const local = toParent(center);
         const ahead = toParent([center[0] + Math.cos(heading), center[1] + Math.sin(heading), center[2]]);
         return { local, angle: Math.atan2(ahead[1] - local[1], ahead[0] - local[0]) };
@@ -292,7 +322,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const rail = rails.find(rail => rail.entityId === saved.rail);
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
-        const { local: point, angle } = fitBody(location, saved.reversed ? -1 : 1);
+        const { local: point, angle } = fitBody(location, saved.reversed ? -1 : 1, readRailRoute(saved.route));
         const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: rotation + turn } };
     }
@@ -307,7 +337,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const reversed = Math.cos(Math.atan2(forward[1] - origin[1], forward[0] - origin[0]) - baseHeading) < 0;
         const step = reversed ? -result.step : result.step;
         const { local: point, angle } = fitBody(result, step);
-        const transaction = attachment(result, step < 0);
+        const transaction = attachment(result, step < 0, buildRailRoute(assetId, rails, result, step));
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
             rotation: angle }, ...(transaction ? { transaction } : {}) };
     }
@@ -331,7 +361,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const reversed = Math.cos(fitBody(best).angle - rotation) < 0;
     const { local: point, angle } = fitBody(best, reversed ? -1 : 1);
     const heading = rotation + Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
-    const transaction = attachment(best, reversed);
+    const transaction = attachment(best, reversed, buildRailRoute(assetId, rails, best, reversed ? -1 : 1));
     return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: heading },
         ...(transaction ? { transaction } : {}) };
 }

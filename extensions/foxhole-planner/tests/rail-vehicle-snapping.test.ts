@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap } from '../src/rail-vehicle-snapping.ts';
+import { foxholeRailVehicleBogies } from '../src/rail-vehicle-rigs.ts';
+import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';
+import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
+import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 import { fitFoxholeRailWheelbase } from '../src/rail-wheelbase.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
@@ -241,5 +245,65 @@ test('long rolling stock steers the two bogies independently through the spatial
         Object.assign(vehicle.components[1]!.data, straight.transform);
         const straightPoses = renderFoxholeSceneV2Entity(vehicle, context).spatial?.modelNodeTransforms;
         assert.ok(straightPoses?.every(pose => Math.abs(pose.rotation[1]) < 1e-6), assetId);
+    }
+});
+
+test('long cars keep both bogie poses when a secondary rail is reshaped', () => {
+    for (const assetId of ['trainhospital', 'trainlrartillery']) {
+        const approach = track('railtrackspline', 'approach');
+        Object.assign(approach.components[0]!.data, { x: -900 });
+        Object.assign(approach.components.at(-1)!.data, { endX: 900, maxLength: 2500 });
+        const continuation = track('railtrackspline', 'continuation');
+        Object.assign(continuation.components.at(-1)!.data, {
+            endX: 900, endY: 340, endRotation: 0.55, maxLength: 2500,
+            startAttachmentNodeId: 'approach', startAttachmentSocketName: 'FrontSocket',
+        });
+        const unrelated = track('railtrackspline', 'straighter');
+        const proposal = request(assetId, [approach, continuation, unrelated]);
+        Object.assign(proposal.transform, { x: -110, y: 0, rotation: 0 });
+        const snap = finalizeFoxholeRailVehicleSnap(proposal);
+        const attachment = snap.transaction?.operations[0];
+        if (attachment?.op !== 'add') assert.fail('Expected a multi-rail attachment');
+        assert.deepEqual(attachment.data.route, ['continuation'], assetId);
+        const vehicle = proposal.context.entities[0]!;
+        vehicle.components.push(component('rail-attachment', attachment.data));
+        vehicle.components.push(component('spatial-transform', { elevation: snap.transform.elevation! }, 'nixie.core'));
+        const context = { ...proposal.context, entities: [vehicle, approach, continuation],
+            settings: { 'nixie.scene.modelNodeTransforms': true } };
+        const resolve = () => {
+            const followed = finalizeFoxholeRailVehicleSnap({ ...proposal, context, interaction: 'transform', followedEntityId: 'approach' });
+            Object.assign(vehicle.components[1]!.data, followed.transform);
+            const poses = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(vehicle, context)).spatial?.modelNodeTransforms;
+            const projection = createFoxholeSpatialProjection(context.entities);
+            const rails = [approach, continuation].map(entity => sampleFoxholeSceneV2Connector(
+                entity.components.at(-1)!.data as unknown as FoxholeSceneV2SplineConnectorData, assets.railtrackspline,
+            ).points.map(point => {
+                const [x, y] = projection.toWorld(entity, [point.x, point.y, 0]);
+                return { x, y };
+            }));
+            const supportingRails = new Set<number>();
+            for (const bogie of foxholeRailVehicleBogies[assetId]!) {
+                const pose = poses?.find(pose => pose.nodeName === bogie.nodeName);
+                assert.ok(pose, bogie.nodeName);
+                const [tx, , ty] = pose.translation, yaw = -pose.rotation[1];
+                for (const axle of bogie.wheelOffsets) {
+                    const [x, y] = projection.toWorld(vehicle,
+                        [(bogie.pivot + tx + Math.cos(yaw) * axle) * 32, (ty + Math.sin(yaw) * axle) * 32, 0]);
+                    const distances = rails.map(rail => Math.min(...rail.slice(1).map((end, index) =>
+                        nearestPointOnSegment({ x, y }, rail[index]!, end).distance)));
+                    const closest = Math.min(...distances);
+                    assert.ok(closest < 0.7, `${assetId} ${bogie.nodeName} axle is ${closest} units from the centerline`);
+                    supportingRails.add(distances.indexOf(closest));
+                }
+            }
+            assert.equal(supportingRails.size, 2, assetId);
+            return poses;
+        };
+        const before = resolve();
+        assert.equal(before?.length, 2, assetId);
+        Object.assign(continuation.components.at(-1)!.data, { endY: 520, endRotation: 0.92 });
+        const after = resolve();
+        assert.equal(after?.length, 2, assetId);
+        assert.notDeepEqual(after, before, assetId);
     }
 });
