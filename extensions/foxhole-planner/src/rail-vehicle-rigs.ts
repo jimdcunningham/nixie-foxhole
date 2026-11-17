@@ -1,3 +1,5 @@
+import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+
 /** Authored longitudinal pivots and wheel contacts measured from the posed game rigs, in metres. */
 export interface FoxholeBogie {
     nodeName: string;
@@ -33,4 +35,13 @@ export const foxholeRailVehicleBogies: Readonly<Record<string, readonly FoxholeB
     smalltrainmaterial: small,
     smalltrainresource: small,
     smalltrainshipping: small,
+};
+
+// Rolling radii measured at the treads, outside the hub and inside the flange.
+const roll = (name: string, radiusMetres: number) => ({
+    nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: -1 / (32 * radiusMetres),
+});
+export const foxholeRailWheelRoll: Readonly<Record<string, NixieSpatialPlanV1['modelDistanceRotations']>> = {
+    trainengine: ['1', '2', '3'].map(name => roll(name, .745)).concat(roll('back', .555)),
+    trainlrartillery: ['front', 'back'].flatMap(bogie => ['01', '02', '03'].map(axle => roll(`${axle}-${bogie}`, .409))),
 };
