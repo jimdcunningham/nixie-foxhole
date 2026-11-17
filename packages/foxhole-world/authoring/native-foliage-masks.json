@@ -64,6 +64,19 @@
         "decodedHash": "9e12954aadf8c486804c4e429a7b76d773feb806bec735e0c0ca1267668013b2",
         "bytes": 7268
       }
+    },
+    {
+      "material": "War/Content/Materials/Environment/Props/Hay.uasset",
+      "albedo": "War/Content/Textures/Props/HayRepeating01A.HayRepeating01A",
+      "source": "War/Content/Textures/Props/HayRepeating01M.HayRepeating01M",
+      "channel": "A",
+      "cutoff": 0.3333,
+      "resource": {
+        "path": "content/raw/74ae9260781a9baad4a6b0dea71552fb13437f9609a3543e2168b45c69265f33/asset.webp",
+        "hash": "74ae9260781a9baad4a6b0dea71552fb13437f9609a3543e2168b45c69265f33",
+        "decodedHash": "74ae9260781a9baad4a6b0dea71552fb13437f9609a3543e2168b45c69265f33",
+        "bytes": 464150
+      }
     }
   ]
 }
