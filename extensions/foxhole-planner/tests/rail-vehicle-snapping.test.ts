@@ -59,6 +59,22 @@ test('every Locomotives asset snaps only to its own gauge', () => {
     }
 });
 
+test('coupler placement advances from the existing car along a curved rail', () => {
+    const curved = track('railtrackspline');
+    Object.assign(curved.components.at(-1)!.data, { endX: 450, endY: 300, endRotation: Math.PI / 2 });
+    const proposal = request('trainflatbed', [curved, track('smallrailtrackspline', 'wrong')]);
+    const height = 32 + 36 * 0.32;
+    proposal.transform = { ...proposal.transform, x: 260, y: 0, rotation: 0 };
+    proposal.geometryGesture = { phase: 'preview', handleId: 'product-placement-port', snappingEnabled: true,
+        worldPoint: { x: 0, y: 0, z: height }, hoveredEntityIds: [] };
+    const result = finalizeFoxholeRailVehicleSnap(proposal).transform;
+    assert.equal(result.elevation, height);
+    assert.ok(result.y > 10 && result.x < 260, JSON.stringify(result));
+    assert.ok(result.rotation! > 0.1);
+    proposal.transform.x = 2000;
+    assert.equal(finalizeFoxholeRailVehicleSnap(proposal).transform.elevation, undefined);
+});
+
 test('large cranes snap to crane rails and locomotives ignore them', () => {
     const craneTrack = track('cranerailtrackspline');
     const pose = finalizeFoxholeRailVehicleSnap(request('largecrane', [track('railtrackspline', 'wrong', 10), craneTrack])).transform;

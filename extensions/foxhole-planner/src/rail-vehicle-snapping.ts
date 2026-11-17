@@ -43,6 +43,67 @@ export const foxholeRailTrackFinalizers = Object.fromEntries(
     [...vehicleGauge.keys()].map(id => [`transforms.track-snapping-${id}`, finalizeFoxholeRailVehicleSnap]),
 );
 
+type RunningRail = FoxholeSpatialPoint[];
+const railDistance = (a: FoxholeSpatialPoint, b: FoxholeSpatialPoint) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+function followRailFromCoupler(rails: RunningRail[], source: FoxholeSpatialPoint, proposed: FoxholeSpatialPoint) {
+    const direction = [proposed[0] - source[0], proposed[1] - source[1]];
+    let remaining = Math.hypot(...direction);
+    if (remaining <= 0) return undefined;
+    let best: { rail: RunningRail; next: number; step: number; point: FoxholeSpatialPoint; score: number } | undefined;
+    for (const rail of rails) for (let i = 1; i < rail.length; i++) {
+        const a = rail[i - 1]!, b = rail[i]!;
+        const nearest = nearestPointOnSegment({ x: source[0], y: source[1] }, { x: a[0], y: a[1] }, { x: b[0], y: b[1] });
+        const point: FoxholeSpatialPoint = [nearest.x, nearest.y, a[2] + (b[2] - a[2]) * nearest.t];
+        if (nearest.distance > SNAP_DISTANCE || Math.abs(point[2] - source[2]) > SNAP_DISTANCE) continue;
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const alignment = (dx * direction[0]! + dy * direction[1]!) / (Math.hypot(dx, dy) * remaining);
+        if (!(Math.abs(alignment) >= 0.5)) continue;
+        const score = railDistance(source, point) + 4 * (1 - Math.abs(alignment));
+        if (best && score >= best.score) continue;
+        const step = Math.sign(alignment);
+        best = { rail, next: step > 0 ? i : i - 1, step, point, score };
+    }
+    if (!best) return undefined;
+    let { rail, next, step, point } = best;
+    const visited = new Set([rail]);
+    let heading = Math.atan2(direction[1]!, direction[0]!);
+    while (remaining > 1e-6) {
+        const end = rail[next];
+        if (end) {
+            const distance = railDistance(point, end);
+            if (distance > 1e-6) {
+                heading = Math.atan2(end[1] - point[1], end[0] - point[0]);
+                if (remaining <= distance) {
+                    const t = remaining / distance;
+                    return { point: point.map((value, i) => value + (end[i]! - value) * t) as FoxholeSpatialPoint, heading };
+                }
+            }
+            remaining -= distance;
+            point = end;
+            next += step;
+            continue;
+        }
+        // At a joined end, prefer the continuation with the least change in heading.
+        const continuations = rails.filter(candidate => !visited.has(candidate)).flatMap(candidate => [1, -1].flatMap(sign => {
+            const index = sign > 0 ? 0 : candidate.length - 1;
+            const start = candidate[index]!, following = candidate[index + sign]!;
+            if (railDistance(point, start) > 3) return [];
+            const angle = Math.atan2(following[1] - start[1], following[0] - start[0]);
+            const alignment = Math.cos(angle - heading);
+            return alignment > 0 ? [{ candidate, index, sign, alignment }] : [];
+        })).sort((a, b) => b.alignment - a.alignment);
+        const continuation = continuations[0];
+        if (!continuation) return undefined;
+        rail = continuation.candidate;
+        step = continuation.sign;
+        point = rail[continuation.index]!;
+        next = continuation.index + step;
+        visited.add(rail);
+    }
+    return { point, heading };
+}
+
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const { x, y, rotation } = request.transform;
     const unchanged: Result = { contractVersion: 1, transform: { x, y } };
@@ -62,14 +123,31 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const toParent = (point: FoxholeSpatialPoint) => parent ? projection.toLocal(parent, point) : point;
     let best: { distance: number; heightDifference: number; point: FoxholeSpatialPoint; angle: number } | undefined;
 
-    for (const track of request.context.entities) {
+    const rails = request.context.entities.flatMap(track => {
         const component = data(track, 'spline-connector');
         const key = String(component?.foxholeKey ?? '').toLowerCase();
-        if (!component || trackGauge(key) !== gauge || data(track, 'visibility', 'nixie.core')?.visible === false) continue;
+        if (!component || trackGauge(key) !== gauge || data(track, 'visibility', 'nixie.core')?.visible === false) return [];
         const spline = resolveFoxholeSpatialSplineAttachments(track, component as unknown as FoxholeSceneV2SplineConnectorData,
             request.context, assets, projection);
         const points = sampleRailCenterline(spline, assets[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
+        return points.length >= 2 ? [points] : [];
+    });
+    if (request.geometryGesture?.handleId === 'product-placement-port') {
+        if (!request.geometryGesture.snappingEnabled || request.interaction !== 'placement') return unchanged;
+        const source = request.geometryGesture.worldPoint;
+        const result = followRailFromCoupler(rails, [source.x, source.y, source.z ?? origin[2]], origin);
+        if (!result) return unchanged;
+        const point = toParent(result.point);
+        const ahead = toParent([result.point[0] + Math.cos(result.heading), result.point[1] + Math.sin(result.heading), result.point[2]]);
+        const outward = Math.atan2(ahead[1] - point[1], ahead[0] - point[0]);
+        const baseHeading = Math.atan2(origin[1] - source.y, origin[0] - source.x);
+        const forward = projection.toWorld(subject, [1, 0, 0]);
+        const reversed = Math.cos(Math.atan2(forward[1] - origin[1], forward[0] - origin[0]) - baseHeading) < 0;
+        return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
+            rotation: reversed ? outward + Math.PI : outward } };
+    }
 
+    for (const points of rails) {
         for (let index = 1; index < points.length; index++) {
             const start = points[index - 1]!, end = points[index]!;
             const nearest = nearestPointOnSegment({ x: origin[0], y: origin[1] }, { x: start[0], y: start[1] }, { x: end[0], y: end[1] });

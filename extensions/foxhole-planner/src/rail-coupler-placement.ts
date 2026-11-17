@@ -40,6 +40,6 @@ export function foxholeRailCouplerPlacementPorts(assetId: string,
             return [[`asset.${id}`, { x: port.point.x - mating.point.x * direction,
                 y: port.point.y - mating.point.y * direction, z: 0, rotation }]];
         }));
-        return { point: { ...port.point, z: port.point.z - size.height / 2 }, rotation: port.rotation, size, products };
+        return { point: port.point, rotation: port.rotation, size, products };
     }).filter(port => Object.keys(port.products).length > 0);
 }
