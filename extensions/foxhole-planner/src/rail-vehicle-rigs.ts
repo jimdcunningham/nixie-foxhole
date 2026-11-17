@@ -42,6 +42,24 @@ export const foxholeRailVehicleBogies: Readonly<Record<string, readonly FoxholeB
 const driveRate = (radiusMetres: number) => -1 / (32 * radiusMetres);
 const mainWheelRadius = .745;
 export const foxholeBlackBoltValveGear = blackBoltValveGear(driveRate(mainWheelRadius));
+// The mouth of the stack measures x=2.56m and z=5.45m in the bound Black Bolt model.
+const stack: [number, number, number] = [82, 0, 175];
+const steam = (opacity: number, endSize: number, lifetime: number) => ({
+    color: 0xd8e0e5, opacity, size: 28, endSize, velocity: [4, -6, 34] as [number, number, number], lifetime,
+});
+export const foxholeBlackBoltEffects: NonNullable<NixieSpatialPlanV1['simulationEffects']> = [
+    { id: 'exhaust', point: stack, trigger: 'distance', interval: 2 * Math.PI * 32 * mainWheelRadius / 4,
+        sound: { resourceId: 'foxhole.audio.steam-chuff', gain: .8, range: 4200 },
+        particle: steam(.85, 102, 2.2) },
+    { id: 'steam-idle', point: stack, trigger: 'idle', interval: 1.8,
+        sound: { resourceId: 'foxhole.audio.steam-idle', gain: .23, range: 1600 },
+        particle: steam(.31, 72, 2.7) },
+    { id: 'whistle', point: stack, trigger: 'cue', label: 'Whistle',
+        sound: { resourceId: 'foxhole.audio.steam-whistle', gain: .85, range: 8500 },
+        particle: steam(.95, 128, 2.5) },
+    { id: 'brake-squeal', point: [18, 0, 16], trigger: 'brake', interval: 24,
+        sound: { resourceId: 'foxhole.audio.brake-squeal', gain: .62, range: 3800 } },
+];
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });

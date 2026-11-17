@@ -19,6 +19,7 @@ export function createCatalogRuntimeManifest(authored: NixieExtensionManifestV1,
                 {id: product.id, assetGroup: product.assetGroup, variant, sha256: resource.sha256})};
     })).concat(catalog.sharedResources.filter(resource => resource.id.startsWith('shared.') && resource.mediaType === 'model/gltf-binary')
         .map(resource => ({contractVersion: 1 as const, id: 'foxhole.model.' + resource.id, kind: 'model' as const, assetPack: declaration.id, path: resource.path})));
+    manifest.contributes.resources.push(...(authored.contributes.resources ?? []).filter(resource => resource.kind === 'audio'));
     const categoryIcons = ['defense', 'bunker', 'general', 'facility', 'mining', 'power', 'liquid', 'foundation', 'shippingcontainer'];
     const privateFiles = (catalog.data as {privateFiles?: Record<string, unknown>} | undefined)?.privateFiles;
     for (const suffix of categoryIcons) {

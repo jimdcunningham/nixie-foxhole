@@ -13,10 +13,13 @@ test('generated catalogs bind stable base, variant, and shared model IDs without
         products: [{id: 'powerpole', assetGroup: 'structures', resources: {model: [{...receipt, dependencies: ['shared.connector']}, {...receipt, variant: 'upgrade.coal'}]}}],
         sharedResources: [{id: 'shared.connector', path: 'shared/models/connector.glb', ...receipt, mediaType: 'model/gltf-binary'}]});
     const built = parseNixieExtensionManifestV1(createCatalogRuntimeManifest(authored, catalog, {baseUrl: 'https://assets.test/', catalog: receipt}));
-    assert.deepEqual(built.contributes.resources?.map(row => [row.id, row.path]), [
+    assert.deepEqual(built.contributes.resources?.filter(row => row.kind === 'model').map(row => [row.id, row.path]), [
         ['foxhole.model.powerpole', 'models/powerpole.base.glb'], ['foxhole.model.powerpole.upgrade.coal', 'models/powerpole.upgrade.coal.glb'],
         ['foxhole.model.shared.connector', 'shared/models/connector.glb'],
     ]);
+    const audio = built.contributes.resources?.filter(row => row.kind === 'audio') ?? [];
+    assert.deepEqual(audio, authored.contributes.resources?.filter(row => row.kind === 'audio'));
+    assert.equal(audio.length, 4);
     assert.equal(built.contributes.assetPacks, undefined);
     assert.equal(built.contributes.productCatalogs?.[0]?.document.path, 'dist/catalog.v1.json');
     assert.ok(built.contributes.resourceTemplates?.every(row => row.assetPack === 'foxhole.catalog'));
