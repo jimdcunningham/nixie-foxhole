@@ -6,6 +6,7 @@ import { resolveMineSplineMarkerSample } from './interval-connector-path.ts';
 import { resolveIntervalMarkerVariantIds } from './interval-marker-variants.ts';
 import { isFoxholeReferenceRoad, resolveConnectorBehavior } from './connector-behavior.ts';
 import { resolveBarbedWireFencePosts } from './barbed-wire-fence.ts';
+import { railSwitchStations } from './rail-path-sockets.ts';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 
@@ -115,6 +116,13 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     } else if (/^(?:small)?railtrackspline(?:biarc|foundation|town)?$/.test(data.foxholeKey)) {
         span('rail-bed', 'bed'); span('rail-span', 'rail');
         rigid('rail-sleepers', 'sleeper', [...interval(0), ...interval(1)]);
+        const stations = railSwitchStations(data.foxholeKey, data.socketAttachments);
+        // Published rail GLBs already contain BackSwitchMesh at index zero, before it had a named role.
+        const switchMesh = profile.parts.switch ?? (asset.renderLayers.backswitch && asset.model.resourceId === `foxhole.model.${data.foxholeKey}`
+            ? { meshIndex: 0, origin: [0, 0, 0] as [number, number, number] } : undefined);
+        if (stations.length && switchMesh) nodes.push({ ...common, id: 'rail-switches', meshIndex: switchMesh.meshIndex,
+            sourceOrigin: switchMesh.origin, instances: stations.map(station => ({ distance: station.fraction * length,
+                ...(station.reverse ? { rotation: Math.PI } : {}) })) });
     } else if (data.foxholeKey === 'barbedwirespline') {
         for (const index of [0,1]) {
             const location = asset.connector?.meshConfigs[index]?.relativeLocation ?? [0, index ? -30 : 30, 0];

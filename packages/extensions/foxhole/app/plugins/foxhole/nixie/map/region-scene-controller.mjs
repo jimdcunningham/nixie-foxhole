@@ -266,7 +266,8 @@ export class FoxholeRegionSceneController {
  tourRegions(){return [...this.records.values()].filter(r=>r.scene?.createRoadTour&&!r.retired).map(r=>({id:r.id,position:r.position,scene:r.scene}));}
  mapAssetAt(x,y){const assets=new Set();for(const r of this.records.values())if(!r.retired)for(const asset of r.scene?.mapAssetsAt?.(x,y)||[])assets.add(asset);return assets.size===1?[...assets][0]:null;}
  sampleWater(x,y){if(this.layers?.water===false)return null;let highest=null;for(const r of this.records.values()){const value=r.scene?.sampleWater?.(x,y);if(value!=null&&Number.isFinite(value))highest=highest===null?value:Math.max(highest,value);}return highest;}
- sampleGround(x,y){let highest=this.sampleWater(x,y);if(this.layers?.terrain!==false)for(const r of this.records.values()){const value=r.scene?.sampleGround?.(x,y);if(value!=null&&Number.isFinite(value))highest=highest===null?value:Math.max(highest,value);}return highest;}
+ sampleTerrain(x,y){let highest=null;if(this.layers?.terrain!==false)for(const r of this.records.values()){const value=r.scene?.sampleGround?.(x,y);if(value!=null&&Number.isFinite(value))highest=highest===null?value:Math.max(highest,value);}return highest;}
+ sampleGround(x,y){const terrain=this.sampleTerrain(x,y),water=this.sampleWater(x,y);return terrain===null?water:water===null?terrain:Math.max(terrain,water);}
  setWaterStencils(triangles){this.waterStencils=triangles;for(const r of this.records.values())r.scene?.setWaterStencils?.(triangles);}
  setGroundCutouts(volumes){this.cutouts=volumes;for(const r of this.records.values())r.scene?.setGroundCutouts?.(volumes);}
  get active(){return [...this.records.values()].some(r=>r.scene);}

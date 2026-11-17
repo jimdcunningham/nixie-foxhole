@@ -114,6 +114,18 @@ export const FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE = {
     label: 'Spline connectors (powerline, pipe, rail track, …)',
 } as const satisfies FoxholeBoardRenderLaneDefinition;
 
+export const FOXHOLE_RAIL_BED_RENDER_LANE = {
+    laneId: 'foxhole:connector:rail-bed',
+    laneOrder: 18,
+    label: 'Rail beds beneath switches',
+} as const satisfies FoxholeBoardRenderLaneDefinition;
+
+export const FOXHOLE_RAIL_SWITCH_RENDER_LANE = {
+    laneId: 'foxhole:connector:rail-switch',
+    laneOrder: 19,
+    label: 'Rail switches beneath tracks',
+} as const satisfies FoxholeBoardRenderLaneDefinition;
+
 export const FOXHOLE_SPLINE_SHADOW_RENDER_LANE = {
     laneId: 'foxhole:connector:spline-shadow',
     laneOrder: 34,
@@ -294,6 +306,8 @@ export const FOXHOLE_BOARD_RENDER_LANE_STACK = [
     FOXHOLE_STRUCTURE_RENDER_LANES.floorDetail,
     FOXHOLE_STRUCTURE_RENDER_LANES.modification,
     FOXHOLE_STRUCTURE_RENDER_LANES.dirt,
+    FOXHOLE_RAIL_BED_RENDER_LANE,
+    FOXHOLE_RAIL_SWITCH_RENDER_LANE,
     FOXHOLE_SPLINE_SHADOW_RENDER_LANE,
     FOXHOLE_LEGACY_CONNECTOR_RENDER_LANE,
     FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE,

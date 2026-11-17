@@ -1,4 +1,4 @@
-import { FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, foxholeRenderLane, resolveFoxholeConnectorRenderLane } from './render-lanes.ts';
+import { FOXHOLE_RAIL_BED_RENDER_LANE, FOXHOLE_RAIL_SWITCH_RENDER_LANE, FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE, foxholeRenderLane, resolveFoxholeConnectorRenderLane } from './render-lanes.ts';
 import type {
     NixieExtensionGraphicsCommandV1,
     NixieExtensionRenderGraphicsV1,
@@ -19,6 +19,7 @@ import { buildSplineRibbonMeshData, resolveConnectorSplineTextureSlicing, resolv
 import { foxholeSceneV2ConnectorConstraints, foxholeSceneV2ConnectorEndpoints, foxholeSceneV2GeometryLayer, sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 import { destroyedTrenchConnectorPieces } from './destroyed-trench-connector.ts';
 import { trenchConnectorTier } from './trench-connector.ts';
+import { railPathSocket, railSwitchStations } from './rail-path-sockets.ts';
 
 export interface FoxholeSceneV2SplineConnectorData {
     foxholeKey: string;
@@ -181,7 +182,8 @@ function buildSplineRibbon(
     if (!geometry) {
         return null;
     }
-    return { id, kind: 'mesh', ...foxholeRenderLane(FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE), resourceId: visual.resourceId,
+    const lane = behavior.railTrack && id === 'spline-connector-underlay' ? FOXHOLE_RAIL_BED_RENDER_LANE : FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE;
+    return { id, kind: 'mesh', ...foxholeRenderLane(lane), resourceId: visual.resourceId,
         positions: [...geometry.positions], uvs: [...geometry.uvs], indices: [...geometry.indices],
         textureAddressMode: resolveConnectorSplineTextureSlicing(data.foxholeKey, rawLayer, primaryConfig?.materialScale) ? 'clamp-to-edge' : 'repeat', textureScaleMode: 'linear',
         ...(data.tint === undefined && !data.blueprint ? {} : { tint: data.tint ?? 0x335CFF }),
@@ -392,6 +394,21 @@ export function renderFoxholeSceneV2SplineConnector(
         buildSplineTrim('spline-connector-back-ramp', data.startAttachmentNodeId || (data.startSocketName && data.socketAttachments?.[data.startSocketName]) ? undefined : asset?.renderLayers.backramp, controlPoints[0], { x: Math.cos(startAngle), y: Math.sin(startAngle) }, data),
         buildSplineTrim('spline-connector-front-ramp', data.endAttachmentNodeId || (data.endSocketName && data.socketAttachments?.[data.endSocketName]) ? undefined : asset?.renderLayers.frontramp, controlPoints[3], { x: Math.cos(endAngle), y: Math.sin(endAngle) }, data),
     ].filter(node => node !== null);
+    const switchVisual = asset?.renderLayers.backswitch;
+    const stations = switchVisual ? railSwitchStations(data.foxholeKey, data.socketAttachments) : [];
+    const switches: NixieExtensionRenderSpriteV1[] = [];
+    if (switchVisual && stations.length) {
+        const railPath = sampleFoxholeSceneV2Connector(data, asset);
+        for (const station of stations) {
+            const socket = railPathSocket(data.foxholeKey, railPath, station.name);
+            if (socket) switches.push({ id: station.name, kind: 'sprite',
+                ...foxholeRenderLane(FOXHOLE_RAIL_SWITCH_RENDER_LANE), resourceId: switchVisual.resourceId,
+                x: socket.x, y: socket.y, rotation: socket.rotation, anchorX: 0.5, anchorY: 0,
+                scaleX: 0.5, scaleY: 0.5, alpha: 1,
+                ...(data.tint !== undefined || data.blueprint ? { tint: data.tint ?? 0x335CFF } : {}),
+            });
+        }
+    }
     return [
         ...(!ribbon && !backTrim && !frontTrim && !intervalMarkers.length ? [path] : []),
         ...[underlay, netOverBuoys ? null : ribbon].filter(node => node !== null),
@@ -400,5 +417,6 @@ export function renderFoxholeSceneV2SplineConnector(
         ...ramps,
         ...[backTrim, frontTrim].filter(node => node !== null),
         ...(netOverBuoys && ribbon ? [ribbon] : []),
+        ...switches,
     ];
 }

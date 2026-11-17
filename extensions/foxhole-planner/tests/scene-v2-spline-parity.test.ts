@@ -11,6 +11,29 @@ const connector = (foxholeKey: string, patch: Partial<FoxholeSceneV2SplineConnec
     minLength: 48, maxLength: 100000, minRadius: 24, maxRadius: 24, maxBuffer: 0, curveT: 1, blueprint: false, ...patch,
 });
 
+test('rail beds draw below switches from other tracks and foundation rails remain bedless', () => {
+    for (const gauge of ['', 'small']) {
+        const groundKey = `${gauge}railtrackspline`;
+        const foundationKey = `${groundKey}foundation`;
+        const groundAsset = assets[groundKey]!;
+        const ground = renderFoxholeSceneV2SplineConnector(connector(groundKey), groundAsset);
+        const foundation = renderFoxholeSceneV2SplineConnector(
+            connector(foundationKey, { socketAttachments: { 'RailPath-5000-f': {} } }), assets[foundationKey],
+        );
+        const bed = ground.find(node => node.id === 'spline-connector-underlay');
+        const sw = foundation.find(node => node.id === 'RailPath-5000-f');
+        assert.ok(bed?.kind === 'mesh' && bed.laneOrder !== undefined);
+        assert.equal(bed.resourceId, groundAsset.renderLayers.underlay!.resourceId);
+        assert.ok(sw?.kind === 'sprite' && sw.laneOrder !== undefined);
+        assert.ok(bed.laneOrder < sw.laneOrder);
+        assert.ok(!foundation.some(node => node.id === 'spline-connector-underlay'));
+        for (const trackNodes of [ground, foundation]) {
+            const span = trackNodes.find(node => node.id === 'spline-connector-span');
+            assert.ok(span?.laneOrder !== undefined && span.laneOrder > sw.laneOrder);
+        }
+    }
+});
+
 test('powerline stroke turns red beyond its maximum length and recovers when shortened', () => {
     const strokeColor = (endX: number) => {
         const path = renderFoxholeSceneV2SplineConnector(connector('powerline', { endX, maxLength: 500 }))[0];

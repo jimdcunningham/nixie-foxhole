@@ -48,6 +48,8 @@ export function spatialConnectorProfile(id, document, exported, scene) {
         const small = id.startsWith('small');
         profile.parts.rail = part([small ? 'SmallGaugeTrack_Rail' : 'Railway_Rail']);
         profile.parts.sleeper = part([small ? 'SmallGaugeTrack_Tie' : 'Railway_Tie']);
+        const railSwitch = part(['SK_RailTrackSwitch'], 0, false);
+        if (railSwitch) profile.parts.switch = railSwitch;
         const bed = part([small ? 'SmallGaugeTrack_Trackbed01' : 'Railway_Trackbed_01'], 0, false);
         if (bed) profile.parts.bed = bed;
     } else if (id === 'barbedwirespline') {

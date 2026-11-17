@@ -14,11 +14,13 @@ import { resolveFoxholeEntityStructureSockets } from './effective-structure-sock
 import { sampleFoxholeSceneV2Connector, foxholeSceneV2ConnectorConstraints, foxholeSceneV2ConnectorEndpoints } from './scene-v2-connector-path.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 import { resolveFacilityPipeSideSocketsFromPath } from './connector-side-sockets.ts';
+import { nearestRailPathSocket, railPathSocket, railPathSocketHasBranch, railPathSocketPolicy, readRailPathSocket } from './rail-path-sockets.ts';
 import { requiresStraightConnectorSocketAlignment } from './connector-behavior.ts';
 import { isTrenchConnector } from './trench-connector.ts';
 import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { isFoxholePowerSocketConnectionAvailable } from './power-socket-capacity.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
+import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { readFoxholeSceneV2CoreTransform, withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 import type { FoxholePowerSocketConnection } from './power-socket-capacity.ts';
 import type {
@@ -229,22 +231,30 @@ function sockets(entity: NixieComponentEntitySnapshotV1, matrix: Matrix,
             Math.max(2, (span?.height ?? 8) * 0.5));
         localSockets.push(...sideSockets.map(socket => ({ ...localSockets[0]!, ...socket })));
     }
-    return localSockets.map(socket => {
-        const position = point(matrix, socket.x, socket.y);
-        const direction = point(matrix, socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation));
-        const world = projection?.toWorld(entity, [socket.x, socket.y, socket.z ?? 0]) ?? [position.x, position.y, 0];
-        const facing = projection?.toWorld(entity, [socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation), socket.z ?? 0])
-            ?? [direction.x, direction.y, 0];
-        return {
-            entityId: entity.entityId,
-            socket,
-            ...position,
-            z: world[2]!,
-            world: world as [number, number, number],
-            direction: facing.map((value, axis) => value - world[axis]!) as [number, number, number],
-            rotation: Math.atan2(direction.y - position.y, direction.x - position.x),
-        };
-    });
+    if (connector?.componentId === 'spline-connector' && railPathSocketPolicy(String(connector.data.foxholeKey))) {
+        const data = connector.data as unknown as FoxholeSceneV2SplineConnectorData;
+        const names = readAttachments(entity).map(link => link.localSocketName).filter(readRailPathSocket);
+        if (names.length) {
+            const path = sampleFoxholeSceneV2Connector(data, asset ?? undefined);
+            for (const name of names) {
+                const socket = railPathSocket(data.foxholeKey, path, name);
+                if (socket) localSockets.push(socket);
+            }
+        }
+    }
+    return localSockets.map(socket => worldSocket(entity, socket, matrix, projection));
+}
+
+function worldSocket(entity: NixieComponentEntitySnapshotV1, socket: FoxholeSceneV2BuildSocketMetadata, matrix: Matrix,
+    projection?: ReturnType<typeof createFoxholeSpatialProjection>): WorldSocket {
+    const position = point(matrix, socket.x, socket.y);
+    const direction = point(matrix, socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation));
+    const world = projection?.toWorld(entity, [socket.x, socket.y, socket.z ?? 0]) ?? [position.x, position.y, 0];
+    const facing = projection?.toWorld(entity, [socket.x + Math.cos(socket.rotation), socket.y + Math.sin(socket.rotation), socket.z ?? 0])
+        ?? [direction.x, direction.y, 0];
+    return { entityId: entity.entityId, socket, ...position, z: world[2], world,
+        direction: [facing[0] - world[0], facing[1] - world[1], facing[2] - world[2]],
+        rotation: Math.atan2(direction.y - position.y, direction.x - position.x) };
 }
 
 type SpatialPoint = WorldSocket['world'];
@@ -477,6 +487,9 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
     if (gesture && !role) {
         const tangentRole = gesture.handleId === 'start-rotation' ? 'start' : gesture.handleId === 'end-rotation' ? 'end' : null;
         if (!tangentRole || connector.componentId !== 'spline-connector') return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
+        if (readRailPathSocket(String(connector.data[tangentRole + 'AttachmentSocketName'] ?? ''))) {
+            return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
+        }
         const attachment = trenchEndRotationTarget(moved, tangentRole, entities);
         if (attachment && !attachment.connector) {
             throw new Error('This end is locked to the attached structure.');
@@ -508,6 +521,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
     const matrix = matrices.get(moved.entityId) ?? localMatrix(moved, request.transform);
     const endpoints = connectorEndpoints(moved);
     const dragged = endpoints.find(endpoint => endpoint.role === role);
+    const byId = new Map(entities.map(entity => [entity.entityId, entity]));
     const nextAttachments = new Map(entities.map(entity => [entity.entityId, readAttachments(entity).filter(item =>
         !(item.targetEntityId === moved.entityId && !movingIds.has(entity.entityId)
             && (!gesture || normalizedName(item.targetSocketName) === normalizedName(dragged!.socket.name)))
@@ -520,6 +534,8 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
     const straight = connector.componentId === 'spline-connector'
         && requiresStraightConnectorSocketAlignment(String(connector.data.foxholeKey ?? ''));
     const spline = connector.data as unknown as FoxholeSceneV2SplineConnectorData;
+    const rail = connector.componentId === 'spline-connector' ? railPathSocketPolicy(spline.foxholeKey) : undefined;
+    const railPaths = new Map<string, { path: ReturnType<typeof sampleFoxholeSceneV2Connector>; startZ: number; endZ: number }>();
     const worldSockets = new Map<string, WorldSocket[]>();
     const socketsFor = (entity: NixieComponentEntitySnapshotV1) => {
         let result = worldSockets.get(entity.entityId);
@@ -566,7 +582,41 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
         for (const entity of entities) {
             if (gesture && !gesture.snappingEnabled) break;
             if (movingIds.has(entity.entityId)) continue;
-            for (const target of socketsFor(entity)) {
+            // Occupied path sockets follow the host spline, but remain unavailable as snap targets.
+            const targets = socketsFor(entity).filter(target => !readRailPathSocket(target.socket.name));
+            const peer = rail && connectorComponent(entity);
+            if (peer && peer.componentId === 'spline-connector') {
+                const data = peer.data as unknown as FoxholeSceneV2SplineConnectorData;
+                if (railPathSocketPolicy(data.foxholeKey)?.category === rail?.category
+                    && data.startAttachmentNodeId !== moved.entityId && data.endAttachmentNodeId !== moved.entityId) {
+                    let resolved = railPaths.get(entity.entityId);
+                    if (!resolved) {
+                        const geometry = data.startAttachmentNodeId || data.endAttachmentNodeId
+                            ? resolveFoxholeSpatialSplineAttachments(entity, data, request.context, foxholeSceneV2Assets, projection)
+                            : { ...data, startZ: 0, endZ: 0 };
+                        resolved = { path: sampleFoxholeSceneV2Connector(geometry, assetMetadata(entity) ?? undefined),
+                            startZ: geometry.startZ, endZ: geometry.endZ };
+                        railPaths.set(entity.entityId, resolved);
+                    }
+                    const reference: SpatialPoint = cursor ? [cursor[0]!, cursor[1]!, cursor[2]!] : moving.world;
+                    const local = projection.toLocal(entity, reference);
+                    const towardBranch = placingFirstEnd || !anchor
+                        ? projection.toLocal(entity, [reference[0] - moving.direction[0], reference[1] - moving.direction[1], reference[2]])
+                        : projection.toLocal(entity, anchor.world);
+                    const station = nearestRailPathSocket(data.foxholeKey, resolved.path, { x: local[0], y: local[1] },
+                        { x: towardBranch[0] - local[0], y: towardBranch[1] - local[1] },
+                        (nextAttachments.get(entity.entityId) ?? []).filter(link => readRailPathSocket(link.localSocketName)
+                            && railPathSocketHasBranch(entity.entityId, link.localSocketName, byId.get(link.targetEntityId)))
+                            .map(link => link.localSocketName), SNAP_DISTANCE);
+                    const socket = station && railPathSocket(data.foxholeKey, resolved.path, station.name, resolved);
+                    if (socket) {
+                        const target = worldSocket(entity, socket, matrices.get(entity.entityId) ?? localMatrix(entity), projection);
+                        // Both rail CDOs permit a 50 cm height difference at the junction.
+                        if (Math.abs(target.z - reference[2]) <= 16) targets.push(target);
+                    }
+                }
+            }
+            for (const target of targets) {
                 if (cursor && !power && Math.hypot(target.world[0] - cursor[0]!, target.world[1] - cursor[1]!,
                     target.world[2] - cursor[2]!) > SNAP_DISTANCE) continue;
                 const key = target.entityId + ':' + target.socket.name;
@@ -577,7 +627,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
                     ? isFoxholePowerSocketConnectionAvailable({ targetNodeId: target.entityId, targetSocketName: target.socket.name,
                         maxConnections: assetMetadata(entity)?.powerSocketMaxConnections, connections,
                         movingConnectorNodeId: moved.entityId, movingConnectorSocketName: endpoint.socket.name })
-                    : !attachmentAt(nextAttachments.get(target.entityId) ?? [], target.socket.name);
+                    : readRailPathSocket(target.socket.name) || !attachmentAt(nextAttachments.get(target.entityId) ?? [], target.socket.name);
                 if (claimed.has(key) || !available || compatible(moving, target) <= 0) continue;
                 if ((power || straight) && oppositeLink?.targetEntityId === target.entityId
                     && normalizedName(oppositeLink.targetSocketName) === normalizedName(target.socket.name)) continue;
@@ -646,7 +696,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
                     : [proposedPoint[0], proposedPoint[1], power ? 0 : proposedPoint[2]],
                 targets,
                 maximumDistance: pose ? 1 : SNAP_DISTANCE,
-                ...(power && gesture ? { hoveredEntityIds: gesture.hoveredEntityIds } : {}),
+                ...((power || rail) && gesture ? { hoveredEntityIds: gesture.hoveredEntityIds } : {}),
             }) : null;
         const best = selected ? { target: selected.target } : null;
         if (gesture) for (const peer of entities) {
@@ -698,7 +748,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
             finalizedTransform = pose.transform;
         } else {
             let endpointProjection = projection;
-            if (power && placingFirstEnd) {
+            if (placingFirstEnd && (power || readRailPathSocket(best.target.socket.name))) {
                 // Keep the free preview end at the socket's height as the pointer crosses uneven model surfaces.
                 const snap = socketSnapPose(request, moved, moving, best.target, false, true);
                 if (snap) {
@@ -733,7 +783,12 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
             set[`${endpoint.role}Attachment`] = { nodeId: best.target.entityId, socketName: best.target.socket.name };
         }
         claimed.add(`${best.target.entityId}:${best.target.socket.name}`);
-        nextAttachments.get(best.target.entityId)!.push({ localSocketName: best.target.socket.name, targetEntityId: moved.entityId, targetSocketName: endpoint.socket.name });
+        const links = nextAttachments.get(best.target.entityId)!;
+        if (readRailPathSocket(best.target.socket.name)) {
+            const previous = links.findIndex(link => link.localSocketName === best.target.socket.name);
+            if (previous >= 0) links.splice(previous, 1);
+        }
+        links.push({ localSocketName: best.target.socket.name, targetEntityId: moved.entityId, targetSocketName: endpoint.socket.name });
     }
     if (request.interaction === 'placement' && role === 'end' && isTrenchConnector(String(connector.data.foxholeKey))) {
         const data = { ...connector.data, ...set } as unknown as FoxholeSceneV2SplineConnectorData;

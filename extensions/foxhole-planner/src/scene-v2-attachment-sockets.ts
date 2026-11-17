@@ -4,10 +4,13 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import { normalizeFoxholeBuildSocketName } from './bunker-statistics-sockets.ts';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { resolveFoxholeConnectorDisplaySockets } from './scene-v2-connector-socket-overlays.ts';
+import { railPathSocket, readRailPathSocket } from './rail-path-sockets.ts';
+import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
 
 /** Attached connectors target the same deformed sockets as their visible endpoint/side markers. */
 export function resolveFoxholeEntityAttachmentSockets(entity: NixieComponentEntitySnapshotV1,
-    asset: FoxholeSceneV2AssetMetadata | null | undefined): FoxholeSceneV2BuildSocketMetadata[] {
+    asset: FoxholeSceneV2AssetMetadata | null | undefined,
+    resolvedSpline?: FoxholeSceneV2SplineConnectorData & { startZ?: number; endZ?: number }): FoxholeSceneV2BuildSocketMetadata[] {
     const templates = resolveFoxholeEntityStructureSockets(entity, asset);
     const spline = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'spline-connector' && component.definitionAvailable);
@@ -29,10 +32,25 @@ export function resolveFoxholeEntityAttachmentSockets(entity: NixieComponentEnti
         });
     }
     if (!spline || !asset) return templates;
-    const points = resolveFoxholeConnectorDisplaySockets(spline.data as unknown as FoxholeSceneV2SplineConnectorData, asset);
-    return points.map(point => ({
+    const data = resolvedSpline ?? spline.data as unknown as FoxholeSceneV2SplineConnectorData;
+    const points = resolveFoxholeConnectorDisplaySockets(data, asset);
+    const sockets: FoxholeSceneV2BuildSocketMetadata[] = points.map(point => ({
         ...templates.find(template => normalizeFoxholeBuildSocketName(template.name) === normalizeFoxholeBuildSocketName(point.socket.name)),
         name: point.socket.name, x: point.x, y: point.y, z: 0, rotation: point.rotation,
         socketTags: point.socket.socketTags,
     }));
+    const occupancy = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
+        && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+    const names = Array.isArray(occupancy) ? occupancy.flatMap(entry => {
+        const name = entry && typeof entry === 'object' && 'localSocketName' in entry ? entry.localSocketName : undefined;
+        return typeof name === 'string' && readRailPathSocket(name) ? [name] : [];
+    }) : [];
+    if (names.length) {
+        const path = sampleFoxholeSceneV2Connector(data, asset);
+        for (const name of names) {
+            const socket = railPathSocket(data.foxholeKey, path, name, resolvedSpline);
+            if (socket) sockets.push(socket);
+        }
+    }
+    return sockets;
 }

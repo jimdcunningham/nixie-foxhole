@@ -4,6 +4,7 @@ import type {
 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
+import { railPathSocketHasBranch, readRailPathSocket } from './rail-path-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';
 import { isTrenchConnector } from './trench-connector.ts';
 import { requiresStraightConnectorSocketAlignment } from './connector-behavior.ts';
@@ -141,16 +142,22 @@ function resolveSocket(
     context: NixieEntityRendererContextV1,
     worldMatrices: Map<string, FoxholeSceneV2Matrix>,
     assetMetadataById: Record<string, FoxholeSceneV2AssetMetadata>,
+    visited: ReadonlySet<string> = new Set(),
 ): ResolvedSocket | null {
     if (!link) {
         return null;
     }
     const entity = context.entities.find(candidate => candidate.entityId === link.nodeId);
-    const asset = entity ? componentData(entity, FOXHOLE_OWNER_ID, 'asset') : undefined;
-    const assetId = typeof asset?.assetId === 'string' ? asset.assetId : '';
+    const assetId = entity ? String(componentData(entity, FOXHOLE_OWNER_ID, 'asset')?.assetId
+        ?? componentData(entity, FOXHOLE_OWNER_ID, 'spline-connector')?.foxholeKey ?? '') : '';
     const metadata = assetMetadataById[assetId];
     const expectedName = normalizedSocketName(link.socketName);
-    const socket = entity && resolveFoxholeEntityAttachmentSockets(entity, metadata).find(candidate => normalizedSocketName(candidate.name) === expectedName);
+    if (!entity) return null;
+    const rail = readRailPathSocket(link.socketName) && componentData(entity, FOXHOLE_OWNER_ID, 'spline-connector');
+    if (rail && visited.has(entity.entityId)) return null;
+    const resolvedRail = rail ? resolveFoxholeSceneV2SplineAttachments(entity,
+        rail as unknown as FoxholeSceneV2SplineConnectorData, context, assetMetadataById, worldMatrices, visited) : undefined;
+    const socket = resolveFoxholeEntityAttachmentSockets(entity, metadata, resolvedRail).find(candidate => normalizedSocketName(candidate.name) === expectedName);
     const world = worldMatrices.get(link.nodeId);
     if (!socket || !world) {
         return null;
@@ -211,35 +218,38 @@ export function resolveFoxholeSceneV2ConnectorAttachments(
 
 export function resolveFoxholeSceneV2SplineAttachments(
     entity: NixieComponentEntitySnapshotV1,
-    data: FoxholeSceneV2SplineConnectorData & Record<string, unknown>,
+    data: FoxholeSceneV2SplineConnectorData,
     context: NixieEntityRendererContextV1,
     assetMetadataById: Record<string, FoxholeSceneV2AssetMetadata>,
+    matrices = resolveFoxholeSceneV2WorldMatrices(context),
+    visited: ReadonlySet<string> = new Set(),
 ): FoxholeSceneV2SplineConnectorData {
-    const matrices = resolveFoxholeSceneV2WorldMatrices(context);
+    const resolving = new Set(visited).add(entity.entityId);
     const inverseEntityWorld = invertFoxholeSceneV2Matrix(matrices.get(entity.entityId) ?? localMatrix(entity));
     const resolve = (prefix: 'start' | 'end') => {
         const nodeId = data[`${prefix}AttachmentNodeId`];
         const socketName = data[`${prefix}AttachmentSocketName`];
         return typeof nodeId === 'string' && typeof socketName === 'string'
-            ? toLocal(resolveSocket({ nodeId, socketName }, context, matrices, assetMetadataById), inverseEntityWorld)
+            ? toLocal(resolveSocket({ nodeId, socketName }, context, matrices, assetMetadataById, resolving), inverseEntityWorld)
             : null;
     };
     const start = resolve('start');
     const end = resolve('end');
     const startRotation = trenchEndRotationTarget(entity, 'start', context.entities)?.connector ? data.startRotation : start?.rotation;
     const endRotation = trenchEndRotationTarget(entity, 'end', context.entities)?.connector ? data.endRotation
-        : end && (isTrenchConnector(data.foxholeKey)
+        : end && (readRailPathSocket(data.endAttachmentSocketName ?? '') || isTrenchConnector(data.foxholeKey)
             || (requiresStraightConnectorSocketAlignment(data.foxholeKey) && !data.foxholeKey.includes('pipe'))) ? Math.atan2(-Math.sin(end.rotation), -Math.cos(end.rotation)) : end?.rotation;
     const occupancy = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;
+    const activeOccupancy = Array.isArray(occupancy) ? occupancy.flatMap(entry => {
+        if (!entry || typeof entry !== 'object' || !('localSocketName' in entry) || typeof entry.localSocketName !== 'string') return [];
+        if (readRailPathSocket(entry.localSocketName) && !railPathSocketHasBranch(entity.entityId, entry.localSocketName,
+            context.entities.find(branch => 'targetEntityId' in entry && branch.entityId === entry.targetEntityId))) return [];
+        return [[entry.localSocketName, entry]];
+    }) : [];
     return {
         ...data,
-        socketAttachments: Array.isArray(occupancy)
-            ? Object.fromEntries(occupancy.flatMap(entry =>
-                entry && typeof entry === 'object' && 'localSocketName' in entry && typeof entry.localSocketName === 'string'
-                    ? [[entry.localSocketName, entry]]
-                    : []))
-            : {},
+        socketAttachments: Object.fromEntries(activeOccupancy),
         ...(start ? { startX: start.x, startY: start.y, startRotation } : {}),
         ...(end ? { endX: end.x, endY: end.y, endRotation } : {}),
     };

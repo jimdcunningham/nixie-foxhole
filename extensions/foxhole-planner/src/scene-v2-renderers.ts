@@ -19,6 +19,7 @@ import { renderFoxholeSpatialConnector } from './scene-v2-spatial-connectors.ts'
 import { renderPlanarTrench } from './scene-v2-planar-trench.ts';
 import { isTrenchConnector } from './trench-connector.ts';
 import { trenchEndRotationTarget } from './trench-end-rotation.ts';
+import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
@@ -657,7 +658,9 @@ function renderFoxholeSceneV2EntityPlan(
         }
         const geometryHandles = foxholeConnectorGeometryHandles(resolved, splineAsset).filter(handle => {
             if (handle.id !== 'start-rotation' && handle.id !== 'end-rotation') return true;
-            const attachment = trenchEndRotationTarget(entity, handle.id === 'start-rotation' ? 'start' : 'end', context.entities);
+            const role = handle.id === 'start-rotation' ? 'start' : 'end';
+            if (readRailPathSocket(resolved[`${role}AttachmentSocketName`] ?? '')) return false;
+            const attachment = trenchEndRotationTarget(entity, role, context.entities);
             return !attachment || Boolean(attachment.connector);
         });
         const wheel = foxholeConnectorGeometryWheel(resolved, splineAsset);

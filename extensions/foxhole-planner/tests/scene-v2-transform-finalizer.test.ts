@@ -5,6 +5,8 @@ import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-final
 import { isFoxholePowerSocketConnectionAvailable } from '../src/power-socket-capacity.ts';
 import { withFoxholeSceneV2TransformProposal } from '../src/scene-v2-core-transforms.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
+import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
+import { FOXHOLE_HEIGHT_RENDER_LANES, FOXHOLE_RAIL_SWITCH_RENDER_LANE } from '../src/render-lanes.ts';
 
 test('power capacity counts endpoint records rather than distinct connector IDs and allows an endpoint to retain its slot', () => {
     const connections = ['line-a', 'line-b'].flatMap(connectorNodeId => ['BackSocket', 'FrontSocket'].map(connectorSocketName => ({
@@ -34,6 +36,107 @@ test('a connector cannot create a new snap to another member of the moving group
     assert.equal(result.transaction?.operations.some(operation => operation.entityId === target.entityId) ?? false, false);
     assert.equal(result.transaction?.operations.some(operation => operation.op === 'patch' && operation.entityId === moving.entityId
         && operation.set?.startAttachmentNodeId === target.entityId) ?? false, false);
+});
+
+test('a small rail endpoint joins the interior of a compatible rail in preview and commit', () => {
+    const host = pipe('main-track', 0);
+    const branch = pipe('branch', 200);
+    const key = 'smallrailtracksplinefoundation';
+    Object.assign(host.components[1]!.data, { foxholeKey: key, endX: 400, endRotation: 0 });
+    Object.assign(branch.components[1]!.data, { foxholeKey: key, startY: 8, endX: 360, endY: 130 });
+    const request = {
+        contractVersion: 1 as const, entityId: branch.entityId, interaction: 'placement' as const,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+        context: { contractVersion: 1 as const, entities: [branch, host] },
+    };
+    const socketName = 'RailPath-5000-f';
+    for (const phase of ['preview', 'commit'] as const) {
+        const result = finalizeFoxholeSceneV2Transform({ ...request, geometryGesture: {
+            phase, handleId: 'start', snappingEnabled: true, worldPoint: { x: 200, y: 8, z: 0 }, hoveredEntityIds: [host.entityId],
+        } });
+        const endpoint = result.transaction?.operations.find(operation => operation.entityId === branch.entityId);
+        assert.ok(endpoint?.op === 'patch');
+        assert.equal(endpoint.set?.startAttachmentNodeId, host.entityId);
+        assert.equal(endpoint.set?.startAttachmentSocketName, socketName);
+        const reciprocal = result.transaction?.operations.find(operation => operation.entityId === host.entityId);
+        assert.ok(reciprocal?.op === 'patch' || reciprocal?.op === 'add');
+        const occupancy = reciprocal.op === 'patch' ? reciprocal.set?.attachments : reciprocal.data.attachments;
+        assert.deepEqual(occupancy, [{ localSocketName: socketName, targetEntityId: branch.entityId,
+            targetSocketName: 'BackSocket' }]);
+        if (phase === 'commit') {
+            Object.assign(branch.components[1]!.data, endpoint.set);
+            host.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1,
+                definitionAvailable: true, data: { attachments: occupancy } });
+        }
+    }
+    const plan = renderFoxholeSceneV2Entity(host, request.context);
+    const sprite = plan.root.children.find(node => node.id === socketName);
+    assert.ok(sprite?.kind === 'sprite');
+    assert.equal(sprite.x, 200);
+    assert.equal(sprite.y, 0);
+    assert.equal(sprite.laneId, FOXHOLE_RAIL_SWITCH_RENDER_LANE.laneId);
+    assert.ok(sprite.laneOrder! < FOXHOLE_HEIGHT_RENDER_LANES.rail.laneOrder);
+    const branchPlan = renderFoxholeSceneV2Entity(branch, request.context);
+    for (const trackPlan of [plan, branchPlan]) {
+        const track = trackPlan.root.children.find(node => node.id === 'spline-connector-span');
+        assert.ok(track?.laneOrder !== undefined && track.laneOrder > sprite.laneOrder!);
+    }
+    const switches = plan.spatial?.nodes.find(node => node.id === 'rail-switches');
+    assert.ok(switches?.kind === 'model-path');
+    assert.equal(switches.meshIndex, 0);
+    assert.deepEqual(switches.instances, [{ distance: 200 }]);
+    const detached = renderFoxholeSceneV2Entity(host);
+    assert.ok(!detached.root.children.some(node => node.id === socketName));
+    assert.ok(!detached.spatial?.nodes.some(node => node.id === 'rail-switches'));
+
+    const occupancy = host.components.at(-1)!.data;
+    occupancy.attachments = [];
+    delete branch.components[1]!.data.startAttachmentNodeId;
+    delete branch.components[1]!.data.startAttachmentSocketName;
+    const otherBranch = pipe('other-branch', 192);
+    Object.assign(otherBranch.components[1]!.data, { foxholeKey: key, endAttachmentNodeId: host.entityId,
+        endAttachmentSocketName: 'RailPath-4800-b' });
+    request.context.entities.push(otherBranch);
+    const blocked = () => finalizeFoxholeSceneV2Transform({ ...request, geometryGesture: {
+        phase: 'commit', handleId: 'start', snappingEnabled: true, worldPoint: { x: 200, y: 8, z: 0 }, hoveredEntityIds: [host.entityId],
+    } }).transaction?.operations.find(operation => operation.entityId === host.entityId);
+    host.components[1]!.data.foxholeKey = 'railtracksplinefoundation';
+    assert.equal(blocked(), undefined, 'different gauge');
+    host.components[1]!.data.foxholeKey = key;
+    occupancy.attachments = [{ localSocketName: 'RailPath-4800-b', targetEntityId: otherBranch.entityId,
+        targetSocketName: 'FrontSocket' }];
+    assert.equal(blocked(), undefined, 'near an existing switch');
+});
+
+test('a rail branch tests height at the junction and binds its end facing into the host tangent', () => {
+    const host = pipe('elevated-rail', 0);
+    const branch = pipe('branch', 350);
+    const key = 'railtracksplinefoundation';
+    Object.assign(host.components[1]!.data, { foxholeKey: key, endX: 500, endRotation: 0 });
+    Object.assign(branch.components[1]!.data, { foxholeKey: key, startY: 180, endX: 250, endY: 5, endRotation: 0 });
+    host.components.push({ ownerId: 'nixie.core', componentId: 'spatial-transform', version: 1,
+        definitionAvailable: true, data: { elevation: 64 } });
+    const finalize = (z: number) => finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: branch.entityId,
+        transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities: [host, branch] },
+        geometryGesture: { phase: 'commit', handleId: 'end', snappingEnabled: true, worldPoint: { x: 250, y: 5, z },
+            hoveredEntityIds: [host.entityId] },
+    }).transaction?.operations;
+    assert.ok(!finalize(46)?.some(operation => operation.entityId === host.entityId));
+    const operations = finalize(64);
+    const endpoint = operations?.find(operation => operation.entityId === branch.entityId);
+    const reciprocal = operations?.find(operation => operation.entityId === host.entityId);
+    assert.ok(endpoint?.op === 'patch' && reciprocal?.op === 'add');
+    assert.equal(endpoint.set?.endAttachmentSocketName, 'RailPath-5000-f');
+    assert.equal(Math.abs(Number(endpoint.set?.endRotation)), Math.PI);
+    Object.assign(branch.components[1]!.data, endpoint.set);
+    host.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'socket-attachments', version: 1,
+        definitionAvailable: true, data: reciprocal.data });
+    const plan = renderFoxholeSceneV2Entity(branch, { contractVersion: 1, entities: [host, branch] });
+    assert.ok(!plan.selectionGeometry?.geometryHandles?.some(handle => handle.id === 'end-rotation'));
+    const span = plan.spatial?.nodes.find(node => node.id === 'rail-span');
+    assert.ok(span?.kind === 'model-path');
+    assert.deepEqual(span.points.slice(-3), [250, 0, 64]);
+    assert.deepEqual(span.endpointBindings?.end, { entityId: host.entityId, point: [250, 0, 0] });
 });
 
 test('a rigid group preserves a connector endpoint and reciprocal attachment', () => {
