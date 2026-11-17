@@ -33,8 +33,8 @@ function request(assetId: string, tracks: NixieComponentEntitySnapshotV1[]): Nix
     };
 }
 
-test('the live socket setting gates a track-spline finalizer for both locomotives', () => {
-    for (const id of ['trainengine', 'smalltrainengine']) {
+test('the live socket setting gates a track-spline finalizer for each rail vehicle', () => {
+    for (const id of ['trainengine', 'smalltrainengine', 'largecrane']) {
         const finalizer = manifest.contributes.transformFinalizers.map(parseNixieTransformFinalizerV1)
             .find(item => item.match.data?.assetId === id);
         assert.ok(finalizer, id);
@@ -42,6 +42,18 @@ test('the live socket setting gates a track-spline finalizer for both locomotive
         assert.equal(finalizer.candidateQuery.match.componentId, 'spline-connector');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
     }
+});
+
+test('large cranes snap to crane rails and locomotives ignore them', () => {
+    const craneTrack = track('cranerailtrackspline');
+    const pose = finalizeFoxholeRailVehicleSnap(request('largecrane', [track('railtrackspline', 'wrong', 10), craneTrack])).transform;
+    assert.equal(pose.x, 173);
+    assert.equal(pose.y, 0);
+    assert.equal(pose.elevation, 32);
+    for (const id of ['trainengine', 'smalltrainengine']) {
+        assert.deepEqual(finalizeFoxholeRailVehicleSnap(request(id, [craneTrack])).transform, { x: 173, y: 10 });
+    }
+    assert.deepEqual(finalizeFoxholeRailVehicleSnap(request('largecrane', [track('smallrailtrackspline')])).transform, { x: 173, y: 10 });
 });
 
 test('locomotives align with their gauge even when a closer track has the wrong gauge', () => {

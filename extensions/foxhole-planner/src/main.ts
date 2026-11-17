@@ -38,6 +38,7 @@ const connection = await connectNixieExtension({
             'transforms.surface-placement': finalizeFoxholeSurfacePlacement,
             'transforms.track-snapping-trainengine': finalizeFoxholeRailVehicleSnap,
             'transforms.track-snapping-smalltrainengine': finalizeFoxholeRailVehicleSnap,
+            'transforms.track-snapping-largecrane': finalizeFoxholeRailVehicleSnap,
             [FOXHOLE_SCENE_V2_TRANSFORM_FINALIZER_SYSTEM_ID]: finalizeFoxholeSceneV2Transform,
             'transforms.spline-socket-snapping': finalizeFoxholeSceneV2Transform,
             'transforms.connector-socket-snapping': finalizeFoxholeSceneV2Transform,

@@ -11,11 +11,12 @@ import type { FoxholeSpatialPoint } from './scene-v2-spatial-transforms.ts';
 import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connectors.ts';
 
 const SNAP_DISTANCE = 20;
-const vehicleGauge = new Map([['trainengine', 'standard'], ['smalltrainengine', 'small']]);
+const vehicleGauge = new Map([['trainengine', 'standard'], ['smalltrainengine', 'small'], ['largecrane', 'crane']]);
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
 function trackGauge(key: string) {
+    if (key === 'cranerailtrackspline') return 'crane';
     if (!railPathSocketPolicy(key)) return undefined;
     return key.startsWith('small') ? 'small' : 'standard';
 }
