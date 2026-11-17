@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
+import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { matchesNixieTransformFinalizerV1, parseNixieTransformFinalizerV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
@@ -38,6 +38,7 @@ function request(assetId: string, tracks: NixieComponentEntitySnapshotV1[]): Nix
 }
 
 test('the live socket setting gates a track-spline finalizer for each rail vehicle', () => {
+    parseNixieExtensionManifestV1(manifest);
     const railVehicles = Object.entries(assets).filter(([, asset]) => asset.category === 'trains');
     for (const id of [...railVehicles.map(([id]) => id), 'largecrane']) {
         const finalizer = manifest.contributes.transformFinalizers.map(parseNixieTransformFinalizerV1)
@@ -157,4 +158,47 @@ test('vehicle couplers offer all and only the matching gauge with per-car dockin
             assert.equal(nextCenter.z, 0);
         }
     }
+});
+
+test('a snapped vehicle follows its saved station and facing after the rail moves and rotates', () => {
+    const rail = track('railtrackspline');
+    const proposal = request('trainengine', [rail]);
+    const snap = finalizeFoxholeRailVehicleSnap(proposal);
+    const add = snap.transaction?.operations[0];
+    assert.equal(add?.op, 'add');
+    if (add?.op !== 'add') assert.fail();
+    assert.equal(add.data.rail, rail.entityId);
+    assert.ok(Math.abs(Number(add.data.station) - 173) < 1e-8);
+    assert.equal(add.data.reversed, true);
+    proposal.context.entities[0]!.components.push(component('rail-attachment', add.data));
+
+    Object.assign(rail.components[0]!.data, { x: 500, y: 600, rotation: Math.PI / 2 });
+    Object.assign(rail.components[1]!.data, { elevation: 70 });
+    const follow = finalizeFoxholeRailVehicleSnap({ ...proposal, followedEntityId: rail.entityId, interaction: 'transform' });
+    assert.ok(Math.abs(follow.transform.x - 500) < 1e-8);
+    assert.ok(Math.abs(follow.transform.y - 773) < 1e-8);
+    assert.ok(Math.abs(follow.transform.rotation! - 3 * Math.PI / 2) < 1e-8);
+    assert.equal(follow.transform.elevation, 70 + 36 * 0.32);
+    assert.equal(follow.transaction, undefined);
+
+    const detach = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'planar-translation',
+        transform: { ...proposal.transform, x: -400, y: -400 } });
+    assert.equal(detach.transaction?.operations[0]?.op, 'remove');
+});
+
+test('a shortened rail clamps the vehicle to the end and a reshaped rail changes its pose', () => {
+    const rail = track('railtrackspline');
+    const proposal = request('trainflatbed', [rail]);
+    const snap = finalizeFoxholeRailVehicleSnap(proposal);
+    const add = snap.transaction?.operations[0];
+    if (add?.op !== 'add') assert.fail();
+    proposal.context.entities[0]!.components.push(component('rail-attachment', add.data));
+    const follow = { ...proposal, followedEntityId: rail.entityId, interaction: 'transform' as const };
+    Object.assign(rail.components.at(-1)!.data, { endX: 350, endY: 260, endRotation: Math.PI / 2 });
+    const curved = finalizeFoxholeRailVehicleSnap(follow);
+    assert.ok(curved.transform.y > 10);
+    assert.notEqual(curved.transform.rotation, snap.transform.rotation);
+
+    Object.assign(rail.components.at(-1)!.data, { endX: 150, endY: 0, endRotation: 0 });
+    assert.ok(Math.abs(finalizeFoxholeRailVehicleSnap(follow).transform.x - 150) < 1e-8);
 });
