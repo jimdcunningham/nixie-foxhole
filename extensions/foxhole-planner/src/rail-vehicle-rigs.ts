@@ -1,4 +1,5 @@
 import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { blackBoltValveGear } from './black-bolt-valve-gear.ts';
 
 /** Authored longitudinal pivots and wheel contacts measured from the posed game rigs, in metres. */
 export interface FoxholeBogie {
@@ -40,6 +41,7 @@ export const foxholeRailVehicleBogies: Readonly<Record<string, readonly FoxholeB
 // Rolling radii measured at the treads, outside the hub and inside the flange.
 const driveRate = (radiusMetres: number) => -1 / (32 * radiusMetres);
 const mainWheelRadius = .745;
+export const foxholeBlackBoltValveGear = blackBoltValveGear(driveRate(mainWheelRadius));
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });

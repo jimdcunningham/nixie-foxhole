@@ -23,7 +23,7 @@ import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { foxholeRailCouplerPlacementPorts } from './rail-coupler-placement.ts';
-import { foxholeRailLinkages, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
+import { foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
     FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
@@ -585,6 +585,7 @@ export function renderFoxholeSceneV2Entity(
         plan.spatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.spatial,
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
+            ...(railAssetId === 'trainengine' ? { modelDistancePoseCycles: foxholeBlackBoltValveGear } : {}),
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
             modelLightOverrides: buildFoxholeModelLightOverrides(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
                 modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)),
