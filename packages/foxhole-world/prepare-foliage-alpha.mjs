@@ -7,9 +7,21 @@ import {nativeCutoutRules} from './authoring/native-cutout-rules.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const compressed=bytes=>brotliCompressSync(bytes,{params:{[constants.BROTLI_PARAM_QUALITY]:6}});
 
-/** Preserve decoded colour bytes and import the authored linear cutout channel. */
-export async function packFoliageAlpha(albedo,mask,channel,resizeMask=false){
+function applyColorRamp(pixels,[first,second]){
+ const table=Array.from({length:256},(_,byte)=>{
+  const value=byte/255,weight=value<=.04045?value/12.92:((value+.055)/1.055)**2.4;
+  return first.map((start,i)=>{
+   const linear=start+(second[i]-start)*weight;
+   return Math.round(255*(linear<=.0031308?linear*12.92:1.055*linear**(1/2.4)-.055));
+  });
+ });
+ for(let i=0;i<pixels.length;i+=4)pixels.set(table[pixels[i]],i);
+}
+
+/** Import the linear cutout channel and apply an authored color ramp when present. */
+export async function packFoliageAlpha(albedo,mask,channel,resizeMask=false,colorRamp){
  const color=await sharp(albedo).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+ if(colorRamp)applyColorRamp(color.data,colorRamp);
  const maskImage=sharp(mask).extractChannel(channel);
  if(resizeMask)maskImage.resize(color.info.width,color.info.height,{fit:'fill'});
  const opacity=await maskImage.raw().toBuffer({resolveWithObject:true});
@@ -39,9 +51,9 @@ export async function prepareNativeFoliageMasks({input,textureRoot}){
      const texture=doc.textures?.[material.pbrMetallicRoughness?.baseColorTexture?.index],image=doc.images?.[texture?.source];
      const match=image?.uri?.match(/^\/__asset_ab\/content\/B\/([a-f0-9]{64})\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/);
      if(!match)throw Error('Unsupported native foliage image reference');
-     const textureKey=match[1]+':'+rule.source+':'+rule.channel;
+     const textureKey=JSON.stringify([match[1],rule.source,rule.channel,rule.colorRamp]);
      let converted=textures.get(textureKey);
-     if(!converted){const bytes=await packFoliageAlpha(await read(match[1]),await fs.readFile(path.join(textureRoot,rule.mask)),rule.channel,rule.resizeMask),hash=digest(bytes);converted={bytes,logical:'world-textures/'+hash+'.png',hash};textures.set(textureKey,converted);}
+     if(!converted){const bytes=await packFoliageAlpha(await read(match[1]),await fs.readFile(path.join(textureRoot,rule.mask)),rule.channel,rule.resizeMask,rule.colorRamp),hash=digest(bytes);converted={bytes,logical:'world-textures/'+hash+'.png',hash};textures.set(textureKey,converted);}
      // Clone the binding so a solid material sharing this colour image stays solid.
      const imageIndex=doc.images.push({...image,uri:`/__asset_ab/content/B/${converted.hash}/${converted.hash}/asset.png`})-1;
      const textureIndex=doc.textures.push({...texture,source:imageIndex})-1;

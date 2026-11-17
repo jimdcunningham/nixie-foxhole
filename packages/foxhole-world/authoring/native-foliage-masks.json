@@ -90,6 +90,32 @@
         "decodedHash": "fca5969f4a0c74ba044ac39f8f3d83fdf1a6ac028535a1be5a24a97af4e08a9f",
         "bytes": 20646
       }
+    },
+    {
+      "material": "War/Content/Materials/Environment/IVy.uasset",
+      "albedo": "War/Content/Textures/Foliage/FoliageMap.FoliageMap",
+      "source": "War/Content/Textures/Foliage/FoliageMap.FoliageMap",
+      "channel": "A",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/638b6382aae738f15f8622bbb9038ebfef1d931b79d6a3963e21fb8ac44fc92e/asset.webp",
+        "hash": "638b6382aae738f15f8622bbb9038ebfef1d931b79d6a3963e21fb8ac44fc92e",
+        "decodedHash": "638b6382aae738f15f8622bbb9038ebfef1d931b79d6a3963e21fb8ac44fc92e",
+        "bytes": 21884
+      }
+    },
+    {
+      "material": "War/Content/Materials/Environment/IVy2.uasset",
+      "albedo": "War/Content/Textures/Foliage/FoliageMap.FoliageMap",
+      "source": "War/Content/Textures/Foliage/FoliageMap.FoliageMap",
+      "channel": "A",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/ea00a77e35c4e852479cc369ce12f870629187328e1bb34ced0cc905f2957943/asset.webp",
+        "hash": "ea00a77e35c4e852479cc369ce12f870629187328e1bb34ced0cc905f2957943",
+        "decodedHash": "ea00a77e35c4e852479cc369ce12f870629187328e1bb34ced0cc905f2957943",
+        "bytes": 22588
+      }
     }
   ]
 }

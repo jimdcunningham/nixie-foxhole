@@ -22,8 +22,8 @@ const read=async name=>{
 const descriptor=path.join(repo,'packages/foxhole-world/authoring/native-foliage-masks.json');
 const {materials}=JSON.parse(await fs.readFile(descriptor,'utf8'));
 const byMaterial=new Map(materials.map(row=>[row.material,row]));
-for(const {material,albedo,source,channel,cutoff,resizeMask} of rules){
-    const rgba=await packFoliageAlpha(await read(albedo),await read(source),channel,resizeMask);
+for(const {material,albedo,source,channel,cutoff,resizeMask,colorRamp} of rules){
+    const rgba=await packFoliageAlpha(await read(albedo),await read(source),channel,resizeMask,colorRamp);
     const bytes=await sharp(rgba).webp({lossless:true}).toBuffer(),hash=createHash('sha256').update(bytes).digest('hex');
     const resource={path:'content/raw/'+hash+'/asset.webp',hash,decodedHash:hash,bytes:bytes.length};
     const file=path.join(assets,'world',resource.path);

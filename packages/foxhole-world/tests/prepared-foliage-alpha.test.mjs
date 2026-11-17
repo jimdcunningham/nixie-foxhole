@@ -24,6 +24,11 @@ test('native lamps use packed alpha and pines accept higher-resolution blue mask
  const pine=await sharp(await packFoliageAlpha(color,large,2,true)).raw().toBuffer();
  assert.deepEqual([...pine],[23,71,124,170,200,150,100,170]);
 });
+test('ivy interpolates its authored colors in linear space and preserves atlas alpha',async()=>{
+ const atlas=await png([0,0,0,255,128,128,128,192]);
+ const baked=await sharp(await packFoliageAlpha(atlas,atlas,3,false,[[0,1,0],[1,0,0]])).raw().toBuffer();
+ assert.deepEqual([...baked],[0,255,0,255,128,229,0,192]);
+});
 for(const [name,colorName,maskName] of [['BirchBushSnow','BirchBushSnowA','BirchBushSnowM'],['BirchBushSmall','BirchBushThinA','BirchBranchThinM']])test(name+' normalization shares the cutout, preserves solids and geometry, and is idempotent',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'foxhole-foliage-'));
  try{
