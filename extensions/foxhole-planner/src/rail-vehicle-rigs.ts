@@ -63,9 +63,17 @@ export const foxholeBlackBoltEffects: NonNullable<NixieSpatialPlanV1['simulation
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });
+const standardCarWheels = ['front-1', 'front-2', 'back-1', 'back-2'].map(name => roll(name, .409));
 export const foxholeRailWheelRoll: Readonly<Record<string, NixieSpatialPlanV1['modelDistanceRotations']>> = {
     trainengine: ['1', '2', '3'].map(name => roll(name, mainWheelRadius)).concat(roll('back', .555)),
     trainlrartillery: ['front', 'back'].flatMap(bogie => ['01', '02', '03'].map(axle => roll(`${axle}-${bogie}`, .409))),
+    traincoal: ['front', 'back'].map(name => roll(name, .409)),
+    trainhospital: ['1-f', '2-f', '1-r', '2-r'].map(name => roll(name, .409)),
+    traincaboose: standardCarWheels,
+    traincombatcarc: standardCarWheels,
+    traincombatcarw: standardCarWheels,
+    trainflatbed: standardCarWheels,
+    traininfantry: standardCarWheels,
 };
 
 const engineLinkNodes = (kind: string) => ['l', 'r'].map(side => `rail-link-${kind}-${side}`);

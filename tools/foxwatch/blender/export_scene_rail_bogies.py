@@ -20,6 +20,10 @@ NAMES = ("rail-bogie-front", "rail-bogie-rear")
 WHEEL_PATTERNS = {
     "trainengine": re.compile(r"wheel_(1|2|3|back)_[lr]$", re.IGNORECASE),
     "trainlrartillery": re.compile(r"wheel(0[1-3]_(?:front|back))_[lr]$", re.IGNORECASE),
+    "traincoal": re.compile(r"wheel_(front|back)_[lr]$", re.IGNORECASE),
+    "trainhospital": re.compile(r"wheel([12]_[fr])$", re.IGNORECASE),
+    **dict.fromkeys(("traincaboose", "traincombatcarc", "traincombatcarw", "trainflatbed", "traininfantry"),
+                    re.compile(r"wheel_(front_[12]|back_[12])_[lr]$", re.IGNORECASE)),
 }
 ENGINE_LINKS = {
     "wheelconnection": "coupling",
