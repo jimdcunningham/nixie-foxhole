@@ -51,6 +51,19 @@
         "decodedHash": "a6899a013f81e5607d710f3f017bab78952bddfb10133eac17a6abe01138e917",
         "bytes": 53720
       }
+    },
+    {
+      "material": "War/Content/Materials/Environment/GrassBladesSnow.uasset",
+      "albedo": "War/Content/Textures/Environment/GrassA.GrassA",
+      "source": "War/Content/Textures/Environment/GrassM.GrassM",
+      "channel": "B",
+      "cutoff": 0.333,
+      "resource": {
+        "path": "content/raw/9e12954aadf8c486804c4e429a7b76d773feb806bec735e0c0ca1267668013b2/asset.webp",
+        "hash": "9e12954aadf8c486804c4e429a7b76d773feb806bec735e0c0ca1267668013b2",
+        "decodedHash": "9e12954aadf8c486804c4e429a7b76d773feb806bec735e0c0ca1267668013b2",
+        "bytes": 7268
+      }
     }
   ]
 }

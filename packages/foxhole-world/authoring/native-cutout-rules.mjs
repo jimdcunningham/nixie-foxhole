@@ -1,7 +1,7 @@
-function cutout(material, folder, albedo, mask, channel, cutoff, resizeMask = false) {
+function cutout(material, folder, albedo, mask, channel, cutoff, resizeMask = false, materialFolder = 'Environment/Props') {
     const texture = name => `War/Content/Textures/${folder}/${name}.${name}`;
     return {
-        material: `War/Content/Materials/Environment/Props/${material}.uasset`,
+        material: `War/Content/Materials/${materialFolder}/${material}.uasset`,
         albedo: texture(albedo),
         mask: `Textures/${folder}/${mask}.png`,
         source: texture(mask),
@@ -19,4 +19,5 @@ export const nativeCutoutRules = [
     cutout('PineBranchDead', 'Props', 'PineBranchDeadA', 'PineBranchDeadM', 2, .333, true),
     cutout('PineBranch02Dead', 'Props', 'PineBranch02DeadA', 'PineBranch02DeadM', 2, .333, true),
     cutout('StreetLamp', 'Props', 'StreetlampA', 'StreetlampM', 3, .3333),
+    cutout('GrassBladesSnow', 'Environment', 'GrassA', 'GrassM', 2, .333, false, 'Environment'),
 ];
