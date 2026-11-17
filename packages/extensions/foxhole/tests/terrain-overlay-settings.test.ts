@@ -19,3 +19,18 @@ test('rendering appearance controls default independently and read persisted loc
  for(const name of ['shadowStrength','vegetationShadows','waterReflections'] as const)assert.equal(isFoxholeMapUserSettingKey(FOXHOLE_MAP_SETTING_KEYS[name]),true);
  assert.equal(readFoxholeMapSettings({},id=>id===FOXHOLE_MAP_SETTING_KEYS.shadowStrength?'invalid':undefined).shadowStrength,'light');
 });
+test('map section visibility masks the selected layers and preserves their settings', () => {
+    const keys = FOXHOLE_MAP_SETTING_KEYS;
+    const selection = { [keys.grid]: true };
+    const visibility: Record<string, boolean> = { [keys.mapLabelsVisible]: false, [keys.mapOverlaysVisible]: false };
+    const hidden = readFoxholeMapSettings(selection, id => visibility[id]);
+    assert.equal(hidden.majorLabels, false);
+    assert.equal(hidden.grid, false);
+    assert.equal(hidden.icons, false);
+    assert.equal(hidden.background, true);
+    const configured = readFoxholeMapSettings(selection, id => visibility[id], { includeHiddenLayers: true });
+    assert.equal(configured.majorLabels, true);
+    assert.equal(configured.grid, true);
+    assert.equal(configured.icons, true);
+    assert.equal(readFoxholeMapSettings(selection, id => id === keys.mapLabelsVisible ? false : undefined).grid, true);
+});

@@ -279,6 +279,8 @@ export interface FoxholeMapSettings {
     regionKeys: string[];
     background: boolean;
     grid: boolean;
+    mapLabelsVisible: boolean;
+    mapOverlaysVisible: boolean;
     names: boolean;
     majorLabels: boolean;
     minorLabels: boolean;
@@ -341,6 +343,8 @@ export const FOXHOLE_MAP_SETTING_KEYS = {
     regionKeys: 'foxhole.map.regionKeys',
     background: 'foxhole.map.background',
     grid: 'foxhole.map.grid',
+    mapLabelsVisible: 'foxhole.map.labelsVisible',
+    mapOverlaysVisible: 'foxhole.map.overlaysVisible',
     names: 'foxhole.map.names',
     majorLabels: 'foxhole.map.majorLabels',
     minorLabels: 'foxhole.map.minorLabels',
@@ -883,6 +887,8 @@ export const foxholeMapUserSettings: readonly UserSettingDefinition[] = withSett
     { ...createStringUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface, 'Terrain Surface', 'Choose map-image or detailed terrain. Map images follow the enabled custom map mod, with processed maps for missing regions. Changing the surface mode reloads selected regions.', 'ph:mountains', 238, 'native'), persist: 'local' },
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, 'Terrain RDZ', 'Shade the 150 m rapid decay zone on terrain, with known 50 m resource and world-base exemptions. Conditional border-base protection is not included.', 'ph:warning-circle', 256, false, { persist: 'local' }),
     createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, 'Terrain Contours', 'Draw elevation contours every 10 m, with stronger lines every 50 m, on 2.5D and 3D terrain.', 'ph:mountains', 257, false, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.mapLabelsVisible, 'Map Labels', 'Show the selected map labels.', 'ph:eye', 258, true, { persist: 'local' }),
+    createBooleanUserSetting(FOXHOLE_MAP_SETTING_KEYS.mapOverlaysVisible, 'Map Overlays', 'Show the selected map overlays.', 'ph:eye', 259, true, { persist: 'local' }),
     ...FOXHOLE_WORLD_LAYER_DEFINITIONS.map((layer, index) => createBooleanUserSetting(
         layer.settingId,
         'Foxhole World ' + layer.label,
@@ -943,6 +949,7 @@ function readSettingValue(
 export function readFoxholeMapSettings(
     settings: Partial<NixieProjectSettings> | null | undefined,
     getUserSetting?: ((settingId: string) => unknown) | null,
+    { includeHiddenLayers = false } = {},
 ): FoxholeMapSettings {
     const source = settings ?? {};
     const readBooleanSetting = (settingId: string, fallback: boolean): boolean => {
@@ -965,7 +972,7 @@ export function readFoxholeMapSettings(
 
     const savedTerrainSurface = readStringSetting(FOXHOLE_MAP_SETTING_KEYS.terrainSurface);
 
-    return {
+    const resolved: FoxholeMapSettings = {
         terrainRdz: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainRdz, false),
         terrainTopo: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.terrainTopo, false),
         solidMap: savedTerrainSurface === 'plain' || readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.solidMap, false),
@@ -992,6 +999,8 @@ export function readFoxholeMapSettings(
         regionKeys: readStringListSetting(FOXHOLE_MAP_SETTING_KEYS.regionKeys),
         background: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.background, true),
         grid: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.grid, false),
+        mapLabelsVisible: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.mapLabelsVisible, true),
+        mapOverlaysVisible: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.mapOverlaysVisible, true),
         names: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.names, true),
         majorLabels: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.majorLabels, true),
         minorLabels: readBooleanSetting(FOXHOLE_MAP_SETTING_KEYS.minorLabels, true),
@@ -1034,4 +1043,13 @@ export function readFoxholeMapSettings(
         cropWidth: readNumberSetting(FOXHOLE_MAP_SETTING_KEYS.cropWidth, 0),
         cropHeight: readNumberSetting(FOXHOLE_MAP_SETTING_KEYS.cropHeight, 0),
     };
+    if (!includeHiddenLayers && !resolved.mapLabelsVisible) {
+        for (const layer of FOXHOLE_MAP_LAYER_GROUPS[0].layers) resolved[layer] = false;
+    }
+    if (!includeHiddenLayers && !resolved.mapOverlaysVisible) {
+        for (const layer of FOXHOLE_MAP_LAYER_GROUPS[1].layers) {
+            if (layer !== 'background') resolved[layer] = false;
+        }
+    }
+    return resolved;
 }

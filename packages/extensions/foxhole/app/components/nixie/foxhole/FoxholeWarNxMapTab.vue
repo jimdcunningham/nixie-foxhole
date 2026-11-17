@@ -92,6 +92,7 @@ onBeforeUnmount(() => {
 const mapSettings = computed(() => readFoxholeMapSettings(
     runtime.projectStore.settings,
     settingId => settingsStore.getValueOr(settingId, ''),
+    { includeHiddenLayers: true },
 ));
 
 const hasImportedMapMod = computed(() => {
@@ -283,6 +284,26 @@ function getLayerGroupDefaultOpen(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]
     return group.heading === 'Labels' || group.heading === 'Layers';
 }
 
+function isLayerGroupVisible(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): boolean {
+    return group.heading === 'Labels' ? mapSettings.value.mapLabelsVisible
+        : group.heading !== 'Layers' || mapSettings.value.mapOverlaysVisible;
+}
+
+function layerGroupVisibilityKey(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): string | undefined {
+    if (group.heading === 'Labels') return FOXHOLE_MAP_SETTING_KEYS.mapLabelsVisible;
+    if (group.heading === 'Layers') return FOXHOLE_MAP_SETTING_KEYS.mapOverlaysVisible;
+    return undefined;
+}
+
+function toggleLayerGroupVisibility(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): void {
+    const key = layerGroupVisibilityKey(group);
+    if (key) setBoolean(key, !isLayerGroupVisible(group));
+}
+
+function getLayerGroupVisibilityLabel(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): string {
+    return `${isLayerGroupVisible(group) ? 'Hide' : 'Show'} ${group.heading === 'Labels' ? 'Labels' : 'Overlays'}`;
+}
+
 function formatCategoryLabel(categoryKey: FoxholeMapIconCategoryKey): string {
     switch (categoryKey) {
         case 'bases':
@@ -303,27 +324,18 @@ function getLayerGroupOptions(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): N
 }
 
 function getLayerGroupActiveIds(group: typeof FOXHOLE_MAP_LAYER_GROUPS[number]): string[] {
+    if (!isLayerGroupVisible(group)) return [];
     return group.layers.filter(layerKey => !(layerKey === 'background' && isSpatialView.value) && isLayerEnabled(layerKey));
 }
 
-function onLayerGroupChange(
+function onLayerGroupOptionClick(
     group: typeof FOXHOLE_MAP_LAYER_GROUPS[number],
-    nextIds: string[],
+    { id, nextIds }: NxToggleGridOptionClick,
 ): void {
-    const previous = new Set(getLayerGroupActiveIds(group));
-    const next = new Set(nextIds);
-
-    for (const layerKey of previous) {
-        if (!next.has(layerKey)) {
-            toggleLayer(layerKey as FoxholeMapLayerKey, false);
-        }
-    }
-
-    for (const layerKey of next) {
-        if (!previous.has(layerKey)) {
-            toggleLayer(layerKey as FoxholeMapLayerKey, true);
-        }
-    }
+    const layer = group.layers.find(key => key === id);
+    if (!layer) return;
+    const showGroup = isLayerGroupVisible(group) ? undefined : layerGroupVisibilityKey(group);
+    toggleLayer(layer, nextIds.includes(id), showGroup);
 }
 
 function enableLocalMapMod(): void {
@@ -352,7 +364,7 @@ function toggleModdedLayer(): void {
     enableLocalMapMod();
 }
 
-function toggleLayer(layerKey: FoxholeMapLayerKey, enabled: boolean): void {
+function toggleLayer(layerKey: FoxholeMapLayerKey, enabled: boolean, showGroup?: string): void {
     if (layerKey === 'background' && isSpatialView.value) {
         return;
     }
@@ -370,6 +382,7 @@ function toggleLayer(layerKey: FoxholeMapLayerKey, enabled: boolean): void {
         patch[FOXHOLE_MAP_SETTING_KEYS.modded] = false;
     }
 
+    if (showGroup) patch[showGroup] = true;
     patchSettings(patch, `foxhole-war-nx-map:layer:${layerKey}`);
 }
 
@@ -895,13 +908,26 @@ const mapModVisibilityDisabled = computed(() => (
                 collapsible
                 :defaultOpen="getLayerGroupDefaultOpen(group)"
             >
+                <template v-if="group.heading === 'Labels' || group.heading === 'Layers'" #actions>
+                    <NxIconButton
+                        class="nixie-sidebar-row__action"
+                        :icon="isLayerGroupVisible(group) ? 'ph:eye' : 'ph:eye-slash'"
+                        :label="getLayerGroupVisibilityLabel(group)"
+                        :tooltip="getLayerGroupVisibilityLabel(group)"
+                        variant="bare"
+                        size="sm"
+                        :disabled="mapControlsDisabled"
+                        :active="!isLayerGroupVisible(group)"
+                        @click="toggleLayerGroupVisibility(group)"
+                    />
+                </template>
                 <NxToggleGrid
                     :modelValue="getLayerGroupActiveIds(group)"
                     :options="getLayerGroupOptions(group)"
                     :disabled="mapControlsDisabled"
                     :aria-label="getLayerGroupTitle(group)"
                     preserveLabelCase
-                    @update:model-value="onLayerGroupChange(group, $event)"
+                    @option-click="onLayerGroupOptionClick(group, $event)"
                 />
             </NixieSidebarFormSection>
 
