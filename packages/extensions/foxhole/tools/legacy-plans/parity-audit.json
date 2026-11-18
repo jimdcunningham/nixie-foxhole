@@ -48,7 +48,7 @@
     {
       "id": "production-cargo-and-stats",
       "status": "verified",
-      "evidence": ["app/components/nixie/foxhole/FoxholeSceneStatsSidebarPanel.vue", "app/components/nixie/foxhole/FoxholeStructureCargoInspectorCard.vue", "tests/marked-cargo-overlay.test.ts"],
+      "evidence": ["tests/host/foxhole-ecs-statistics-export-parity.test.ts", "app/components/nixie/foxhole/FoxholeStructureCargoInspectorCard.vue", "tests/marked-cargo-overlay.test.ts"],
       "nextAction": "Keep separate follow-up issues for liquid capacity and bunker-stat correctness rather than treating the whole surface as missing."
     },
     {

@@ -1,0 +1,14 @@
+{
+    "all": {
+        "listText": "Scene Statistics\n2 nodes • 1 facility\n\nConstruction Cost\n126.5 Basic \"Materials\", Pack (Materials)\n\nLiquid Capacity\nTotal Capacity: 400\nLiquid Silos: 100\nPipelines: 300\n\nFacility Power\nProduced: 10 MW\nConsumed: 24 MW\nNet Total: -14 MW\n\nBuilding Maintenance ({interval})\nMaintenance Supplies: 3.5\n\nProduction ({interval})\nActive Orders: 2\nPower: 1.5 MW\nInput: 12 Materials\nOutput: 3 Ammunition\n\nBunker Health\nTotal Health: 650\nRepair Cost: 50\nRepair Rate: 13/swing\nBreachable Health: 600 (92.3%)\nStructural Integrity: 100% (High)\n\nBunker Destruction ({interval})\nHE Grenade: T1 4, T2 5, T3 Wet 2, T3 12",
+        "csvText": "scope,section,metric,value,unit,notes\r\nScene,Construction Cost,\"Basic \"\"Materials\"\", Pack\",126.5,,Materials\r\nScene,Liquid Capacity,Total Capacity,400,,\r\nScene,Liquid Capacity,Liquid Silos,100,,\r\nScene,Liquid Capacity,Pipelines,300,,\r\nScene,Facility Power,Produced,10,MW,\r\nScene,Facility Power,Consumed,24,MW,\r\nScene,Facility Power,Net Total,-14,MW,\r\nScene,Building Maintenance,Maintenance Supplies,3.5,,{interval}\r\nScene,Production,Active Orders,2,,{interval}\r\nScene,Production,Power,1.5,MW,\r\nScene,Production,Input: Materials,12,,item\r\nScene,Production,Output: Ammunition,3,,crate\r\nScene,Bunker Health,Total Health,650,,\r\nScene,Bunker Health,Repair Cost,50,,\r\nScene,Bunker Health,Repair Rate,13,/swing,\r\nScene,Bunker Health,Breachable Health,600,,92.3%\r\nScene,Bunker Health,Structural Integrity,100%,,High\r\nScene,Bunker Destruction,HE Grenade,4,shots,T1\r\nScene,Bunker Destruction,HE Grenade,5,shots,T2\r\nScene,Bunker Destruction,HE Grenade,2,shots,T3 Wet\r\nScene,Bunker Destruction,HE Grenade,12,shots,T3"
+    },
+    "productionAndDestruction": {
+        "listText": "Scene Statistics\n2 nodes • 1 facility\n\nProduction ({interval})\nActive Orders: 2\nPower: 1.5 MW\nInput: 12 Materials\nOutput: 3 Ammunition\n\nBunker Destruction ({interval})\nHE Grenade: T1 4, T2 5, T3 Wet 2, T3 12",
+        "csvText": "scope,section,metric,value,unit,notes\r\nScene,Production,Active Orders,2,,{interval}\r\nScene,Production,Power,1.5,MW,\r\nScene,Production,Input: Materials,12,,item\r\nScene,Production,Output: Ammunition,3,,crate\r\nScene,Bunker Destruction,HE Grenade,4,shots,T1\r\nScene,Bunker Destruction,HE Grenade,5,shots,T2\r\nScene,Bunker Destruction,HE Grenade,2,shots,T3 Wet\r\nScene,Bunker Destruction,HE Grenade,12,shots,T3"
+    },
+    "cost": {
+        "listText": "Scene Statistics\n2 nodes • 1 facility\n\nConstruction Cost\n126.5 Basic \"Materials\", Pack (Materials)",
+        "csvText": "scope,section,metric,value,unit,notes\r\nScene,Construction Cost,\"Basic \"\"Materials\"\", Pack\",126.5,,Materials"
+    }
+}

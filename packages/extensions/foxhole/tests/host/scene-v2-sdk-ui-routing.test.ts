@@ -51,7 +51,13 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
             values.set(id, !values.get(id));
         },
     });
-    registry.register(sdkSource, createNixieSurfaceRoutedSdkUi(manifest.id, sdkSource, declaration,
+    registry.register(sdkSource, createNixieSurfaceRoutedSdkUi(manifest.id, sdkSource, {
+        ...declaration,
+        rightSidebar: manifest.contributes.panels.map(panel => ({
+            id: `external:${manifest.id}:${panel.id}`, name: panel.title, icon: panel.icon,
+            sections: [{ id: panel.id, name: panel.title, component: {} }],
+        })),
+    },
         new Set((manifest.contributes.productTools ?? []).map(tool => `nixie.tool.activate.extension:${manifest.id}:${tool.id}`)), registry));
     context.after(() => {
         registerNixieEditorDocumentSessionBridge(null);
@@ -65,7 +71,8 @@ test('Planner SDK socket/overlay/settings UI composes with the precise retained 
     for (const setting of foxholeStatsUserSettings) {
         assert.equal(registry.getSettingDefinition(setting.id), undefined);
     }
-    assert.ok(registry.getSettingDefinition(statsId), 'Statistics settings are SDK-owned even though the old map source also declared them');
+    assert.ok(registry.getSettingDefinition(statsId), 'Statistics settings come from the SDK');
+    assert.deepEqual(registry.getAllRightSidebarContributions().map(panel => panel.id), [`external:${manifest.id}:statistics`]);
     for (const setting of mapControls) {
         assert.equal(registry.getSettingDefinition(setting.id), setting);
     }

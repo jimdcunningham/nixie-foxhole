@@ -1,4 +1,3 @@
-import { defineAsyncComponent } from 'vue';
 import FoxholeWarNxSidebarPanel from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarPanel.vue';
 import FoxholeWarNxSidebarTitle from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarTitle.vue';
 import FoxholeWarNxSidebarMetadata from '#foxhole/components/nixie/foxhole/FoxholeWarNxSidebarMetadata.vue';
@@ -17,11 +16,6 @@ import { FOXHOLE_MAP_SETTING_KEYS, foxholeMapSettings, readFoxholeMapSettings } 
 import { FoxholeMapViewportPlugin, getFoxholeMapActiveBounds } from '#foxhole/plugins/foxhole/nixie/map/controller.ts';
 import { foxholeSceneMapRendererSetting } from '#foxhole/plugins/foxhole/nixie/scene-map-renderer-setting.ts';
 import { foxholeStatsUserSettings } from '#foxhole/plugins/foxhole/nixie/stats-settings.ts';
-
-const FoxholeSceneStatsSidebarPanel = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarPanel.vue'));
-const FoxholeSceneStatsSidebarMetadata = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarMetadata.vue'));
-const FoxholeSceneStatsSidebarActions = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarActions.vue'));
-const FoxholeSceneStatsSidebarOverflow = defineAsyncComponent(() => import('#foxhole/components/nixie/foxhole/FoxholeSceneStatsSidebarOverflow.vue'));
 
 function isFoxholeSceneSurfaceActive(): boolean {
     const session = getNixieEditorDocumentSessionBridge();
@@ -98,26 +92,6 @@ export default defineContribution({
                     id: 'foxhole-war-shell',
                     name: 'Foxhole War',
                     component: FoxholeWarNxSidebarPanel,
-                    showHeader: false,
-                },
-            ],
-        },
-    ],
-    rightSidebar: [
-        {
-            id: 'foxhole-scene-stats',
-            name: 'Statistics',
-            icon: 'ph:chart-bar-horizontal',
-            headerMetadata: FoxholeSceneStatsSidebarMetadata,
-            headerActions: FoxholeSceneStatsSidebarActions,
-            headerOverflow: FoxholeSceneStatsSidebarOverflow,
-            order: 55,
-            visible: () => getNixieEditorDocumentSessionBridge()?.isSceneActive.value === true,
-            sections: [
-                {
-                    id: 'foxhole-scene-stats',
-                    name: 'Statistics',
-                    component: FoxholeSceneStatsSidebarPanel,
                     showHeader: false,
                 },
             ],
