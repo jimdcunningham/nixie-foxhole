@@ -431,6 +431,59 @@ test('a snapped vehicle follows its saved station and facing after the rail move
     assert.equal(detach.transaction?.operations[0]?.op, 'remove');
 });
 
+test('committing a connected rail edit rebakes the train path without rebuilding it during preview', () => {
+    const approach = track('railtrackspline', 'approach');
+    const extension = track('railtrackspline', 'extension');
+    Object.assign(approach.components[0]!.data, { x: -1000 });
+    Object.assign(approach.components.at(-1)!.data, { endX: 1000 });
+    Object.assign(extension.components.at(-1)!.data, { endX: 1000,
+        startAttachmentNodeId: 'approach', startAttachmentSocketName: 'FrontSocket' });
+    const proposal = request('trainengine', [approach, extension]);
+    Object.assign(proposal.transform, { x: -550, y: 0, rotation: 0 });
+    const add = finalizeFoxholeRailVehicleSnap(proposal).transaction?.operations[0];
+    if (add?.op !== 'add') assert.fail('Expected an initial rail attachment');
+    const oldPath = parseNixieSimulationPathV1(add.data.simulationPath);
+    assert.deepEqual(oldPath.sources, ['approach', 'extension']);
+    proposal.context.entities[0]!.components.push(component('rail-attachment', add.data));
+
+    Object.assign(extension.components[1]!.data, { elevation: 132 });
+    const follow = { ...proposal, interaction: 'transform' as const, followedEntityId: 'approach' };
+    assert.equal(finalizeFoxholeRailVehicleSnap({ ...follow, followPhase: 'preview' }).transaction, undefined);
+    const patch = finalizeFoxholeRailVehicleSnap({ ...follow, followPhase: 'commit' }).transaction?.operations[0];
+    if (patch?.op !== 'patch') assert.fail('Expected a rebuilt rail attachment');
+    const path = parseNixieSimulationPathV1(patch.set?.simulationPath);
+    assert.deepEqual(path.sources, oldPath.sources);
+    assert.ok(path.frames.at(-1)!.position[2] > oldPath.frames.at(-1)!.position[2] + 20);
+});
+
+test('the Black Bolt can complete a loop larger than the local discovery radius', () => {
+    const count = 36;
+    const radius = 5100;
+    const railId = (index: number) => `loop-${index}`;
+    const point = (index: number) => {
+        const angle = index % count * 2 * Math.PI / count;
+        return { x: radius * Math.cos(angle), y: radius * Math.sin(angle), angle };
+    };
+    const rails = Array.from({ length: count }, (_, index) => {
+        const rail = track('railtrackspline', railId(index));
+        const start = point(index), end = point(index + 1);
+        Object.assign(rail.components[0]!.data, { x: start.x, y: start.y });
+        Object.assign(rail.components.at(-1)!.data, { endX: end.x - start.x, endY: end.y - start.y,
+            startRotation: start.angle + Math.PI / 2, endRotation: end.angle + Math.PI / 2,
+            startAttachmentNodeId: railId((index + count - 1) % count), startAttachmentSocketName: 'FrontSocket' });
+        return rail;
+    });
+    const proposal = request('trainengine', rails);
+    const middle = point(0.5);
+    Object.assign(proposal.transform, { x: middle.x, y: middle.y, rotation: middle.angle + Math.PI / 2 });
+    const add = finalizeFoxholeRailVehicleSnap(proposal).transaction?.operations[0];
+    if (add?.op !== 'add') assert.fail('Expected a rail attachment');
+    const path = parseNixieSimulationPathV1(add.data.simulationPath);
+    assert.equal(path.drive?.manual?.loop, true);
+    assert.equal(path.sources?.length, count);
+    assert.ok(path.frames.at(-1)!.distance > 30_000);
+});
+
 test('a shortened rail clamps the vehicle to the end and a reshaped rail changes its pose', () => {
     const rail = track('railtrackspline');
     const proposal = request('trainflatbed', [rail]);

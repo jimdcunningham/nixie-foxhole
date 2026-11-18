@@ -1134,9 +1134,14 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const rail = rails.find(rail => rail.entityId === saved.rail);
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
-        const { local: point, angle } = fitBody(location, saved.reversed ? -1 : 1, readRailRoute(saved.route));
+        const step = saved.reversed ? -1 : 1;
+        const rebuild = request.followPhase === 'commit' && (assetId === engineId
+            || (assetId === cannonId && !previousLeader));
+        const { local: point, angle } = fitBody(location, step, rebuild ? undefined : readRailRoute(saved.route));
         const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
-        return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: rotation + turn } };
+        const transaction = rebuild ? attachTrain(location, step) : undefined;
+        return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: rotation + turn },
+            ...(transaction ? { transaction } : {}) };
     }
 
     if (request.geometryGesture?.handleId === 'product-placement-port') {
