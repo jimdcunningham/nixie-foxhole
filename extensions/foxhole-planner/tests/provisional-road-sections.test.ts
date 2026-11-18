@@ -73,7 +73,7 @@ test('published road retains native length-dependent UV scaling through the SDK 
 });
 
 
-test('spatial views deform the road mesh and its end caps along the spline', () => {
+test('spatial views repeat the road body from endpoint to endpoint', () => {
     const asset = assets.facilityroad!;
     const data = createFoxholeSceneV2SplineProductData('facilityroad', asset.connector!);
     const render = (endX: number, endY: number, endRotation: number) => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({
@@ -84,20 +84,15 @@ test('spatial views deform the road mesh and its end caps along the spline', () 
     }));
     const plan = render(700, 300, Math.PI / 3);
     const nodes = plan.spatial!.nodes;
-    assert.deepEqual(nodes.map(node => node.id), ['road-start', 'road-end', 'road-body']);
-    for (const node of nodes) {
-        assert.equal(node.kind, 'model-path');
-        assert.equal(node.resourceId, asset.model!.resourceId);
-        assert.deepEqual(node.points.slice(-3), [700, 300, 0]);
-        assert.ok(node.points.some((value, i) => i % 3 === 1 && Math.abs(value - node.points[i - 1]! * 300 / 700) > 10));
-    }
-    const [start, end, body] = nodes;
-    assert.ok(start?.kind === 'model-path' && end?.kind === 'model-path' && body?.kind === 'model-path');
-    assert.equal(start.meshIndex, asset.model?.pathProfile?.parts.start?.meshIndex ?? 0);
-    assert.equal(end.meshIndex, asset.model?.pathProfile?.parts.end?.meshIndex ?? 2);
+    assert.deepEqual(nodes.map(node => node.id), ['road-body']);
+    const [body] = nodes;
+    assert.ok(body?.kind === 'model-path');
+    assert.equal(body.resourceId, asset.model!.resourceId);
+    assert.deepEqual(body.points.slice(0, 3), [0, 0, 0]);
+    assert.deepEqual(body.points.slice(-3), [700, 300, 0]);
+    assert.ok(body.points.some((value, i) => i % 3 === 1 && Math.abs(value - body.points[i - 1]! * 300 / 700) > 10));
     assert.equal(body.meshIndex, asset.model?.pathProfile?.parts.span?.meshIndex ?? 1);
-    assert.equal(body.startInset, 144);
-    assert.equal(body.endInset, 144);
+    assert.equal(body.startInset, undefined);
+    assert.equal(body.endInset, undefined);
     assert.equal(body.instances, undefined, 'the host bends and repeats the body mesh');
-    assert.deepEqual(render(220, 0, 0).spatial!.nodes.map(node => node.id), ['road-start', 'road-end']);
 });

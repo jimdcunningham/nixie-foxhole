@@ -13,7 +13,7 @@ import { writeJsonAtomic } from './pipeline-core.mjs';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { prepareSpatialStructureScene, prepareSpatialStructureModifications, spatialStructureProfile } from './spatial-structure-profiles.mjs';
-import { spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
+import { orientSpatialStandaloneSpline, spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
 import { prepareSpatialReferenceScene } from './spatial-reference-models.mjs';
 import { pruneUnusedStaticGltfUvs } from './spatial-gltf-geometry.mjs';
 import { compressSpatialMeshopt } from './spatial-meshopt.mjs';
@@ -215,7 +215,8 @@ export async function createSpatialModelExporter(options) {
             let input;
             try { input = JSON.parse(await readFile(scenePath, 'utf8')); }
             catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-            const prepared = await prepareSpatialSharedParts(assetId, prepareSpatialConnectorScene(assetId, input), sharedOptions);
+            const scene = await loadStandaloneSplineSpan(catalog.assets.find(asset => asset.id === assetId), input);
+            const prepared = await prepareSpatialSharedParts(assetId, prepareSpatialConnectorScene(assetId, scene), sharedOptions);
             for (const part of prepared.parts) {
                 if (!canonicalPublications.has(part.id)) canonicalPublications.set(part.id, (async () => {
                     const canonicalPath = resolve(temporaryRoot, part.id + '.source.scene.json');
@@ -233,6 +234,12 @@ export async function createSpatialModelExporter(options) {
             }
         }
         return availableSharedParts;
+    }
+
+    async function loadStandaloneSplineSpan(asset, scene) {
+        if (!asset.useAuthoredSplineSpan) return scene;
+        const span = JSON.parse(await readFile(resolve(sceneRoot, asset.id, 'components/span.scene.json'), 'utf8'));
+        return orientSpatialStandaloneSpline(scene, span, asset.id);
     }
     const descriptor = metadata => Object.fromEntries(['resourceId', 'width', 'height', 'depth', 'offsetX', 'offsetY', 'offsetZ'].map(key => [key, metadata[key]]));
 
@@ -256,7 +263,7 @@ export async function createSpatialModelExporter(options) {
             for (const [key, value] of Object.entries(manifest.resources)) if (value.assetId === id) delete manifest.resources[key];
             return { asset: manifest.assets[id] ?? null, resources: manifest.resources, timing };
         }
-        scene = prepareSpatialReferenceScene(id, scene);
+        scene = prepareSpatialReferenceScene(id, await loadStandaloneSplineSpan(asset, scene));
         if (!meshCount(scene, 'whole')) {
             timing.status = 'skipped'; timing.reason = 'Scene has no visible static mesh';
             delete manifest.assets[id];

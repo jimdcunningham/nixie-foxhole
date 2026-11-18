@@ -12,6 +12,19 @@ test('extraction metadata provides model scope and modification identity without
  assert.equal(catalog.assets[0].sprite,undefined);
 });
 
+test('non-X manual splines opt into the authored span in either catalog format', async () => {
+    const connector = { isManualConnector: true, pathStyle: 'spline' };
+    const { assets } = await spatialExportCatalog({ assets: [
+        { id: 'raw', connector: { ...connector, meshConfigs: [{ mode: 'ESplineConnectorMeshMode::Spline', splineMeshAxis: 'ESplineMeshAxis::Z' }] } },
+        { id: 'published', connector: { ...connector, meshConfigs: [{ mode: 'spline', axis: 'z' }] } },
+        { id: 'straight', connector: { ...connector, meshConfigs: [{ mode: 'spline', axis: 'x' }] } },
+        { id: 'blueprint', connector: { pathStyle: 'spline', meshConfigs: [{ mode: 'spline', axis: 'z' }] } },
+        { id: 'interval', connector: { ...connector, meshConfigs: [{ mode: 'interval', axis: 'z' }] } },
+        { id: 'composite', connector: { ...connector, meshConfigs: [{ mode: 'spline', axis: 'z' }, { mode: 'interval', axis: 'x' }] } },
+    ] });
+    assert.deepEqual(assets.filter(asset => asset.useAuthoredSplineSpan).map(asset => asset.id), ['raw', 'published']);
+});
+
 test('the raw and published catalog identify the same upgrades on real extracted fixtures when available',async t=>{
  let raw,published;
  try{raw=JSON.parse(await readFile(new URL('../tmp/foxwatch-manifest.v1.json',import.meta.url),'utf8'));published=JSON.parse(await readFile(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/manifest.v1.json',import.meta.url),'utf8'));}

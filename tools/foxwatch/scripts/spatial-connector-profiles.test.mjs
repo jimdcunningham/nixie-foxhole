@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
+import { orientSpatialStandaloneSpline, spatialConnectorProfile, prepareSpatialConnectorScene } from './spatial-connector-profiles.mjs';
 
 test('overhead roles follow exported geometry identities even when Blender reorders them', () => {
     const document = { meshes: [{ name: 'Pipelineoverhead.001' }, { name: 'Pipelineoverhead.002' }, { name: 'PipelineoverheadConnect.001' }],
@@ -22,7 +22,27 @@ test('profiles recover native span length and include a missing minimum-length f
     assert.deepEqual(input, copy);
 });
 
-test('road cap roles follow their exported positions when mesh order changes', () => {
+test('standalone spline exports use the authored forward frame from the planar span', () => {
+    const input = { scene: { roots: [{ unrealRotationDegrees: [0, 0, 0], children: [{ meshId: 'body' }] }] },
+        assets: { meshes: [{ id: 'body' }] } };
+    const span = structuredClone(input);
+    span.render = { repeatAxis: 'x' };
+    span.scene.roots[0].unrealRotationDegrees[1] = 90;
+    const prepared = orientSpatialStandaloneSpline(input, span, 'standalone');
+    assert.deepEqual(prepared.scene.roots[0].unrealRotationDegrees, [0, 90, 0]);
+    assert.deepEqual(input.scene.roots[0].unrealRotationDegrees, [0, 0, 0]);
+    span.scene.roots[0].children[0].meshId = 'other';
+    assert.throws(() => orientSpatialStandaloneSpline(input, span, 'standalone'), /does not match/);
+});
+
+test('Provisional Road exports only its repeating body and still recognizes it in old files', () => {
+    const caps = { id: 'cap', sourcePath: 'Meshes/FacilityRoadEnd.glb' };
+    const body = { id: 'body', sourcePath: 'Meshes/FacilityRoad_Test.glb' };
+    const input = { scene: { roots: [{ children: [{ meshId: 'cap' }, { meshId: 'body' }, { meshId: 'cap' }] }] },
+        assets: { meshes: [caps, body] } };
+    const prepared = prepareSpatialConnectorScene('facilityroad', input);
+    assert.deepEqual(prepared.assets.meshes, [body]);
+    assert.deepEqual(prepared.scene.roots[0].children.map(node => node.meshId), ['body']);
     const document = {
         meshes: ['FacilityRoadEnd.002', 'FacilityRoad_Test.001', 'FacilityRoadEnd.001']
             .map((name, index) => ({ name, primitives: [{ attributes: { POSITION: index } }] })),
@@ -32,8 +52,6 @@ test('road cap roles follow their exported positions when mesh order changes', (
     const exported = { meshParts: [{ name: 'front', origin: [288, 0, 1.6] },
         { name: 'body', origin: [144, 0, 1.6] }, { name: 'back', origin: [144, 0, 1.6] }] };
     assert.deepEqual(spatialConnectorProfile('facilityroad', document, exported).parts, {
-        start: { meshIndex: 2, origin: [144, 0, 1.6] },
-        end: { meshIndex: 0, origin: [288, 0, 1.6] },
         span: { meshIndex: 1, origin: [144, 0, 1.6] },
     });
 });

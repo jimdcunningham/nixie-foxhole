@@ -7,7 +7,13 @@ export async function spatialExportCatalog(document, overrideDirectory) {
     return { assets: (document.assets ?? []).filter(asset => !asset.isUpgrade && !excluded.has(asset.id)).map(asset => {
         const raw = Array.isArray(asset.modificationSlots);
         const slots = raw ? asset.modificationSlots : Array.isArray(asset.modifications) ? asset.modifications : [];
+        const splineConfigs = asset.connector?.meshConfigs;
+        const span = splineConfigs?.length === 1 ? splineConfigs[0] : undefined;
+        const useAuthoredSplineSpan = asset.connector?.isManualConnector === true
+            && asset.connector.pathStyle === 'spline' && /(?:^|::)spline$/i.test(span?.mode ?? '')
+            && /(?:^|::)[yz]$/i.test(span?.splineMeshAxis ?? span?.axis ?? '');
         return { id: asset.id, codeName: asset.codeName, categoryId: asset.categoryId,
+            ...(useAuthoredSplineSpan ? { useAuthoredSplineSpan } : {}),
             ...(asset.isItem ? { isItem: true } : {}), ...(asset.isVehicle ? { isVehicle: true } : {}),
             ...(asset.isBunker ? { isBunker: true } : {}), ...(asset.isDestroyed ? { isDestroyed: true } : {}),
             ...(asset.isBreached ? { isBreached: true } : {}), renderLayers: asset.renderLayers ?? [],

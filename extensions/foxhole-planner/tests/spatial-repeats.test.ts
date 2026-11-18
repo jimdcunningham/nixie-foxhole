@@ -102,6 +102,32 @@ test('all seven reference roads overlap the visible parts of native tiles', () =
     }
 });
 
+test('Provisional Road repeats only the span mesh across short and long paths', () => {
+    const id = 'facilityroad';
+    const asset = assets[id]!;
+    assert.ok(asset.model && asset.connector);
+    const parts = {
+        span: { meshIndex: 0, origin: [0, 0, 0] as [number, number, number] },
+        start: { meshIndex: 1, origin: [0, 0, 0] as [number, number, number] },
+        end: { meshIndex: 2, origin: [0, 0, 0] as [number, number, number] },
+    };
+    for (const model of [{ ...asset.model, pathProfile: undefined }, { ...asset.model, pathProfile: { version: 1 as const, parts } }]) {
+        for (const endX of [64, 960]) {
+            const data = createFoxholeSceneV2SplineProductData(id, asset.connector) as unknown as FoxholeSceneV2SplineConnectorData;
+            Object.assign(data, { endX, endY: 0, startZ: 8, endZ: 32 });
+            const { nodes } = parseNixieSpatialPlanV1(renderFoxholeSpatialConnector(entity, data, { ...asset, model }));
+            assert.equal(nodes.length, 1);
+            const [road] = nodes;
+            assert.ok(road?.kind === 'model-path');
+            assert.equal(road.meshIndex, model.pathProfile ? 0 : 1);
+            assert.equal(road.startInset, undefined);
+            assert.equal(road.endInset, undefined);
+            assert.deepEqual(road.points.slice(0, 3), [0, 0, 8]);
+            assert.deepEqual(road.points.slice(-3), [endX, 0, 32]);
+        }
+    }
+});
+
 test('all rail profiles preserve the authored path and rigid sleepers through serialization', () => {
     for (const id of rails) {
         const asset = assets[id]!;

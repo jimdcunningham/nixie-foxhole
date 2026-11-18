@@ -45,19 +45,9 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
         return { contractVersion: 1, nodes };
     }
     if (road) {
-        // The original exported road GLB already contains the back cap, body and front cap in this order.
-        const back = profile?.parts.start?.meshIndex ?? 0;
+        // Older exports put the body between two caps. New profiles name the body directly.
         const body = profile?.parts.span?.meshIndex ?? 1;
-        const front = profile?.parts.end?.meshIndex ?? 2;
-        const capLength = Math.min(450 * .32, length / 2);
-        const nodes: NixieSpatialNodeV1[] = [
-            { ...common, id: 'road-start', meshIndex: back, endInset: length - capLength },
-            { ...common, id: 'road-end', meshIndex: front, startInset: length - capLength },
-        ];
-        if (length - 2 * capLength > 1e-6) {
-            nodes.push({ ...common, id: 'road-body', meshIndex: body, startInset: capLength, endInset: capLength });
-        }
-        return { contractVersion: 1, nodes };
+        return { contractVersion: 1, nodes: [{ ...common, id: 'road-body', meshIndex: body }] };
     }
     if (!profile) return undefined;
     const nodes: NixieSpatialNodeV1[] = [];

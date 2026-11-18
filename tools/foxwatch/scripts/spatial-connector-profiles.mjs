@@ -12,6 +12,26 @@ const sandbagMeshes = {
     sandbagfullspline: ['SandbagFullSpline01', 'SandbagFullSpline02', 'SandbagFullSpline03', 'SandbagFullSpline04'],
 };
 
+/** Use the same X-forward prototype as the planar render for a standalone authored spline. */
+export function orientSpatialStandaloneSpline(input, span, id) {
+    const visibleMeshIds = document => {
+        const ids = [];
+        const visit = node => {
+            if (node.visible === false) return;
+            if (node.meshId) ids.push(node.meshId);
+            (node.children ?? []).forEach(visit);
+        };
+        document.scene.roots.forEach(visit);
+        return ids;
+    };
+    const meshes = visibleMeshIds(input);
+    const spanMeshes = visibleMeshIds(span);
+    if (meshes.length !== 1 || spanMeshes.length !== 1 || meshes[0] !== spanMeshes[0] || span.render?.repeatAxis !== 'x') {
+        throw new Error(`The authored spatial spline span does not match the standalone mesh for ${id}.`);
+    }
+    return { ...input, scene: span.scene, assets: span.assets };
+}
+
 /** Resolve authored roles against actual exported mesh indices, never assumed Blender order. */
 export function spatialConnectorProfile(id, document, exported, scene) {
     const meshes = document.meshes ?? [];
@@ -36,13 +56,6 @@ export function spatialConnectorProfile(id, document, exported, scene) {
         if (!endpoint || !(endpoint[0] > 0)) throw new Error('Missing overhead endpoint reference');
         profile.endOrigin = [endpoint[0] * .32, -endpoint[1] * .32, endpoint[2] * .32];
     } else if (id === 'facilityroad') {
-        const caps = meshes.map((mesh, index) => ({ mesh, index }))
-            .filter(({ mesh }) => clean(mesh.name) === 'facilityroadend');
-        const minX = ({ mesh }) => Math.min(...mesh.primitives.map(primitive => document.accessors[primitive.attributes.POSITION].min[0]));
-        const [back, front] = caps.sort((a, b) => minX(a) - minX(b));
-        if (caps.length !== 2) throw new Error('Expected two spatial facility road caps');
-        profile.parts.start = part(['FacilityRoadEnd'], back.index < front.index ? 0 : 1);
-        profile.parts.end = part(['FacilityRoadEnd'], back.index < front.index ? 1 : 0);
         profile.parts.span = part(['FacilityRoad_Test']);
     } else if (/^(?:small)?railtrackspline(?:biarc|foundation|town)?$/.test(id)) {
         const small = id.startsWith('small');
@@ -92,6 +105,14 @@ export function prepareSpatialConnectorScene(id, input) {
             && node.id?.includes(':spline-mesh-') && node.scale) node.scale[0] = 1;
         (node.children ?? []).forEach(normalize);
     };
+    if (id === 'facilityroad') {
+        const meshes = new Set(scene.assets.meshes.filter(mesh => /(?:^|[\\/])FacilityRoadEnd\.glb$/iu.test(mesh.sourcePath)).map(mesh => mesh.id));
+        const dropCaps = nodes => nodes.filter(node => !meshes.has(node.meshId)).map(node => ({
+            ...node, children: dropCaps(node.children ?? []),
+        }));
+        scene.scene.roots = dropCaps(scene.scene.roots);
+        scene.assets.meshes = scene.assets.meshes.filter(mesh => !meshes.has(mesh.id));
+    }
     scene.scene.roots.forEach(normalize);
     if (id === 'tankstopsplinet3') {
         const existing = new Set();
