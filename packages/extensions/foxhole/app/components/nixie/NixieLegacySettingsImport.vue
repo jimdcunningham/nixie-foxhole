@@ -1,89 +1,26 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useNixieLegacySettingsImport } from '#foxhole/composables/useNixieLegacySettingsImport.ts';
 import type { LegacySettingsChange } from '#foxhole/utils/nixie-legacy-settings.ts';
 
-const props = defineProps<{ open: boolean; file: File | null; }>();
-const emit = defineEmits<{ close: []; pending: [value: boolean]; 'choose-file': []; }>();
+const props = defineProps<{ file: File; includePreferences: boolean; includeToolbelts: boolean; disabled?: boolean; }>();
+const emit = defineEmits<{ ready: [value: boolean]; pending: [value: boolean]; }>();
 const importer = useNixieLegacySettingsImport();
-watch(importer.pending, value => emit('pending', value));
-watch(() => props.file, file => {
-    if (file) void importer.readFile(file);
+const visibleChanges = computed(() => importer.report.value?.changes.filter(change =>
+    change.paletteKey || change.source === 'showToolbelt' ? props.includeToolbelts : props.includePreferences,
+) ?? []);
+
+watch([() => props.includePreferences, () => props.includeToolbelts, importer.report], ([preferences, toolbelts]) => {
+    importer.preferences.value = preferences;
+    importer.toolbelts.value = toolbelts;
+}, { immediate: true, flush: 'sync' });
+
+watch([importer.pending, importer.selectedCount], ([pending, count]) => {
+    emit('ready', !pending && count > 0);
 }, { immediate: true });
-let previousFocus: HTMLElement | null = null;
-
-function dialog(): HTMLElement | null {
-    return document.getElementById('nx-legacy-settings-import-title')?.closest<HTMLElement>('[role="dialog"]') ?? null;
-}
-
-watch(() => props.open, async open => {
-    if (open) {
-        previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        await nextTick();
-        dialog()?.querySelector<HTMLElement>('[data-legacy-review], button')?.focus();
-    } else {
-        await nextTick();
-        if (previousFocus?.isConnected) {
-            previousFocus.focus();
-        }
-    }
-});
-
-watch(importer.report, async report => {
-    if (!props.open) {
-        return;
-    }
-    await nextTick();
-    dialog()?.querySelector<HTMLElement>(report ? '[data-legacy-review]' : 'button')?.focus();
-});
-
-function handleKeydown(event: KeyboardEvent): void {
-    if (!props.open) {
-        return;
-    }
-    const root = dialog();
-    if (!root) {
-        return;
-    }
-    // Keep native button/file/checkbox behavior. NxModal's default Enter action
-    // must never turn a keyboard Cancel or file selection into Apply.
-    if (event.key === 'Enter' && root.contains(event.target as Node)) {
-        event.stopPropagation();
-    }
-    if (event.key !== 'Tab') {
-        return;
-    }
-    const elements = Array.from(root.querySelectorAll<HTMLElement>('button, input, select, textarea, summary, a[href], [tabindex]'))
-        .filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0);
-    const first = elements[0];
-    const last = elements.at(-1);
-    if (!first || !last) {
-        return;
-    }
-    if (event.shiftKey && (document.activeElement === first || !elements.includes(document.activeElement as HTMLElement))) {
-        event.preventDefault();
-        last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !elements.includes(document.activeElement as HTMLElement))) {
-        event.preventDefault();
-        first.focus();
-    }
-}
-
-onMounted(() => document.addEventListener('keydown', handleKeydown, true));
-onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown, true));
-
-function close(): void {
-    if (importer.pending.value) {
-        return;
-    }
-    importer.cancelReview();
-    emit('close');
-}
-
-function chooseAnotherFile(): void {
-    importer.cancelReview();
-    emit('choose-file');
-}
+watch(() => props.file, file => { void importer.readFile(file); }, { immediate: true });
+watch(importer.pending, pending => emit('pending', pending), { immediate: true });
+defineExpose({ apply: importer.apply });
 
 function displayValue(value: unknown, change?: LegacySettingsChange): string {
     if (change?.paletteKey === 'selectedPaletteRow') {
@@ -97,36 +34,19 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
 </script>
 
 <template>
-    <NxModal
-        :open="open"
-        title="Import Legacy Settings"
-        eyebrow="Foxhole Planner / Game Kitchen"
-        labelledById="nx-legacy-settings-import-title"
-        width="min(760px, calc(100vw - 32px))"
-        :closeOnOverlay="!importer.pending.value"
-        :closeOnEscape="!importer.pending.value"
-        @close="close"
-    >
-        <div class="nx-legacy-settings">
+    <section class="nx-legacy-settings" aria-label="Editor settings and toolbelts">
             <p v-if="importer.error.value" role="alert" class="nx-legacy-settings__error">{{ importer.error.value }}</p>
             <p v-if="importer.message.value" role="status">{{ importer.message.value }}</p>
             <template v-if="!importer.report.value">
-                <p v-if="importer.pending.value" role="status">Reading settings and loading the Foxhole asset catalog…</p>
-                <p class="nx-text-muted">Imports update only supported editor preferences and resolved toolbelt slots. Empty and skipped slots keep their current Nixie bindings. Account, security, project, and keyboard shortcut settings stay unchanged.</p>
+                <p v-if="importer.pending.value" role="status">Reading settings…</p>
             </template>
-            <template v-else>
-                <p class="nx-legacy-settings__filename" data-legacy-review tabindex="-1">{{ importer.filename.value }} · Legacy settings version {{ importer.report.value.version }}</p>
-                <div class="nx-legacy-settings__choices">
-                    <NxCheckbox v-model="importer.preferences.value" label="Editor Preferences" />
-                    <NxCheckbox v-model="importer.toolbelts.value" label="Toolbelts And Palette" />
-                </div>
-                <p class="nx-text-muted">Only the mapped values below will be applied. Matching palette slots are replaced in their original rows; other slots are kept.</p>
-                <div v-if="importer.report.value.changes.length" class="nx-legacy-settings__table-wrap">
-                    <table class="nx-legacy-settings__table">
-                        <caption>Mapped Preferences ({{ importer.report.value.changes.length }})</caption>
-                        <thead><tr><th scope="col">Nixie Preference</th><th scope="col">Current</th><th scope="col">Imported</th></tr></thead>
+            <template v-else-if="includePreferences || includeToolbelts">
+                <p v-if="includeToolbelts && importer.report.value.slots.length" class="nx-text-muted">Matching palette slots are replaced in their original rows; other slots are kept.</p>
+                <div v-if="visibleChanges.length" class="nx-legacy-settings__table-wrap">
+                    <table class="nx-legacy-settings__table" aria-label="Settings to import">
+                        <thead><tr><th scope="col">Nixie Setting</th><th scope="col">Current</th><th scope="col">Imported</th></tr></thead>
                         <tbody>
-                            <tr v-for="change in importer.report.value.changes" :key="change.source" :class="{ 'is-skipped': (change.paletteKey || change.source === 'showToolbelt') ? !importer.toolbelts.value : !importer.preferences.value }">
+                            <tr v-for="change in visibleChanges" :key="change.source">
                                 <th scope="row">{{ change.label }}</th>
                                 <td>{{ displayValue(importer.currentValue(change), change) }}</td>
                                 <td>{{ displayValue(change.value, change) }}</td>
@@ -134,8 +54,8 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
                         </tbody>
                     </table>
                 </div>
-                <section v-if="importer.report.value.slots.length" :class="{ 'is-skipped': !importer.toolbelts.value }">
-                    <h3>Mapped Toolbelt Slots ({{ importer.report.value.slots.length }})</h3>
+                <section v-if="includeToolbelts && importer.report.value.slots.length">
+                    <h3>Toolbelt Slots</h3>
                     <ul class="nx-legacy-settings__slots">
                         <li v-for="item in importer.report.value.slots" :key="item.source">
                             <span class="nx-legacy-settings__slot-position">Row {{ item.row + 1 }} · Key {{ item.slot === 9 ? '0' : item.slot + 1 }}</span>
@@ -151,39 +71,19 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
                     </ul>
                 </details>
                 <p v-if="!importer.selectedCount.value" role="status">No supported items are selected. Your settings will be kept.</p>
-                <p v-else role="status">{{ importer.selectedCount.value }} preferences and slots selected. Undo will be available after applying.</p>
             </template>
-        </div>
-        <template #footer>
-            <NxButton variant="secondary" :disabled="importer.pending.value" @click="chooseAnotherFile">Choose Another File</NxButton>
-            <NxButton
-                v-if="importer.recovery.value"
-                variant="secondary"
-                :disabled="importer.pending.value"
-                @click="importer.undo"
-            >Undo Last Import</NxButton>
-            <NxButton variant="ghost" :disabled="importer.pending.value" @click="close">{{ importer.report.value ? 'Cancel' : 'Close' }}</NxButton>
-            <NxButton
-                v-if="importer.report.value"
-                variant="primary"
-                :disabled="!importer.selectedCount.value || importer.pending.value"
-                @click="importer.apply"
-            >Apply Selected</NxButton>
-        </template>
-    </NxModal>
+    </section>
 </template>
 
 <style scoped>
 .nx-legacy-settings { display: grid; gap: var(--nx-space-3); min-width: 0; }
 .nx-legacy-settings p { margin: 0; font-size: 13px; line-height: 1.6; }
 .nx-legacy-settings__error { color: var(--nx-danger); }
-.nx-legacy-settings__filename { overflow-wrap: anywhere; }
 .nx-legacy-settings__file { display: grid; gap: var(--nx-space-2); font-size: 13px; font-weight: 600; }
 .nx-legacy-settings__file input { max-width: 100%; min-width: 0; font: inherit; padding: var(--nx-space-2); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-md); }
-.nx-legacy-settings__choices { display: flex; flex-wrap: wrap; gap: var(--nx-space-4); }
 .nx-legacy-settings__table-wrap { overflow-x: auto; }
 .nx-legacy-settings__table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.nx-legacy-settings__table caption, .nx-legacy-settings h3 { text-align: left; font-size: 13px; font-weight: 600; margin: 0 0 var(--nx-space-2); }
+.nx-legacy-settings h3 { text-align: left; font-size: 13px; font-weight: 600; margin: 0 0 var(--nx-space-2); }
 .nx-legacy-settings__table th, .nx-legacy-settings__table td { padding: var(--nx-space-2); border-bottom: 1px solid var(--nx-border); text-align: left; overflow-wrap: anywhere; }
 .nx-legacy-settings__table thead th { color: var(--nx-text-muted); font-weight: 500; }
 .nx-legacy-settings__table tbody th { font-weight: 500; }
@@ -195,5 +95,4 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
 .nx-legacy-settings__skipped { font-size: 12px; }
 .nx-legacy-settings__skipped summary { cursor: pointer; font-weight: 600; padding: var(--nx-space-2) 0; }
 .nx-legacy-settings__skipped ul { margin: var(--nx-space-2) 0 0; padding-left: var(--nx-space-4); display: grid; gap: var(--nx-space-2); overflow-wrap: anywhere; }
-.is-skipped { opacity: 0.5; }
 </style>

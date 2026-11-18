@@ -110,9 +110,9 @@ export function useNixieLegacySettingsImport() {
         }
     }
 
-    function apply(): void {
+    function apply(): boolean {
         if (pending.value || !report.value || !selectedCount.value) {
-            return;
+            return false;
         }
         error.value = '';
         try {
@@ -126,10 +126,11 @@ export function useNixieLegacySettingsImport() {
             const applied = buildLegacySettingsPatch(before, report.value, preferences.value, toolbelts.value);
             store.patch(applied);
             recovery.value = { before, applied };
-            message.value = `Applied ${selectedCount.value} mapped preferences and slots. You can undo this import until the next import or until Nixie closes.`;
             report.value = null;
+            return true;
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : 'Unable to apply these settings.';
+            return false;
         }
     }
 
