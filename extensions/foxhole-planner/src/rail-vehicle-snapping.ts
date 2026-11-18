@@ -381,6 +381,13 @@ const cannonId = 'trainlrartillery';
 const drawbarLength = .5 * UNITS_PER_METRE;
 const drawbarSlack = .3 * UNITS_PER_METRE;
 
+function blackBoltDrive(leader: string, massKg: number, startDistance: number, loop: boolean) {
+    // Yard simulation tuning. Higher brake force keeps the stopping distance at top speed comparable.
+    return { contractVersion: 1 as const, speed: 8 * UNITS_PER_METRE,
+        drive: { leader, acceleration: 195_000 / massKg * UNITS_PER_METRE,
+            braking: 400_000 / massKg * UNITS_PER_METRE, manual: { startDistance, loop } } };
+}
+
 /** Solve the coupled centre station on the same running line as the anchor. */
 function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle, traversal: RailTraversal) {
     const offsetDirection = anchorId === cannonId ? 1 : -1;
@@ -686,8 +693,7 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
     }
     if (samples[0]!.length < 2) return;
     const mass = 72_000 + members.slice(1).reduce((total, member) => total + (member.assetId === cannonId ? 135_000 : 32_000), 0);
-    const drive = { leader: leader.entity.entityId, acceleration: 65_000 / mass * UNITS_PER_METRE,
-        braking: 100_000 / mass * UNITS_PER_METRE, manual: { startDistance: -samples[0]![0]!.distance, loop } };
+    const drive = blackBoltDrive(leader.entity.entityId, mass, 0 - samples[0]![0]!.distance, loop);
     const encoder = new TextEncoder();
     const before = Math.max(...members.map(member => member.offset)) + 192;
     const after = -Math.min(...members.map(member => member.offset)) + 192;
@@ -697,7 +703,7 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
         const selected = simplifyConsistFrames(frames, frames, tolerance);
         if (!selected.includes(backward.length)) selected.push(backward.length);
         selected.sort((a, b) => a - b);
-        return { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE, drive,
+        return { ...drive,
             sources: [...sources, ...members.filter(other => other !== member).map(other => other.entity.entityId)],
             ...packRailFrames(selected.map(i => frames[i]!)) } satisfies NixieSimulationPathV1;
     };
@@ -943,12 +949,7 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
         indices = indices.slice(startIndex, startIndex + NIXIE_SIMULATION_PATH_MAX_FRAMES);
     }
     const initialDistance = pairs[indices[0]!]!.engine.distance;
-    // Sandbox estimates in SI units. Traction and braking limits apply to the
-    // entire consist. Studio integrates the resulting longitudinal rates.
-    const massKg = 72_000 + 135_000;
-    const common = { contractVersion: 1 as const, speed: 4 * UNITS_PER_METRE,
-        drive: { leader: engineEntityId, acceleration: 65_000 / massKg * UNITS_PER_METRE,
-            braking: 100_000 / massKg * UNITS_PER_METRE, manual: { startDistance: 0 - initialDistance, loop } } };
+    const common = blackBoltDrive(engineEntityId, 72_000 + 135_000, 0 - initialDistance, loop);
     const pack = (vehicle: 'engine' | 'cannon', peer: string) => {
         const frames = indices.map(index => pairs[index]![vehicle]);
         const nodes = rest[vehicle].modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))

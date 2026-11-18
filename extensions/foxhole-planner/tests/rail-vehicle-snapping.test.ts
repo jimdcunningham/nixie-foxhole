@@ -263,6 +263,8 @@ test('an existing mixed eleven-vehicle train is rebuilt as one drive with its or
         return [operation.entityId, path] as const;
     });
     const leader = paths.find(([id]) => id === 'vehicle')![1];
+    assert.equal(leader.speed, 8 * 32);
+    assert.ok(leader.speed / leader.drive!.acceleration < 21, 'the full train should reach top speed in about 20 seconds');
     const start = leader.drive!.manual!.startDistance;
     for (const [id, path] of paths) {
         assert.deepEqual(path.drive, leader.drive);
