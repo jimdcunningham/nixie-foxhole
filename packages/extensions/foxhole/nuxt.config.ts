@@ -90,10 +90,6 @@ export default defineNuxtConfig({
   },
   nitro: {
     tasks: {
-      'nixie:blueprints:moderate': {
-        handler: join(currentDir, './tasks/blueprints/moderate.ts'),
-        description: 'Moderate legacy blueprint text and images in the configured queue order.',
-      },
       'foxhole:playback:purge': {
         handler: join(currentDir, './tasks/playback/purge.ts'),
         description: 'Purge expired Foxhole playback frames, checkpoints, and war events.',
@@ -101,7 +97,6 @@ export default defineNuxtConfig({
     },
     scheduledTasks: {
       ...(enableScheduledTasks ? { '0 8 * * *': 'foxhole:playback:purge' } : {}),
-      ...(process.env.NIXIE_BUILD_SCHEDULED_TASKS === 'true' ? { '*/10 * * * *': 'nixie:blueprints:moderate' } : {}),
     },
   },
   icon: {

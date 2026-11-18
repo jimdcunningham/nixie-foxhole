@@ -1,5 +1,4 @@
 import { LEGACY_BLUEPRINT_LIMITS } from '#nixie/utils/legacy-blueprint-archive-bounds.ts';
-const containers = new Set(['layer', 'container', 'group', 'ly', 'cn']);
 
 export function checkLegacyBlueprintSave(save: unknown): void {
     if (!save || typeof save !== 'object' || !Array.isArray((save as { entities?: unknown; }).entities)) {
@@ -31,19 +30,4 @@ export function checkLegacyBlueprintSave(save: unknown): void {
             }
         }
     }
-}
-
-export function legacyHasPublicationContent(entities: unknown): boolean {
-    return Array.isArray(entities) && entities.some(entity => {
-        if (!entity || typeof entity !== 'object') {
-            return false;
-        }
-        if (entity.type === 'text') {
-            return Boolean(String(entity.label ?? '').trim());
-        }
-        if (entity.type === 'image') {
-            return Boolean(entity.textureFile || entity.textureData);
-        }
-        return Boolean(entity.key || (entity.type && !containers.has(entity.type)));
-    });
 }
