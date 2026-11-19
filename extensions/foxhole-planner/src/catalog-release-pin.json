@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "baseUrl": "https://assets.nixiejs.com/",
   "catalog": {
-    "url": "https://assets.nixiejs.com/foxhole-planner/objects/c8af845a6799c9df0384a272848612b6235d46e6b76accef848207f44f2e5fd7.json",
-    "sha256": "c8af845a6799c9df0384a272848612b6235d46e6b76accef848207f44f2e5fd7",
-    "byteLength": 16654614
+    "url": "https://assets.nixiejs.com/foxhole-planner/objects/efd24a2660466563ae46e0dcafdce7bc79ae262cac84e5109b17b8231af75954.json",
+    "sha256": "efd24a2660466563ae46e0dcafdce7bc79ae262cac84e5109b17b8231af75954",
+    "byteLength": 16438655
   },
   "completion": {
-    "url": "https://assets.nixiejs.com/foxhole-planner/objects/f427b5527d40a486f6f51f8dd2edb9045f240634825da56f1881d9dfe6ffcbdd.json",
-    "sha256": "f427b5527d40a486f6f51f8dd2edb9045f240634825da56f1881d9dfe6ffcbdd",
+    "url": "https://assets.nixiejs.com/foxhole-planner/objects/451e57a49f784b148f8314f130b4cfc45bb0c6778e02f074f4cfefac52a56f13.json",
+    "sha256": "451e57a49f784b148f8314f130b4cfc45bb0c6778e02f074f4cfefac52a56f13",
     "byteLength": 2121
   }
 }
