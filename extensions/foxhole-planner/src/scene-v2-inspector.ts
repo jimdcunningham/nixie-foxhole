@@ -1,4 +1,5 @@
 import { foxholeColorLabel } from './color-label.ts';
+import { FOXHOLE_BOARD_UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
@@ -74,7 +75,7 @@ export function inspectFoxholeSceneV2SplineConnector(request: NixieInspectorRequ
     const hasAsset = request.subject.components.some(component => component.ownerId === OWNER && component.componentId === 'asset');
     return { contractVersion: 1,
         ...(!hasAsset ? { layout: {
-            title: 'Foxhole (SDK)',
+            title: 'Foxhole',
             batch: { label: 'Foxhole Nodes', hint: 'Batch edit the selected Foxhole nodes.' },
             summary: asset ? inspectorSummary(key, asset) : { title: 'Unknown Connector', identifier: '#' + key },
             ...(menu ? { menu } : {}),
@@ -379,7 +380,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
             } },
         ]);
     }
-    const tabs = [
+    const tabs: NonNullable<NixieInspectorResultV1['layout']>['tabs'] = [
         { id: 'upgrades', label: 'Upgrades', componentIds: ['modification'] },
         { id: 'production', label: 'Production', componentIds: ['production-order'] },
         { id: 'supply', label: 'Supply', componentIds: ['maintenance-supply'],
@@ -390,11 +391,16 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
     ].filter(tab => tab.componentIds.some(componentId => (data(componentId) !== undefined || (componentId === 'maintenance-supply' && supplyDefaults))
         && (componentId === 'maintenance-supply' || componentId === 'spline-connector'
             || result.get(componentId)?.some(field => !field.hidden))));
+    if (asset.isRailVehicle) {
+        const storage = tabs.findIndex(tab => tab.id === 'storage');
+        tabs.splice(storage < 0 ? tabs.length : storage, 0, { id: 'controls', label: 'Controls', componentIds: [],
+            simulationControls: { unitsPerMetre: FOXHOLE_BOARD_UNITS_PER_METRE, guidedVehicle: true } });
+    }
     const hitboxKey = String(assetId).toLowerCase();
     const splineKey = data('spline-connector')?.foxholeKey;
     const splineMenu = typeof splineKey === 'string' ? connectorVariantMenu(splineKey, assets[splineKey]) : undefined;
     return { contractVersion: 1, layout: {
-        title: 'Foxhole (SDK)',
+        title: 'Foxhole',
         batch: { label: 'Foxhole Nodes', hint: 'Batch edit the selected Foxhole nodes.' },
         ...(!asset.isItem ? { hitboxes: { settingId: FOXHOLE_HITBOX_SETTING_ID, seedDefaultsOnSelection: true, unitsPerDisplayUnit: 32, unit: 'm', clipboardKind: 'foxhole-hitboxes',
             export: {

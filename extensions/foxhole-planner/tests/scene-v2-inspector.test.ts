@@ -39,6 +39,16 @@ test('all published assets return bounded Inspector choices validated against th
     }
 });
 
+test('the train engine contributes simulation Controls before Storage', () => {
+    const tabs = inspect('trainengine').layout!.tabs;
+    const controls = tabs.findIndex(tab => tab.id === 'controls');
+    assert.ok(controls >= 0);
+    assert.equal(tabs[controls + 1]?.id, 'storage');
+    assert.deepEqual(tabs[controls]?.simulationControls, { unitsPerMetre: 32, guidedVehicle: true });
+    assert.ok(inspect('trainflatbed').layout?.tabs.some(tab => tab.simulationControls?.guidedVehicle));
+    assert.ok(!inspect('fortt3').layout?.tabs.some(tab => tab.simulationControls));
+});
+
 test('modification tiles include their category, rendered preview, and material costs', () => {
     const options = inspect('fortt3').components.find(component => component.componentId === 'modification')
         ?.fields[0]?.choices?.options ?? [];
@@ -185,7 +195,7 @@ test('catalog and standalone spline stencils expose only applicable authoring co
             layout = structure.layout;
             assert.ok(structure.components.some(component => component.componentId === 'spline-connector'));
         }
-        assert.equal(layout?.title, 'Foxhole (SDK)', product.id);
+        assert.equal(layout?.title, 'Foxhole', product.id);
         assert.equal(layout?.summary?.identifier, '#' + spline.data.foxholeKey, product.id);
         const visible = result.components[0]!.fields.filter(field => !field.hidden).map(field => field.path[0]);
         assert.equal(layout?.tabs.some(tab => tab.componentIds.includes('spline-connector')), visible.length > 0, product.id);
