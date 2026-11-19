@@ -47,18 +47,34 @@ const stack: [number, number, number] = [82, 0, 175];
 const steam = (opacity: number, endSize: number, lifetime: number) => ({
     color: 0xd8e0e5, opacity, size: 28, endSize, velocity: [4, -6, 34] as [number, number, number], lifetime,
 });
+type SimulationEffect = NonNullable<NixieSpatialPlanV1['simulationEffects']>[number];
+const cylinderSteam = (side: -1 | 1): SimulationEffect[] => {
+    // Vent just below the front cylinder on either side of the Black Bolt rig.
+    const point: SimulationEffect['point'] = [77, side * 45, 19];
+    const label = side < 0 ? 'left' : 'right';
+    return [
+        { id: `cylinder-idle-${label}`, point, trigger: 'idle', interval: side < 0 ? 2.3 : 2.8,
+            particle: { ...steam(.25, 30, 1.35), size: 12, velocity: [0, side * 10, 8], velocitySpace: 'entity' } },
+        { id: `cylinder-start-${label}`, point, trigger: 'start',
+            particle: { ...steam(.78, 86, 1.8), size: 22, velocity: [2, side * 53, 13], velocitySpace: 'entity' } },
+    ];
+};
 export const foxholeBlackBoltEffects: NonNullable<NixieSpatialPlanV1['simulationEffects']> = [
-    { id: 'exhaust', point: stack, trigger: 'distance', interval: 2 * Math.PI * 32 * mainWheelRadius / 4,
+    { id: 'exhaust', point: stack, trigger: 'distance', interval: Math.PI * 32 * mainWheelRadius,
         sound: { resourceId: 'foxhole.audio.steam-chuff', gain: .8, range: 4200 },
         particle: steam(.85, 102, 2.2) },
     { id: 'steam-idle', point: stack, trigger: 'idle', interval: 1.8,
-        sound: { resourceId: 'foxhole.audio.steam-idle', gain: .23, range: 1600 },
+        sound: { resourceId: 'foxhole.audio.steam-idle', gain: .3, range: 2400 },
         particle: steam(.31, 72, 2.7) },
     { id: 'whistle', point: stack, trigger: 'cue', label: 'Whistle',
         sound: { resourceId: 'foxhole.audio.steam-whistle', gain: .85, range: 8500 },
         particle: steam(.95, 128, 2.5) },
-    { id: 'brake-squeal', point: [18, 0, 16], trigger: 'brake', interval: 24,
-        sound: { resourceId: 'foxhole.audio.brake-squeal', gain: .62, range: 3800 } },
+    { id: 'bell', point: stack, trigger: 'cue', label: 'Bell',
+        sound: { resourceId: 'foxhole.audio.steam-bell', gain: .75, range: 5000 } },
+    { id: 'wheel-grind', point: [18, 0, 16], trigger: 'slip', interval: 12,
+        sound: { resourceId: 'foxhole.audio.wheel-grind', gain: .45, range: 3800 } },
+    ...cylinderSteam(-1),
+    ...cylinderSteam(1),
 ];
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),

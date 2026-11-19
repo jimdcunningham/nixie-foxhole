@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationColliderV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
     parseNixieTransformFinalizerV1, parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
@@ -49,10 +49,61 @@ test('the live socket setting gates a track-spline finalizer for each rail vehic
         const finalizer = manifest.contributes.transformFinalizers.map(parseNixieTransformFinalizerV1)
             .find(item => item.match.data?.assetId === id);
         assert.ok(finalizer, id);
+        assert.equal(finalizer.previewAware, true);
         assert.equal(finalizer.enabledSettingId, 'foxhole.viewport.socketSnapping');
         assert.equal(finalizer.candidateQuery.match.componentId, id.startsWith('train') ? 'asset' : 'spline-connector');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
     }
+});
+
+test('ordinary train drag previews snap to the committed pose without rebuilding the drive', () => {
+    const proposal = { ...request('trainengine', [track('railtrackspline')]), interaction: 'planar-translation' as const };
+    const committed = finalizeFoxholeRailVehicleSnap(proposal);
+    const preview = finalizeFoxholeRailVehicleSnap({ ...proposal, preview: true });
+    assert.deepEqual(preview.transform, committed.transform);
+    assert.equal(preview.transform.y, 0);
+    assert.equal(preview.transaction, undefined);
+    assert.ok(committed.transaction?.operations.some(operation => operation.op === 'add' && operation.data.simulationPath));
+});
+
+test('the Black Bolt vents from both front cylinders at idle and on departure', () => {
+    const engine = request('trainengine', []).context.entities[0]!;
+    const render = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(engine));
+    const effects = render.spatial?.simulationEffects ?? [];
+    for (const side of ['left', 'right'] as const) {
+        const idle = effects.find(effect => effect.id === `cylinder-idle-${side}`)!;
+        const start = effects.find(effect => effect.id === `cylinder-start-${side}`)!;
+        assert.equal(idle.trigger, 'idle');
+        assert.equal(start.trigger, 'start');
+        assert.deepEqual(start.point, idle.point);
+        assert.equal(Math.sign(start.point[1]), side === 'left' ? -1 : 1);
+        assert.equal(start.particle?.velocitySpace, 'entity');
+        assert.equal(Math.sign(start.particle!.velocity[1]), Math.sign(start.point[1]));
+        assert.ok(start.particle!.opacity > idle.particle!.opacity);
+        assert.ok(start.particle!.endSize > idle.particle!.endSize);
+    }
+});
+
+test('re-snapping a Black Bolt refreshes an older parked flatbed on its running line', () => {
+    const main = track('railtrackspline', 'main');
+    main.components.at(-1)!.data.endX = 2200;
+    const flatbed: NixieComponentEntitySnapshotV1 = { entityId: 'old-flatbed', revision: 1, components: [
+        component('asset', { catalogId: 'foxhole.structures', assetId: 'trainflatbed' }),
+        component('transform', { x: 1030, y: 0, rotation: 0 }, 'nixie.core'),
+        component('rail-attachment', { rail: 'main', station: 1030, reversed: false,
+            simulationCollider: { center: [0, 0, 50], halfExtents: [135, 50, 50] } }),
+    ] };
+    const proposal = request('trainengine', [main, flatbed]);
+    Object.assign(proposal.transform, { x: 600, y: 0, rotation: 0 });
+    const result = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'planar-translation' });
+    const patch = result.transaction?.operations.find(operation => operation.entityId === flatbed.entityId
+        && operation.componentId === 'rail-attachment');
+    if (patch?.op !== 'patch') assert.fail('Expected the parked flatbed attachment to be refreshed');
+    const path = parseNixieSimulationPathV1(patch.set?.simulationPath);
+    assert.equal(path.drive?.manual?.passive, true);
+    assert.deepEqual(path.sources, ['main']);
+    assert.ok(patch.set?.simulationCollider);
+    assert.equal(patch.set?.station, undefined);
 });
 
 test('every Locomotives asset snaps only to its own gauge', () => {
@@ -81,6 +132,8 @@ test('the large locomotive supplies a manual drive over a straight-to-curved rai
     assert.deepEqual(path.sources, ['approach', 'bend']);
     assert.equal(path.drive?.leader, 'vehicle');
     assert.ok(path.drive.manual);
+    const wheelSpan = parseNixieSimulationColliderV1(operation.data.simulationCollider).wheelSpan!;
+    assert.ok(wheelSpan[0] < -100 && wheelSpan[1] > 78);
     assert.equal(path.frames.find(frame => frame.distance === path.drive!.manual!.startDistance)?.position[0], -220);
     assert.ok(path.frames.at(-1)!.position[1] > 50);
     const straddling = path.frames.find(frame => frame.position[0] > 20 && frame.position[0] < 80);
@@ -109,6 +162,8 @@ test('Tempest playback keeps both bogies on separate rails while crossing the jo
     if (operation?.op !== 'add') assert.fail('Expected a snapped rail attachment');
     const path = parseNixieSimulationPathV1(operation.data.simulationPath);
     assert.deepEqual(path.sources, ['approach', 'bend']);
+    assert.equal(path.drive?.manual?.passive, true);
+    assert.equal(path.frames.find(frame => frame.distance === path.drive?.manual?.startDistance)?.position[0], -520);
     const frame = path.frames.find(frame => frame.position[0] > 20 && frame.position[0] < 80);
     assert.ok(frame);
     const centerlines = [
@@ -118,8 +173,10 @@ test('Tempest playback keeps both bogies on separate rails while crossing the jo
     ];
     const railsUnderWheels = new Set<number>();
     for (const bogie of foxholeRailVehicleBogies.trainlrartillery!) {
-        const pose = frame.modelNodeTransforms.find(node => node.nodeName === bogie.nodeName);
-        assert.ok(pose);
+        const node = path.modelNodes?.indexOf(bogie.nodeName) ?? -1;
+        assert.ok(node >= 0);
+        const pose = { translation: frame.modelOffsets!.slice(node * 6, node * 6 + 3),
+            rotation: frame.modelOffsets!.slice(node * 6 + 3, node * 6 + 6) };
         assert.ok(Math.abs(pose.rotation[1]) > 0.02);
         for (const axle of bogie.wheelOffsets) {
             const [x, y] = frame.position;
@@ -161,6 +218,7 @@ test('a turnout along an open line bakes matching alternate poses for both vehic
     const [engine, cannon] = routes;
     assert.equal(engine!.id, 'branch');
     assert.deepEqual(engine!.start, cannon!.start);
+    assert.equal(engine!.start?.occupancyRadius, 48);
     assert.equal(engine!.start?.id, 'main:RailPath-5000-f');
     assert.equal(engine!.end, undefined);
     assert.equal(engine!.frames.at(-1)!.distance, cannon!.frames.at(-1)!.distance);
@@ -188,6 +246,8 @@ test('a Black Bolt added at the Tempest front coupler drives both vehicles throu
     const result = finalizeFoxholeRailVehicleSnap(proposal);
     const [engine, trailer] = result.transaction?.operations ?? [];
     if (engine?.op !== 'add' || trailer?.op !== 'patch') assert.fail('Expected both coupled attachments');
+    assert.ok(engine.data.simulationCollider);
+    assert.ok(trailer.set?.simulationCollider);
     const enginePath = parseNixieSimulationPathV1(engine.data.simulationPath);
     const cannonPath = parseNixieSimulationPathV1(trailer.set?.simulationPath);
     assert.deepEqual(enginePath.drive, cannonPath.drive);
@@ -289,7 +349,9 @@ test('an existing mixed eleven-vehicle train is rebuilt as one drive with its or
     const remaining = detached.find(operation => operation.entityId === 'vehicle');
     assert.equal(remaining?.op, 'patch');
     assert.deepEqual(parseNixieSimulationPathV1(remaining.set!.simulationPath).sources, ['main', 'car-0']);
-    assert.equal(detached.filter(operation => operation.op === 'patch' && operation.unset?.includes('simulationPath')).length, 8);
+    const parked = detached.filter(operation => operation.op === 'patch' && operation.componentId === 'rail-attachment'
+        && operation.set?.simulationPath && parseNixieSimulationPathV1(operation.set.simulationPath).drive?.manual?.passive);
+    assert.equal(parked.length, 8);
 });
 
 test('coupler placement advances from the existing car along a curved rail', () => {
@@ -396,6 +458,7 @@ test('vehicle couplers offer all and only the matching gauge with per-car dockin
         const compatible = vehicles.filter(([other]) => other.startsWith('smalltrain') === id.startsWith('smalltrain'))
             .map(([other]) => `asset.${other}`).sort();
         for (const port of ports!) {
+            assert.equal(port.placementSound, 'foxhole.audio.coupler-clank');
             assert.deepEqual(Object.keys(port.products).sort(), compatible, id);
             const nextCenter = port.products[`asset.${id}`]!;
             assert.equal(Math.sign(nextCenter.x), Math.sign(port.point.x), id);

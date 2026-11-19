@@ -19,7 +19,9 @@ test('generated catalogs bind stable base, variant, and shared model IDs without
     ]);
     const audio = built.contributes.resources?.filter(row => row.kind === 'audio') ?? [];
     assert.deepEqual(audio, authored.contributes.resources?.filter(row => row.kind === 'audio'));
-    assert.equal(audio.length, 4);
+    assert.equal(audio.length, 6);
+    assert.equal(audio.find(row => row.id === 'foxhole.audio.coupler-clank')?.path, 'dist/audio/coupler-clank.wav');
+    assert.equal(audio.find(row => row.id === 'foxhole.audio.steam-bell')?.path, 'dist/audio/steam-bell.wav');
     assert.equal(built.contributes.assetPacks, undefined);
     assert.equal(built.contributes.productCatalogs?.[0]?.document.path, 'dist/catalog.v1.json');
     assert.ok(built.contributes.resourceTemplates?.every(row => row.assetPack === 'foxhole.catalog'));

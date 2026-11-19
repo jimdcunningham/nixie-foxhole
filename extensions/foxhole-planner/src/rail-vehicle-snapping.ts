@@ -1,14 +1,16 @@
 import { nearestPointOnSegment, NIXIE_COMPONENT_MAX_DATA_BYTES, NIXIE_SIMULATION_PATH_MAX_FRAMES, NIXIE_SIMULATION_PATH_PROPERTY,
+    NIXIE_SIMULATION_COLLIDER_PROPERTY,
     NIXIE_SIMULATION_ROUTING_PROPERTY, NIXIE_SIMULATION_ROUTING_SCHEMA_V1, NIXIE_TRANSFORM_FINALIZER_MAX_BYTES,
     validateNixieComponentDataV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRequestV1 as Request,
     NixieTransformFinalizeResultV1 as Result, NixieEntityRendererContextV1 as Context, NixieSimulationPathV1,
-    NixieSimulationRouteConnectionV1, NixieSimulationRouteV1, NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+    NixieSimulationColliderV1, NixieSimulationRouteConnectionV1, NixieSimulationRouteV1, NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy, readRailPathSocket } from './rail-path-sockets.ts';
 import { foxholeRailVehicleBogies } from './rail-vehicle-rigs.ts';
 import { fitFoxholeRailWheelbase, foxholeRailWheelbase } from './rail-wheelbase.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
+import { FOXHOLE_BOARD_UNITS_PER_METRE as UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
@@ -17,7 +19,6 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
-const UNITS_PER_METRE = 32;
 // RailZOffset on the standard and small-gauge RailTrackSpline blueprint CDOs (cm).
 const RAIL_Z_OFFSET_CM = { standard: 36, small: 20 };
 // The crane track blueprint has no RailZOffset. Use the exported railhead
@@ -48,6 +49,42 @@ export function railCouplers(asset: FoxholeSceneV2AssetMetadata, gauge: 'small' 
             rotation: direction > 0 ? 0 : Math.PI }];
     });
 }
+
+export function foxholeRailContactPorts(assetId: string) {
+    const asset = assets[assetId], gauge = vehicleGauge.get(assetId);
+    if (!asset || !gauge || gauge === 'crane') return [];
+    return railCouplers(asset, gauge).map(({ point }) => {
+        const end = point.x > 0 ? 1 as const : -1 as const;
+        return { end, point: [point.x, point.y, point.z] as FoxholeSpatialPoint,
+            compatibility: gauge, captureDistance: .65 * UNITS_PER_METRE, maxLatchSpeed: 1.5 * UNITS_PER_METRE,
+            effect: end > 0 ? 'coupler-front' : 'coupler-rear' };
+    });
+}
+
+function railVehicleCollider(assetId: string) {
+    const asset = assets[assetId], gauge = vehicleGauge.get(assetId);
+    const model = asset?.model;
+    if (!model || !gauge || gauge === 'crane') return;
+    const ports = foxholeRailContactPorts(assetId);
+    const forward = ports.find(port => port.end > 0)?.point[0];
+    const rear = ports.find(port => port.end < 0)?.point[0];
+    const minX = model.offsetX - model.width / 2;
+    const maxX = model.offsetX + model.width / 2;
+    const start = Math.min(Math.max(minX, rear ?? minX), model.offsetX - .5);
+    const end = Math.max(Math.min(maxX, forward ?? maxX), model.offsetX + .5);
+    const wheelOffsets = (foxholeRailVehicleBogies[assetId] ?? [])
+        .flatMap(bogie => bogie.wheelOffsets.map(offset => (bogie.pivot + offset) * UNITS_PER_METRE));
+    // The first driver is on the locomotive's rigid frame, outside the rear truck.
+    if (assetId === 'trainengine') wheelOffsets.push(2.51 * UNITS_PER_METRE);
+    const fallback = (foxholeRailWheelbase(assetId) ?? model.width * .65) / 2;
+    return { center: [(start + end) / 2, model.offsetY, model.offsetZ],
+        halfExtents: [(end - start) / 2, model.depth / 2, model.height / 2],
+        wheelSpan: wheelOffsets.length ? [Math.min(...wheelOffsets), Math.max(...wheelOffsets)] : [-fallback, fallback],
+        guidedContact: { massKg: railVehicleMass(assetId), ports } } satisfies NixieSimulationColliderV1;
+}
+
+const railVehicleMass = (assetId: string) => assetId === 'trainengine' ? 72_000
+    : assetId === 'trainlrartillery' ? 135_000 : 32_000;
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
@@ -344,26 +381,6 @@ function railSimulationFrame(assetId: string, chassis: RailChassis, distance: nu
 
 type SimulationFrame = NonNullable<ReturnType<typeof railSimulationFrame>>;
 
-/** Sample a forward run using the fitted chassis and each independently sampled wheel group. */
-function buildRailVehicleSimulationPath(assetId: PoweredTestVehicle, rails: RunningRail[], start: RailLocation, direction: number) {
-    const stride = 12;
-    const sources = new Set([start.rail.entityId]);
-    const frames: SimulationFrame[] = [];
-    for (let index = 0; index < 128; index++) {
-        const distance = index * stride;
-        const traversed = new Set<string>();
-        const location = index === 0 ? { ...start, step: direction }
-            : advanceOnRail(rails, start, distance * direction, { traversed });
-        if (!location) break;
-        const frame = railSimulationFrame(assetId, resolveRailChassis(assetId, rails, location, location.step, { traversed }), distance);
-        if (!frame) break;
-        sources.add(location.rail.entityId);
-        for (const id of traversed) sources.add(id);
-        frames.push(frame);
-    }
-    return frames.length >= 2 ? { contractVersion: 1 as const, speed: 96, sources: [...sources], frames } : undefined;
-}
-
 interface DirectedRailLocation extends RailLocation {
     step: number;
 }
@@ -381,11 +398,11 @@ const cannonId = 'trainlrartillery';
 const drawbarLength = .5 * UNITS_PER_METRE;
 const drawbarSlack = .3 * UNITS_PER_METRE;
 
-function blackBoltDrive(leader: string, massKg: number, startDistance: number, loop: boolean) {
+function blackBoltDrive(leader: string, massKg: number, startDistance: number, loop: boolean, passive = false) {
     // Yard simulation tuning. Higher brake force keeps the stopping distance at top speed comparable.
     return { contractVersion: 1 as const, speed: 8 * UNITS_PER_METRE,
         drive: { leader, acceleration: 195_000 / massKg * UNITS_PER_METRE,
-            braking: 400_000 / massKg * UNITS_PER_METRE, manual: { startDistance, loop } } };
+            braking: 400_000 / massKg * UNITS_PER_METRE, manual: { startDistance, loop, ...(passive ? { passive } : {}) } } };
 }
 
 /** Solve the coupled centre station on the same running line as the anchor. */
@@ -578,7 +595,7 @@ function railVehicleAt(entity: Entity, rails: RunningRail[]): ParkedRailVehicle 
     const attachment = data(entity, ATTACHMENT_COMPONENT);
     const rail = rails.find(entry => entry.entityId === attachment?.rail);
     const location = rail && typeof attachment?.station === 'number' && locationAtStation(rail, attachment.station);
-    if (!location || vehicleGauge.get(assetId) !== 'standard') return;
+    if (!location || !vehicleGauge.has(assetId) || vehicleGauge.get(assetId) === 'crane') return;
     const step = attachment?.reversed ? -1 : 1;
     return { entity, assetId, location: { ...location, step }, chassis: resolveRailChassis(assetId, rails, location, step) };
 }
@@ -607,7 +624,7 @@ function packRailFrames(frames: SimulationFrame[]) {
 /** Reconstruct couplings from the saved socket poses on the same running line.
  * Older scenes saved rail stations for socket placements, with no coupling links. */
 function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[], rails: RunningRail[], subjectId: string,
-    options?: { requireAdditionalCars?: boolean; portOwnerId?: string; }) {
+    options?: { requireAdditionalCars?: boolean; portOwnerId?: string; passive?: boolean; }) {
     const closed = closedRunningLine(rails, leader.location);
     const line = closed ?? openRunningLine(rails, leader.location);
     const path: RunningRail = { entityId: '', points: [], stations: [], endpointLinks: ['', ''], loop: !!closed };
@@ -625,7 +642,8 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
         if (!parked) return [];
         const distance = parked.station - origin;
         const offset = closed ? wrapStation(distance + length / 2, length) - length / 2 : distance;
-        const sockets = railCouplers(assets[vehicle.assetId]!, 'standard').map(socket => ({
+        const gauge = vehicleGauge.get(vehicle.assetId);
+        const sockets = (gauge === 'standard' || gauge === 'small' ? railCouplers(assets[vehicle.assetId]!, gauge) : []).map(socket => ({
             point: couplerPoint(vehicle.chassis, socket.point),
             side: Math.sign(socket.point.x) * parked.facing,
         }));
@@ -692,8 +710,8 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
         row.forEach((frame, index) => samples[index]!.push(frame));
     }
     if (samples[0]!.length < 2) return;
-    const mass = 72_000 + members.slice(1).reduce((total, member) => total + (member.assetId === cannonId ? 135_000 : 32_000), 0);
-    const drive = blackBoltDrive(leader.entity.entityId, mass, 0 - samples[0]![0]!.distance, loop);
+    const mass = members.reduce((total, member) => total + railVehicleMass(member.assetId), 0);
+    const drive = blackBoltDrive(leader.entity.entityId, mass, 0 - samples[0]![0]!.distance, loop, options?.passive);
     const encoder = new TextEncoder();
     const before = Math.max(...members.map(member => member.offset)) + 192;
     const after = -Math.min(...members.map(member => member.offset)) + 192;
@@ -773,6 +791,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
         position: locationAtStation(geometry.path, point)!.point,
         route: geometry.path.entityId,
         distance: geometry.loop ? wrapStation(transfer - geometry.first, primaryLength) : transfer - geometry.first,
+        occupancyRadius: 1.5 * UNITS_PER_METRE,
     });
     for (const source of geometries) for (const span of source.spans) for (const branch of rails) {
         if (used.has(branch) || result[0]!.length >= 16) continue;
@@ -990,6 +1009,7 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
 
 export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const { x, y, rotation } = request.transform;
+    const preview = request.preview === true || request.geometryGesture?.phase === 'preview';
     const unchanged: Result = { contractVersion: 1, transform: { x, y } };
     if ((request.movingEntityIds?.length ?? 1) > 1) return unchanged;
 
@@ -1002,13 +1022,16 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const saved = data(original, ATTACHMENT_COMPONENT);
     const previous = saved?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
     const previousLeader = previous?.drive?.leader;
-    const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: ReturnType<typeof buildRailVehicleSimulationPath>): Result['transaction'] => {
+    const collider = railVehicleCollider(assetId);
+    const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: NonNullable<ReturnType<typeof buildTrainDrive>>[number]['path']): Result['transaction'] => {
         if (!location && !saved) return undefined;
         const set = location && { rail: location.rail.entityId, station: location.station, reversed, route,
+            ...(collider ? { [NIXIE_SIMULATION_COLLIDER_PROPERTY]: collider } : {}),
             ...(simulationPath ? { [NIXIE_SIMULATION_PATH_PROPERTY]: simulationPath } : {}) };
         if (set && saved?.rail === set.rail && saved.station === set.station && saved.reversed === set.reversed
             && JSON.stringify(saved.route) === JSON.stringify(route)
-            && JSON.stringify(saved[NIXIE_SIMULATION_PATH_PROPERTY]) === JSON.stringify(simulationPath)) return undefined;
+            && JSON.stringify(saved[NIXIE_SIMULATION_PATH_PROPERTY]) === JSON.stringify(simulationPath)
+            && JSON.stringify(saved[NIXIE_SIMULATION_COLLIDER_PROPERTY]) === JSON.stringify(collider)) return undefined;
         return { contractVersion: 1, transactionId: `rail-attachment-${crypto.randomUUID()}`,
             operations: [set
                 ? saved ? { op: 'patch', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT, set,
@@ -1025,12 +1048,12 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
-    const simulationPath = (location: RailLocation, step: number) =>
-        assetId === cannonId && !previousLeader ? buildRailVehicleSimulationPath(assetId, rails, location, step) : undefined;
+    const parkedPlan = (vehicle: ParkedRailVehicle | undefined) =>
+        vehicle && buildTrainDrive(vehicle, [], rails, vehicle.entity.entityId, { passive: true })?.[0];
     const attachTrain = (location?: RailLocation, step = 1, options?: { requireAdditionalCars?: boolean; portOwnerId?: string; }) => {
-        if (request.geometryGesture?.phase === 'preview') return;
+        if (preview) return;
         const route = location ? buildRailRoute(assetId, rails, location, step) : [];
-        if (gauge !== 'standard') return attachment(location, step < 0, route);
+        if (gauge === 'crane') return attachment(location, step < 0, route);
         const railData = location && { rail: location.rail.entityId, station: location.station, reversed: step < 0, route };
         const parkedSubject = railData ? { ...subject, components: [
             ...subject.components.filter(component => component.ownerId !== 'nixie.foxhole-planner' || component.componentId !== ATTACHMENT_COMPONENT),
@@ -1057,21 +1080,51 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
                 members.set(member.entity.entityId, member);
             }
         }
-        const own = members.get(subject.entityId);
-        const transaction = attachment(location, step < 0, route, own?.path ?? (location && simulationPath(location, step)))
+        const own = members.get(subject.entityId) ?? parkedPlan(vehicles.find(vehicle => vehicle.entity === parkedSubject));
+        const transaction = attachment(location, step < 0, route, own?.path)
             ?? { contractVersion: 1, transactionId: `rail-consist-${crypto.randomUUID()}`, operations: [] };
+        const detached: Entity[] = [];
         for (const entity of entities) {
             const member = members.get(entity.entityId);
             const old = data(entity, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
             if (entity === subject) {
                 transaction.operations.push(...routingOperations(entity, own?.routes ?? []));
             } else if (member) {
+                const shape = railVehicleCollider(String(data(entity, 'asset')?.assetId));
                 transaction.operations.push({ op: 'patch', entityId: entity.entityId, componentId: ATTACHMENT_COMPONENT,
-                    set: { [NIXIE_SIMULATION_PATH_PROPERTY]: member.path } },
+                    set: { [NIXIE_SIMULATION_PATH_PROPERTY]: member.path,
+                        ...(shape ? { [NIXIE_SIMULATION_COLLIDER_PROPERTY]: shape } : {}) } },
                 ...routingOperations(entity, member.routes));
             } else if (previousLeader && old?.drive?.leader === previousLeader) {
-                transaction.operations.push({ op: 'patch', entityId: entity.entityId, componentId: ATTACHMENT_COMPONENT,
-                    unset: [NIXIE_SIMULATION_PATH_PROPERTY] }, ...routingOperations(entity, []));
+                detached.push(entity);
+            }
+        }
+        const encoder = new TextEncoder();
+        const detachedIds = new Set(detached.map(entity => entity.entityId));
+        const outdated = assetId === engineId && own ? vehicles.filter(vehicle => {
+            if (vehicle.assetId === engineId || members.has(vehicle.entity.entityId) || detachedIds.has(vehicle.entity.entityId)
+                || !own.path.sources.includes(vehicle.location.rail.entityId)) return false;
+            const saved = data(vehicle.entity, ATTACHMENT_COMPONENT);
+            const path = saved?.[NIXIE_SIMULATION_PATH_PROPERTY] as unknown as NixieSimulationPathV1 | undefined;
+            const shape = saved?.[NIXIE_SIMULATION_COLLIDER_PROPERTY] as unknown as NixieSimulationColliderV1 | undefined;
+            return !path?.drive?.manual || (path.drive.manual.passive && (!shape?.guidedContact?.massKg || !shape.wheelSpan));
+        }).map(vehicle => vehicle.entity) : [];
+        for (const entity of [...detached, ...outdated]) {
+            const passive = parkedPlan(vehicles.find(vehicle => vehicle.entity === entity));
+            const shape = railVehicleCollider(String(data(entity, 'asset')?.assetId));
+            const patch = { op: 'patch' as const, entityId: entity.entityId, componentId: ATTACHMENT_COMPONENT };
+            if (passive) {
+                const replacement = [{ ...patch, set: { [NIXIE_SIMULATION_PATH_PROPERTY]: passive.path,
+                    ...(shape ? { [NIXIE_SIMULATION_COLLIDER_PROPERTY]: shape } : {}) } },
+                    ...routingOperations(entity, passive.routes)];
+                if (encoder.encode(JSON.stringify([...transaction.operations, ...replacement])).byteLength
+                    < NIXIE_TRANSFORM_FINALIZER_MAX_BYTES - 16_384) {
+                    transaction.operations.push(...replacement);
+                    continue;
+                }
+            }
+            if (detachedIds.has(entity.entityId)) {
+                transaction.operations.push({ ...patch, unset: [NIXIE_SIMULATION_PATH_PROPERTY] }, ...routingOperations(entity, []));
             }
         }
         return transaction.operations.length ? transaction : undefined;
@@ -1100,7 +1153,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const initial = findCoupledChassis(rails, directed, anchorAsset, {});
         if (!initial || railDistance(initial.location.point, origin) > tolerance) return;
         const { local: point, angle } = fitBody(initial.location, initial.location.step);
-        if (request.geometryGesture?.phase === 'preview') {
+        if (preview) {
             return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle } };
         }
         const extended = attachTrain(initial.location, initial.location.step, { requireAdditionalCars: true, portOwnerId: anchor.entityId });
@@ -1113,10 +1166,13 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         let transaction = attachment(pair.location, pair.location.step < 0,
             buildRailRoute(assetId, rails, pair.location, pair.location.step), assetId === engineId ? pair.engine : pair.cannon);
         const anchorPath = assetId === engineId ? pair.cannon : pair.engine;
-        if (JSON.stringify(anchorAttachment?.simulationPath) !== JSON.stringify(anchorPath)) {
+        const anchorCollider = railVehicleCollider(anchorAsset);
+        if (JSON.stringify(anchorAttachment?.simulationPath) !== JSON.stringify(anchorPath)
+            || JSON.stringify(anchorAttachment?.[NIXIE_SIMULATION_COLLIDER_PROPERTY]) !== JSON.stringify(anchorCollider)) {
             transaction ??= { contractVersion: 1, transactionId: `rail-consist-${crypto.randomUUID()}`, operations: [] };
             transaction.operations.push({ op: 'patch', entityId: anchor.entityId, componentId: ATTACHMENT_COMPONENT,
-                set: { [NIXIE_SIMULATION_PATH_PROPERTY]: anchorPath } });
+                set: { [NIXIE_SIMULATION_PATH_PROPERTY]: anchorPath,
+                    ...(anchorCollider ? { [NIXIE_SIMULATION_COLLIDER_PROPERTY]: anchorCollider } : {}) } });
         }
         for (const [entity, index] of [[original, assetId === engineId ? 0 : 1],
             [anchor, assetId === engineId ? 1 : 0]] as const) {
@@ -1135,8 +1191,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
         const step = saved.reversed ? -1 : 1;
-        const rebuild = request.followPhase === 'commit' && (assetId === engineId
-            || (assetId === cannonId && !previousLeader));
+        const rebuild = request.followPhase === 'commit' && (assetId === engineId || !previousLeader || previous?.drive?.manual?.passive);
         const { local: point, angle } = fitBody(location, step, rebuild ? undefined : readRailRoute(saved.route));
         const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
         const transaction = rebuild ? attachTrain(location, step) : undefined;

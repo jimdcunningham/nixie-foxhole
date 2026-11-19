@@ -1,4 +1,4 @@
-import { poseFoxholeRailBogies } from './rail-vehicle-snapping.ts';
+import { foxholeRailContactPorts, poseFoxholeRailBogies } from './rail-vehicle-snapping.ts';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
@@ -582,11 +582,16 @@ export function renderFoxholeSceneV2Entity(
         const railAssetId = String(asset?.data.assetId ?? '');
         const wheelRoll = foxholeRailWheelRoll[railAssetId];
         const linkages = foxholeRailLinkages[railAssetId];
+        const engine = railAssetId === 'trainengine';
+        const latchEffects = foxholeRailContactPorts(railAssetId).map(({ effect, point }) => ({
+            id: effect, point, trigger: 'latch' as const,
+            sound: { resourceId: 'foxhole.audio.coupler-clank', gain: .7, range: 3200 },
+        }));
         plan.spatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.spatial,
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
-            ...(railAssetId === 'trainengine' ? { modelDistancePoseCycles: foxholeBlackBoltValveGear,
-                simulationEffects: foxholeBlackBoltEffects } : {}),
+            ...(engine ? { modelDistancePoseCycles: foxholeBlackBoltValveGear } : {}),
+            ...(engine || latchEffects.length ? { simulationEffects: [...(engine ? foxholeBlackBoltEffects : []), ...latchEffects] } : {}),
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
             modelLightOverrides: buildFoxholeModelLightOverrides(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
                 modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)),
