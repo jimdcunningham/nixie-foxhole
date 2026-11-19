@@ -359,9 +359,6 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
                 ] } },
     }, { path: ['disabled'], hidden: true }]);
     result.set('socket-attachments', [{ path: ['attachments'], hidden: true }]);
-    result.set('rail-attachment', ['rail', 'station', 'reversed', 'route', 'simulationPath'].map(property => ({ path: [property], hidden: true, readOnly: true })));
-    result.set('rail-simulation-routing', [{ path: ['simulationRouting'], hidden: true, readOnly: true }]);
-    result.set('rail-simulation-routing-overflow', [{ path: ['simulationRouting'], hidden: true, readOnly: true }]);
     const connector = data('spline-connector') ? inspectFoxholeSceneV2SplineConnector(request).components[0] : undefined;
     if (connector) {
         // The connector provider supplies fields; this layout reserves their placement.
