@@ -116,11 +116,13 @@ test('every provider page is bounded and all published items create portable ico
         assert.equal(asset.data.catalogId, metadata.isItem ? 'foxhole.icons' : 'foxhole.structures');
         if (metadata.isItem) {
             iconCount += 1;
-            assert.ok(item.product.components.some(component => component.ownerId === 'nixie.core' && component.componentId === 'icon'));
+            const icon = item.product.components.find(component => component.ownerId === 'nixie.core' && component.componentId === 'icon');
+            assert.equal(icon?.data.catalogSourceId, 'sdk.nixie.foxhole-planner__assets');
+            assert.equal(icon?.data.catalogAssetId, item.product.id);
             assert.equal(item.product.components.some(component => component.componentId === 'appearance'), false);
             const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity({ entityId: 'provider-item', revision: 1,
                 components: item.product.components.map(component => ({ ...component, definitionAvailable: true })) }));
-            assert.ok(plan.root.children.some(node => node.kind === 'sprite' && node.resourceId === `foxhole.icon.${asset.data.assetId}`));
+            assert.deepEqual(plan.root.children, []);
         } else {
             assert.equal(item.product.components.some(component => component.componentId === 'production-order'), metadata.supportsProduction === true);
         }

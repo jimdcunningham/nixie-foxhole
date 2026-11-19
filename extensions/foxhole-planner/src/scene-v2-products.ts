@@ -188,6 +188,8 @@ export function listFoxholeSceneV2Products(
                         ownerId: 'nixie.core', componentId: 'icon', version: 1,
                         // Match the ordinary Native item-icon defaults; textures remain owner-qualified resources.
                         data: {
+                            catalogSourceId: 'sdk.nixie.foxhole-planner__assets',
+                            catalogAssetId: productId ?? `asset.${assetId}`,
                             label: metadata.label, frameWidth: 128, frameHeight: 128, padding: 20,
                             backgroundColor: 0x0B0B0B, borderColor: 0x00FF00, borderWidth: 3, cornerRadius: 0,
                             iconTint: 0xFFFFFF, labelPosition: 'bottom', labelColor: 0xFFFFFF,

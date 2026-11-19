@@ -772,6 +772,9 @@ function renderFoxholeSceneV2EntityPlan(
         if (!icon) {
             throw new Error('The Foxhole icon renderer requires the Nixie icon component.');
         }
+        if (typeof icon.data.catalogSourceId === 'string' && typeof icon.data.catalogAssetId === 'string') {
+            return { schemaVersion: 1, root: { id: 'root', kind: 'group', children: [] } };
+        }
         const frameWidth = typeof icon.data.frameWidth === 'number' ? icon.data.frameWidth : 96;
         const frameHeight = typeof icon.data.frameHeight === 'number' ? icon.data.frameHeight : 96;
         const padding = typeof icon.data.padding === 'number' ? icon.data.padding : 14;

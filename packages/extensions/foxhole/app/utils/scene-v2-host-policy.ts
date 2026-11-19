@@ -12,6 +12,13 @@ export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     legacyCapabilities: foxholeLegacyEditingCapabilities,
     rail: foxholeRailPresentation,
     modelLightHints: readFoxholeModelLightHints,
+    legacyIconCatalogReference(entity) {
+        const asset = entity.components.find(component => component.ownerId === OWNER_ID && component.componentId === 'asset'
+            && component.version === 1 && component.definitionAvailable && component.data.catalogId === 'foxhole.icons');
+        const assetId = asset?.data.assetId;
+        if (typeof assetId !== 'string' || !assetId) return;
+        return { catalogSourceId: `sdk.${OWNER_ID}__assets`, catalogAssetId: `asset.${assetId}` };
+    },
     spatialPresentation(readSetting) {
         const faction = normalizeFoxholeSceneFaction(readSetting(FOXHOLE_SCENE_FACTION_SETTING_ID));
         return {
