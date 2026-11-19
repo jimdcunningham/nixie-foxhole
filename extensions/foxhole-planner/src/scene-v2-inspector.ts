@@ -3,6 +3,7 @@ import { FOXHOLE_BOARD_UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { localizedFoxholeCatalog } from './catalog-localization.ts';
 import { resolveFoxholeSdkProductionOrderLimit } from './production-statistics.ts';
 import { FOXHOLE_MAINTENANCE_CATEGORIES, includesFoxholeMaintenanceNeighbor, isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, resolveFoxholeMaintenanceCoverage } from './maintenance-supply.ts';
+import { NIXIE_INSPECTOR_MAX_BYTES } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentJsonObjectV1, NixieInspectorFieldV1,
     NixieInspectorActionV1, NixieInspectorReadoutV1, NixieInspectorRequestV1, NixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets, { productionOutputsByRecipeId, productionRecipesById } from '#foxhole-scene-v2-assets';
@@ -399,7 +400,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
     const hitboxKey = String(assetId).toLowerCase();
     const splineKey = data('spline-connector')?.foxholeKey;
     const splineMenu = typeof splineKey === 'string' ? connectorVariantMenu(splineKey, assets[splineKey]) : undefined;
-    return { contractVersion: 1, layout: {
+    const response: NixieInspectorResultV1 = { contractVersion: 1, layout: {
         title: 'Foxhole',
         batch: { label: 'Foxhole Nodes', hint: 'Batch edit the selected Foxhole nodes.' },
         ...(!asset.isItem ? { hitboxes: { settingId: FOXHOLE_HITBOX_SETTING_ID, seedDefaultsOnSelection: true, unitsPerDisplayUnit: 32, unit: 'm', clipboardKind: 'foxhole-hitboxes',
@@ -439,4 +440,13 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
         if (componentId === 'appearance') return [{ componentId, fields, initialData: {} }];
         return componentId === 'maintenance-supply' && supplyDefaults ? [{ componentId, fields, initialData: supplyDefaults }] : [];
     }) };
+    if (recipes.length && new TextEncoder().encode(JSON.stringify(response)).byteLength > NIXIE_INSPECTOR_MAX_BYTES) {
+        // Keep every recipe and breakdown row. Their optional thumbnails account for most of the excess.
+        for (const recipe of recipes) {
+            for (const section of recipe.details.sections) {
+                for (const row of section.rows) delete row.image;
+            }
+        }
+    }
+    return response;
 }

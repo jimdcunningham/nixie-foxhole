@@ -126,7 +126,6 @@ test('every provider page is bounded and all published items create portable ico
         }
     }
     assert.equal(iconCount, Object.values(foxholeSceneV2Assets).filter(metadata => metadata.isItem).length);
-    assert.equal(iconCount, 221);
 });
 
 test('provider-created production structures expose empty authored orders without copying recipe bodies', () => {

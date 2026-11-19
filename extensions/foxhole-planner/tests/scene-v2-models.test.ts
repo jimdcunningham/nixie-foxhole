@@ -72,7 +72,8 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             assert.ok(treads.length > 0);
             const trackHeight = Math.min(...treads.map((primitive: { attributes: { POSITION: number; }; }) =>
                 document.accessors[primitive.attributes.POSITION].min[1] * 32 + metadata.offsetZ));
-            const contactTolerance = (metadata.precisionOptimization.positionStepMetres ?? 0) * 32 + 0.0001;
+            const positionStep = 'precisionOptimization' in metadata ? metadata.precisionOptimization.positionStepMetres ?? 0 : 0;
+            const contactTolerance = positionStep * 32 + 0.0001;
             assert.ok(Math.abs(trackHeight) <= contactTolerance, 'crane tracks must retain ground contact within their declared precision grid');
             assert.ok(metadata.blueprintOrigin.z > 70, 'the vehicle actor origin is retained above the track reference');
         }
@@ -102,7 +103,8 @@ test('the allowlisted bundle uses embedded WebP images and baked meshes within p
             // Still reject scale/baking corruption; allow only that measured rounding budget.
             const roundingBudget = step + Math.max(1, size / 32) * 1e-6;
             assert.ok(step <= 1 / 512, 'the position grid must remain below 2mm');
-            assert.ok(Math.abs(size / 32 - dimensions[axis]!) <= roundingBudget,
+            // The exporter clamps a planar axis to 1 mm in the sizing metadata.
+            assert.ok(Math.abs(size / 32 - Math.max(dimensions[axis]!, 0.001)) <= roundingBudget,
                 `${assetId} axis ${axis} would distort the model during bounds sizing`);
         }
         for (const image of document.images ?? []) {

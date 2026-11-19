@@ -6,7 +6,7 @@ import { parseNixieExtensionManifestV1 } from '@nixiejs/extension-sdk';
 import { projectNixieInspectorSubjectV1, validateNixieInspectorResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { inspectFoxholeSceneV2Structure, inspectFoxholeSceneV2SplineConnector } from '../src/scene-v2-inspector.ts';
 import { listFoxholeSceneV2Products } from '../src/scene-v2-products.ts';
-import assets from '#foxhole-scene-v2-assets';
+import assets, { productionOutputsByRecipeId } from '#foxhole-scene-v2-assets';
 
 const manifest = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('../nixie.extension.json', import.meta.url), 'utf8')));
 const provider = manifest.contributes.inspectorProviders![0]!;
@@ -37,6 +37,14 @@ test('all published assets return bounded Inspector choices validated against th
             }
         }
     }
+});
+
+test('the Mass Production Factory keeps every recipe within the Inspector payload budget', () => {
+    const orders = inspect('massproduction').components.find(component => component.componentId === 'production-order')!;
+    const options = orders.fields.find(field => field.path[0] === 'orders')!.choices!.options;
+    const catalogRecipes = Object.keys(productionOutputsByRecipeId).filter(id => id.startsWith('structure:massproduction:recipe:'));
+    assert.deepEqual(options.map(option => (option.value as { recipeId: string }).recipeId).sort(), catalogRecipes.sort());
+    assert.ok(options.every(option => option.details?.sections?.length === 2));
 });
 
 test('the train engine contributes simulation Controls before Storage', () => {
@@ -96,7 +104,9 @@ test('cargo retains the Native item selection set and enforces published capacit
     const stockpile = Object.entries(assets).find(([, asset]) => asset.cargo?.allowsAnyItem && asset.cargo.limit === null)!;
     const field = inspect(stockpile[0]).components.find(component => component.componentId === 'cargo')!.fields[0]!;
     assert.equal(field.maxItems, 256);
-    assert.equal(field.choices!.options.length, 221);
+    const catalogItems = new Set(Object.values(assets).filter(asset => asset.isItem).map(asset => asset.codeName.toLowerCase()));
+    assert.deepEqual(new Set(field.choices!.options.map(option => String(option.value).toLowerCase())), catalogItems);
+    assert.equal(field.choices!.options.length, catalogItems.size);
     assert.equal(field.choices!.uniqueBy, true);
     const fuelTank = Object.entries(assets).find(([, asset]) => asset.cargo?.limit === 1)!;
     assert.equal(inspect(fuelTank[0]).components.find(component => component.componentId === 'cargo')!.fields[0]!.maxItems, 1);

@@ -28,11 +28,16 @@ test('previously saved tier changes render the current asset instead of a stale 
 });
 
 test('asset changes to flat artwork suppress an obsolete model while retaining the planar visual', () => {
-    const target = Object.entries(metadata).find(([, asset]) => !asset.isItem && !asset.model && !asset.connector)!;
-    assert.ok(target);
-    const plan = renderFoxholeSceneV2Entity(entity(target[0]));
-    assert.equal(plan.spatial?.model, null);
-    assert.ok(plan.root.children.length > 0);
+    const target = metadata.crate!;
+    const model = target.model;
+    delete target.model;
+    try {
+        const plan = renderFoxholeSceneV2Entity(entity('crate'));
+        assert.equal(plan.spatial?.model, null);
+        assert.ok(plan.root.children.length > 0);
+    } finally {
+        if (model) target.model = model;
+    }
 });
 
 test('a saved planar asset can use a newly cataloged model without a scene edit', () => {

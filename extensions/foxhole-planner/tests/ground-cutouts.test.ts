@@ -23,7 +23,11 @@ test('ground openings use native floor shapes and occupied approaches without pr
         parseNixieSpatialPlanV1({contractVersion:1,supplementModel:true,nodes:[],groundCutouts});
     }
     assert.deepEqual(structuralGroundCutouts(assets.facilityrefineryoil!,new Set()),[]);
-    assert.deepEqual(structuralGroundCutouts({...assets.fortt3!,model:undefined},new Set()),[]);
+    const planarBunker = { ...assets.fortt3!, model: undefined };
+    assert.deepEqual(structuralGroundCutouts(planarBunker, new Set()), [{
+        polygon: [-96, -96, 96, -96, 96, 96, -96, 96], minZ: -32, maxZ: 32,
+    }]);
+    assert.deepEqual(structuralGroundCutouts({ ...planarBunker, landscapeHoles: undefined }, new Set()), []);
 });
 test('radar bunker interiors use the same ground opening as the Tier 3 bunker', () => {
     const expected = structuralGroundCutouts(assets.fortt3!, new Set());
