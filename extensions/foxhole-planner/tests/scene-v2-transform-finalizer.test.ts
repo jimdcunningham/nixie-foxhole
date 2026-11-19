@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import type { NixieComponentEntitySnapshotV1 } from '@nixiejs/extension-sdk/scene-v2';
+import assets from '#foxhole-scene-v2-assets';
 import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
 import { isFoxholePowerSocketConnectionAvailable } from '../src/power-socket-capacity.ts';
 import { withFoxholeSceneV2TransformProposal } from '../src/scene-v2-core-transforms.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
+import { resolveFoxholeSceneV2SplineAttachments } from '../src/scene-v2-attachments.ts';
+import { resolveFoxholeSpatialSplineAttachments } from '../src/scene-v2-spatial-attachments.ts';
+import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 import { FOXHOLE_HEIGHT_RENDER_LANES, FOXHOLE_RAIL_SWITCH_RENDER_LANE } from '../src/render-lanes.ts';
 
 test('power capacity counts endpoint records rather than distinct connector IDs and allows an endpoint to retain its slot', () => {
@@ -36,6 +41,48 @@ test('a connector cannot create a new snap to another member of the moving group
     assert.equal(result.transaction?.operations.some(operation => operation.entityId === target.entityId) ?? false, false);
     assert.equal(result.transaction?.operations.some(operation => operation.op === 'patch' && operation.entityId === moving.entityId
         && operation.set?.startAttachmentNodeId === target.entityId) ?? false, false);
+});
+
+test('joining curved rail ends keeps the snapped headings in either drawing direction', () => {
+    for (const reverse of [false, true]) {
+        const lower = pipe('lower', 250), upper = pipe('upper', 750), join = pipe('join', 0);
+        const foxholeKey = 'railtrackspline';
+        Object.assign(lower.components[1]!.data, { foxholeKey, startY: 500, startRotation: -2.5,
+            endX: 0, endY: 0, endRotation: -Math.PI / 2 });
+        Object.assign(upper.components[1]!.data, { foxholeKey, startY: -600, endX: 1230, endY: -300, endRotation: Math.PI / 4 });
+        const points = [{ x: 0, y: 0 }, { x: 750, y: -600 }];
+        const [start, end] = reverse ? [points[1]!, points[0]!] : [points[0]!, points[1]!];
+        const [startRail, endRail] = reverse ? [upper, lower] : [lower, upper];
+        const joinData = join.components[1]!.data;
+        Object.assign(joinData, { foxholeKey, startX: start.x, startY: start.y, endX: end.x, endY: end.y,
+            endRotation: 0, curveT: 1, maxLength: 2048 });
+        const context = { contractVersion: 1 as const, entities: [join, lower, upper] };
+        const connect = (role: 'start' | 'end', point: typeof start, target: typeof join) => {
+            const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: join.entityId, interaction: 'placement',
+                transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context,
+                geometryGesture: { phase: 'commit', handleId: role, snappingEnabled: true, worldPoint: point, hoveredEntityIds: [target.entityId] } });
+            const patch = result.transaction?.operations.find(operation => operation.entityId === join.entityId && operation.componentId === 'spline-connector');
+            assert.ok(patch?.op === 'patch');
+            Object.assign(joinData, patch.set);
+            assert.equal(joinData[`${role}AttachmentNodeId`], target.entityId);
+            const reciprocal = result.transaction?.operations.find(operation => operation.entityId === target.entityId && operation.componentId === 'socket-attachments');
+            assert.ok(reciprocal?.op === 'add');
+            target.components.push({ ownerId: 'nixie.foxhole-planner', componentId: reciprocal.componentId, version: 1,
+                definitionAvailable: true, data: reciprocal.data });
+        };
+        connect('start', start, startRail);
+        Object.assign(joinData, { endX: end.x, endY: end.y });
+        connect('end', end, endRail);
+        const spline = joinData as unknown as FoxholeSceneV2SplineConnectorData;
+        const expectedEnd = reverse ? Math.PI / 2 : 0;
+        for (const resolved of [resolveFoxholeSceneV2SplineAttachments(join, spline, context, assets),
+            resolveFoxholeSpatialSplineAttachments(join, spline, context, assets)]) {
+            assert.ok(Math.cos(resolved.endRotation - expectedEnd) > 0.999999);
+        }
+        for (const entity of context.entities) {
+            assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, context)));
+        }
+    }
 });
 
 test('a small rail endpoint joins the interior of a compatible rail in preview and commit', () => {

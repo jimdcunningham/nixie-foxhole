@@ -4,7 +4,7 @@ import type {
 } from '@nixiejs/extension-sdk/scene-v2';
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
-import { railPathSocketHasBranch, readRailPathSocket } from './rail-path-sockets.ts';
+import { railPathSocketHasBranch, railPathSocketPolicy, readRailPathSocket } from './rail-path-sockets.ts';
 import type { FoxholeSceneV2ConnectorData } from './scene-v2-connectors.ts';
 import { isTrenchConnector } from './trench-connector.ts';
 import { requiresStraightConnectorSocketAlignment } from './connector-behavior.ts';
@@ -237,7 +237,7 @@ export function resolveFoxholeSceneV2SplineAttachments(
     const end = resolve('end');
     const startRotation = trenchEndRotationTarget(entity, 'start', context.entities)?.connector ? data.startRotation : start?.rotation;
     const endRotation = trenchEndRotationTarget(entity, 'end', context.entities)?.connector ? data.endRotation
-        : end && (readRailPathSocket(data.endAttachmentSocketName ?? '') || isTrenchConnector(data.foxholeKey)
+        : end && (railPathSocketPolicy(data.foxholeKey) || readRailPathSocket(data.endAttachmentSocketName ?? '') || isTrenchConnector(data.foxholeKey)
             || (requiresStraightConnectorSocketAlignment(data.foxholeKey) && !data.foxholeKey.includes('pipe'))) ? Math.atan2(-Math.sin(end.rotation), -Math.cos(end.rotation)) : end?.rotation;
     const occupancy = entity.components.find(component => component.ownerId === 'nixie.foxhole-planner'
         && component.componentId === 'socket-attachments' && component.definitionAvailable)?.data.attachments;

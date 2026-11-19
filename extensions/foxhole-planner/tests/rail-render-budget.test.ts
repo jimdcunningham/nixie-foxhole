@@ -6,7 +6,7 @@ import assets from '#foxhole-scene-v2-assets';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
 import { buildSplineRibbonMeshData } from '../src/spline-ribbon-mesh.ts';
 
-for (const foxholeKey of ['railtracksplinefoundation', 'smallrailtracksplinefoundation']) {
+for (const foxholeKey of ['railtrackspline', 'railtracksplinefoundation', 'smallrailtracksplinebiarc', 'smallrailtracksplinefoundation']) {
     for (const curved of [false, true]) {
         test(`${foxholeKey} keeps long ${curved ? 'curved' : 'straight'} ribbons within the render plan budget`, () => {
             const data = { foxholeKey, startX: 0, startY: 0, startRotation: 0,
@@ -15,6 +15,9 @@ for (const foxholeKey of ['railtracksplinefoundation', 'smallrailtracksplinefoun
             const nodes = renderFoxholeSceneV2SplineConnector(data, assets[foxholeKey]);
             const plan = { schemaVersion: 1, root: { id: 'root', kind: 'group', children: nodes } };
             assert.doesNotThrow(() => parseNixieExtensionRenderPlanV1(plan));
+            if (assets[foxholeKey].renderLayers.underlay) {
+                assert.ok(nodes.some(node => node.id === 'spline-connector-underlay' && node.kind === 'mesh'));
+            }
             const mesh = nodes.find(node => node.id === 'spline-connector-span');
             assert.ok(mesh?.kind === 'mesh', 'the textured track remains visible');
             assert.ok(mesh.positions.length / 2 <= NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES);

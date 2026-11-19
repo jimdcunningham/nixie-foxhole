@@ -168,13 +168,16 @@ function buildSplineRibbon(
             ? { startInset: primaryConfig?.startOffset ?? 0, endInset: primaryConfig?.endOffset ?? 0 }
             : resolveSpanTrimSocketInset(back && foxholeSceneV2GeometryLayer(back), front && foxholeSceneV2GeometryLayer(front));
     const { start, end } = foxholeSceneV2ConnectorEndpoints(data);
+    const railRibbonCount = behavior.railTrack
+        ? [asset?.renderLayers.span, asset?.renderLayers.underlay].filter(layer => layer && layer.width > 0 && layer.height > 0).length
+        : 0;
     const geometry = buildSplineRibbonMeshData({ spanLayer: rawLayer, pathSample: sampleFoxholeSceneV2Connector(data, asset),
         textureMapping: { repeatLength }, textureMaterialScale: primaryConfig?.materialScale, ...insets,
-        // A ribbon has two vertices per section and six indices per segment.
-        // Rail textures can repeat without adding more geometric sections.
-        ...(behavior.railTrack ? { maxSegments: Math.min(
-            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES / 2) - 1,
-            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES / 6),
+        // Rails and ballast share the plan budget. Each ribbon has two vertices
+        // per section and six indices per segment.
+        ...(railRibbonCount ? { maxSegments: Math.min(
+            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES / (2 * railRibbonCount)) - 1,
+            Math.floor(NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES / (6 * railRibbonCount)),
         ) } : {}),
         ...(layeredWall ? { perpendicularOffset: 0, centerTextureRepeats: true } : {}),
         ...(id === 'spline-connector-span' ? { textureSlicing: resolveConnectorSplineTextureSlicing(data.foxholeKey, rawLayer, primaryConfig?.materialScale) } : {}) }, start, end,
