@@ -31,7 +31,7 @@ versions that actually support this runtime and its remaining private adapters.
 Keep the range narrow while those contracts are evolving; a private adapter change
 must advance the Studio version before a new extension can depend on it.
 
-Pushing relevant changes to `main`, or dispatching **Publish Planner SDK Extension**,
+Dispatching **Publish Planner SDK Extension**
 builds an isolated consumer, verifies it, packages the generated runtime manifest,
 and checks the published registry against the exact `.nxext` hash. The workflow
 skips publishing identical bytes for an existing version and fails if that

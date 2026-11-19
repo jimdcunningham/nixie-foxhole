@@ -6,7 +6,7 @@ import { shouldPublishRelease } from './check-published-release.mjs';
 test('Planner publishing builds an independent remote package with scoped authority', async () => {
     const text = await readFile(new URL('../../../.github/workflows/publish-planner.yml', import.meta.url), 'utf8');
     assert.match(text, /permissions:\s+contents: read/);
-    assert.match(text, /branches: \[main\]/);
+    assert.match(text, /^"on":\n  workflow_dispatch:\s*\npermissions:/m);
     assert.match(text, /prepare-authoring-consumer\.mjs/);
     assert.match(text, /prepare-catalog-input\.test\.mjs/);
     assert.match(text, /PLANNER_ROOT=\$RUNNER_TEMP\/planner-consumer\/extensions\/foxhole-planner/);

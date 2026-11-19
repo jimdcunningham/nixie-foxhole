@@ -1,12 +1,6 @@
 name: Publish Planner SDK Extension
 
 "on":
-  push:
-    branches: [main]
-    paths:
-      - 'extensions/foxhole-planner/**'
-      - 'tools/foxwatch/catalog/**'
-      - '.github/workflows/publish-planner.yml'
   workflow_dispatch:
 
 permissions:

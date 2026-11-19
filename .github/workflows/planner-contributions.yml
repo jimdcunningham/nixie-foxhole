@@ -1,25 +1,6 @@
 name: Planner Contributions
 
 on:
-  pull_request:
-    paths:
-      - 'extensions/foxhole-planner/**'
-      - 'tools/foxwatch/catalog/**'
-      - 'tools/foxwatch/asset-overrides/**'
-      - 'tools/planner-contributor.mjs'
-      - 'packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'
-      - 'package*.json'
-      - '.github/workflows/planner-contributions.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'extensions/foxhole-planner/**'
-      - 'tools/foxwatch/catalog/**'
-      - 'tools/foxwatch/asset-overrides/**'
-      - 'tools/planner-contributor.mjs'
-      - 'packages/extensions/foxhole/app/plugins/foxhole/nixie/map/icon-preview.ts'
-      - 'package*.json'
-      - '.github/workflows/planner-contributions.yml'
   workflow_dispatch:
 
 permissions:
