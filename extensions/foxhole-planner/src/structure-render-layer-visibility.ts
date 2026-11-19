@@ -306,6 +306,9 @@ const additionalRoofLayerIdsByStructure: Readonly<Record<string, readonly string
     atgunait1: ['flagmesh'],
     atgunait2: ['basemesh', 'topmesh', 'flagmesh'],
     atgunait3: ['basemesh', 'topmesh', 'flagmesh'],
+    fortisgait1: ['skelmesh', 'flagmesh'],
+    fortisgait2: ['skelmesh', 'basemesh', 'topmesh', 'flagmesh'],
+    fortisgait3: ['skelmesh', 'basemesh', 'topmesh', 'flagmesh'],
     mgait1: ['flagmesh'],
     mgait2: ['basemesh', 'topmesh', 'flagmesh'],
     mgait3: ['basemesh', 'topmesh', 'flagmesh'],
@@ -390,7 +393,7 @@ export function isFoxholeTopRenderLayer(
     return (layer.componentTags ?? []).some(tag => normalizeSocketTag(tag) === 'top')
         || (/^observationbunkert[123]$/.test(normalizeSocketTag(structureCodeName)) && normalizeSocketTag(layer.id) === 'teamflagmesh')
         || (
-            normalizeSocketTag(structureCodeName).startsWith('atgunai')
+            /^(?:atgunai|fortisgai)/.test(normalizeSocketTag(structureCodeName))
             && normalizeSocketTag(layer.id) === 'skelmesh'
         )
         || (

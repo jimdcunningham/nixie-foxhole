@@ -1,0 +1,41 @@
+{
+  "categoryId": "aircraft",
+  "previewDirection": "sw",
+  "renderNodeOverrides": {
+    "EngineGroup": {
+      "unrealRotationDegrees": [
+        0,
+        -90,
+        0
+      ]
+    },
+    "FuselageGroup": {
+      "unrealRotationDegrees": [
+        0,
+        -90,
+        0
+      ]
+    },
+    "LeftWingGroup": {
+      "unrealRotationDegrees": [
+        0,
+        -90,
+        0
+      ]
+    },
+    "RightWingGroup": {
+      "unrealRotationDegrees": [
+        0,
+        -90,
+        0
+      ]
+    },
+    "TailGroup": {
+      "unrealRotationDegrees": [
+        0,
+        -90,
+        0
+      ]
+    }
+  }
+}

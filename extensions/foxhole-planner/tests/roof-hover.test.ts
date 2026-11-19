@@ -47,6 +47,26 @@ test('roof hover fades completely, includes flags, and leaves Hide Roofs authori
     assert.equal(renderFoxholeSceneV2Entity(subject).hover, undefined);
 });
 
+test('ISG Overwatch roofs hide their turret, flag and spotlights together', () => {
+    for (const tier of [1, 2, 3]) {
+        const id = `fortisgait${tier}`;
+        const subject = entity(id);
+        const context = { contractVersion: 1 as const, entities: [subject] };
+        const fixed = renderFoxholeSceneV2Entity(subject, { ...context, settings: { 'foxhole.structure.hideRoofs': true } });
+        const hover = renderFoxholeSceneV2Entity(subject, { ...context, settings: { 'foxhole.structure.hideRoofsOnHover': true } });
+        const layers = ['roof', 'skelmesh', 'flagmesh', ...(tier === 1 ? [] : ['basemesh', 'topmesh'])];
+        for (const layer of layers) {
+            const node = `structure-layer-${layer}`;
+            assert.ok(!fixed.root.children.some(child => child.id === node), `${id} fixed ${layer}`);
+            assert.ok(hover.hover?.hiddenNodeIds?.includes(node), `${id} hover ${layer}`);
+            for (const modelNode of assets[id]!.model!.structuralProfile!.layers[layer] ?? []) {
+                assert.ok(fixed.spatial?.hiddenModelNodes?.includes(modelNode), `${id} model ${layer}`);
+            }
+        }
+        assert.ok(fixed.root.children.some(child => child.id === 'structure-layer-floor'), id);
+    }
+});
+
 test('an Inspector preview reveals interior bunker modifications in planar and model views', () => {
     const subject = entity('fortt3');
     subject.components.push({ ownerId: 'nixie.foxhole-planner', componentId: 'modification', version: 1, definitionAvailable: true,

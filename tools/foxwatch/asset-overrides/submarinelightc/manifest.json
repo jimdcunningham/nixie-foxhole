@@ -1,0 +1,5 @@
+{
+  "categoryId": "naval",
+  "previewDirection": "sw",
+  "renderExcludedMeshIds": ["mesh-minitorpedoammo"]
+}
