@@ -3,6 +3,7 @@ import test from 'node:test';
 import { registerFoxholeSceneV2HostPolicy } from '../app/utils/scene-v2-host-policy.ts';
 import { prepareNixieSceneV1Import, prepareNixieSceneV2Snapshots } from '../../../nixie/app/utils/nixie-scene-v2-create-snapshots.ts';
 import { registerNixieSceneV1NodeConverter } from '../../../nixie/app/utils/nixie-scene-v2-converter-registry.ts';
+import { hydrateNixieSceneV2Capabilities } from '../../../nixie/desktop-extensions/scene-v2-capabilities.ts';
 import { convertNixieSceneV1ToV2 } from '../../../nixie/desktop-extensions/scene-v2-conversion.ts';
 import { convertFoxholeSceneV1NodeToV2 } from '../app/plugins/foxhole/nixie/scene-v2-conversion.ts';
 import { createFoxholeSplineConnectorSnapshot } from '../app/plugins/foxhole/nixie/spline-connector-snapshot.ts';
@@ -46,7 +47,10 @@ test('production opt-outs survive import and conversion only for assets with pro
             state: { ...node.state, disableProduction: true,
                 ...(key === 'fortt3' ? { productionOrders: [{ recipeId: 'stale-order' }] } : {}) },
         }], { nodeConverters: [convertFoxholeSceneV1NodeToV2] });
-        const order = result.content.entities[0]?.components.find(component => component.componentId === 'production-order');
+        const imported = result.content.entities[0]!;
+        assert.ok(capabilityIds(imported).includes('capability-move'), key);
+        assert.ok(capabilityIds(imported).includes('capability-rotate'), key);
+        const order = imported.components.find(component => component.componentId === 'production-order');
         assert.equal(Boolean(order), keepFlag, key);
         assert.equal(order?.data.disabled, keepFlag ? true : undefined, key);
     }
@@ -65,6 +69,12 @@ test('authored Wall Tier 1 remains insertable with the implemented spline handle
     const spline = readNixieSceneV2EditableSpline({ ...entity,
         components: entity.components.map(component => ({ ...component, definitionAvailable: true })) }, definitions);
     assert.ok(capabilityIds(entity).includes('capability-geometry-reshape'));
+    const older = { ...entity, components: entity.components.flatMap(component => {
+        if (component.componentId === 'capability-geometry-reshape') return [];
+        return [component.componentId === 'capability-model' ? { ...component, data: {} } : component];
+    }) };
+    const reopened = hydrateNixieSceneV2Capabilities({ ...converted.content, entities: [older] }).entities[0]!;
+    assert.ok(capabilityIds(reopened).includes('capability-geometry-reshape'));
     assert.equal(spline?.componentId, 'spline-connector');
     assert.equal(entity.components.find(component => component.componentId === 'spline-connector')?.data.foxholeKey, 'wallsplinet1');
     assert.deepEqual(snapshot, original);

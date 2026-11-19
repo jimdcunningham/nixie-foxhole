@@ -1,3 +1,4 @@
+import { foxholeLegacyEditingCapabilities } from '../../../utils/legacy-scene-editing.ts';
 import { isFoxholeMaintenanceTunnel, normalizeFoxholeMaintenanceFilters, supportsFoxholeMaintenanceFilters } from './maintenance-supply.ts';
 import modelBundle from '../../../../public/foxhole/assets/models/manifest.v1.json' with { type: 'json' };
 import { getFoxholeSceneV2ModelComponentData, isFoxholeSceneV2ModelAllowed } from '../../../../../../../extensions/foxhole-planner/src/scene-v2-models.ts';
@@ -1051,7 +1052,7 @@ function convertTriangulationState(state: Record<string, unknown>): {
     };
 }
 
-export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entityId, node, resolveEntityId }) => {
+const convertNode: NixieSceneV1NodeConverter = ({ entityId, node, resolveEntityId }) => {
     const iconAssetId = node.type === 'nixieIcon'
         ? resolveFoxholeIconAssetId(node.state.textureUrl)
         : null;
@@ -1419,4 +1420,10 @@ export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = ({ entit
             },
         }] : [])],
     };
+};
+
+export const convertFoxholeSceneV1NodeToV2: NixieSceneV1NodeConverter = (context) => {
+    const result = convertNode(context);
+    if (!result?.supported) return result;
+    return { ...result, legacyCapabilities: foxholeLegacyEditingCapabilities(context.node.type, result.components ?? []) };
 };

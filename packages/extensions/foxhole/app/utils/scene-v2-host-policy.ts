@@ -1,3 +1,5 @@
+import { foxholeLegacyEditingCapabilities } from './legacy-scene-editing.ts';
+import { foxholeRailPresentation } from './spatial-foxhole-rail-bed.ts';
 import { readFoxholeModelLightHints } from '../../../../../extensions/foxhole-planner/src/model-light-hints.ts';
 import { registerNixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
@@ -7,6 +9,8 @@ import { FOXHOLE_SCENE_FACTION_SETTING_ID, normalizeFoxholeSceneFaction } from '
 const OWNER_ID = 'nixie.foxhole-planner';
 export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     ownerId: OWNER_ID,
+    legacyCapabilities: foxholeLegacyEditingCapabilities,
+    rail: foxholeRailPresentation,
     modelLightHints: readFoxholeModelLightHints,
     spatialPresentation(readSetting) {
         const faction = normalizeFoxholeSceneFaction(readSetting(FOXHOLE_SCENE_FACTION_SETTING_ID));
