@@ -7,6 +7,7 @@ import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimu
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
 import { foxholeRailVehicleBogies } from '../src/rail-vehicle-rigs.ts';
+import { foxholeRailCouplerHook } from '../src/rail-coupler-hooks.ts';
 import { FOXHOLE_HEIGHT_RENDER_LANES, FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane, resolveFoxholeAssetHeightLane } from '../src/render-lanes.ts';
 import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
@@ -17,6 +18,55 @@ import assets from '../src/scene-v2-assets-node.ts';
 
 const ownerId = 'nixie.foxhole-planner';
 
+test('rail seat points cover both small-gauge ends and follow the owning bogie on articulated cars', () => {
+    for (const id of ['smalltrainengine', 'smalltrainmaterial', 'smalltrainresource', 'smalltrainshipping', 'smalltrainliquid']) {
+        const model = assets[id]!.model!;
+        const front = foxholeRailCouplerHook(id, 1, model), rear = foxholeRailCouplerHook(id, -1, model);
+        assert.ok(front && rear);
+        assert.equal(front.modelAttachment.nodeName, 'rail-body');
+        assert.ok(front.point[0] > 0 && rear.point[0] < 0);
+        assert.ok(Math.abs(front.point[2] - 17.08) < 0.02);
+    }
+    for (const [id, front, rear] of [['trainhospital', 'rail-bogie-rear', 'rail-bogie-front'],
+        ['trainlrartillery', 'rail-bogie-front', 'rail-bogie-rear']] as const) {
+        const model = assets[id]!.model!;
+        assert.equal(foxholeRailCouplerHook(id, 1, model)?.modelAttachment.nodeName, front);
+        assert.equal(foxholeRailCouplerHook(id, -1, model)?.modelAttachment.nodeName, rear);
+    }
+});
+
+test('rail seats and their owning pivots include the rendered model anchor', () => {
+    const anchor = [5, -4, 7] as const;
+    for (const id of ['traincoal', 'trainlrartillery', 'trainhospital']) {
+        const model = { resourceId: 'foxhole.model.' + id, width: 200, height: 150, depth: 100, offsetX: 0, offsetY: 0, offsetZ: 75 };
+        const [offsetX, offsetY, z] = anchor;
+        for (const end of [-1, 1] as const) {
+            const centered = foxholeRailCouplerHook(id, end, model)!;
+            const shifted = foxholeRailCouplerHook(id, end, { ...model, offsetX, offsetY, offsetZ: model.height / 2 + z })!;
+            assert.deepEqual(shifted.point, centered.point.map((value, axis) => value + anchor[axis]!));
+            assert.deepEqual(shifted.modelAttachment.pivot, id === 'traincoal' ? [0, 0, 0]
+                : centered.modelAttachment.pivot.map((value, axis) => value + anchor[axis]!));
+        }
+    }
+});
+
+test('only supported upright hooks advertise a tip for their end link', () => {
+    const effect = (assetId: string, end: 'front' | 'rear', supported: boolean) => {
+        const entity = request(assetId, []).context.entities[0]!;
+        return parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, {
+            contractVersion: 1, entities: [entity], settings: {
+                'nixie.scene.simulationModelAttachments': supported ? '2' : true,
+            },
+        })).spatial?.simulationEffects?.find(effect => effect.id === 'coupler-' + end);
+    };
+    const front = effect('trainhospital', 'front', true)!;
+    assert.ok(front.chainHookTip && front.chainHookTip[2] > front.point[2]);
+    assert.equal(front.modelAttachment?.nodeName, 'rail-bogie-rear');
+    assert.equal(effect('trainhospital', 'front', false)?.chainHookTip, undefined);
+    assert.equal(effect('traininfantry', 'rear', true)?.chainHookTip, undefined);
+    assert.equal(effect('smalltrainengine', 'front', true)?.chainEndPlane, 'vertical');
+    assert.equal(effect('smalltrainengine', 'front', true)?.chainHookTip, undefined);
+});
 const component = (componentId: string, data: NixieComponentEntitySnapshotV1['components'][number]['data'], owner = ownerId) =>
     ({ ownerId: owner, componentId, version: 1, definitionAvailable: true, data });
 

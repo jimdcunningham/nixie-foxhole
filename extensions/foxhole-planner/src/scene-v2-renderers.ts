@@ -1,4 +1,5 @@
 import { foxholeRailContactPorts, poseFoxholeRailBogies } from './rail-vehicle-snapping.ts';
+import { foxholeRailCouplerHook } from './rail-coupler-hooks.ts';
 import { parseNixieRenderPresentationV1 } from '@nixiejs/extension-sdk';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
@@ -647,10 +648,16 @@ export function renderFoxholeSceneV2Entity(
         const linkages = foxholeRailLinkages[railAssetId];
         const engine = railAssetId === 'trainengine';
         const rolling = foxholeRailRollingEffect(railAssetId, context.settings);
-        const latchEffects = foxholeRailContactPorts(railAssetId).map(({ effect, point }) => ({
-            id: effect, point, trigger: 'latch' as const,
-            sound: { resourceId: 'foxhole.audio.coupler-clank', gain: .7, range: 3200 },
-        }));
+        const attachmentSupport = context.settings?.['nixie.scene.simulationModelAttachments'];
+        const latchEffects = foxholeRailContactPorts(railAssetId).map(({ effect, point, end }) => {
+            const hook = foxholeRailCouplerHook(railAssetId, end, metadata.model!);
+            return { id: effect, point: hook?.point ?? point, trigger: 'latch' as const,
+                ...(hook?.tip && attachmentSupport === '2' ? { chainHookTip: hook.tip } : {}),
+                ...(hook && (attachmentSupport === true || attachmentSupport === '2')
+                    ? { modelAttachment: hook.modelAttachment, ...(railAssetId.startsWith('smalltrain')
+                        ? { chainEndPlane: 'vertical' as const } : {}) } : {}),
+                sound: { resourceId: 'foxhole.audio.coupler-clank', gain: .7, range: 3200 } };
+        });
         plan.spatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.spatial,
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
