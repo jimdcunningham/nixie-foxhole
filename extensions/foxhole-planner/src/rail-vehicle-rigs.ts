@@ -1,4 +1,5 @@
 import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+import { parseNixieSimulationEffectsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { blackBoltValveGear } from './black-bolt-valve-gear.ts';
 
 /** Authored longitudinal pivots and wheel contacts measured from the posed game rigs, in metres. */
@@ -59,10 +60,24 @@ const cylinderSteam = (side: -1 | 1): SimulationEffect[] => {
             particle: { ...steam(.78, 86, 1.8), size: 22, velocity: [2, side * 53, 13], velocitySpace: 'entity' } },
     ];
 };
-export const foxholeBlackBoltEffects: NonNullable<NixieSpatialPlanV1['simulationEffects']> = [
-    { id: 'exhaust', point: stack, trigger: 'distance', interval: Math.PI * 32 * mainWheelRadius,
-        sound: { resourceId: 'foxhole.audio.steam-chuff', gain: .8, range: 4200 },
-        particle: steam(.85, 102, 2.2) },
+const exhaust = {
+    id: 'exhaust', point: stack, trigger: 'distance', interval: Math.PI * 32 * mainWheelRadius,
+    sound: { resourceId: 'foxhole.audio.steam-chuff', gain: .8, range: 4200 },
+    particle: steam(.85, 102, 2.2),
+} satisfies SimulationEffect;
+const variableExhaust = { ...exhaust, sound: { ...exhaust.sound, distancePlayback: {
+    referenceSpeed: 3.4 * exhaust.interval, rate: 1.2, variation: .02, minDuration: .12, maxDuration: .85,
+} } };
+const distanceSoundPlaybackSupported = (() => {
+    try {
+        parseNixieSimulationEffectsV1([variableExhaust]);
+        return true;
+    } catch {
+        return false;
+    }
+})();
+
+const blackBoltEffects: SimulationEffect[] = [
     { id: 'steam-idle', point: stack, trigger: 'idle', interval: 1.8,
         sound: { resourceId: 'foxhole.audio.steam-idle', gain: .3, range: 2400 },
         particle: steam(.31, 72, 2.7) },
@@ -76,6 +91,10 @@ export const foxholeBlackBoltEffects: NonNullable<NixieSpatialPlanV1['simulation
     ...cylinderSteam(-1),
     ...cylinderSteam(1),
 ];
+
+export function foxholeBlackBoltEffects(distanceSoundPlayback: boolean): SimulationEffect[] {
+    return [distanceSoundPlayback && distanceSoundPlaybackSupported ? variableExhaust : exhaust, ...blackBoltEffects];
+}
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });

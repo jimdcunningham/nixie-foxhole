@@ -654,7 +654,9 @@ export function renderFoxholeSceneV2Entity(
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
             ...(engine ? { modelDistancePoseCycles: foxholeBlackBoltValveGear } : {}),
-            ...(engine || latchEffects.length ? { simulationEffects: [...(engine ? foxholeBlackBoltEffects : []), ...latchEffects] } : {}),
+            ...(engine || latchEffects.length ? { simulationEffects: [
+                ...(engine ? foxholeBlackBoltEffects(context.settings?.['nixie.scene.distanceSoundPlayback'] === true) : []), ...latchEffects,
+            ] } : {}),
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
             modelLightOverrides: buildFoxholeModelLightOverrides(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
                 modelLightHintsByResourceId, shouldEnableFoxholePoweredModelLights(context.settings)),

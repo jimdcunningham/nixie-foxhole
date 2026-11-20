@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1, parseNixieRenderPresentationV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationColliderV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationColliderV1, parseNixieSimulationEffectsV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
     parseNixieTransformFinalizerV1, parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
@@ -83,6 +83,26 @@ test('the Black Bolt vents from both front cylinders at idle and on departure', 
         assert.ok(start.particle!.opacity > idle.particle!.opacity);
         assert.ok(start.particle!.endSize > idle.particle!.endSize);
     }
+});
+
+test('the Black Bolt advertises tuned exhaust playback only when the host and SDK support it', () => {
+    const engine = request('trainengine', []).context.entities[0]!;
+    const base = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(engine))
+        .spatial!.simulationEffects!.find(effect => effect.id === 'exhaust')!;
+    assert.equal(Object.hasOwn(base.sound!, 'distancePlayback'), false);
+    const tuned = { ...base, sound: { ...base.sound!, distancePlayback: {
+        referenceSpeed: 3.4 * base.interval!, rate: 1.2, variation: .02, minDuration: .12, maxDuration: .85,
+    } } };
+    let expected = base;
+    try {
+        expected = parseNixieSimulationEffectsV1([tuned])[0]!;
+    } catch {
+        // The released SDK still needs to be able to build and test the fallback.
+    }
+    const render = renderFoxholeSceneV2Entity(engine, { contractVersion: 1, entities: [engine],
+        settings: { 'nixie.scene.distanceSoundPlayback': true } });
+    assert.deepEqual(parseNixieExtensionRenderPlanV1(render).spatial!.simulationEffects!
+        .find(effect => effect.id === 'exhaust'), expected);
 });
 
 test('re-snapping a Black Bolt refreshes an older parked flatbed on its running line', () => {
