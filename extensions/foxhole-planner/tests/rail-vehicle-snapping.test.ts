@@ -85,13 +85,13 @@ test('the Black Bolt vents from both front cylinders at idle and on departure', 
     }
 });
 
-test('the Black Bolt advertises tuned exhaust playback only when the host and SDK support it', () => {
+test('the Black Bolt pins the crawl pitch when the host and SDK support it', () => {
     const engine = request('trainengine', []).context.entities[0]!;
     const base = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(engine))
         .spatial!.simulationEffects!.find(effect => effect.id === 'exhaust')!;
     assert.equal(Object.hasOwn(base.sound!, 'distancePlayback'), false);
     const tuned = { ...base, sound: { ...base.sound!, distancePlayback: {
-        referenceSpeed: 3.4 * base.interval!, rate: 1.2, variation: .02, minDuration: .12, maxDuration: .85,
+        referenceSpeed: 3.4 * base.interval!, rate: 1.2, variation: 0, minDuration: .85, maxDuration: .85,
     } } };
     let expected = base;
     try {
@@ -103,6 +103,24 @@ test('the Black Bolt advertises tuned exhaust playback only when the host and SD
         settings: { 'nixie.scene.distanceSoundPlayback': true } });
     assert.deepEqual(parseNixieExtensionRenderPlanV1(render).spatial!.simulationEffects!
         .find(effect => effect.id === 'exhaust'), expected);
+});
+
+test('the Black Bolt offers a repeating bell alongside its one-shot whistle', () => {
+    const engine = request('trainengine', []).context.entities[0]!;
+    const readCues = (supported: boolean) => parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(engine, {
+        contractVersion: 1, entities: [engine], settings: { 'nixie.scene.loopedSimulationCue': supported },
+    })).spatial!.simulationEffects!.filter(effect => effect.trigger === 'cue');
+    const [whistle, bell] = readCues(false);
+    assert.equal(whistle?.id, 'whistle');
+    assert.equal(bell?.id, 'bell');
+    const loopingBell = { ...bell!, loop: true, interval: 1.25, sound: { ...bell!.sound!, resourceId: 'foxhole.audio.steam-bell-loop', gain: .28 } };
+    let expected = bell;
+    try {
+        expected = parseNixieSimulationEffectsV1([loopingBell])[0]!;
+    } catch {
+        // Older SDKs retain the original one-shot.
+    }
+    assert.deepEqual(readCues(true), [whistle, expected]);
 });
 
 test('re-snapping a Black Bolt refreshes an older parked flatbed on its running line', () => {

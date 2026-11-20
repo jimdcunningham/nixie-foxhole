@@ -65,17 +65,23 @@ const exhaust = {
     sound: { resourceId: 'foxhole.audio.steam-chuff', gain: .8, range: 4200 },
     particle: steam(.85, 102, 2.2),
 } satisfies SimulationEffect;
-const variableExhaust = { ...exhaust, sound: { ...exhaust.sound, distancePlayback: {
-    referenceSpeed: 3.4 * exhaust.interval, rate: 1.2, variation: .02, minDuration: .12, maxDuration: .85,
+// Keep the former crawl pitch at every cadence. Equal bounds pin the sample's playback rate.
+const fixedExhaust = { ...exhaust, sound: { ...exhaust.sound, distancePlayback: {
+    referenceSpeed: 3.4 * exhaust.interval, rate: 1.2, variation: 0, minDuration: .85, maxDuration: .85,
 } } };
-const distanceSoundPlaybackSupported = (() => {
+function supportsSimulationEffect(effect: SimulationEffect): boolean {
     try {
-        parseNixieSimulationEffectsV1([variableExhaust]);
+        parseNixieSimulationEffectsV1([effect]);
         return true;
     } catch {
         return false;
     }
-})();
+}
+const distanceSoundPlaybackSupported = supportsSimulationEffect(fixedExhaust);
+const bell = { id: 'bell', point: stack, trigger: 'cue', label: 'Bell',
+    sound: { resourceId: 'foxhole.audio.steam-bell', gain: .75, range: 5000 } } satisfies SimulationEffect;
+const loopingBell = { ...bell, loop: true, interval: 1.25, sound: { ...bell.sound, resourceId: 'foxhole.audio.steam-bell-loop', gain: .28 } };
+const loopingBellSupported = supportsSimulationEffect(loopingBell);
 
 const blackBoltEffects: SimulationEffect[] = [
     { id: 'steam-idle', point: stack, trigger: 'idle', interval: 1.8,
@@ -84,16 +90,16 @@ const blackBoltEffects: SimulationEffect[] = [
     { id: 'whistle', point: stack, trigger: 'cue', label: 'Whistle',
         sound: { resourceId: 'foxhole.audio.steam-whistle', gain: .85, range: 8500 },
         particle: steam(.95, 128, 2.5) },
-    { id: 'bell', point: stack, trigger: 'cue', label: 'Bell',
-        sound: { resourceId: 'foxhole.audio.steam-bell', gain: .75, range: 5000 } },
     { id: 'wheel-grind', point: [18, 0, 16], trigger: 'slip', interval: 12,
         sound: { resourceId: 'foxhole.audio.wheel-grind', gain: .45, range: 3800 } },
     ...cylinderSteam(-1),
     ...cylinderSteam(1),
 ];
 
-export function foxholeBlackBoltEffects(distanceSoundPlayback: boolean): SimulationEffect[] {
-    return [distanceSoundPlayback && distanceSoundPlaybackSupported ? variableExhaust : exhaust, ...blackBoltEffects];
+export function foxholeBlackBoltEffects(settings: Readonly<Record<string, unknown>> | undefined): SimulationEffect[] {
+    const exhaustEffect = settings?.['nixie.scene.distanceSoundPlayback'] === true && distanceSoundPlaybackSupported ? fixedExhaust : exhaust;
+    const bellEffect = settings?.['nixie.scene.loopedSimulationCue'] === true && loopingBellSupported ? loopingBell : bell;
+    return [exhaustEffect, ...blackBoltEffects, bellEffect];
 }
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
