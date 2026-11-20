@@ -1,4 +1,5 @@
 import { foxholeRailContactPorts, poseFoxholeRailBogies } from './rail-vehicle-snapping.ts';
+import { parseNixieRenderPresentationV1 } from '@nixiejs/extension-sdk';
 import { resolveFoxholeEntityStructureSockets } from './effective-structure-sockets.ts';
 import { readFoxholeSceneV2CoreTransform } from './scene-v2-core-transforms.ts';
 import { renderFoxholeContactShadows } from './scene-v2-contact-shadows.ts';
@@ -23,7 +24,8 @@ import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { foxholeRailCouplerPlacementPorts } from './rail-coupler-placement.ts';
-import { foxholeBlackBoltEffects, foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
+import { foxholeBlackBoltEffects, foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailVehicleBogies, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
+import { FOXHOLE_BOARD_UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
     FOXHOLE_PLACEMENT_WARNING_SETTING_ID,
@@ -263,6 +265,7 @@ function renderFoxholeSceneV2Asset(
     assetMetadata: FoxholeSceneV2AssetMetadata,
     settings: Record<string, boolean> = {},
     entities: readonly NixieComponentEntitySnapshotV1[] = [],
+    railPose?: ReturnType<typeof poseFoxholeRailBogies>,
 ): NixieExtensionRenderNodeV1[] {
     const appearance = readFoxholeSceneV2Appearance(entity);
     const modifications = selectedFoxholeSceneV2Modifications(entity, assetMetadata);
@@ -271,7 +274,8 @@ function renderFoxholeSceneV2Asset(
         ? modifications.find(entry => entry.variant.isUpgrade)?.variant
         : undefined;
     const visual = resolveFoxholeSceneV2Visual(assetId, assetMetadata, appearance);
-    const layers = orderFoxholeStructureRenderLayers(Object.entries(assetMetadata.renderLayers).map(([id, layer]) => ({ id, ...layer })), assetMetadata.codeName);
+    const layers = orderFoxholeStructureRenderLayers(Object.entries(assetMetadata.renderLayers)
+        .filter(([id]) => !planarRailPartIds.has(id)).map(([id, layer]) => ({ id, ...layer })), assetMetadata.codeName);
     const useLayers = operational && !replacement && layers.length > 0 && settings['foxhole.structure.useStaticRender'] !== true;
     const layerOptions = { profileType: assetMetadata.profileType, useStructureRenderLayers: useLayers };
     const orderSelection = (entry: ResolvedFoxholeSceneV2Modification) => ({ slot: { ...entry.slot, id: entry.slot.id ?? '', name: entry.slot.name ?? '' }, variant: { id: entry.variant.id ?? '' } });
@@ -403,7 +407,63 @@ function renderFoxholeSceneV2Asset(
             ?? { laneId: node.laneId ?? 'default', laneOrder: node.laneOrder ?? 0, label: '' };
         return { ...node, ...foxholeRenderLane(resolveFoxholeAssetComponentLane(assetId, componentLane)) };
     });
+    const railParts = operational && !replacement && settings['foxhole.structure.useStaticRender'] !== true
+        ? renderFoxholePlanarRailParts(assetId, assetMetadata, railPose, settings['nixie.scene.planarModelMotion'] === true) : null;
+    if (railParts) {
+        const shadows = renderFoxholeContactShadows([base], assetMetadata.contactShadows).filter(node => node !== base);
+        return [...shadows, ...poleLamp, ...railParts, ...overlays, ...glow];
+    }
     return renderFoxholeContactShadows([...poleLamp, ...(useLayers && !shouldCompositeFoxholeStructureBaseTexture(layers) ? [] : [base]), ...pallet, ...bodyLayers, ...overlays, ...glow], assetMetadata.contactShadows);
+}
+
+const planarRailPartIds = new Set(['rail-body', 'rail-bogie-front', 'rail-bogie-rear']);
+const planarModelMotionSupported = (() => {
+    try {
+        // The SDK validates output inside the extension before it reaches Studio.
+        parseNixieRenderPresentationV1({ contractVersion: 1,
+            simulationModelNode: { nodeName: 'rail-bogie-front', unitsPerMetre: 32, restX: 0, restY: 0 } });
+        return true;
+    } catch {
+        return false;
+    }
+})();
+
+function renderFoxholePlanarRailParts(
+    assetId: string,
+    metadata: FoxholeSceneV2AssetMetadata,
+    pose: ReturnType<typeof poseFoxholeRailBogies>,
+    animateBogies: boolean,
+): NixieExtensionRenderNodeV1[] | null {
+    if (assetId !== 'trainlrartillery' && assetId !== 'trainhospital') {
+        return null;
+    }
+    const parts = [...foxholeRailVehicleBogies[assetId]!, { nodeName: 'rail-body', pivot: 0 }];
+    if (parts.some(part => !metadata.renderLayers[part.nodeName])) {
+        return null;
+    }
+    const lane = foxholeRenderLane(resolveFoxholeAssetHeightLane(assetId)
+        ?? resolveFoxholeStructurePrimaryRenderLane(assetId, metadata.isRailVehicle, metadata.isVehicle));
+    const units = FOXHOLE_BOARD_UNITS_PER_METRE;
+    return parts.map(({ nodeName, pivot }) => {
+        const layer = metadata.renderLayers[nodeName]!;
+        const transform = pose?.find(node => node.nodeName === nodeName);
+        const rotation = transform ? -transform.rotation[1] : 0;
+        const pivotX = pivot * units;
+        const x = layer.offsetX - pivotX;
+        const y = layer.offsetY;
+        const posedX = pivotX + (transform?.translation[0] ?? 0) * units;
+        const posedY = (transform?.translation[2] ?? 0) * units;
+        const sprite = { kind: 'sprite' as const, resourceId: layer.resourceId, anchorX: .5, anchorY: .5, width: layer.width, height: layer.height };
+        if (animateBogies && planarModelMotionSupported && nodeName !== 'rail-body') {
+            const presentation = { contractVersion: 1 as const,
+                simulationModelNode: { nodeName, unitsPerMetre: units, restX: pivotX, restY: 0 } };
+            return { ...lane, id: nodeName, kind: 'group', x: posedX, y: posedY, rotation, presentation,
+                children: [{ ...sprite, id: nodeName + '-texture', x, y }] };
+        }
+        return { ...lane, ...sprite, id: nodeName, rotation,
+            x: posedX + x * Math.cos(rotation) - y * Math.sin(rotation),
+            y: posedY + x * Math.sin(rotation) + y * Math.cos(rotation) };
+    });
 }
 
 function resolveBreachIndicators(entity: NixieComponentEntitySnapshotV1, metadata: FoxholeSceneV2AssetMetadata,
@@ -807,7 +867,11 @@ function renderFoxholeSceneV2EntityPlan(
         ? foxholeRailCouplerPlacementPorts(assetId, assetMetadataById) : [];
     const selectionGeometry = { ...resolveFoxholeSceneV2StructureSelectionGeometry(entity, assetMetadata),
         ...(ports.length ? { productPlacementPorts: ports } : {}) };
-    const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, settings, context.entities);
+    const splitRail = (assetId === 'trainlrartillery' || assetId === 'trainhospital')
+        && !!assetMetadata.renderLayers['rail-body'] && settings['foxhole.structure.useStaticRender'] !== true;
+    const railPose = (splitRail || settings['nixie.scene.modelNodeTransforms'] === true) && !appearance.destroyed && !appearance.packaged
+        ? poseFoxholeRailBogies(entity, assetId, context, assetMetadataById) : undefined;
+    const rendered = renderFoxholeSceneV2Asset(entity, assetId, assetMetadata, settings, context.entities, railPose);
     const structural = assetMetadata.model?.structuralProfile;
     const spatialRendered = structural ? renderFoxholeSceneV2Asset(entity, assetId, assetMetadata,
         {...settings, 'foxhole.structure.useStaticRender': false}, context.entities) : rendered;
@@ -848,11 +912,8 @@ function renderFoxholeSceneV2EntityPlan(
         placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],
             ...(placementSpatial?.markers ? { markers: placementSpatial.markers } : {}), hiddenModelNodes: [...new Set(hiddenModelNodes)] };
     }
-    if (settings['nixie.scene.modelNodeTransforms'] === true && !appearance.destroyed && !appearance.packaged) {
-        const modelNodeTransforms = poseFoxholeRailBogies(entity, assetId, context, assetMetadataById);
-        if (modelNodeTransforms) {
-            placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, modelNodeTransforms };
-        }
+    if (settings['nixie.scene.modelNodeTransforms'] === true && railPose) {
+        placementSpatial = { contractVersion: 1, supplementModel: true, nodes: [], ...placementSpatial, modelNodeTransforms: railPose };
     }
     const modelClips = structuralModelClips(assetMetadata, occupiedTags);
     if (modelClips.length) placementSpatial = { contractVersion: 1, supplementModel: true, nodes: placementSpatial?.nodes ?? [],

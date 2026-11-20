@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk';
+import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1, parseNixieRenderPresentationV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationColliderV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
     parseNixieTransformFinalizerV1, parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
@@ -114,6 +114,65 @@ test('every Locomotives asset snaps only to its own gauge', () => {
         const wrong = track(small ? 'railtrackspline' : 'smallrailtrackspline');
         assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [own])).transform.elevation, 32 + (small ? 20 : 36) * 0.32, id);
         assert.equal(finalizeFoxholeRailVehicleSnap(request(id, [wrong])).transform.elevation, undefined, id);
+    }
+});
+
+test('split top-down train cars keep the body fixed and steer each bogie on a curve', t => {
+    const rail = track('railtrackspline');
+    Object.assign(rail.components.at(-1)!.data, { endX: 1050, endY: 700, endRotation: Math.PI / 2 });
+    for (const assetId of ['trainhospital', 'trainlrartillery']) {
+        const metadata = assets[assetId]!;
+        const previous = metadata.renderLayers;
+        t.after(() => { metadata.renderLayers = previous; });
+        const parts = [...foxholeRailVehicleBogies[assetId]!, { nodeName: 'rail-body', pivot: 0 }];
+        metadata.renderLayers = Object.fromEntries(parts.map(({ nodeName, pivot }) => [nodeName, {
+            resourceId: `foxhole.visual.${assetId}-layer-${nodeName}`,
+            width: 120, height: 100, anchorX: .5, anchorY: .5, offsetX: pivot * 32 + 8, offsetY: 0,
+        }]));
+        const proposal = request(assetId, [rail]);
+        const vehicle = proposal.context.entities[0]!;
+        vehicle.components.push(component('rail-attachment', { rail: 'track', station: 650, reversed: false }));
+        const { x, y, rotation, elevation } = finalizeFoxholeRailVehicleSnap({
+            ...proposal, interaction: 'transform', followedEntityId: 'track',
+        }).transform;
+        Object.assign(vehicle.components[1]!.data, { x, y, rotation });
+        vehicle.components.push(component('spatial-transform', { elevation: elevation! }, 'nixie.core'));
+
+        const context = { contractVersion: 1 as const, entities: proposal.context.entities };
+        const plan = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(vehicle, context));
+        assert.equal(plan.root.kind, 'group');
+        const nodes = plan.root.children.filter(node => parts.some(part => part.nodeName === node.id));
+        assert.deepEqual(nodes.map(node => node.id), ['rail-bogie-front', 'rail-bogie-rear', 'rail-body']);
+        assert.equal(nodes[2]!.rotation, 0);
+        assert.equal(nodes[2]!.x, 8);
+        assert.ok(Math.abs(nodes[0]!.rotation!) > 0.03);
+        assert.ok(Math.abs(nodes[1]!.rotation!) > 0.03);
+        assert.ok(nodes[0]!.rotation! * nodes[1]!.rotation! < 0);
+        assert.ok(!plan.root.children.some(node => node.id === 'building-texture'));
+
+        const animated = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(vehicle,
+            { ...context, settings: { 'nixie.scene.planarModelMotion': true } })).root.children;
+        for (const bogie of foxholeRailVehicleBogies[assetId]!) {
+            const group = animated.find(node => node.id === bogie.nodeName)!;
+            const presentation = { contractVersion: 1 as const,
+                simulationModelNode: { nodeName: bogie.nodeName, unitsPerMetre: 32, restX: bogie.pivot * 32, restY: 0 } };
+            try {
+                parseNixieRenderPresentationV1(presentation);
+            } catch {
+                assert.equal(group.kind, 'sprite');
+                continue;
+            }
+            assert.equal(group.kind, 'group');
+            assert.deepEqual(group.presentation, presentation);
+            assert.equal(group.children[0]?.x, 8, 'artwork is positioned relative to the pivot');
+        }
+        assert.equal(animated.find(node => node.id === 'rail-body')?.kind, 'sprite');
+
+        delete metadata.renderLayers['rail-bogie-rear'];
+        const fallback = renderFoxholeSceneV2Entity(vehicle, context).root;
+        assert.equal(fallback.kind, 'group');
+        assert.ok(fallback.children.some(node => node.id === 'building-texture'));
+        assert.ok(fallback.children.every(node => !parts.some(part => part.nodeName === node.id)));
     }
 });
 
@@ -336,6 +395,18 @@ test('an existing mixed eleven-vehicle train is rebuilt as one drive with its or
         assert.ok(Math.abs(atRest.position[0] - Number(parked.station)) < .001);
         assert.ok(Math.abs(Math.cos(atRest.heading) - (parked.reversed ? -1 : 1)) < 1e-8);
         assert.ok(path.frames.at(-1)!.position[0] > atRest.position[0] + 100);
+        const assetId = entity.components.find(entry => entry.componentId === 'asset')!.data.assetId;
+        if (assetId === 'trainhospital' || assetId === 'trainlrartillery') {
+            const routing = result.transaction!.operations.find(operation => operation.entityId === id
+                && operation.componentId === 'rail-simulation-routing');
+            assert.equal(routing?.op, 'add');
+            const branchPath = parseNixieSimulationRoutingV1(routing.data.simulationRouting)[0]!;
+            const front = branchPath.modelNodes!.indexOf('rail-bogie-front');
+            const rear = branchPath.modelNodes!.indexOf('rail-bogie-rear');
+            assert.ok(front >= 0 && rear >= 0);
+            assert.ok(branchPath.frames.some(frame => frame.modelOffsets![front * 6 + 4]! * frame.modelOffsets![rear * 6 + 4]! < -0.0001),
+                `${assetId} must bring both independent bogie angles into playback on the curve`);
+        }
     }
 
     for (const operation of operations) {
