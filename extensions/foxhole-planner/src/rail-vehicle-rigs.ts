@@ -69,19 +69,25 @@ const exhaust = {
 const fixedExhaust = { ...exhaust, sound: { ...exhaust.sound, distancePlayback: {
     referenceSpeed: 3.4 * exhaust.interval, rate: 1.2, variation: 0, minDuration: .85, maxDuration: .85,
 } } };
-function supportsSimulationEffect(effect: SimulationEffect): boolean {
+const cruiseExhaust = parseSupportedSimulationEffect({ ...fixedExhaust, sound: { ...fixedExhaust.sound,
+    speedGain: { startSpeed: 64, endSpeed: 224, startGain: 1, endGain: .28 },
+} });
+const railRolling = parseSupportedSimulationEffect({ id: 'rail-rolling', point: [0, 0, 12], trigger: 'moving',
+    sound: { resourceId: 'foxhole.audio.rail-rolling', gain: .22, range: 1400,
+        speedGain: { startSpeed: 16, endSpeed: 176, startGain: 0, endGain: 1 } },
+});
+function parseSupportedSimulationEffect(effect: unknown): SimulationEffect | undefined {
     try {
-        parseNixieSimulationEffectsV1([effect]);
-        return true;
+        return parseNixieSimulationEffectsV1([effect])[0];
     } catch {
-        return false;
+        return undefined;
     }
 }
-const distanceSoundPlaybackSupported = supportsSimulationEffect(fixedExhaust);
+const distanceSoundPlaybackSupported = Boolean(parseSupportedSimulationEffect(fixedExhaust));
 const bell = { id: 'bell', point: stack, trigger: 'cue', label: 'Bell',
     sound: { resourceId: 'foxhole.audio.steam-bell', gain: .75, range: 5000 } } satisfies SimulationEffect;
 const loopingBell = { ...bell, loop: true, interval: 1.25, sound: { ...bell.sound, resourceId: 'foxhole.audio.steam-bell-loop', gain: .28 } };
-const loopingBellSupported = supportsSimulationEffect(loopingBell);
+const loopingBellSupported = Boolean(parseSupportedSimulationEffect(loopingBell));
 
 const blackBoltEffects: SimulationEffect[] = [
     { id: 'steam-idle', point: stack, trigger: 'idle', interval: 1.8,
@@ -97,9 +103,15 @@ const blackBoltEffects: SimulationEffect[] = [
 ];
 
 export function foxholeBlackBoltEffects(settings: Readonly<Record<string, unknown>> | undefined): SimulationEffect[] {
-    const exhaustEffect = settings?.['nixie.scene.distanceSoundPlayback'] === true && distanceSoundPlaybackSupported ? fixedExhaust : exhaust;
+    const exhaustEffect = settings?.['nixie.scene.motionSoundMix'] === true && cruiseExhaust ? cruiseExhaust
+        : settings?.['nixie.scene.distanceSoundPlayback'] === true && distanceSoundPlaybackSupported ? fixedExhaust : exhaust;
     const bellEffect = settings?.['nixie.scene.loopedSimulationCue'] === true && loopingBellSupported ? loopingBell : bell;
     return [exhaustEffect, ...blackBoltEffects, bellEffect];
+}
+
+export function foxholeRailRollingEffect(assetId: string, settings: Readonly<Record<string, unknown>> | undefined): SimulationEffect | undefined {
+    if (settings?.['nixie.scene.motionSoundMix'] !== true || !railRolling?.sound || !foxholeRailVehicleBogies[assetId]) return;
+    return assetId === 'trainengine' ? { ...railRolling, sound: { ...railRolling.sound, gain: .5 } } : railRolling;
 }
 const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),

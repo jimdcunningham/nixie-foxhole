@@ -123,6 +123,30 @@ test('the Black Bolt offers a repeating bell alongside its one-shot whistle', ()
     assert.deepEqual(readCues(true), [whistle, expected]);
 });
 
+test('the cruise mix adds wheel sound to the Black Bolt and unpowered cars', () => {
+    const effects = (assetId: string, supported: boolean) => {
+        const entity = request(assetId, []).context.entities[0]!;
+        return parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity, {
+            contractVersion: 1, entities: [entity], settings: { 'nixie.scene.motionSoundMix': supported },
+        })).spatial?.simulationEffects ?? [];
+    };
+    const rolling = { id: 'rail-rolling', point: [0, 0, 12], trigger: 'moving',
+        sound: { resourceId: 'foxhole.audio.rail-rolling', gain: .22, range: 1400,
+            speedGain: { startSpeed: 16, endSpeed: 176, startGain: 0, endGain: 1 } } };
+    let declared;
+    try {
+        declared = parseNixieSimulationEffectsV1([rolling])[0];
+    } catch {
+        // An older host or SDK still renders rail vehicles without the new mix.
+    }
+    const engine = effects('trainengine', true);
+    const wagon = effects('trainhospital', true);
+    assert.deepEqual(wagon.find(effect => effect.id === rolling.id), declared);
+    assert.equal(engine.find(effect => effect.id === rolling.id)?.sound?.gain, declared && .5);
+    assert.equal(Object.hasOwn(engine.find(effect => effect.id === 'exhaust')!.sound!, 'speedGain'), !!declared);
+    assert.equal(effects('trainhospital', false).some(effect => effect.id === rolling.id), false);
+});
+
 test('re-snapping a Black Bolt refreshes an older parked flatbed on its running line', () => {
     const main = track('railtrackspline', 'main');
     main.components.at(-1)!.data.endX = 2200;

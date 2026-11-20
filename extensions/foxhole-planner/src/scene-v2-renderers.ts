@@ -24,7 +24,7 @@ import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { foxholeRailCouplerPlacementPorts } from './rail-coupler-placement.ts';
-import { foxholeBlackBoltEffects, foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailVehicleBogies, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
+import { foxholeBlackBoltEffects, foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailRollingEffect, foxholeRailVehicleBogies, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
 import { FOXHOLE_BOARD_UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
@@ -646,6 +646,7 @@ export function renderFoxholeSceneV2Entity(
         const wheelRoll = foxholeRailWheelRoll[railAssetId];
         const linkages = foxholeRailLinkages[railAssetId];
         const engine = railAssetId === 'trainengine';
+        const rolling = foxholeRailRollingEffect(railAssetId, context.settings);
         const latchEffects = foxholeRailContactPorts(railAssetId).map(({ effect, point }) => ({
             id: effect, point, trigger: 'latch' as const,
             sound: { resourceId: 'foxhole.audio.coupler-clank', gain: .7, range: 3200 },
@@ -654,8 +655,8 @@ export function renderFoxholeSceneV2Entity(
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
             ...(engine ? { modelDistancePoseCycles: foxholeBlackBoltValveGear } : {}),
-            ...(engine || latchEffects.length ? { simulationEffects: [
-                ...(engine ? foxholeBlackBoltEffects(context.settings) : []), ...latchEffects,
+            ...(engine || rolling || latchEffects.length ? { simulationEffects: [
+                ...(engine ? foxholeBlackBoltEffects(context.settings) : []), ...(rolling ? [rolling] : []), ...latchEffects,
             ] } : {}),
             modelLights: context.settings?.['foxhole.structure.modelLights'] === true,
             modelLightOverrides: buildFoxholeModelLightOverrides(plan.spatial?.model === null ? undefined : plan.spatial?.model?.resourceId ?? metadata.model.resourceId,
