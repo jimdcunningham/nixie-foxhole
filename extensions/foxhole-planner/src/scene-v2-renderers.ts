@@ -25,7 +25,7 @@ import { trenchEndRotationTarget } from './trench-end-rotation.ts';
 import { readRailPathSocket } from './rail-path-sockets.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { foxholeRailCouplerPlacementPorts } from './rail-coupler-placement.ts';
-import { foxholeBlackBoltEffects, foxholeBlackBoltValveGear, foxholeRailLinkages, foxholeRailRollingEffect, foxholeRailVehicleBogies, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
+import { foxholeBlackBoltEffects, foxholeRailLinkages, foxholeRailRollingEffect, foxholeRailValveGear, foxholeRailVehicleBogies, foxholeRailWheelRoll } from './rail-vehicle-rigs.ts';
 import { FOXHOLE_BOARD_UNITS_PER_METRE } from './scene-v2-footprints.ts';
 import { findFoxholePowerlineObstructions } from './powerline-clearance.ts';
 import {
@@ -646,6 +646,7 @@ export function renderFoxholeSceneV2Entity(
         const railAssetId = String(asset?.data.assetId ?? '');
         const wheelRoll = foxholeRailWheelRoll[railAssetId];
         const linkages = foxholeRailLinkages[railAssetId];
+        const valveGear = foxholeRailValveGear[railAssetId];
         const engine = railAssetId === 'trainengine';
         const rolling = foxholeRailRollingEffect(railAssetId, context.settings);
         const attachmentSupport = context.settings?.['nixie.scene.simulationModelAttachments'];
@@ -661,7 +662,7 @@ export function renderFoxholeSceneV2Entity(
         plan.spatial = { contractVersion: 1, supplementModel: true, nodes: [], ...plan.spatial,
             ...(wheelRoll ? { modelDistanceRotations: wheelRoll } : {}),
             ...(linkages ? { modelDistanceLinkages: linkages } : {}),
-            ...(engine ? { modelDistancePoseCycles: foxholeBlackBoltValveGear } : {}),
+            ...(valveGear ? { modelDistancePoseCycles: valveGear } : {}),
             ...(engine || rolling || latchEffects.length ? { simulationEffects: [
                 ...(engine ? foxholeBlackBoltEffects(context.settings) : []), ...(rolling ? [rolling] : []), ...latchEffects,
             ] } : {}),

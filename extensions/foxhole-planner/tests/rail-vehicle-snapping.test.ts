@@ -50,6 +50,28 @@ test('rail seats and their owning pivots include the rendered model anchor', () 
     }
 });
 
+test('small-gauge wheels and locomotive drive gear use the same signed travel cycle', () => {
+    const ids = ['smalltrainengine', 'smalltrainmaterial', 'smalltrainresource', 'smalltrainshipping', 'smalltrainliquid'];
+    for (const id of ids) {
+        const entity = request(id, []).context.entities[0]!;
+        const spatial = parseNixieExtensionRenderPlanV1(renderFoxholeSceneV2Entity(entity)).spatial!;
+        const wheels = spatial.modelDistanceRotations!;
+        assert.deepEqual(wheels.map(wheel => wheel.nodeName), ['rail-wheel-f', 'rail-wheel-b']);
+        assert.ok(wheels.every(wheel => wheel.axis === 'z' && wheel.radiansPerUnit === -1 / (32 * .362)));
+        if (id !== 'smalltrainengine') {
+            assert.equal(spatial.modelDistancePoseCycles, undefined);
+            continue;
+        }
+        const [gear] = spatial.modelDistancePoseCycles!;
+        assert.ok(gear);
+        assert.ok(Math.abs(gear.distancePerCycle * wheels[0]!.radiansPerUnit + 2 * Math.PI) < 1e-10);
+        assert.equal(gear.tracks.length, 14);
+        assert.ok(gear.tracks.every(track => track.samples[0]?.every(value => value === 0)));
+        const quarter = gear.tracks.find(track => track.nodeName === 'rail-link-small-coupling-l')!;
+        assert.deepEqual(quarter.samples[quarter.samples.length / 4], [-.25905, .25905, 0]);
+    }
+});
+
 test('only supported upright hooks advertise a tip for their end link', () => {
     const effect = (assetId: string, end: 'front' | 'rear', supported: boolean) => {
         const entity = request(assetId, []).context.entities[0]!;

@@ -1,6 +1,7 @@
 import type { NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { parseNixieSimulationEffectsV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { blackBoltValveGear } from './black-bolt-valve-gear.ts';
+import { smallGaugeValveGear } from './small-gauge-valve-gear.ts';
 
 /** Authored longitudinal pivots and wheel contacts measured from the posed game rigs, in metres. */
 export interface FoxholeBogie {
@@ -42,7 +43,12 @@ export const foxholeRailVehicleBogies: Readonly<Record<string, readonly FoxholeB
 // Rolling radii measured at the treads, outside the hub and inside the flange.
 const driveRate = (radiusMetres: number) => -1 / (32 * radiusMetres);
 const mainWheelRadius = .745;
+const smallGaugeWheelRadius = .362;
 export const foxholeBlackBoltValveGear = blackBoltValveGear(driveRate(mainWheelRadius));
+export const foxholeRailValveGear: Readonly<Record<string, NixieSpatialPlanV1['modelDistancePoseCycles']>> = {
+    trainengine: foxholeBlackBoltValveGear,
+    smalltrainengine: smallGaugeValveGear(driveRate(smallGaugeWheelRadius)),
+};
 // The mouth of the stack measures x=2.56m and z=5.45m in the bound Black Bolt model.
 const stack: [number, number, number] = [82, 0, 175];
 const steam = (opacity: number, endSize: number, lifetime: number) => ({
@@ -117,6 +123,7 @@ const roll = (name: string, radiusMetres: number) => ({
     nodeName: `rail-wheel-${name}`, axis: 'z' as const, radiansPerUnit: driveRate(radiusMetres),
 });
 const standardCarWheels = ['front-1', 'front-2', 'back-1', 'back-2'].map(name => roll(name, .409));
+const smallGaugeWheels = ['f', 'b'].map(name => roll(name, smallGaugeWheelRadius));
 export const foxholeRailWheelRoll: Readonly<Record<string, NixieSpatialPlanV1['modelDistanceRotations']>> = {
     trainengine: ['1', '2', '3'].map(name => roll(name, mainWheelRadius)).concat(roll('back', .555)),
     trainlrartillery: ['front', 'back'].flatMap(bogie => ['01', '02', '03'].map(axle => roll(`${axle}-${bogie}`, .409))),
@@ -127,6 +134,11 @@ export const foxholeRailWheelRoll: Readonly<Record<string, NixieSpatialPlanV1['m
     traincombatcarw: standardCarWheels,
     trainflatbed: standardCarWheels,
     traininfantry: standardCarWheels,
+    smalltrainengine: smallGaugeWheels,
+    smalltrainliquid: smallGaugeWheels,
+    smalltrainmaterial: smallGaugeWheels,
+    smalltrainresource: smallGaugeWheels,
+    smalltrainshipping: smallGaugeWheels,
 };
 
 const engineLinkNodes = (kind: string) => ['l', 'r'].map(side => `rail-link-${kind}-${side}`);
