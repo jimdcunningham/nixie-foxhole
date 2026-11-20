@@ -62,8 +62,8 @@ test('Planner package declares only standalone public dependencies', async () =>
     }
     const sdkVersion = extensionPackage.dependencies?.['@nixiejs/extension-sdk'];
     assert.ok(
-        sdkVersion === '1.3.0'
-        || sdkVersion === 'file:./vendor/nixiejs-extension-sdk-1.3.0.tgz',
+        sdkVersion === '1.3.2'
+        || sdkVersion === 'file:./vendor/nixiejs-extension-sdk-1.3.2.tgz',
         `Planner uses an unexpected SDK version: ${sdkVersion ?? '(missing)'}`,
     );
 });
