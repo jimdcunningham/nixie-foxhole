@@ -23,6 +23,7 @@ from script_bootstrap import append_script_search_paths
 append_script_search_paths(globals().get("__file__"), bpy.data.filepath, os.getcwd())
 
 from render_cache import RenderCache  # noqa: E402
+from export_scene_rail_bogies import NAMES as RAIL_BOGIE_NAMES, split_rail_bogies  # noqa: E402
 from road_native_surface import publish_road_surface  # noqa: E402
 from render_readability import (uses_readability_profile, has_contact_shadow, configure_readability,
     restore_materials, host_floor_bounds, render_contact_shadow, shadow_output_path)  # noqa: E402
@@ -116,6 +117,26 @@ def collection_root_anchor_point(collection):
     for obj in root_objects:
         combined += obj.matrix_world.translation
     return combined / float(len(root_objects))
+
+
+def rail_render_part(document):
+    if document["structure"]["id"] not in {"trainlrartillery", "trainhospital"}:
+        return None
+    key = document["render"]["outputKey"]
+    part = key.removeprefix("components/")
+    return part if key != part and part in ("rail-body", *RAIL_BOGIE_NAMES) else None
+
+
+def isolate_rail_render_part(structure_id, collection, part, ground):
+    meshes = [obj for obj in collection.all_objects if obj.type == "MESH" and not obj.hide_render]
+    output, parts = split_rail_bogies(structure_id, meshes, collection, ground)
+    groups = {obj: parent or name for name, obj, _, parent in parts}
+    visible = [obj for obj in output if groups.get(obj, "rail-body") == part]
+    if not visible:
+        raise RuntimeError(f"{structure_id}: no meshes for {part}")
+    for obj in output:
+        obj.hide_render = obj not in visible
+    bpy.context.view_layer.update()
 
 
 def render_sidecar_paths(output_path: str, structure_id: str, output_key: str, render_data_root=None):
@@ -1552,7 +1573,7 @@ def planned_cache_outputs(args, entry, document, modes):
             output_path = resolve_render_output_path(args.output_dir, asset_type, structure_id,
                                                      document["render"]["outputKey"], document, mode, variant)
             paths.append(output_path)
-            if has_contact_shadow(document, mode):
+            if not rail_render_part(document) and has_contact_shadow(document, mode):
                 paths.append(shadow_output_path(output_path))
             images.append({"path": os.path.abspath(output_path), "structureId": structure_id,
                            "sceneEntry": entry["outputPath"], "sceneVariant": variant, "renderMode": mode,
@@ -1687,6 +1708,12 @@ def main():
                 clip_bounds_mode="shader",
             )
             collection_bounds = collection_world_bounds(collection)
+            rail_part = rail_render_part(scene_document)
+            rail_anchor = None
+            if rail_part:
+                rail_anchor = collection_root_anchor_point(collection)
+                isolate_rail_render_part(structure_id, collection, rail_part, collection_bounds[0].z)
+                collection_bounds = collection_world_bounds(collection)
             if args.debug_bounds:
                 create_bounds_debug_box(collection, collection_bounds[0], collection_bounds[1])
 
@@ -1761,7 +1788,7 @@ def main():
                                 set_webp_lossy(bpy.context.scene.render.image_settings)
                     if readability_state is not None:
                         try:
-                            if has_contact_shadow(scene_document, mode):
+                            if not rail_part and has_contact_shadow(scene_document, mode):
                                 render_contact_shadow(scene_document, collection, collection_bounds, output_path,
                                     render_state, args.pixels_per_meter, host_floor_bounds(scene_document, scene_path, search_roots))
                         finally:
@@ -1803,7 +1830,7 @@ def main():
                         anchor_projection = (
                             project_world_point_to_render(
                                 bpy.context.scene.camera,
-                                collection_root_anchor_point(collection),
+                                rail_anchor if rail_anchor is not None else collection_root_anchor_point(collection),
                                 render_state["resolution"][0],
                                 render_state["resolution"][1],
                             )

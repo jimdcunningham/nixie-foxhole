@@ -407,6 +407,25 @@ public sealed class FoxWatchRenderSceneGenerator
             },
         };
 
+        if (structure.Id is "trainlrartillery" or "trainhospital")
+        {
+            foreach (var part in new[] { "rail-body", "rail-bogie-front", "rail-bogie-rear" })
+            {
+                documents.Add(new FoxWatchGeneratedRenderSceneDocument
+                {
+                    StructureId = structure.Id,
+                    AllowedStructureIds = GetAllowedStructureIds(structure),
+                    CodeName = structure.CodeName,
+                    Name = structure.Name.Fallback,
+                    CategoryId = structure.CategoryId,
+                    RelativeScenePath = Path.Combine(structure.Id, "components", $"{part}.scene.json"),
+                    Document = await CreateDocumentAsync(
+                        structure, CloneBlueprintSceneExtraction(collapsedStructureScene), $"components/{part}",
+                        ["topdown"], includePoseVariants: false, clipFloorOverride: false, cancellationToken),
+                });
+            }
+        }
+
         if (IsFacilityCatwalkBridgeStructure(structure))
         {
             var previewScene = PrepareFacilityCatwalkBridgeScene(
