@@ -91,6 +91,11 @@ export const FOXHOLE_STRUCTURE_RENDER_LANES = {
         laneOrder: 1_000,
         label: 'Hitbox authoring overlays',
     },
+    railBogie: {
+        laneId: 'foxhole:structure:rail-bogie',
+        laneOrder: 79,
+        label: 'Rail bogies beneath rolling stock',
+    },
     vehicle: {
         laneId: 'foxhole:structure:vehicle',
         laneOrder: 80,
@@ -292,6 +297,7 @@ export const FOXHOLE_MODIFICATION_VARIANT_RENDER_PRIORITY_DEFAULT = 20;
  * - lane 10: stairs / one-way
  * - lane 20: rails; lane 35: ground pipes
  * - lane 75: power lines; lane 80: vehicles above buildings
+ * - lane 79: rail bogies beneath vehicle bodies
  * - lane 120: overhead walkways / pipes; lane 130: poles
  * - lane 160: cranes; lane 161: Sky Hauler
  * - lane 100: trench barbed wire / sandbag berms (above structure visuals)
@@ -312,6 +318,7 @@ export const FOXHOLE_BOARD_RENDER_LANE_STACK = [
     FOXHOLE_LEGACY_CONNECTOR_RENDER_LANE,
     FOXHOLE_SPLINE_CONNECTOR_RENDER_LANE,
     FOXHOLE_STRUCTURE_RENDER_LANES.roof,
+    FOXHOLE_STRUCTURE_RENDER_LANES.railBogie,
     FOXHOLE_STRUCTURE_RENDER_LANES.vehicle,
     FOXHOLE_STRUCTURE_RENDER_LANES.base,
     FOXHOLE_STRUCTURE_RENDER_LANES.corners,

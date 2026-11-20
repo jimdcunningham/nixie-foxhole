@@ -441,10 +441,13 @@ function renderFoxholePlanarRailParts(
     if (parts.some(part => !metadata.renderLayers[part.nodeName])) {
         return null;
     }
-    const lane = foxholeRenderLane(resolveFoxholeAssetHeightLane(assetId)
+    const bodyLane = foxholeRenderLane(resolveFoxholeAssetHeightLane(assetId)
         ?? resolveFoxholeStructurePrimaryRenderLane(assetId, metadata.isRailVehicle, metadata.isVehicle));
+    const bogieLane = foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.railBogie);
     const units = FOXHOLE_BOARD_UNITS_PER_METRE;
     return parts.map(({ nodeName, pivot }) => {
+        const isBogie = nodeName !== 'rail-body';
+        const lane = isBogie ? bogieLane : bodyLane;
         const layer = metadata.renderLayers[nodeName]!;
         const transform = pose?.find(node => node.nodeName === nodeName);
         const rotation = transform ? -transform.rotation[1] : 0;
@@ -454,7 +457,7 @@ function renderFoxholePlanarRailParts(
         const posedX = pivotX + (transform?.translation[0] ?? 0) * units;
         const posedY = (transform?.translation[2] ?? 0) * units;
         const sprite = { kind: 'sprite' as const, resourceId: layer.resourceId, anchorX: .5, anchorY: .5, width: layer.width, height: layer.height };
-        if (animateBogies && planarModelMotionSupported && nodeName !== 'rail-body') {
+        if (animateBogies && planarModelMotionSupported && isBogie) {
             const presentation = { contractVersion: 1 as const,
                 simulationModelNode: { nodeName, unitsPerMetre: units, restX: pivotX, restY: 0 } };
             return { ...lane, id: nodeName, kind: 'group', x: posedX, y: posedY, rotation, presentation,

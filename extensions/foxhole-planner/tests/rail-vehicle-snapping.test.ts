@@ -7,6 +7,7 @@ import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimu
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
 import { foxholeRailVehicleBogies } from '../src/rail-vehicle-rigs.ts';
+import { FOXHOLE_HEIGHT_RENDER_LANES, FOXHOLE_STRUCTURE_RENDER_LANES, foxholeRenderLane, resolveFoxholeAssetHeightLane } from '../src/render-lanes.ts';
 import { sampleFoxholeSceneV2Connector } from '../src/scene-v2-connector-path.ts';
 import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transforms.ts';
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
@@ -143,6 +144,15 @@ test('split top-down train cars keep the body fixed and steer each bogie on a cu
         assert.equal(plan.root.kind, 'group');
         const nodes = plan.root.children.filter(node => parts.some(part => part.nodeName === node.id));
         assert.deepEqual(nodes.map(node => node.id), ['rail-bogie-front', 'rail-bogie-rear', 'rail-body']);
+        const body = nodes[2]!;
+        const bogieLane = foxholeRenderLane(FOXHOLE_STRUCTURE_RENDER_LANES.railBogie);
+        for (const bogie of nodes.slice(0, 2)) {
+            assert.deepEqual({ laneId: bogie.laneId, laneOrder: bogie.laneOrder }, bogieLane);
+        }
+        assert.equal(body.laneId, FOXHOLE_STRUCTURE_RENDER_LANES.vehicle.laneId);
+        assert.ok(bogieLane.laneOrder > FOXHOLE_HEIGHT_RENDER_LANES.rail.laneOrder);
+        assert.ok(bogieLane.laneOrder < body.laneOrder!);
+        assert.ok(bogieLane.laneOrder < resolveFoxholeAssetHeightLane('trainengine')!.laneOrder);
         assert.equal(nodes[2]!.rotation, 0);
         assert.equal(nodes[2]!.x, 8);
         assert.ok(Math.abs(nodes[0]!.rotation!) > 0.03);
@@ -154,6 +164,7 @@ test('split top-down train cars keep the body fixed and steer each bogie on a cu
             { ...context, settings: { 'nixie.scene.planarModelMotion': true } })).root.children;
         for (const bogie of foxholeRailVehicleBogies[assetId]!) {
             const group = animated.find(node => node.id === bogie.nodeName)!;
+            assert.deepEqual({ laneId: group.laneId, laneOrder: group.laneOrder }, bogieLane);
             const presentation = { contractVersion: 1 as const,
                 simulationModelNode: { nodeName: bogie.nodeName, unitsPerMetre: 32, restX: bogie.pivot * 32, restY: 0 } };
             try {
