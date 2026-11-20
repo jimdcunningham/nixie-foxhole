@@ -84,7 +84,9 @@ function railVehicleCollider(assetId: string) {
 }
 
 const railVehicleMass = (assetId: string) => assetId === 'trainengine' ? 72_000
-    : assetId === 'trainlrartillery' ? 135_000 : 32_000;
+    : assetId === 'trainlrartillery' ? 135_000
+        : assetId === 'smalltrainengine' ? 15_000
+            : assetId.startsWith('smalltrain') ? 50_000 : 32_000;
 const data = (entity: Entity, id: string, owner = 'nixie.foxhole-planner') => entity.components.find(component =>
     component.ownerId === owner && component.componentId === id && component.definitionAvailable)?.data;
 
@@ -394,13 +396,15 @@ function couplerPoint(chassis: RailChassis, point: ReturnType<typeof railCoupler
 }
 
 const engineId = 'trainengine';
+const smallEngineId = 'smalltrainengine';
 const cannonId = 'trainlrartillery';
 const drawbarLength = .5 * UNITS_PER_METRE;
 const drawbarSlack = .3 * UNITS_PER_METRE;
 
-function blackBoltDrive(leader: string, massKg: number, startDistance: number, loop: boolean, passive = false) {
+function railDrive(leader: string, massKg: number, startDistance: number, loop: boolean, passive = false, smallGauge = false) {
     // Yard simulation tuning. Higher brake force keeps the stopping distance at top speed comparable.
-    return { contractVersion: 1 as const, speed: 8 * UNITS_PER_METRE,
+    // The small locomotive's movement blueprint caps its speed at 4 m/s.
+    return { contractVersion: 1 as const, speed: (smallGauge ? 4 : 8) * UNITS_PER_METRE,
         drive: { leader, acceleration: 195_000 / massKg * UNITS_PER_METRE,
             braking: 400_000 / massKg * UNITS_PER_METRE, manual: { startDistance, loop, ...(passive ? { passive } : {}) } } };
 }
@@ -637,7 +641,8 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
             facing: span.step * location.step };
     };
     const origin = locate(leader)!.station;
-    const candidates = [leader, ...vehicles.filter(vehicle => vehicle !== leader && vehicle.assetId !== engineId)].flatMap(vehicle => {
+    const candidates = [leader, ...vehicles.filter(vehicle => vehicle !== leader && vehicle.assetId !== engineId
+        && vehicle.assetId !== smallEngineId)].flatMap(vehicle => {
         const parked = locate(vehicle);
         if (!parked) return [];
         const distance = parked.station - origin;
@@ -711,7 +716,8 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
     }
     if (samples[0]!.length < 2) return;
     const mass = members.reduce((total, member) => total + railVehicleMass(member.assetId), 0);
-    const drive = blackBoltDrive(leader.entity.entityId, mass, 0 - samples[0]![0]!.distance, loop, options?.passive);
+    const drive = railDrive(leader.entity.entityId, mass, 0 - samples[0]![0]!.distance, loop, options?.passive,
+        vehicleGauge.get(leader.assetId) === 'small');
     const encoder = new TextEncoder();
     const before = Math.max(...members.map(member => member.offset)) + 192;
     const after = -Math.min(...members.map(member => member.offset)) + 192;
@@ -968,7 +974,7 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
         indices = indices.slice(startIndex, startIndex + NIXIE_SIMULATION_PATH_MAX_FRAMES);
     }
     const initialDistance = pairs[indices[0]!]!.engine.distance;
-    const common = blackBoltDrive(engineEntityId, 72_000 + 135_000, 0 - initialDistance, loop);
+    const common = railDrive(engineEntityId, 72_000 + 135_000, 0 - initialDistance, loop);
     const pack = (vehicle: 'engine' | 'cannon', peer: string) => {
         const frames = indices.map(index => pairs[index]![vehicle]);
         const nodes = rest[vehicle].modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))
@@ -1048,6 +1054,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
+    const poweredAssetId = gauge === 'small' ? smallEngineId : engineId;
     const parkedPlan = (vehicle: ParkedRailVehicle | undefined) =>
         vehicle && buildTrainDrive(vehicle, [], rails, vehicle.entity.entityId, { passive: true })?.[0];
     const attachTrain = (location?: RailLocation, step = 1, options?: { requireAdditionalCars?: boolean; portOwnerId?: string; }) => {
@@ -1064,8 +1071,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
             return candidate && railVehicleAt(candidate, rails);
         })
             .filter((vehicle): vehicle is ParkedRailVehicle => !!vehicle);
-        const lead = vehicles.filter(vehicle => vehicle.assetId === engineId);
-        const leaders = assetId === engineId ? lead.filter(vehicle => vehicle.entity.entityId === subject.entityId) : lead;
+        const lead = vehicles.filter(vehicle => vehicle.assetId === poweredAssetId);
+        const leaders = assetId === poweredAssetId ? lead.filter(vehicle => vehicle.entity.entityId === subject.entityId) : lead;
         let train: ReturnType<typeof buildTrainDrive>;
         if (location) for (const leader of leaders) {
             train = buildTrainDrive(leader, vehicles, rails, subject.entityId, options);
@@ -1101,8 +1108,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         }
         const encoder = new TextEncoder();
         const detachedIds = new Set(detached.map(entity => entity.entityId));
-        const outdated = assetId === engineId && own ? vehicles.filter(vehicle => {
-            if (vehicle.assetId === engineId || members.has(vehicle.entity.entityId) || detachedIds.has(vehicle.entity.entityId)
+        const outdated = assetId === poweredAssetId && own ? vehicles.filter(vehicle => {
+            if (vehicle.assetId === poweredAssetId || members.has(vehicle.entity.entityId) || detachedIds.has(vehicle.entity.entityId)
                 || !own.path.sources.includes(vehicle.location.rail.entityId)) return false;
             const saved = data(vehicle.entity, ATTACHMENT_COMPONENT);
             const path = saved?.[NIXIE_SIMULATION_PATH_PROPERTY] as unknown as NixieSimulationPathV1 | undefined;
@@ -1191,7 +1198,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
         const step = saved.reversed ? -1 : 1;
-        const rebuild = request.followPhase === 'commit' && (assetId === engineId || !previousLeader || previous?.drive?.manual?.passive);
+        const rebuild = request.followPhase === 'commit' && (assetId === poweredAssetId || !previousLeader || previous?.drive?.manual?.passive);
         const { local: point, angle } = fitBody(location, step, rebuild ? undefined : readRailRoute(saved.route));
         const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
         const transaction = rebuild ? attachTrain(location, step) : undefined;

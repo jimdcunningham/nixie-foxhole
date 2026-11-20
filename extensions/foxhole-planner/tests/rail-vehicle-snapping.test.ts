@@ -16,6 +16,7 @@ import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 
 const ownerId = 'nixie.foxhole-planner';
+
 const component = (componentId: string, data: NixieComponentEntitySnapshotV1['components'][number]['data'], owner = ownerId) =>
     ({ ownerId: owner, componentId, version: 1, definitionAvailable: true, data });
 
@@ -54,6 +55,35 @@ test('the live socket setting gates a track-spline finalizer for each rail vehic
         assert.equal(finalizer.enabledSettingId, 'foxhole.viewport.socketSnapping');
         assert.equal(finalizer.candidateQuery.match.componentId, id.startsWith('train') ? 'asset' : 'spline-connector');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
+    }
+});
+
+test('a small locomotive authors a shared drive for every small-gauge car', () => {
+    const line = track('smallrailtrackspline', 'small-line');
+    Object.assign(line.components.at(-1)!.data, { endX: 2000, maxLength: 2100 });
+    const proposal = request('smalltrainengine', [line]);
+    proposal.interaction = 'planar-translation';
+    let station = 1000;
+    Object.assign(proposal.transform, { x: station, y: 0, rotation: 0 });
+    proposal.context.entities[0]!.components.push(component('rail-attachment', { rail: 'small-line', station, reversed: false }));
+    let rear = Math.abs(railCouplers(assets.smalltrainengine!, 'small').find(port => port.point.x < 0)!.point.x);
+    for (const id of ['smalltrainmaterial', 'smalltrainresource', 'smalltrainshipping', 'smalltrainliquid']) {
+        const sockets = railCouplers(assets[id]!, 'small');
+        station -= rear + sockets.find(port => port.point.x > 0)!.point.x + 1;
+        rear = Math.abs(sockets.find(port => port.point.x < 0)!.point.x);
+        proposal.context.entities.push({ entityId: id, revision: 1, components: [
+            component('asset', { catalogId: 'foxhole.structures', assetId: id }),
+            component('rail-attachment', { rail: 'small-line', station, reversed: false }),
+            component('transform', { x: station, y: 0, rotation: 0 }, 'nixie.core'),
+        ] });
+    }
+    const result = finalizeFoxholeRailVehicleSnap(proposal);
+    const paths = result.transaction?.operations.flatMap(operation => operation.op === 'patch' && operation.set?.simulationPath
+        ? [parseNixieSimulationPathV1(operation.set.simulationPath)] : []);
+    assert.equal(paths?.length, 5);
+    for (const path of paths!) {
+        assert.equal(path.drive?.leader, 'vehicle');
+        assert.ok(path.frames.at(-1)!.position[0] > path.frames[0]!.position[0] + 100);
     }
 });
 

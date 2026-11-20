@@ -418,7 +418,7 @@ export function inspectFoxholeSceneV2Structure(request: NixieInspectorRequestV1)
             frame: resolveFoxholeSceneV2HitboxFrame(request.subject, String(assetId), asset),
             defaults: resolveFoxholeDefaultHitboxPolygons(asset, wallSelections.map(selection =>
                 asset.modifications[selection.slotId]!.variants[selection.variantId]!)).slice(0, 128) } } : {}),
-        ...(result.get('cargo')?.some(field => field.preview !== undefined) ? { previewControls: [{
+        ...(data('cargo') && result.get('cargo')?.some(field => field.preview !== undefined) ? { previewControls: [{
             componentId: 'cargo', title: 'Offset', resetLabel: 'Reset Offset Overrides', fields: [
                 { propertyId: 'cargoOffsetX', label: 'X', exportKey: 'offsetX' },
                 { propertyId: 'cargoOffsetY', label: 'Y', exportKey: 'offsetY' },

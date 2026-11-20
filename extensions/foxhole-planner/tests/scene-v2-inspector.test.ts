@@ -39,6 +39,18 @@ test('all published assets return bounded Inspector choices validated against th
     }
 });
 
+test('an older small locomotive without cargo can still expose drive controls', () => {
+    const subject = { entityId: 'small-locomotive', revision: 1, components: [
+        { ownerId: manifest.id, componentId: 'asset', version: 1, definitionAvailable: true,
+            data: { catalogId: 'foxhole.structures', assetId: 'smalltrainengine' } },
+    ] };
+    const request = projectNixieInspectorSubjectV1(subject, manifest.id, provider);
+    const result = inspectFoxholeSceneV2Structure(request);
+    const validated = validateNixieInspectorResultV1(result, provider, manifest.contributes.components!.components, request);
+    assert.equal(validated.layout?.tabs.find(tab => tab.id === 'controls')?.simulationControls?.guidedVehicle, true);
+    assert.equal(validated.layout?.previewControls, undefined);
+});
+
 test('the Mass Production Factory keeps every recipe within the Inspector payload budget', () => {
     const orders = inspect('massproduction').components.find(component => component.componentId === 'production-order')!;
     const options = orders.fields.find(field => field.path[0] === 'orders')!.choices!.options;
