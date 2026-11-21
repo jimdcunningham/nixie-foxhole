@@ -81,6 +81,10 @@ export class AssetDirectory {
       throw new Error('Linked entries are not inspected.');
     return canonical;
   }
+  label(relative: string, directory: boolean): string {
+    return this.aliases.get(relative) ?? readableName(path.posix.basename(relative), directory);
+  }
+
   async list(relative: string): Promise<AssetEntry[]> {
     const directory = await this.resolve(relative);
     const entries = await readdir(directory, { withFileTypes: true });
@@ -100,8 +104,7 @@ export class AssetDirectory {
         return {
           path: logical,
           name: entry.name,
-          label:
-            this.aliases.get(logical) ?? readableName(entry.name, directory),
+          label: this.label(logical, directory),
           directory,
           kind: assetKind(entry.name),
         };
@@ -123,7 +126,7 @@ export class AssetDirectory {
     return {
       path: relative,
       name,
-      label: this.aliases.get(relative) ?? readableName(name, false),
+      label: this.label(relative, false),
       directory: false,
       kind: assetKind(name),
       absolutePath,

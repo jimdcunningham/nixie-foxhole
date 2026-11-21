@@ -131,6 +131,21 @@ async function monitorOnce({
     let activeBranch = null;
     let remoteBuildId = null;
     let failureCheckpoint = 'FoxWatch Monitor Failed';
+    async function prepareCatalog() {
+        failureCheckpoint = 'FoxWatch Catalog Preparation Failed';
+        const publicationConfig = path.join(paths.localRoot, 'asset-publication.json');
+        if (await pathExists(publicationConfig)) {
+            logger.info('Preparing Planner catalog for review.');
+            await runAndTee(process.execPath, [runnerScriptPath, 'assets-prepare', '--config', publicationConfig], {
+                cwd: repoRoot, logger, label: 'FoxWatch catalog preparation',
+            });
+        }
+        delete state.pendingCatalog;
+        branchState.lastError = null;
+        state.branches[activeBranch] = branchState;
+        await writeJsonAtomic(paths.statePath, state);
+    }
+
     try {
         config = await loadMonitorConfig(paths);
         secrets = await loadMonitorSecrets(paths);
@@ -213,6 +228,10 @@ async function monitorOnce({
         }
 
         if (!shouldRunFoxWatch(branchState, remoteBuildId, { forceRefresh })) {
+            if (state.pendingCatalog?.branch === activeBranch && state.pendingCatalog.buildId === remoteBuildId) {
+                await prepareCatalog();
+                return;
+            }
             logger.info(`FoxWatch already completed successfully for ${activeBranch} BuildID ${remoteBuildId}; no work required.`);
             return;
         }
@@ -244,6 +263,7 @@ async function monitorOnce({
             logger,
         });
         branchState.pipelineStartedAt = new Date().toISOString();
+        delete state.pendingCatalog;
         state.branches[activeBranch] = branchState;
         await writeJsonAtomic(paths.statePath, state);
 
@@ -270,8 +290,10 @@ async function monitorOnce({
         branchState.lastError = null;
         branchState.deferredAt = null;
         branchState.deferredReason = null;
+        state.pendingCatalog = { branch: activeBranch, buildId: remoteBuildId };
         state.branches[activeBranch] = branchState;
         await writeJsonAtomic(paths.statePath, state);
+        await prepareCatalog();
         await sendCheckpointNotification({
             nixieWebhookUrl,
             checkpoint: 'FoxWatch Refresh Finished',

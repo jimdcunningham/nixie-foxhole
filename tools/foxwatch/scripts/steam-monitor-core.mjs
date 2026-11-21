@@ -213,6 +213,9 @@ export function createMonitorState(existing = null) {
             ? { ...existing.branches }
             : {},
         lastPollAt: existing?.lastPollAt ?? null,
+        ...(existing?.schemaVersion === FOXWATCH_MONITOR_SCHEMA_VERSION && existing.pendingCatalog
+            ? { pendingCatalog: existing.pendingCatalog }
+            : {}),
     };
 }
 

@@ -13,9 +13,12 @@ import type {
   AssetEntry,
   AssetRoot,
   ReviewSummary,
+  AssetComparison,
+  CatalogReview,
 } from '../shared/contracts';
 import Icon from './Icon.vue';
 import ToolPanel from './ToolPanel.vue';
+import ComparisonContent from './ComparisonContent.vue';
 import type { AppView, RunStatus } from '../shared/monitor';
 const view = ref<AppView>('inspector');
 const runStatus = shallowRef<RunStatus | null>(null);
@@ -31,10 +34,18 @@ const fileManagerName = window.foxwatch.fileManagerName;
 
 interface TreeRow extends AssetEntry {
   depth: number;
+  catalog?: boolean;
+  onDisk?: boolean;
 }
 const root = shallowRef<AssetRoot | null>(null);
 const children = ref(new Map<string, AssetEntry[]>());
 const expanded = ref(new Set<string>());
+const catalogOnly = ref(false);
+const catalog = shallowRef<CatalogReview | null>(null);
+const catalogPair = shallowRef<AssetComparison | null>(null);
+const catalogLoading = ref(false);
+const showCatalog = computed(() => !!root.value?.managed && catalogOnly.value);
+let catalogRequest = 0;
 const pending = ref(new Set<string>());
 const details = shallowRef<AssetDetails | null>(null);
 const selected = ref('');
@@ -55,6 +66,7 @@ const changeCount = computed(
 async function runReview(action: 'approve' | 'compare' | 'discard') {
   const current = root.value;
   if (!current || reviewBusy.value) return;
+  if (current.managed) { view.value = 'inspector'; catalogOnly.value = true; return; }
   reviewBusy.value = true;
   reviewProgress.value =
     action === 'approve' ? 'Saving baseline…' : action === 'discard' ? 'Preparing to return to baseline…' : 'Comparing assets…';
@@ -89,12 +101,51 @@ let listingVersion = 0;
 let observer: ResizeObserver | undefined;
 const unsubscribe: Array<() => void> = [];
 
+const parentPath = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf('/')));
+const catalogChildren = computed(() => {
+  const parents = new Map<string, Map<string, AssetEntry>>();
+  const add = (entry: AssetEntry) => {
+    const parent = parentPath(entry.path);
+    let children = parents.get(parent);
+    if (!children) parents.set(parent, children = new Map());
+    children.set(entry.path, entry);
+  };
+  for (const change of catalog.value?.changes ?? []) {
+    add(change);
+    for (let folder = parentPath(change.path); folder; folder = parentPath(folder)) {
+      if (parents.get(parentPath(folder))?.has(folder)) break;
+      const name = folder.split('/').at(-1)!;
+      add({ path: folder, name, label: catalog.value?.folderLabels[folder] ?? name, directory: true, kind: 'file' });
+    }
+  }
+  return parents;
+});
+
+function folderOnDisk(path: string) {
+  return children.value.get(parentPath(path))?.some(row => row.path === path && row.directory) ?? false;
+}
+
 const rows = computed(() => {
   const result: TreeRow[] = [];
   const visit = (parent: string, depth: number) => {
-    for (const entry of children.value.get(parent) ?? []) {
+    const diskEntries = showCatalog.value ? [] : children.value.get(parent) ?? [];
+    const checkpointEntries = root.value?.managed ? catalogChildren.value.get(parent) : undefined;
+    const merged = new Map<string, TreeRow>();
+    for (const entry of diskEntries) {
       if (changesOnly.value && !entry.change) continue;
-      result.push({ ...entry, depth });
+      merged.set(entry.path, { ...entry, depth, onDisk: true });
+    }
+    if (checkpointEntries) {
+      for (const entry of checkpointEntries.values()) {
+        const file = merged.get(entry.path);
+        merged.set(entry.path, { ...(file ?? entry), depth, change: entry.change, catalog: !entry.directory });
+      }
+    }
+    // Use the same folder-first, natural filename order as the filesystem browser.
+    const entries = checkpointEntries ? [...merged.values()].sort((a, b) =>
+      Number(b.directory) - Number(a.directory) || a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })) : merged.values();
+    for (const entry of entries) {
+      result.push(entry);
       if (entry.directory && expanded.value.has(entry.path))
         visit(entry.path, depth + 1);
     }
@@ -187,6 +238,9 @@ async function setRoot(value: AssetRoot) {
   inspecting.value = false;
   scrollTop.value = 0;
   if (tree.value) tree.value.scrollTop = 0;
+  catalog.value = null;
+  catalogOnly.value = !!value.managed;
+  if (value.managed) { void loadCatalog(); return; }
   await load('');
   const summary = await window.foxwatch.review(value.id, 'summary');
   if (root.value?.id === value.id) reviewSummary.value = summary;
@@ -203,13 +257,29 @@ async function activate(row: TreeRow) {
   focused.value = row.path;
   error.value = '';
   if (row.directory) {
-    if (expanded.value.has(row.path)) expanded.value.delete(row.path);
-    else {
+    if (!expanded.value.delete(row.path)) {
       expanded.value.add(row.path);
-      await load(row.path);
+      if (!showCatalog.value && row.onDisk) await load(row.path);
     }
     return;
   }
+  if (row.catalog && catalog.value) {
+    const version = ++selectionVersion;
+    selected.value = row.path;
+    inspecting.value = true;
+    details.value = null;
+    catalogPair.value = null;
+    try {
+      const pair = await window.foxwatch.catalogPreview(catalog.value.id, row.path);
+      if (version === selectionVersion) catalogPair.value = pair;
+    } catch (cause) {
+      if (version === selectionVersion) error.value = message(cause);
+    } finally {
+      if (version === selectionVersion) inspecting.value = false;
+    }
+    return;
+  }
+  catalogPair.value = null;
   const current = root.value;
   if (!current) return;
   const version = ++selectionVersion;
@@ -225,8 +295,32 @@ async function activate(row: TreeRow) {
     if (version === selectionVersion) inspecting.value = false;
   }
 }
+async function loadCatalog() {
+  const request = ++catalogRequest;
+  const rootId = root.value?.id;
+  catalogLoading.value = true;
+  error.value = '';
+  try {
+    const next = await window.foxwatch.catalogReview();
+    if (request !== catalogRequest || rootId !== root.value?.id) return;
+    if (catalog.value?.sha256 !== next?.sha256 || catalog.value?.version !== next?.version) {
+      selectionVersion++;
+      selected.value = '';
+      focused.value = '';
+      catalogPair.value = null;
+      inspecting.value = false;
+    }
+    catalog.value = next;
+  } catch (cause) {
+    if (request === catalogRequest && rootId === root.value?.id) error.value = message(cause);
+  } finally {
+    if (request === catalogRequest) catalogLoading.value = false;
+  }
+}
 async function refresh(recompare = true) {
   if (!root.value) return;
+  if (showCatalog.value) return loadCatalog();
+  if (root.value.managed) void loadCatalog();
   const current = root.value.id;
   if (recompare && reviewSummary.value?.approvedAt) {
     await runReview('compare');
@@ -245,8 +339,8 @@ async function refresh(recompare = true) {
   if (root.value?.id !== current) return;
   for (const folder of open) {
     if (root.value?.id !== current) return;
-    if (rows.value.some((row) => row.path === folder)) await load(folder, true);
-    else expanded.value.delete(folder);
+    if (folderOnDisk(folder)) await load(folder, true);
+    else if (!catalogChildren.value.get(parentPath(folder))?.has(folder)) expanded.value.delete(folder);
   }
   const row = rows.value.find((row) => row.path === selected.value);
   if (row) await activate(row);
@@ -267,7 +361,8 @@ async function reveal(path: string) {
 }
 async function showContext(path: string) {
   if (
-    !root.value ||
+    !root.value || showCatalog.value ||
+    rows.value.some(row => row.path === path && row.onDisk === undefined && root.value?.managed) ||
     rows.value.some(
       (row) => row.path === path && row.fromBaseline && row.directory,
     )
@@ -290,6 +385,33 @@ function focusRow(path: string) {
   else if (top + rowHeight > tree.value.scrollTop + tree.value.clientHeight)
     tree.value.scrollTop = top + rowHeight - tree.value.clientHeight;
 }
+watch(showCatalog, async active => {
+  if (!root.value?.managed) return;
+  scrollTop.value = 0;
+  if (tree.value) tree.value.scrollTop = 0;
+  if (active) {
+    if (!catalog.value?.changes.some(row => row.path === selected.value)) {
+      selectionVersion++;
+      selected.value = '';
+      focused.value = '';
+      details.value = null;
+      catalogPair.value = null;
+      inspecting.value = false;
+    }
+    return;
+  }
+  await load('');
+  const folders = [...expanded.value].sort((a, b) => a.split('/').length - b.split('/').length);
+  for (const folder of folders) {
+    if (showCatalog.value || !root.value?.managed) return;
+    if (folderOnDisk(folder)) await load(folder);
+  }
+});
+watch(() => runStatus.value?.finishedAt, (finished, previous) => {
+  if (!finished || finished === previous || !root.value?.managed) return;
+  if (showCatalog.value) void loadCatalog();
+  else void refresh(false);
+});
 watch(changesOnly, () => {
   scrollTop.value = 0;
   if (tree.value) tree.value.scrollTop = 0;
@@ -449,7 +571,12 @@ onBeforeUnmount(() => {
         >
           <Icon name="folder" /><strong>{{ root.name }}</strong>
         </button>
-        <div v-if="root" class="review-controls">
+        <div v-if="root?.managed" class="review-controls" aria-label="Asset Browser Mode">
+          <button :aria-pressed="showCatalog" @click="catalogOnly = true">Changes Only</button>
+          <button :aria-pressed="!showCatalog" @click="catalogOnly = false">All Files</button>
+          <span v-if="catalog" :title="catalog.sha256">vs. Planner {{ catalog.version }}</span>
+        </div>
+        <div v-if="root && !root.managed" class="review-controls">
           <button
             :disabled="!reviewSummary?.approvedAt || reviewBusy"
             :aria-pressed="changesOnly"
@@ -482,7 +609,7 @@ onBeforeUnmount(() => {
             }}</span
           >
         </div>
-        <div v-if="root" class="discard-controls">
+        <div v-if="root && !root.managed" class="discard-controls">
           <button :disabled="!reviewSummary?.approvedAt || reviewBusy || !!runStatus?.running" @click="runReview('discard')">Return to Baseline…</button>
         </div>
         <div
@@ -577,7 +704,11 @@ onBeforeUnmount(() => {
               />
             </div>
           </div>
-          <p v-if="pending.has('')" class="tree-message">Loading assets…</p>
+          <p v-if="showCatalog && !rows.length" class="tree-message">
+            {{ catalogLoading ? 'Loading catalog changes…' : !catalog
+              ? 'Changes appear when a build finishes preparing.' : 'No Asset Changes' }}
+          </p>
+          <p v-else-if="pending.has('')" class="tree-message">Loading assets…</p>
           <p v-else-if="root && !rows.length" class="tree-message">
             {{ changesOnly ? 'No changed assets.' : 'This folder is empty.' }}
           </p>
@@ -605,11 +736,11 @@ onBeforeUnmount(() => {
       <section class="inspector" aria-label="Asset Inspector">
         <header class="inspector-header">
           <div v-if="selected" class="file-heading">
-            <Icon :name="details?.kind ?? 'file'" />
+            <Icon :name="details?.kind ?? (catalogPair?.after ?? catalogPair?.before)?.asset.kind ?? 'file'" />
             <h1>{{ selectedLabel }}</h1>
           </div>
           <span v-else class="muted">Asset Inspector</span>
-          <div v-if="selected" class="inspector-mode" role="group" aria-label="Inspector Mode">
+          <div v-if="selected && !root?.managed" class="inspector-mode" role="group" aria-label="Inspector Mode">
             <button :aria-pressed="!compareAsset" @click="compareAsset = false">Preview</button>
             <button :aria-pressed="compareAsset" :disabled="!reviewSummary?.approvedAt" :title="reviewSummary?.approvedAt ? 'Compare with the approved local baseline' : 'Approve a baseline from the Review menu first'" @click="compareAsset = true">Compare</button>
           </div>
@@ -621,7 +752,16 @@ onBeforeUnmount(() => {
             <Icon name="close" :size="14" />
           </button>
         </div>
-        <div v-if="details" class="file-inspector">
+        <div v-if="catalogPair" class="file-inspector">
+          <ComparisonContent :key="selected" :pair="catalogPair" />
+        </div>
+        <div v-else-if="showCatalog && !selected" class="empty-inspector">
+          <Icon name="file" :size="44" />
+          <h1>Catalog Changes</h1>
+          <p v-if="catalog">Select a change to compare the prepared build with Planner {{ catalog.version }}.</p>
+          <p v-else>FoxWatch prepares the catalog when a build finishes.</p>
+        </div>
+        <div v-else-if="details" class="file-inspector">
           <div class="breadcrumbs" :title="details.path">
             {{ root?.name }}<span>/</span
             >{{ details.path.split('/').slice(0, -1).join(' / ')

@@ -95,16 +95,16 @@ onBeforeUnmount(() => { controller.abort(); observer?.disconnect(); urls.forEach
     <p v-if="mode === 'difference'" class="comparison-note">{{ diffBusy ? 'Computing pixel differences…' : diffInfo }} · Pink marks changed pixels. Transparent RGB is ignored.</p>
     <div class="comparison-sides" :class="{'combined-image':mode !== 'side'}">
       <section v-for="index in mode === 'side' ? [0,1] : [0]" :key="index" :data-side="mode === 'side' ? (index ? 'working' : 'approved') : 'combined'">
-        <header v-if="mode === 'side'">{{ index ? 'B · Working' : 'A · Approved' }}<span>{{ dimension(index) }}</span></header>
-        <header v-else>A · Approved {{ dimension(0) }}<span>B · Working {{ dimension(1) }}</span></header>
+        <header v-if="mode === 'side'">{{ index ? 'B · ' + (pair.labels?.after ?? 'Working') : 'A · ' + (pair.labels?.before ?? 'Approved') }}<span>{{ dimension(index) }}</span></header>
+        <header v-else>A · {{ pair.labels?.before ?? 'Approved' }} {{ dimension(0) }}<span>B · {{ pair.labels?.after ?? 'Working' }} {{ dimension(1) }}</span></header>
         <div class="comparison-image-viewport" @wheel.prevent="setZoom(zoom*Math.exp(-$event.deltaY*.001))" @pointerdown="down" @pointermove="move" @pointerup="drag = null" @lostpointercapture="drag = null" @pointercancel="drag = null" @dblclick="fit">
           <p v-if="mode === 'side' && !sides[index]" class="comparison-empty">{{ index ? 'Deleted from working files' : 'Not in the approved baseline' }}</p>
           <div v-else class="comparison-image-space" :style="transform">
-            <template v-if="mode === 'side'"><div class="comparison-image-frame" :class="background" :style="{width:`${sides[index]!.width*zoom}px`,height:`${sides[index]!.height*zoom}px`}"><img :src="sides[index]!.url" :alt="index ? 'Working image' : 'Approved image'" draggable="false"></div></template>
+            <template v-if="mode === 'side'"><div class="comparison-image-frame" :class="background" :style="{width:`${sides[index]!.width*zoom}px`,height:`${sides[index]!.height*zoom}px`}"><img :src="sides[index]!.url" :alt="index ? (pair.labels?.after ?? 'Working') + ' image' : (pair.labels?.before ?? 'Approved') + ' image'" draggable="false"></div></template>
             <div v-else-if="mode === 'difference'" class="comparison-image-frame" :class="background" :style="{width:'100%',height:'100%'}"><canvas :ref="setDifference" style="width:100%;height:100%"/></div>
             <template v-else>
               <div v-for="(side,sideIndex) in sides" :key="sideIndex" class="comparison-image-layer" :style="{clipPath:sideIndex && mode === 'swipe' ? `inset(0 ${100-mix}% 0 0)` : undefined, opacity:sideIndex && mode === 'overlay' ? mix/100 : 1}">
-                <div v-if="side" class="comparison-image-frame" :class="background" :style="{width:`${side.width*zoom}px`,height:`${side.height*zoom}px`}"><img :src="side.url" :alt="sideIndex ? 'Working image' : 'Approved image'" draggable="false"></div>
+                <div v-if="side" class="comparison-image-frame" :class="background" :style="{width:`${side.width*zoom}px`,height:`${side.height*zoom}px`}"><img :src="side.url" :alt="sideIndex ? (pair.labels?.after ?? 'Working') + ' image' : (pair.labels?.before ?? 'Approved') + ' image'" draggable="false"></div>
               </div>
               <div v-if="mode === 'swipe'" class="swipe-divider" :style="{left:`${mix}%`}"/>
             </template>

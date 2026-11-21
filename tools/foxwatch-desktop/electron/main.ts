@@ -14,6 +14,7 @@ import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MonitorService } from './monitor-service.js';
+import { CatalogReviewService } from './catalog-review.js';
 import type { AppView } from '../shared/monitor.js';
 import { PublishedLibrary, type PublishedPlan } from './published-library.js';
 import type { PublishedStatus } from '../shared/contracts.js';
@@ -114,6 +115,8 @@ function currentReview(id: unknown) {
 async function openDirectory(target: string, persist = false) {
   if (restoringBaseline) throw new Error('Wait for the baseline restore to finish before changing directories.');
   const opened = await AssetDirectory.open(target);
+  const managedRoot = path.resolve(repo, monitor.settings.assetsRoot || 'packages/extensions/foxhole/public/foxhole/assets');
+  opened.root.managed = opened.root.path === await realpath(managedRoot).catch(() => managedRoot);
   if (persist) {
     const settings = path.join(app.getPath('userData'), 'inspector.json');
     await mkdir(path.dirname(settings), { recursive: true });
@@ -143,9 +146,17 @@ async function openDirectory(target: string, persist = false) {
     opened,
     path.join(app.getPath('userData'), 'baselines'),
     reviewIdentity,
+    !opened.root.managed,
   );
   directory = opened;
   review = openedReview;
+  const reviewMenu = Menu.getApplicationMenu();
+  for (const id of ['legacy-compare', 'legacy-approve', 'legacy-discard', 'legacy-review-separator']) {
+    const item = reviewMenu?.getMenuItemById(id);
+    if (item) item.visible = !opened.root.managed;
+  }
+  const catalogMenu = reviewMenu?.getMenuItemById('catalog-changes');
+  if (catalogMenu) catalogMenu.visible = !!opened.root.managed;
   window?.setTitle(`FoxWatch — ${opened.root.path}`);
   window?.webContents.send('assets:changed', opened.root);
   return opened.root;
@@ -394,16 +405,18 @@ async function launch() {
     {
       label: '&Review',
       submenu: [
+        { id: 'catalog-changes', label: 'Catalog Changes', visible: false,
+          click: () => { navigate('inspector'); window.webContents.send('review:run', 'compare'); } },
         {
-          label: 'Compare With Approved Baseline',
+          id: 'legacy-compare', label: 'Compare With Approved Baseline',
           click: () => window.webContents.send('review:run', 'compare'),
         },
         {
-          label: 'Approve Current Assets as Baseline',
+          id: 'legacy-approve', label: 'Approve Current Assets as Baseline',
           click: () => window.webContents.send('review:run', 'approve'),
         },
-        { type: 'separator' },
-        { label: 'Return to Baseline…', click: () => window.webContents.send('review:run', 'discard') },
+        { id: 'legacy-review-separator', type: 'separator' },
+        { id: 'legacy-discard', label: 'Return to Baseline…', click: () => window.webContents.send('review:run', 'discard') },
       ],
     },
     { label: '&Run', submenu: [
@@ -459,6 +472,17 @@ async function launch() {
   ];
   if (process.platform === 'darwin') menu.unshift({ role: 'appMenu' });
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu));
+  const catalogReview = new CatalogReviewService(repo);
+  ipcMain.handle('catalog:review', async event => {
+    authorize(event);
+    const current = directory;
+    return catalogReview.review((await monitor.info()).prepared?.planPath, current?.root.managed
+      ? (file, folder) => current.label(file, folder) : undefined);
+  });
+  ipcMain.handle('catalog:preview', (event, reviewId, path) => {
+    authorize(event);
+    return catalogReview.preview(reviewId, path);
+  });
   ipcMain.handle('monitor:status', event => { authorize(event); return monitor.controller.status; });
   ipcMain.handle('monitor:info', event => { authorize(event); return monitor.info(); });
   ipcMain.handle('monitor:save', async (event, value) => {
@@ -480,7 +504,7 @@ async function launch() {
       const messages: Record<string, [string,string]> = {
         cancel: ['Cancel the active run?', 'This stops the process tree and pauses polling. Generated outputs already written are retained.'],
         'clear-cache': ['Clear generation caches?', 'Steam installations, settings, logs, rendered outputs, and published assets are preserved.'],
-        publish: ['Publish the prepared asset release?', 'This uploads the prepared snapshot and updates the public stable channel after verification. It does not approve a local baseline or update the extension build pin.'],
+        publish: ['Publish the prepared asset release?', 'This uploads the prepared snapshot and updates the public stable channel after verification. Updating the Planner extension pin is a separate release step.'],
       };
       const [message, detail] = messages[action]!;
       const result = await dialog.showMessageBox(window, { type: 'question', message, detail, buttons: ['Cancel', 'Continue'], defaultId: 0, cancelId: 0 });
@@ -495,6 +519,7 @@ async function launch() {
       authorize(event);
       const current = currentReview(id);
       if (action === 'summary') return current.summary();
+      if (source(id).root.managed) throw new Error('Use Catalog Changes to review generated Planner assets.');
       if (action !== 'approve' && action !== 'compare' && action !== 'discard')
         throw new Error('Invalid review action.');
       if (reviewRunning) throw new Error('An asset review is already running.');

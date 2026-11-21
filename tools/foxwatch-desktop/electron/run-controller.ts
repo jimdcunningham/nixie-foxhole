@@ -72,8 +72,9 @@ export class RunController {
         if (this.status.exportTotal) this.status.percent = Math.max(this.status.percent, Math.min(90, 40 + 25 * this.status.exported / this.status.exportTotal + 25 * (this.status.renderTotal ? this.status.rendered / this.status.renderTotal : 0)));
       } else if (value.startsWith('asset-publication: ')) {
         const item = JSON.parse(value.slice(19));
-        this.status.stage = `Assets · ${item.phase}`;
-        this.status.detail = item.total ? `${item.completed ?? 0} / ${item.total} objects` : item.phase;
+        this.status.stage = item.phase ? `Assets · ${item.phase}` : 'Preparing Catalog';
+        this.status.detail = item.total ? `${item.completed ?? 0} / ${item.total} objects`
+          : item.path ? `${item.objects} objects · ${item.path}` : item.phase;
         if (item.total) this.status.percent = Math.max(this.status.percent, Math.min(99, 100 * (item.completed ?? 0) / item.total));
       } else {
         for (const [match, stage, percent] of [

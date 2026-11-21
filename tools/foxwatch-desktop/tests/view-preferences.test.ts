@@ -10,9 +10,10 @@ test('view choices survive recreating preferences with independent image sliders
   const first = scope.run(() => createViewPreferences(storage))!;
   // The first preview closes before later previews change shared preferences.
   scope.stop();
+  assert.equal(first.manifestMode.value, 'source');
   first.imageMode.value = 'overlay'; first.swipePosition.value = 24; first.overlayOpacity.value = 68;
   first.imageBackground.value = 'dark'; first.modelMode.value = 'before';
-  first.manifestMode.value = 'source'; first.manifestFilter.value = 'changed'; first.formattedJson.value = false;
+  first.manifestMode.value = 'fields'; first.manifestFilter.value = 'changed'; first.formattedJson.value = false;
   const restored = createViewPreferences(storage);
   for (const key of Object.keys(first) as Array<keyof typeof first>) assert.equal(restored[key].value,first[key].value,key);
   assert.equal(restored.swipePosition.value,24); assert.equal(restored.overlayOpacity.value,68);
@@ -25,7 +26,7 @@ test('invalid saved choices use defaults and slider values stay within their bou
     'foxwatch.manifestChangeType': 'missing', 'foxwatch.swipePosition': '-20', 'foxwatch.overlayOpacity': '200',
   } as Record<string,string>)[key] ?? null, setItem() {} });
   assert.equal(preferences.imageMode.value,'side'); assert.equal(preferences.imageBackground.value,'checker');
-  assert.equal(preferences.modelMode.value,'both'); assert.equal(preferences.manifestMode.value,'fields'); assert.equal(preferences.manifestFilter.value,'all');
+  assert.equal(preferences.modelMode.value,'both'); assert.equal(preferences.manifestMode.value,'source'); assert.equal(preferences.manifestFilter.value,'all');
   assert.equal(preferences.swipePosition.value,0); assert.equal(preferences.overlayOpacity.value,100);
   for (const invalid of ['NaN','Infinity','', ' ']) assert.equal(createViewPreferences({getItem: () => invalid,setItem() {}}).swipePosition.value,50);
 });

@@ -853,7 +853,26 @@ dd {
 .manifest-table .added td:last-child { background:#24513c33; }.manifest-table .removed td:nth-child(2) { background:#663b3e33; }
 .manifest-table .changed td:nth-child(2) { background:#663b3e22; }.manifest-table .changed td:last-child { background:#24513c22; }
 .manifest-table .added .field-kind { color:#86cda7; }.manifest-table .removed .field-kind { color:#e49c9e; }.manifest-table .changed .field-kind { color:#dcc18b; }
-.source-sides .text-preview { padding:14px; font-size:11px; }
+.source-diff { flex:1; min-width:0; min-height:0; overflow:auto; }
+.source-inline { width:max-content; min-width:100%; }
+.source-line, .source-columns { display:grid; grid-template-columns:7ch 7ch 3ch 1fr; font:12px/1.65 Consolas,monospace; }
+.source-columns { position:sticky; top:0; z-index:1; background:#20242b; color:var(--muted); border-bottom:1px solid var(--line); }
+.source-columns span { padding:5px 7px; }
+.source-columns span:nth-child(-n+2), .source-number { text-align:right; }
+.source-number, .source-gutter { padding-inline:7px; color:var(--muted); user-select:none; }
+.source-gutter { text-align:center; }
+.source-code { display:block; padding-inline:9px; color:inherit; font:inherit; white-space:pre; }
+.source-context .source-code { color:#c4cfdb; }
+.source-gap { background:#202d3a; border-block:1px solid #2f4050; color:#a6c3dc; }
+.source-gap-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; position:sticky; left:0; width:fit-content; max-width:100%; padding:5px 10px; font-size:11px; }
+.source-gap-actions button { padding:3px 7px; color:inherit; }
+.source-added { background:#1c322a; color:#d4f0dd; }
+.source-added .source-number, .source-added .source-gutter { background:#254639; color:#a6e0bf; }
+.source-removed { background:#352529; color:#f3d9d9; }
+.source-removed .source-number, .source-removed .source-gutter { background:#4a3037; color:#efb4bb; }
+.source-code mark { border-radius:2px; color:inherit; }
+.source-added mark { background:#346449; }
+.source-removed mark { background:#75414b; }
 
 .discard-controls { padding: 4px 10px 8px; border-bottom: 1px solid var(--line); }
 .discard-controls button { width: 100%; padding: 5px 8px; border: 1px solid #634341; color: #dfa7a3; font-size: 11px; text-align: left; }

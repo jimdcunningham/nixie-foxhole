@@ -30,6 +30,8 @@ const api: InspectorApi = {
     ipcRenderer.invoke('published:action', action, scope),
   onPublished: (callback) => subscribe('published:open', callback),
   onPublishedProgress: (callback) => subscribe('published:progress', callback),
+  catalogReview: () => ipcRenderer.invoke('catalog:review'),
+  catalogPreview: (reviewId, path) => ipcRenderer.invoke('catalog:preview', reviewId, path),
   review: (id, action) => ipcRenderer.invoke('assets:review', id, action),
   onReview: (callback) => subscribe('review:run', callback),
   onReviewProgress: (callback) => subscribe('review:progress', callback),

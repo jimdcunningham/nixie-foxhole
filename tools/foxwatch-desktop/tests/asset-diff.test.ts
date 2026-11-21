@@ -1,28 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compareManifest, pixelDifference, unionBounds } from '../shared/asset-diff.ts';
+import { compareManifestSource } from '../shared/source-diff.ts';
 
 test('manifest fields ignore object key order and distinguish null, missing, and changed values', () => {
   const diff = compareManifest('{"same":{"a":1,"b":2},"remove":null,"change":1}', '{"same":{"b":2,"a":1},"change":2,"add":null}');
   assert.deepEqual(diff.changes.map(row => [row.kind,row.path,row.before,row.after]), [
-    ['removed','/remove','null',null], ['changed','/change','1','2'], ['added','/add',null,'null'],
+    ['removed','remove','null',null], ['changed','change','1','2'], ['added','add',null,'null'],
   ]);
 });
 test('named arrays preserve identity across insertions but report meaningful reorderings', () => {
   const a = JSON.stringify({ items: [{id:'a',v:1},{id:'b',v:2}] });
   const b = JSON.stringify({ items: [{id:'new',v:0},{id:'b',v:3},{id:'a',v:1}] });
   const diff = compareManifest(a,b);
-  assert.deepEqual(diff.changes.map(row => row.path), ['/items/(order)', '/items/[id=b]/v', '/items/[id=new]']);
+  assert.deepEqual(diff.changes.map(row => row.path), ['items.(order)', 'items[id=b].v', 'items[id=new]']);
 });
 test('manifest comparisons handle missing files, primitives, escaping, and bounded results', () => {
   assert.equal(compareManifest(null,'{"x":1}').changes[0]?.kind,'added');
   assert.equal(compareManifest('false',null).changes[0]?.kind,'removed');
-  assert.equal(compareManifest('{"a/b~":1}','{"a/b~":2}').changes[0]?.path,'/a~1b~0');
+  assert.equal(compareManifest('{"a/b~":1}','{"a/b~":2}').changes[0]?.path,'["a/b~"]');
   const large = Object.fromEntries(Array.from({length:4000},(_,i) => [i,i]));
   const result = compareManifest(JSON.stringify(large), JSON.stringify(Object.fromEntries(Object.keys(large).map(key => [key,-1]))));
   assert.equal(result.changes.length,3000); assert.equal(result.limited,true);
   assert.throws(() => compareManifest('invalid','{}'));
 });
+test('manifest source preserves indentation and line numbers across inserted and removed lines', () => {
+  const before = { keep: 10, cost: { Cloth: { q: 20 }, old: 1 }, end: true };
+  const after = { keep: 10, cost: { Cloth: { quantity: 20, crate: true } }, end: true };
+  const source = compareManifestSource(JSON.stringify(before), JSON.stringify(after), true);
+  assert.equal(source.limited, false);
+  const old = source.parts.filter(part => part.kind !== 'added').flatMap(part => part.lines).join('\n');
+  const next = source.parts.filter(part => part.kind !== 'removed').flatMap(part => part.lines).join('\n');
+  assert.equal(old, JSON.stringify(before, null, 2));
+  assert.equal(next, JSON.stringify(after, null, 2));
+  const removal = source.parts.find(part => part.kind === 'removed');
+  const addition = source.parts.find(part => part.kind === 'added');
+  assert.equal(removal?.before, 5);
+  assert.equal(addition?.after, 5);
+  assert.deepEqual(removal?.object, { start: 4, end: 6 });
+  assert.deepEqual(addition?.object, { start: 4, end: 7 });
+  assert.equal(removal?.lines[0], '      "q": 20');
+  assert.equal(addition?.lines[0], '      "quantity": 20,');
+});
+
+test('manifest source handles identical, missing, and invalid documents', () => {
+  assert.deepEqual(compareManifestSource('{"x":1}', '{ "x": 1 }', true).parts, []);
+  assert.deepEqual(compareManifestSource(null, '{"x":1}', true).parts, [
+    { kind: 'added', before: 1, after: 1, lines: ['{', '  "x": 1', '}'] },
+  ]);
+  assert.equal(compareManifestSource('{invalid', '{}', true).unavailable, true);
+  assert.equal(compareManifestSource('{}', '{}', false).unavailable, true);
+});
+
 test('pixel differences detect opacity and color changes without opaque transparent-RGB noise', () => {
   const a = new Uint8ClampedArray([255,0,0,0, 255,255,255,255, 40,40,40,255]);
   const b = new Uint8ClampedArray([0,255,0,0, 255,255,255,128, 40,40,40,255]);

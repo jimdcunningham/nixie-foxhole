@@ -162,7 +162,13 @@ export async function readAssetPreview(
   }
   if (compressed)
     bytes = brotliDecompressSync(bytes, { maxOutputLength: MAX_BYTES });
-  if (text) {
+  return previewBytes(bytes, logicalPath, textLimit, truncated);
+}
+
+export function previewBytes(bytes: Uint8Array, logicalPath: string, textLimit = TEXT_BYTES, truncated = false): AssetPreview {
+  if (bytes.byteLength > MAX_BYTES) throw new Error('This file exceeds the 32 MB preview limit.');
+  const extension = path.extname(logicalPath).toLowerCase();
+  if (['.json', '.md', '.txt', '.csv', '.yaml', '.yml'].includes(extension)) {
     truncated ||= bytes.byteLength > textLimit;
     const content = new TextDecoder().decode(bytes.subarray(0, textLimit));
     if (content.includes('\0'))
@@ -177,10 +183,11 @@ export async function readAssetPreview(
       json: extension === '.json',
     };
   }
-  if (image) {
+  if (['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'].includes(extension)) {
     const mime = imageMime(bytes, extension);
     if (!mime) throw new Error('This file does not contain a supported image.');
     return { type: 'image', bytes: new Uint8Array(bytes), mime };
   }
-  return { type: 'model', bytes: prepareGlb(bytes), mime: 'model/gltf-binary' };
+  if (extension === '.glb') return { type: 'model', bytes: prepareGlb(bytes), mime: 'model/gltf-binary' };
+  return { type: 'unsupported', message: 'A preview is not available for this file format yet.' };
 }

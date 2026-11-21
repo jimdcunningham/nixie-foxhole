@@ -2,6 +2,7 @@ export interface AssetRoot {
   id: string;
   name: string;
   path: string;
+  managed?: boolean;
 }
 export type AssetKind = 'image' | 'model' | 'data' | 'text' | 'audio' | 'file';
 export type AssetChange = 'added' | 'modified' | 'deleted';
@@ -31,6 +32,8 @@ export interface AssetDetails extends AssetEntry {
 export interface InspectorApi {
   monitor: import('./monitor.js').MonitorApi;
   fileManagerName: string;
+  catalogReview(): Promise<CatalogReview | null>;
+  catalogPreview(reviewId: string, path: string): Promise<AssetComparison>;
   published(
     action: 'info' | 'check' | 'download' | 'cancel' | 'open',
     scope: PublishedScope,
@@ -93,7 +96,15 @@ export interface PublishedStatus {
 }
 
 export interface AssetVersion { asset: AssetDetails; preview: AssetPreview }
+export interface CatalogReview {
+  id: string;
+  version: string;
+  sha256: string;
+  changes: AssetEntry[];
+  folderLabels: Record<string, string>;
+}
 export interface AssetComparison {
+  labels?: { before: string; after: string };
   approvedAt: string | null;
   before: AssetVersion | null;
   after: AssetVersion | null;

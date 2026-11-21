@@ -33,7 +33,7 @@ export function createViewPreferences(storage?: PreferenceStorage) {
     swipePosition: percentage('foxwatch.swipePosition'),
     overlayOpacity: percentage('foxwatch.overlayOpacity'),
     modelMode: choice('foxwatch.modelCompareMode', 'both', ['both', 'before', 'after']),
-    manifestMode: choice('foxwatch.manifestCompareMode', 'fields', ['fields', 'source']),
+    manifestMode: choice('foxwatch.manifestCompareMode', 'source', ['fields', 'source']),
     manifestFilter: choice('foxwatch.manifestChangeType', 'all', ['all', 'added', 'removed', 'changed']),
     formattedJson: preference('foxwatch.formattedJson', true, value => value !== 'false'),
   };

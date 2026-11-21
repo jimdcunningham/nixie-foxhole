@@ -53,11 +53,11 @@ onBeforeUnmount(() => { disposed = true; viewers.forEach(viewer => viewer?.destr
 </script>
 <template>
   <div class="comparison-content model-comparison">
-    <div class="preview-toolbar comparison-toolbar"><button :aria-pressed="mode === 'both'" @click="mode = 'both'">Side by Side</button><button :aria-pressed="mode === 'before'" @click="mode = 'before'">A · Approved</button><button :aria-pressed="mode === 'after'" @click="mode = 'after'">B · Working</button><div class="toolbar-spacer"/><span class="muted">Linked Cameras · Shared Scale</span><button :disabled="!ready" @click="reset">Reset Views</button></div>
+    <div class="preview-toolbar comparison-toolbar"><button :aria-pressed="mode === 'both'" @click="mode = 'both'">Side by Side</button><button :aria-pressed="mode === 'before'" @click="mode = 'before'">A · {{ pair.labels?.before ?? 'Approved' }}</button><button :aria-pressed="mode === 'after'" @click="mode = 'after'">B · {{ pair.labels?.after ?? 'Working' }}</button><div class="toolbar-spacer"/><span class="muted">Linked Cameras · Shared Scale</span><button :disabled="!ready" @click="reset">Reset Views</button></div>
     <div class="comparison-sides">
       <section v-for="(side,index) in [pair.before,pair.after]" v-show="mode === 'both' || mode === (index ? 'after' : 'before')" :key="index" :data-side="index ? 'working' : 'approved'">
-        <header>{{ index ? 'B · Working' : 'A · Approved' }}<span>{{ side ? (side.asset.bytes/1024).toFixed(1) + ' KB' : 'Missing' }}</span></header>
-        <div :ref="element => host(element,index)" class="model-viewport" :aria-label="index ? 'Working Model' : 'Approved Model'"><div v-if="messages[index]" class="model-message">{{ messages[index] }}</div></div>
+        <header>{{ index ? 'B · ' + (pair.labels?.after ?? 'Working') : 'A · ' + (pair.labels?.before ?? 'Approved') }}<span>{{ side ? (side.asset.bytes/1024).toFixed(1) + ' KB' : 'Missing' }}</span></header>
+        <div :ref="element => host(element,index)" class="model-viewport" :aria-label="index ? (pair.labels?.after ?? 'Working') + ' Model' : (pair.labels?.before ?? 'Approved') + ' Model'"><div v-if="messages[index]" class="model-message">{{ messages[index] }}</div></div>
         <div class="comparison-model-stats">{{ stats[index] }}</div>
       </section>
     </div>

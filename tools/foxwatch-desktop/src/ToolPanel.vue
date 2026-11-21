@@ -109,11 +109,11 @@ const bytes = (value: number) => (value / 1_000_000_000).toFixed(2) + ' GB';
         </div><button class="tool-button" :disabled="!Object.values(credentials).some(Boolean)" @click="saveCredentials">Save Credentials</button>
       </fieldset>
       <fieldset :disabled="busy || !!status?.running || !info.windows"><legend>Publish a Release</legend>
-        <p>Prepare snapshots local files. Inspect and approve them before publishing. Check Upload verifies the prepared snapshot without uploading. Publish explicitly uploads it and updates the public stable channel after verification.</p>
+        <p>Successful builds prepare their catalog automatically. Review it in the Assets browser. Check Upload verifies the prepared release. Publish uploads it and updates the public stable channel after verification.</p>
         <p v-if="info.prepared" class="prepared-release">{{ info.prepared.files.toLocaleString() }} source files · {{ bytes(info.prepared.bytes) }}<br>{{ info.prepared.releaseUrl }}</p>
         <p v-else class="muted">No prepared release.</p>
-        <div class="tool-actions"><button class="tool-button" @click="action('prepare')">Prepare Assets</button><button class="tool-button" :disabled="!info.prepared" @click="action('check')">Check Upload</button><button class="tool-button" :disabled="!info.prepared" @click="action('publish')">Publish Assets…</button><button class="tool-button" @click="action('output')">Open Output</button></div>
-        <p class="muted">Generation does not upload. Publishing does not approve the inspector baseline or update Nixie's checked-in asset pin.</p>
+        <div class="tool-actions"><button class="tool-button" :disabled="!info.prepared" @click="action('check')">Check Upload</button><button class="tool-button" :disabled="!info.prepared" @click="action('publish')">Publish Assets…</button><button class="tool-button" @click="action('output')">Open Output</button></div>
+        <p class="muted">Publishing the asset release and updating the Planner extension pin are separate steps.</p>
       </fieldset>
       <fieldset :disabled="busy || !!status?.running || !info.windows"><legend>Maintenance</legend><button class="tool-button danger" @click="action('clear-cache')">Clear Generation Cache…</button><button class="tool-button" @click="action('logs')">Open Logs</button></fieldset>
     </template>

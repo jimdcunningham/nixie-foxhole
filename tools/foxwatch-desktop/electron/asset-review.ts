@@ -90,9 +90,11 @@ export class AssetReview {
     source: AssetDirectory,
     store: string,
     identity = source.root.path,
+    loadBaseline = true,
   ) {
     const key = createHash('sha256').update(identity).digest('hex');
     const review = new AssetReview(source, path.join(store, key), identity);
+    if (!loadBaseline) return review;
     try {
       const file = path.join(review.storage, 'approved.json');
       if ((await stat(file)).size > 64 * 1024 ** 2)
