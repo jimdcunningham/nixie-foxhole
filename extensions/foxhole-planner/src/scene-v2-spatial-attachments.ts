@@ -7,6 +7,7 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import { resolveFoxholeEntityAttachmentSockets } from './scene-v2-attachment-sockets.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
 import { railPathSocketPolicy, readRailPathSocket } from './rail-path-sockets.ts';
+import { readFixedRailEndpoint } from './fixed-region-rails.ts';
 
 const data = (entity: Entity, id: string, owner = 'nixie.core') => entity.components.find(component => component.ownerId === owner
     && component.componentId === id && component.definitionAvailable)?.data;
@@ -21,6 +22,16 @@ export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: F
     const endpointBindings: NixieSpatialEndpointBindingsV1 = {};
     const result = { ...spline, startZ: 0, endZ: 0, endpointBindings };
     for (const prefix of ['start', 'end'] as const) {
+        const fixed = readFixedRailEndpoint(spline[`${prefix}FixedRailEnd`]);
+        if (fixed) {
+            const point = projection.toLocal(entity, fixed.point);
+            const direction = projection.toLocal(entity, [fixed.point[0] + Math.cos(fixed.rotation),
+                fixed.point[1] + Math.sin(fixed.rotation), fixed.point[2]]);
+            const facing = prefix === 'end' ? -1 : 1;
+            Object.assign(result, { [`${prefix}X`]: point[0], [`${prefix}Y`]: point[1], [`${prefix}Z`]: point[2],
+                [`${prefix}Rotation`]: Math.atan2(facing * (direction[1] - point[1]), facing * (direction[0] - point[0])) });
+            continue;
+        }
         const subject = entities.get(String(spline[`${prefix}AttachmentNodeId`] ?? ''));
         if (!subject) continue;
         const subjectSpline = data(subject, 'spline-connector', 'nixie.foxhole-planner');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNixieExtensionManifestV1, parseNixieExtensionRenderPlanV1, parseNixieRenderPresentationV1 } from '@nixiejs/extension-sdk';
 import type { NixieComponentEntitySnapshotV1, NixieTransformFinalizeRequestV1 } from '@nixiejs/extension-sdk/scene-v2';
-import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSimulationColliderV1, parseNixieSimulationEffectsV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
+import { nearestPointOnSegment, matchesNixieTransformFinalizerV1, parseNixieSceneV2DocumentV1, parseNixieSimulationColliderV1, parseNixieSimulationEffectsV1, parseNixieSimulationPathV1, parseNixieSimulationRoutingV1,
     parseNixieTransformFinalizerV1, parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import manifest from '../nixie.extension.json' with { type: 'json' };
 import { finalizeFoxholeRailVehicleSnap, railCouplers } from '../src/rail-vehicle-snapping.ts';
@@ -14,6 +14,10 @@ import { createFoxholeSpatialProjection } from '../src/scene-v2-spatial-transfor
 import type { FoxholeSceneV2SplineConnectorData } from '../src/scene-v2-spline-connectors.ts';
 import { fitFoxholeRailWheelbase } from '../src/rail-wheelbase.ts';
 import { renderFoxholeSceneV2Entity } from '../src/scene-v2-renderers.ts';
+import { fixedRailNetwork, nearbyFixedRailRegions } from '../src/fixed-region-rails.ts';
+import fixedRailData from '../src/fixed-region-rail-centerlines.json' with { type: 'json' };
+import { finalizeFoxholeSceneV2Transform } from '../src/scene-v2-transform-finalizer.ts';
+import { resolveFoxholeSpatialSplineAttachments } from '../src/scene-v2-spatial-attachments.ts';
 import assets from '../src/scene-v2-assets-node.ts';
 
 const ownerId = 'nixie.foxhole-planner';
@@ -115,6 +119,119 @@ function request(assetId: string, tracks: NixieComponentEntitySnapshotV1[]): Nix
         ] },
     };
 }
+
+for (const [region, count, suffix] of [['westgate', 15, 'foundation_6:end'], ['greatmarch', 10, 'spline3_9:start']] as const) {
+    test(`${region} accepts an end extension and large vehicles retain their rail route after a save round trip`, () => {
+        const fixed = fixedRailNetwork(region)!;
+        assert.equal(fixed.rails.length, count);
+        const endpoint = fixed.endpoints.find(value => value.id.endsWith(suffix))!;
+        assert.ok(endpoint);
+        const [x, y, elevation] = endpoint.point;
+        const heading = endpoint.rotation;
+        const settings = { [`foxhole.map.fixedRails.${region}`]: true };
+        const extension = track('railtrackspline', `${region}-extension`);
+        Object.assign(extension.components[0]!.data, { x, y, rotation: heading });
+        extension.components[1]!.data.elevation = elevation;
+        const context = { contractVersion: 1 as const, entities: [extension], settings };
+        const proposal: NixieTransformFinalizeRequestV1 = { contractVersion: 1, entityId: extension.entityId,
+            transform: { x, y, rotation: heading, scaleX: 1, scaleY: 1 }, interaction: 'placement', context,
+            geometryGesture: { phase: 'commit', handleId: 'start', worldPoint: { x, y, z: elevation },
+                hoveredEntityIds: [], snappingEnabled: true } };
+        const snapped = finalizeFoxholeSceneV2Transform(proposal);
+        const patch = snapped.transaction?.operations.find(operation => operation.op === 'patch' && operation.componentId === 'spline-connector');
+        assert.equal(patch?.op === 'patch' && patch.set?.startFixedRailEnd, endpoint.id);
+        assert.equal(snapped.transaction?.operations.every(operation => operation.entityId === extension.entityId), true);
+        Object.assign(extension.components[2]!.data, patch?.op === 'patch' ? patch.set : {});
+        extension.components[2]!.data.endX = 640;
+        const competing = { ...extension, entityId: 'second-extension', components: structuredClone(extension.components) };
+        delete competing.components[2]!.data.startFixedRailEnd;
+        const unavailable = finalizeFoxholeSceneV2Transform({ ...proposal, entityId: competing.entityId,
+            context: { ...context, entities: [competing, extension] } });
+        assert.ok(!unavailable.transaction?.operations.some(operation => operation.op === 'patch' && operation.set?.startFixedRailEnd));
+        const trackContext = { ...context, settings: undefined };
+        const attached = resolveFoxholeSpatialSplineAttachments(extension,
+            extension.components[2]!.data as unknown as FoxholeSceneV2SplineConnectorData, trackContext, assets);
+        assert.ok(Math.abs(attached.startZ) < 0.001);
+        assert.ok(Math.abs(attached.startRotation) < 0.001);
+
+        const rail = fixed.rails.find(rail => rail.id === endpoint.railId)!;
+        const sample = endpoint.end === 'start' ? rail.points : [...rail.points].reverse();
+        let remaining = 285;
+        let spawn = sample.at(-1)!;
+        for (let i = 1; i < sample.length; i++) {
+            const from = sample[i - 1]!, to = sample[i]!;
+            const length = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+            if (remaining <= length) {
+                spawn = [from[0] + (to[0] - from[0]) * remaining / length,
+                    from[1] + (to[1] - from[1]) * remaining / length, from[2] + (to[2] - from[2]) * remaining / length];
+                break;
+            }
+            remaining -= length;
+        }
+        const [railX, railY, railZ] = spawn;
+        const snapVehicle = (id: string, entities: NixieComponentEntitySnapshotV1[]) => {
+            const draft = request(id, entities);
+            draft.context.settings = settings;
+            Object.assign(draft.transform, { x: railX, y: railY, rotation: heading });
+            draft.context.entities[0]!.components.push(component('spatial-transform', { elevation: railZ + 11.52 }, 'nixie.core'));
+            return finalizeFoxholeRailVehicleSnap(draft);
+        };
+        for (const id of ['trainengine', 'trainflatbed']) {
+            const result = snapVehicle(id, [extension]);
+            const add = result.transaction?.operations.find(operation => operation.op === 'add' && operation.componentId === 'rail-attachment');
+            assert.ok(add?.op === 'add', id);
+            const entities = [extension, { entityId: 'vehicle', revision: 0, components: [component('rail-attachment', add.data)] }];
+            const savedEntities = entities.map(entity => ({ ...entity, components: entity.components.map(({ definitionAvailable, ...entry }) => entry) }));
+            const document = parseNixieSceneV2DocumentV1(JSON.parse(JSON.stringify({ type: 'scene-v2', contractVersion: 1, entities: savedEntities })));
+            const saved = document.entities[1]!.components[0]!.data;
+            assert.equal(saved.fixedRail, rail.id);
+            assert.equal(document.entities[0]!.components[2]!.data.startFixedRailEnd, endpoint.id);
+            const path = parseNixieSimulationPathV1(saved.simulationPath);
+            assert.deepEqual(path.sources, [extension.entityId]);
+            assert.equal(path.drive?.manual?.passive === true, id !== 'trainengine');
+            const across = ([px, py]: number[]) => (px! - x) * Math.cos(heading) + (py! - y) * Math.sin(heading);
+            assert.ok(across(path.frames[0]!.position) < -100);
+            assert.ok(across(path.frames.at(-1)!.position) > 100);
+            assert.ok(path.drive?.manual && path.drive.manual.startDistance > 0
+                && path.drive.manual.startDistance < path.frames.at(-1)!.distance);
+        }
+        assert.equal(snapVehicle('smalltrainengine', [extension]).transaction, undefined);
+    });
+}
+
+test('each region with visible rails accepts an open-end extension and standard-gauge rolling stock', () => {
+    for (const [id, dataset] of Object.entries(fixedRailData)) {
+        const network = fixedRailNetwork(id);
+        assert.equal(network?.rails.length, dataset.rails.length, id);
+        const endpoint = network?.endpoints[0];
+        assert.ok(endpoint, id);
+        const [x, y, elevation] = endpoint.point;
+        const rotation = endpoint.rotation;
+        const extension = track('railtrackspline');
+        Object.assign(extension.components[0]!.data, { x, y, rotation });
+        extension.components[1]!.data.elevation = elevation;
+        const context = { contractVersion: 1 as const, entities: [extension], settings: { [`foxhole.map.fixedRails.${id}`]: true } };
+        assert.deepEqual(nearbyFixedRailRegions(context, x, y), [id]);
+        const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: extension.entityId,
+            transform: { x, y, rotation, scaleX: 1, scaleY: 1 }, interaction: 'placement', context,
+            geometryGesture: { phase: 'commit', handleId: 'start', worldPoint: { x, y, z: elevation }, hoveredEntityIds: [], snappingEnabled: true } });
+        assert.ok(result.transaction?.operations.some(op => op.op === 'patch' && op.set?.startFixedRailEnd === endpoint.id), id);
+
+        const rail = network!.rails.find(candidate => candidate.id === endpoint.railId)!;
+        const [x0, y0, z0] = rail.points[Math.floor(rail.points.length / 2)]!;
+        for (const asset of ['trainengine', 'trainflatbed']) {
+            const proposal = request(asset, []);
+            proposal.context.settings = context.settings;
+            Object.assign(proposal.transform, { x: x0, y: y0, rotation });
+            proposal.context.entities[0]!.components.push(component('spatial-transform', { elevation: z0 + 11.52 }, 'nixie.core'));
+            const snapped = finalizeFoxholeRailVehicleSnap(proposal);
+            assert.ok(snapped.transaction?.operations.some(op => op.op === 'add' && op.componentId === 'rail-attachment'
+                && typeof op.data.fixedRail === 'string' && op.data.fixedRail.startsWith(`${id}:`)), `${id} ${asset}`);
+            delete proposal.context.settings;
+            assert.equal(finalizeFoxholeRailVehicleSnap(proposal).transaction, undefined, `inactive ${id} ${asset}`);
+        }
+    }
+});
 
 test('the live socket setting gates a track-spline finalizer for each rail vehicle', () => {
     parseNixieExtensionManifestV1(manifest);

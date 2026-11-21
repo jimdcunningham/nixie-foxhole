@@ -45,6 +45,8 @@ export interface FoxholeSceneV2SplineConnectorData {
     endAttachmentNodeId?: string;
     startAttachmentSocketName?: string;
     endAttachmentSocketName?: string;
+    startFixedRailEnd?: string;
+    endFixedRailEnd?: string;
     socketAttachments?: Record<string, unknown>;
     /** Derived render-only placement state; never persisted. */
     powerlineObstructed?: boolean;

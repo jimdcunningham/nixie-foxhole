@@ -10,6 +10,16 @@ The default export is **compact recipes**. Keep encoded textures and compact, ve
 
 Published files are immutable and shared by content hash. Only a selected region's dependency closure is loaded. Expanded recipe fallbacks and aliases are excluded. JSON/glTF dependencies are rewritten to static relative URLs during publication; production needs no prototype server, URL globals or fetch monkeypatch. Publish the index last. Retain old immutable files until deployment/rollback policy allows garbage collection.
 
+### Fixed rail centerlines
+
+Planner's fixed rails use the standard-gauge centerlines from the visible rail bake. Regenerate the source data from the matching compact world directory and game PAK directory after changing native rail geometry. The exporter checks the world receipts, socket positions and reconstructed segment lengths before writing the catalog.
+
+```powershell
+node packages/foxhole-world/authoring/export-rail-centerlines.mjs --list-maps <world-directory> <map-list-file>
+dotnet run --project packages/foxhole-world/audit -c Release -- <pak-directory> <audit-directory> rail-endpoints-batch <map-list-file>
+node packages/foxhole-world/authoring/export-rail-centerlines.mjs --regions <world-directory> <audit-directory> extensions/foxhole-planner/src/fixed-region-rail-centerlines.json
+```
+
 Files under `world/content/br/**` require `Content-Encoding: br`; the Foxhole Nuxt layer configures this. Configure the same headers if hosting the assets elsewhere. The browser handles transport decompression; workers decode meshopt, textures and lossless geometry recipes. Recipe inputs have a persistent compressed Cache API cache. Model/image dependencies use the same explicit persistent cache and immutable HTTP caching. Cache API quota failure is nonfatal.
 
 The runtime overlaps independent terrain, model, road and decal preparation. Cache reads, gzip decoding and integrity checks run in a dedicated worker; source buffers are transferred rather than copied back. Model loading has bounded concurrency and throttled progress updates. Verified rendered recipe outputs also use a separate, compressed browser-only cache capped at 1 GiB per origin. This cache never changes the asset bundle or texture/geometry quality; eviction and first-time population still require reconstruction. Independent canvas loads retain separate cancellation lifetimes.

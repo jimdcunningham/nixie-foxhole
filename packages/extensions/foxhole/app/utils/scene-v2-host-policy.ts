@@ -3,6 +3,7 @@ import { foxholeRailPresentation } from './spatial-foxhole-rail-bed.ts';
 import { readFoxholeModelLightHints } from '../../../../../extensions/foxhole-planner/src/model-light-hints.ts';
 import { registerNixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
 import type { NixieInternalSceneV2Adapter } from '#nixie-internal/desktop-extensions/internal-scene-v2-adapters.ts';
+import { regionIdForKey } from '../../../../foxhole-world/runtime/region-id.mjs';
 
 import { FOXHOLE_SCENE_FACTION_SETTING_ID, normalizeFoxholeSceneFaction } from './scene-faction.ts';
 
@@ -11,6 +12,12 @@ export const foxholeSceneV2HostPolicy: NixieInternalSceneV2Adapter = {
     ownerId: OWNER_ID,
     legacyCapabilities: foxholeLegacyEditingCapabilities,
     rail: foxholeRailPresentation,
+    transformSettings(readSetting) {
+        if (readSetting('foxhole.map.enabled') !== true) return {};
+        const regions = String(readSetting('foxhole.map.regionKeys') ?? '').split(',').map(key => key.trim());
+        return Object.fromEntries([...new Set(regions.map(regionIdForKey))].filter(id => /^[a-z0-9]+$/u.test(id))
+            .slice(0, 64).map(id => [`foxhole.map.fixedRails.${id}`, true])); // SDK context setting limit.
+    },
     modelLightHints: readFoxholeModelLightHints,
     legacyIconCatalogReference(entity) {
         const asset = entity.components.find(component => component.ownerId === OWNER_ID && component.componentId === 'asset'

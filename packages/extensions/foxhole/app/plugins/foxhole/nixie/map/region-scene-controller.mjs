@@ -12,8 +12,8 @@ export function worldLightingProfile(view){
   shadow:{cascades:3,maxDistance:reach,lambda:.7,bias:.00015,normalBias:.8,update:1}};
 }
 import {combineRegionPasses} from './region-render-passes.mjs';
-const aliases={callahanspassagehex:'callahans',deadlandshex:'deadlands',lochmorhex:'lochmor',fishermansrowhex:'fishermans',weatheredexpansehex:'weathered'};
-export function regionIdForKey(key){return aliases[key.toLowerCase()]||key.replace(/Hex$/i,'').toLowerCase();}
+import {regionIdForKey} from '../../../../../../../foxhole-world/runtime/region-id.mjs';
+export {regionIdForKey};
 
 export function selectedSpatialRegions({enabled,regionKeys,mode}){return enabled&&mode!=='flat'?[...new Set(regionKeys.map(regionIdForKey))]:[];}
 

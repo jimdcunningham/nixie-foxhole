@@ -18,6 +18,14 @@ static class Coverage {
  }
  public static FTransform Absolute(UObject c,HashSet<UObject>? seen=null){seen??=[];if(!seen.Add(c))throw new Exception("Component attachment cycle");var local=new FTransform(c.GetOrDefault("RelativeRotation",FRotator.ZeroRotator),c.GetOrDefault("RelativeLocation",FVector.ZeroVector),c.GetOrDefault("RelativeScale3D",FVector.OneVector));var parent=c.GetOrDefault<FPackageIndex?>("AttachParent")?.Load();return parent==null?local:local*Absolute(parent,seen);}
  public static float[] Matrix(FTransform t){float[] P(FVector v)=>[v.X/100,v.Z/100,-v.Y/100];var o=P(t.TransformPosition(FVector.ZeroVector));var m=new float[16];var basis=new[]{new FVector(100,0,0),new FVector(0,0,100),new FVector(0,-100,0)};for(int i=0;i<3;i++){var p=P(t.TransformPosition(basis[i]));for(int a=0;a<3;a++)m[i*4+a]=p[a]-o[a];}m[12]=o[0];m[13]=o[1];m[14]=o[2];m[15]=1;return m;}
+ public static void WriteRailEndpoints(UObject[] objects,string output){
+  var rails=objects.Where(o=>Regex.IsMatch(o.ExportType,"RailTrackSpline.*_C$")).Select(o=>{
+   var front=o.GetOrDefault<FPackageIndex?>("FrontSocket")?.Load();
+   var back=o.GetOrDefault<FPackageIndex?>("BackSocket")?.Load();
+   return new{name=o.Name,type=o.ExportType,front=front==null?null:Matrix(Absolute(front)),back=back==null?null:Matrix(Absolute(back))};
+  });
+  File.WriteAllText(Path.Combine(output,"rail-endpoints.json"),JsonConvert.SerializeObject(rails,Formatting.Indented));
+ }
  public static void Run(UObject[] objects,string output,bool includeAll=false){Directory.CreateDirectory(output);PropertyUtil.SearchPropertyInTemplate=true;int assigned=0;var errors=new List<string>();
  foreach(var c in objects.Where(o=>o.Outer?.Object?.Value?.ExportType.EndsWith("_C")==true))try{var a=c.Outer!.Object!.Value;var template=Find(a.Class?.Object?.Value as UClass,c.Name);if(template!=null&&!ReferenceEquals(template.Object?.Value,c)){c.Template=template;assigned++;}}catch(Exception e){errors.Add(c.Name+": "+e.Message);}
  var decals=new List<object>();var materials=new Dictionary<string,object>();var all=new List<object>();Directory.CreateDirectory(Path.Combine(output,"decals/textures"));

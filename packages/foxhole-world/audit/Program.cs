@@ -9,8 +9,22 @@ using System.Diagnostics;
 var timer=Stopwatch.StartNew();
 using var provider=new DefaultFileProvider(args[0],SearchOption.TopDirectoryOnly,new VersionContainer(EGame.GAME_UE4_24),StringComparer.OrdinalIgnoreCase);
 provider.Initialize();provider.Mount();PropertyUtil.SearchPropertyInTemplate=true;
+if (args.Length > 3 && args[2] == "rail-endpoints-batch")
+{
+    foreach (var key in File.ReadLines(args[3]).Where(key => key.Length > 0))
+    {
+        if (!Regex.IsMatch(key, "^[A-Za-z0-9]+$")) throw new ArgumentException("Invalid map key: " + key);
+        var output = Path.Combine(args[1], key);
+        Directory.CreateDirectory(output);
+        var regionPackage = provider.LoadPackage("War/Content/Maps/Master/" + key + ".umap");
+        Coverage.WriteRailEndpoints(regionPackage.GetExports().ToArray(), output);
+        Console.WriteLine("Read rail endpoints for " + key);
+    }
+    return;
+}
 var objects=provider.LoadPackage("War/Content/Maps/Master/"+(args.Length>3?args[3]:"DeadlandsHex")+".umap").GetExports().ToArray();
 Directory.CreateDirectory(args[1]);if(args.Length>2&&args[2]=="rails"){Rails.Run(provider,args[1]);return;}if(args.Length>2&&args[2] is "coverage" or "effects"){Coverage.Run(objects,args[1],args[2]=="effects");if(args[2]=="effects")EffectsProbe.Run(provider,objects,args[1]);return;}
+if(args.Length>2&&args[2]=="rail-endpoints"){Coverage.WriteRailEndpoints(objects,args[1]);return;}
 File.WriteAllText(Path.Combine(args[1],"rail-properties.json"),JsonConvert.SerializeObject(objects.Where(o=>Regex.IsMatch(o.ExportType,"RailTrack|Rail01|RailBumper")||Regex.IsMatch(o.Outer?.Name.ToString()??"","RailTrack|Rail01|RailBumper")),Formatting.Indented));
 File.WriteAllText(Path.Combine(args[1],"source-classes.json"),JsonConvert.SerializeObject(objects.GroupBy(o=>o.ExportType).Select(g=>new{type=g.Key,count=g.Count()}).OrderByDescending(g=>g.count),Formatting.Indented));
 Console.WriteLine($"Objects {objects.Length}, splines {objects.OfType<USplineMeshComponent>().Count()}, seconds {timer.Elapsed.TotalSeconds:F2}");

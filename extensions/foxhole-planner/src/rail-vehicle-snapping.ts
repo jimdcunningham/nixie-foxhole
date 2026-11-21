@@ -7,6 +7,7 @@ import type { NixieComponentEntitySnapshotV1 as Entity, NixieTransformFinalizeRe
     NixieSimulationColliderV1, NixieSimulationRouteConnectionV1, NixieSimulationRouteV1, NixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { railPathSocketPolicy, readRailPathSocket } from './rail-path-sockets.ts';
+import { fixedRailNetwork, fixedRailRegionId, nearbyFixedRailRegions, readFixedRailEndpoint } from './fixed-region-rails.ts';
 import { foxholeRailVehicleBogies } from './rail-vehicle-rigs.ts';
 import { fitFoxholeRailWheelbase, foxholeRailWheelbase } from './rail-wheelbase.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
@@ -114,6 +115,7 @@ export const foxholeRailTrackFinalizers = Object.fromEntries(
 
 interface RunningRail {
     entityId: string;
+    fixed?: boolean;
     points: FoxholeSpatialPoint[];
     stations: number[];
     endpointLinks: readonly [string, string];
@@ -196,6 +198,7 @@ function railContinuation(rails: RunningRail[], rail: RunningRail, step: number,
         const angle = Math.atan2(following[1] - start[1], following[0] - start[0]);
         const alignment = Math.cos(angle - heading);
         const connected = linked === candidate.entityId || candidate.endpointLinks[sign > 0 ? 0 : 1] === rail.entityId;
+        if (!!rail.fixed !== !!candidate.fixed && !connected) return [];
         return alignment > 0 ? [{ candidate, index, sign, alignment, connected }] : [];
     })).sort((a, b) => Number(b.connected) - Number(a.connected) || b.alignment - a.alignment
         || a.candidate.entityId.localeCompare(b.candidate.entityId))[0];
@@ -251,8 +254,15 @@ function advanceOnRail(rails: RunningRail[], location: RailLocation, delta: numb
 
 function sampleRunningRails(context: Context, gauge: NonNullable<ReturnType<typeof foxholeRailVehicleGauge>>,
     projection: ReturnType<typeof createFoxholeSpatialProjection>, metadata: Record<string, FoxholeSceneV2AssetMetadata>,
-    boundRailId?: string) {
-    return context.entities.flatMap(track => {
+    origin: FoxholeSpatialPoint, boundRailId?: string): RunningRail[] {
+    const makeStations = (points: FoxholeSpatialPoint[]) => {
+        const stations = [0];
+        for (let index = 1; index < points.length; index++) {
+            stations.push(stations[index - 1]! + railDistance(points[index - 1]!, points[index]!));
+        }
+        return stations;
+    };
+    const authored: RunningRail[] = context.entities.flatMap(track => {
         const component = data(track, 'spline-connector');
         const key = String(component?.foxholeKey ?? '').toLowerCase();
         if (!component || trackGauge(key) !== gauge || (track.entityId !== boundRailId
@@ -261,14 +271,25 @@ function sampleRunningRails(context: Context, gauge: NonNullable<ReturnType<type
             context, metadata, projection);
         const points = sampleRailCenterline(spline, metadata[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
         if (points.length < 2) return [];
-        const stations = [0];
-        for (let index = 1; index < points.length; index++) {
-            stations.push(stations[index - 1]! + railDistance(points[index - 1]!, points[index]!));
-        }
-        return [{ entityId: track.entityId, points, stations,
-            endpointLinks: [String(component.startAttachmentNodeId ?? ''), String(component.endAttachmentNodeId ?? '')] as const,
+        const fixedStart = readFixedRailEndpoint(component.startFixedRailEnd);
+        const fixedEnd = readFixedRailEndpoint(component.endFixedRailEnd);
+        return [{ entityId: track.entityId, points, stations: makeStations(points),
+            endpointLinks: [fixedStart?.railId ?? String(component.startAttachmentNodeId ?? ''),
+                fixedEnd?.railId ?? String(component.endAttachmentNodeId ?? '')] as const,
             endpointSockets: [String(component.startAttachmentSocketName ?? ''), String(component.endAttachmentSocketName ?? '')] as const }];
     });
+    if (gauge !== 'standard') return authored;
+    const ids = new Set(nearbyFixedRailRegions(context, origin[0], origin[1]));
+    for (const reference of [...authored.flatMap(rail => rail.endpointLinks),
+        ...context.entities.map(entity => data(entity, ATTACHMENT_COMPONENT)?.fixedRail)]) {
+        const region = fixedRailRegionId(reference);
+        if (region) ids.add(region);
+    }
+    const offset = RAIL_Z_OFFSET_CM.standard * 0.32;
+    return authored.concat([...ids].flatMap(region => fixedRailNetwork(region)?.rails ?? []).map(({ id, points: base }) => {
+        const points = base.map(([x, y, z]): FoxholeSpatialPoint => [x, y, z + offset]);
+        return { entityId: id, fixed: true, points, stations: makeStations(points), endpointLinks: ['', ''] };
+    }));
 }
 
 function resolveRailChassis(assetId: string, rails: RunningRail[], location: RailLocation, step: number, traversal?: RailTraversal) {
@@ -303,11 +324,12 @@ function buildRailRoute(assetId: string, rails: RunningRail[], location: RailLoc
     const traversed = new Set<string>();
     const chassis = resolveRailChassis(assetId, rails, location, step, { traversed });
     for (const bogie of foxholeRailVehicleBogies[assetId] ?? []) sampleBogieAxles(bogie, chassis);
-    return [...traversed].slice(0, 16);
+    return [...traversed].filter(id => !rails.find(rail => rail.entityId === id)?.fixed).slice(0, 16);
 }
 
-function readRailRoute(value: unknown): ReadonlySet<string> | undefined {
-    return Array.isArray(value) ? new Set(value.filter((id): id is string => typeof id === 'string')) : undefined;
+function readRailRoute(value: unknown, rails: RunningRail[]): ReadonlySet<string> | undefined {
+    return Array.isArray(value) ? new Set([...value.filter((id): id is string => typeof id === 'string'),
+        ...rails.filter(rail => rail.fixed).map(rail => rail.entityId)]) : undefined;
 }
 
 /** Model-local deltas for the wheel groups split around the original pivots by FoxWatch. */
@@ -316,15 +338,16 @@ export function poseFoxholeRailBogies(entity: Entity, assetId: string, context: 
     const bogies = foxholeRailVehicleBogies[assetId];
     const attachment = data(entity, ATTACHMENT_COMPONENT);
     const gauge = foxholeRailVehicleGauge(assetId);
-    if (!bogies || !gauge || typeof attachment?.rail !== 'string' || typeof attachment.station !== 'number') return undefined;
+    const railId = attachment?.fixedRail ?? attachment?.rail;
+    if (!bogies || !gauge || typeof railId !== 'string' || typeof attachment?.station !== 'number') return undefined;
 
     const projection = createFoxholeSpatialProjection(context.entities);
-    const rails = sampleRunningRails(context, gauge, projection, metadata, attachment.rail);
-    const rail = rails.find(rail => rail.entityId === attachment.rail);
+    const rails = sampleRunningRails(context, gauge, projection, metadata, projection.toWorld(entity, [0, 0, 0]), railId);
+    const rail = rails.find(rail => rail.entityId === railId);
     const location = rail && locationAtStation(rail, attachment.station);
     if (!location) return undefined;
     const chassis = resolveRailChassis(assetId, rails, location, attachment.reversed ? -1 : 1,
-        { route: readRailRoute(attachment.route) });
+        { route: readRailRoute(attachment.route, rails) });
     return railModelNodeTransforms(bogies, chassis, point => projection.toLocal(entity, point));
 }
 
@@ -597,7 +620,7 @@ interface ParkedRailVehicle {
 function railVehicleAt(entity: Entity, rails: RunningRail[]): ParkedRailVehicle | undefined {
     const assetId = String(data(entity, 'asset')?.assetId);
     const attachment = data(entity, ATTACHMENT_COMPONENT);
-    const rail = rails.find(entry => entry.entityId === attachment?.rail);
+    const rail = rails.find(entry => entry.entityId === (attachment?.fixedRail ?? attachment?.rail));
     const location = rail && typeof attachment?.station === 'number' && locationAtStation(rail, attachment.station);
     if (!location || !vehicleGauge.has(assetId) || vehicleGauge.get(assetId) === 'crane') return;
     const step = attachment?.reversed ? -1 : 1;
@@ -683,7 +706,7 @@ function buildTrainDrive(leader: ParkedRailVehicle, vehicles: ParkedRailVehicle[
         }
     }
     if (!matched.has(subjectId) || options?.requireAdditionalCars && members.length < 3) return;
-    const sources = [...line.rails].map(rail => rail.entityId);
+    const sources = [...line.rails].filter(rail => !rail.fixed).map(rail => rail.entityId);
     if (sources.length + members.length > 65) return;
     const sample = (rail: RunningRail, station: number, distance: number) => members.map(member => {
         const target = station + member.offset;
@@ -871,7 +894,7 @@ function buildConsistRoutes(rails: RunningRail[], line: ReturnType<typeof openRu
             const frames = poses.map(row => row[vehicle]!);
             const indices = simplifyConsistFrames(frames, frames, tolerance);
             return { id: branch.entityId, ...(start ? { start } : {}), ...(end ? { end } : {}),
-                sources: [...visited].map(rail => rail.entityId),
+                sources: [...visited].filter(rail => !rail.fixed).map(rail => rail.entityId),
                 ...packRailFrames(indices.map(index => frames[index]!)) };
         });
         const size = encoder.encode(JSON.stringify(routes)).byteLength;
@@ -983,7 +1006,7 @@ function buildRailConsist(rails: RunningRail[], anchor: DirectedRailLocation, an
                 return [...node.translation, ...node.rotation].some(value => value !== 0);
             }));
         return {
-            ...common, sources: [...sources, peer],
+            ...common, sources: [...sources].filter(id => !rails.find(rail => rail.entityId === id)?.fixed).concat(peer),
             ...(nodes.length ? { modelNodes: nodes.map(node => node.name) } : {}),
             frames: frames.map(frame => ({
                 distance: frame.distance - initialDistance, position: frame.position,
@@ -1031,17 +1054,23 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const collider = railVehicleCollider(assetId);
     const attachment = (location?: RailLocation, reversed = false, route: string[] = [], simulationPath?: NonNullable<ReturnType<typeof buildTrainDrive>>[number]['path']): Result['transaction'] => {
         if (!location && !saved) return undefined;
-        const set = location && { rail: location.rail.entityId, station: location.station, reversed, route,
+        const anchor = location?.rail.fixed ? simulationPath?.sources.find(id =>
+            request.context.entities.some(entity => entity.entityId === id && data(entity, 'spline-connector'))) : location?.rail.entityId;
+        const fixedRail = location?.rail.fixed ? location.rail.entityId : undefined;
+        const set = location && { ...(anchor ? { rail: anchor } : {}), ...(fixedRail ? { fixedRail } : {}),
+            station: location.station, reversed, route,
             ...(collider ? { [NIXIE_SIMULATION_COLLIDER_PROPERTY]: collider } : {}),
             ...(simulationPath ? { [NIXIE_SIMULATION_PATH_PROPERTY]: simulationPath } : {}) };
-        if (set && saved?.rail === set.rail && saved.station === set.station && saved.reversed === set.reversed
+        if (set && saved && saved.rail === anchor && saved.fixedRail === fixedRail && saved.station === set.station && saved.reversed === set.reversed
             && JSON.stringify(saved.route) === JSON.stringify(route)
             && JSON.stringify(saved[NIXIE_SIMULATION_PATH_PROPERTY]) === JSON.stringify(simulationPath)
             && JSON.stringify(saved[NIXIE_SIMULATION_COLLIDER_PROPERTY]) === JSON.stringify(collider)) return undefined;
+        const unset = saved && set ? ['rail', 'fixedRail', NIXIE_SIMULATION_PATH_PROPERTY]
+            .filter(key => key in saved && !(key in set)) : [];
         return { contractVersion: 1, transactionId: `rail-attachment-${crypto.randomUUID()}`,
             operations: [set
                 ? saved ? { op: 'patch', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT, set,
-                    ...(!simulationPath && saved[NIXIE_SIMULATION_PATH_PROPERTY] ? { unset: [NIXIE_SIMULATION_PATH_PROPERTY] } : {}) }
+                    ...(unset.length ? { unset } : {}) }
                     : { op: 'add', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT, data: set }
                 : { op: 'remove', entityId: original.entityId, componentId: ATTACHMENT_COMPONENT }] };
     };
@@ -1053,7 +1082,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     const toParent = (point: FoxholeSpatialPoint) => parent ? projection.toLocal(parent, point) : point;
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
-    const rails = sampleRunningRails(request.context, gauge, projection, assets, request.followedEntityId);
+    const rails = sampleRunningRails(request.context, gauge, projection, assets, origin, request.followedEntityId);
     const poweredAssetId = gauge === 'small' ? smallEngineId : engineId;
     const parkedPlan = (vehicle: ParkedRailVehicle | undefined) =>
         vehicle && buildTrainDrive(vehicle, [], rails, vehicle.entity.entityId, { passive: true })?.[0];
@@ -1061,7 +1090,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         if (preview) return;
         const route = location ? buildRailRoute(assetId, rails, location, step) : [];
         if (gauge === 'crane') return attachment(location, step < 0, route);
-        const railData = location && { rail: location.rail.entityId, station: location.station, reversed: step < 0, route };
+        const railData = location && { [location.rail.fixed ? 'fixedRail' : 'rail']: location.rail.entityId,
+            station: location.station, reversed: step < 0, route };
         const parkedSubject = railData ? { ...subject, components: [
             ...subject.components.filter(component => component.ownerId !== 'nixie.foxhole-planner' || component.componentId !== ATTACHMENT_COMPONENT),
             { ownerId: 'nixie.foxhole-planner', componentId: ATTACHMENT_COMPONENT, version: 1, definitionAvailable: true, data: railData },
@@ -1194,12 +1224,12 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     };
     if (request.followedEntityId) {
         if (saved?.rail !== request.followedEntityId || typeof saved.station !== 'number') return unchanged;
-        const rail = rails.find(rail => rail.entityId === saved.rail);
+        const rail = rails.find(rail => rail.entityId === (saved.fixedRail ?? saved.rail));
         const location = rail && locationAtStation(rail, saved.station);
         if (!location) return unchanged;
         const step = saved.reversed ? -1 : 1;
         const rebuild = request.followPhase === 'commit' && (assetId === poweredAssetId || !previousLeader || previous?.drive?.manual?.passive);
-        const { local: point, angle } = fitBody(location, step, rebuild ? undefined : readRailRoute(saved.route));
+        const { local: point, angle } = fitBody(location, step, rebuild ? undefined : readRailRoute(saved.route, rails));
         const turn = Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
         const transaction = rebuild ? attachTrain(location, step) : undefined;
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: rotation + turn },
