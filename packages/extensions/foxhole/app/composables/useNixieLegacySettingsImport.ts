@@ -14,12 +14,20 @@ import {
 } from '../utils/nixie-legacy-settings.ts';
 import type { LegacySettingsReport } from '../utils/nixie-legacy-settings.ts';
 
-export function useNixieLegacySettingsImport() {
+export function useNixieLegacySettingsImport(getFile: () => File) {
     const store = useNixieSettingsStore();
     const registry = useNixieRegistry();
     const user = useSupabaseUser();
-    const owner = computed(() => user.value?.sub ?? null);
-    const pending = ref(false);
+    const owner = computed(() => user.value?.id ?? user.value?.sub ?? null);
+    const waitingForAccountSettings = computed(() => {
+        // The store's bound account ID isn't reactive. Hydration advances its revision.
+        void store.revision;
+        const context = store.getPaletteStorageContext();
+        return context.userId !== owner.value || !context.ready;
+    });
+    const reading = ref(false);
+    const pending = computed(() => (preferences.value || toolbelts.value)
+        && (waitingForAccountSettings.value || reading.value));
     const report = shallowRef<LegacySettingsReport | null>(null);
     const filename = ref('');
     const error = ref('');
@@ -38,16 +46,8 @@ export function useNixieLegacySettingsImport() {
             + (toolbelts.value ? report.value.slots.length : 0);
     });
 
-    watch(owner, () => {
-        report.value = null;
-        recovery.value = null;
-        filename.value = '';
-        error.value = '';
-        message.value = '';
-    });
-
     function assertReady(): void {
-        if (!store.getPaletteStorageContext().ready) {
+        if (waitingForAccountSettings.value || !store.getPaletteStorageContext().ready) {
             throw new Error('Wait for your account settings to finish loading, then try again.');
         }
     }
@@ -61,15 +61,7 @@ export function useNixieLegacySettingsImport() {
         error.value = '';
     }
 
-    async function readFile(file: File): Promise<void> {
-        if (pending.value) {
-            return;
-        }
-        pending.value = true;
-        error.value = '';
-        message.value = '';
-        report.value = null;
-        const expectedOwner = owner.value;
+    async function readFile(file: File, isCurrent: () => boolean): Promise<void> {
         try {
             assertReady();
             if (file.size > LEGACY_SETTINGS_MAX_BYTES) {
@@ -81,8 +73,8 @@ export function useNixieLegacySettingsImport() {
             if (getNixieExtension('foxhole')) {
                 await ensureNixieExtensionContributions(['foxhole']);
             }
-            if (owner.value !== expectedOwner) {
-                throw new Error('Your account changed. Choose the file again.');
+            if (!isCurrent()) {
+                return;
             }
             const manifest = getFoxholeManifest('/foxhole/assets/');
             const mapped = parseLegacySettings(text, createLegacySettingsAssetIndex(manifest.assets,
@@ -99,16 +91,33 @@ export function useNixieLegacySettingsImport() {
                 mapped.skipped.push({ source: change.source, reason: 'This preference is unavailable in this Nixie installation.' });
                 return false;
             });
-            preferences.value = true;
-            toolbelts.value = true;
             filename.value = file.name;
             report.value = mapped;
         } catch (cause) {
-            error.value = cause instanceof Error ? cause.message : 'Unable to read this settings file.';
+            if (isCurrent()) {
+                error.value = cause instanceof Error ? cause.message : 'Unable to read this settings file.';
+            }
         } finally {
-            pending.value = false;
+            if (isCurrent()) {
+                reading.value = false;
+            }
         }
     }
+
+    watch([getFile, owner, waitingForAccountSettings], ([file, account, waiting], _previous, onCleanup) => {
+        report.value = null;
+        recovery.value = null;
+        filename.value = '';
+        error.value = '';
+        message.value = '';
+        reading.value = !waiting;
+        if (waiting) {
+            return;
+        }
+        let current = true;
+        onCleanup(() => { current = false; });
+        void readFile(file, () => current && file === getFile() && account === owner.value);
+    }, { immediate: true });
 
     function apply(): boolean {
         if (pending.value || !report.value || !selectedCount.value) {
@@ -171,5 +180,5 @@ export function useNixieLegacySettingsImport() {
         return tool?.metadata.name ?? 'Unavailable tool';
     }
 
-    return { pending, report, filename, error, message, preferences, toolbelts, recovery, selectedCount, readFile, cancelReview, apply, undo, currentValue, currentSlotLabel };
+    return { pending, waitingForAccountSettings, report, filename, error, message, preferences, toolbelts, recovery, selectedCount, cancelReview, apply, undo, currentValue, currentSlotLabel };
 }

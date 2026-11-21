@@ -5,7 +5,7 @@ import type { LegacySettingsChange } from '#foxhole/utils/nixie-legacy-settings.
 
 const props = defineProps<{ file: File; includePreferences: boolean; includeToolbelts: boolean; disabled?: boolean; }>();
 const emit = defineEmits<{ ready: [value: boolean]; pending: [value: boolean]; }>();
-const importer = useNixieLegacySettingsImport();
+const importer = useNixieLegacySettingsImport(() => props.file);
 const visibleChanges = computed(() => importer.report.value?.changes.filter(change =>
     change.paletteKey || change.source === 'showToolbelt' ? props.includeToolbelts : props.includePreferences,
 ) ?? []);
@@ -18,7 +18,6 @@ watch([() => props.includePreferences, () => props.includeToolbelts, importer.re
 watch([importer.pending, importer.selectedCount], ([pending, count]) => {
     emit('ready', !pending && count > 0);
 }, { immediate: true });
-watch(() => props.file, file => { void importer.readFile(file); }, { immediate: true });
 watch(importer.pending, pending => emit('pending', pending), { immediate: true });
 defineExpose({ apply: importer.apply });
 
@@ -38,7 +37,7 @@ function displayValue(value: unknown, change?: LegacySettingsChange): string {
             <p v-if="importer.error.value" role="alert" class="nx-legacy-settings__error">{{ importer.error.value }}</p>
             <p v-if="importer.message.value" role="status">{{ importer.message.value }}</p>
             <template v-if="!importer.report.value">
-                <p v-if="importer.pending.value" role="status">Reading settings…</p>
+                <p v-if="importer.pending.value" role="status">{{ importer.waitingForAccountSettings.value ? 'Loading account settings…' : 'Reading settings…' }}</p>
             </template>
             <template v-else-if="includePreferences || includeToolbelts">
                 <p v-if="includeToolbelts && importer.report.value.slots.length" class="nx-text-muted">Matching palette slots are replaced in their original rows; other slots are kept.</p>
