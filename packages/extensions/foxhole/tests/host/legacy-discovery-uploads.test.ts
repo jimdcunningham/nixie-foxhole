@@ -26,14 +26,15 @@ function fixture(fail = false) {
             if (table === 'blueprints') {
                 assert.equal(url.searchParams.get('user_id'), `eq.${actor}`, 'every legacy page is scoped to its owner');
                 assert.equal(url.searchParams.get('game'), 'eq.foxhole');
+                assert.equal(url.searchParams.has('privacy'), false, 'owners can list their own unlisted blueprints');
                 assert.equal(url.searchParams.get('deleted_at'), 'is.null');
                 assert.equal(url.searchParams.has('approved'), false, 'owners can see pending uploads');
-                data = [{ id: actor, name: 'Private Upload', privacy: 'private', approved: null, version: null, description: null, created_at: date, updated_at: date }];
+                data = [{ id: actor, name: 'Pending Upload', privacy: 'unlisted', approved: null, version: null, description: null, created_at: date, updated_at: date }];
             } else if (table === 'nixie_registry_listings') {
                 assert.equal(url.searchParams.get('publisher_user_id'), `eq.${actor}`, 'every native page is scoped to its publisher');
                 assert.equal(url.searchParams.get('type'), 'eq.project');
                 assert.equal(url.searchParams.get('limit'), '25');
-                assert.equal(url.searchParams.has('visibility'), false, 'owners can see unlisted uploads');
+                assert.equal(url.searchParams.has('visibility'), false, 'publishers can list their own unlisted uploads');
                 data = Array.from({ length: 25 }, (_, index) => ({
                     public_id: `Upload${String(index).padStart(6, '0')}`, title: `Upload ${index}`, description: '',
                     visibility: 'unlisted', status: 'published', default_release_id: index === 0 ? null : actor,
@@ -59,7 +60,7 @@ test('native uploads preserve ownership on first and continuation pages', async 
     assert.match(requests[1]!.searchParams.get('or')!, /public_id.lt.Upload000023/);
 });
 
-test('legacy uploads include private pending entries without exposing a public link', async () => {
+test('legacy uploads include pending unlisted entries for the owner', async () => {
     const { client } = fixture();
     const page = await readDiscoveryUploads(client, actor, 'legacy');
     assert.equal(page.items[0]!.id, `foxhole-blueprint-${actor}`);
