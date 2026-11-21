@@ -15,7 +15,7 @@ test('Planner publishing builds an independent remote package with scoped author
     // Runner paths are available inside setup steps, not job-level env expressions.
     assert.doesNotMatch(text.split('    steps:')[0], /\$\{\{\s*runner\./);
     assert.match(text, />> \"\$GITHUB_ENV\"/);
-    for (const step of ['typecheck', 'build', 'pack', 'publish:extension']) assert.ok(text.includes('npm run ' + step));
+    for (const step of ['lint', 'typecheck', 'build', 'pack', 'publish:extension']) assert.ok(text.includes('npm run ' + step));
     assert.match(text, /npm test/);
     assert.match(text, /prepare-publication-inputs\.mjs/);
     assert.match(text, /verify-publication-package\.mjs/);

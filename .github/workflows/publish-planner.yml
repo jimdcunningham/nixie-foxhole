@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           node --test "$PLANNER_ROOT/build/prepare-catalog-input.test.mjs" "$PLANNER_ROOT/build/prepare-publication-inputs.test.mjs"
+          npm run lint --prefix "$PLANNER_ROOT"
           npm run typecheck --prefix "$PLANNER_ROOT"
           npm test --prefix "$PLANNER_ROOT"
           npm run build --prefix "$PLANNER_ROOT"

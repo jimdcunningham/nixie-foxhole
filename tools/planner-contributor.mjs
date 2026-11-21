@@ -56,6 +56,7 @@ try {
         await realpath(catalog).catch(() => { throw new Error('Run npm run setup:planner before starting the watcher.'); });
         await script('dev');
     } else {
+        await script('lint');
         await fixtures();
         const buildTests = (await readdir(join(planner, 'build'))).filter(name => name.endsWith('.test.mjs')).sort();
         await run(process.execPath, ['--test', ...buildTests.map(name => 'build/' + name)], planner);

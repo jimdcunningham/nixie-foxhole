@@ -71,6 +71,8 @@ The pure legacy socket ID/name map lives in `src/legacy-plan-socket-id-map.ts`. 
 
 For a public contributor checkout, follow [CONTRIBUTING.md](../../CONTRIBUTING.md): run `npm run setup:planner` and `npm run dev:planner` from the repository root, choose the clone’s `extensions` folder in Studio Editor Settings, then approve and enable Planner in an offline project’s Manage Extensions dialog. Run `npm run check:planner` before opening a pull request. The private Nixie workspace retains its separate `npm run dev --workspace @nixiejs/foxhole-planner-sdk` integration workflow.
 
+Run `npm run format:manifest` from the Planner extension folder to format the source manifest. `npm run lint` checks its formatting, and the build writes a compact manifest for packaging.
+
 The Explorer uses the SDK `assets` provider in both Scene V1 and Scene V2. Language, default/rendered icons, search aliases, categories, filters and upgrade entries come from that provider. The bundled layer no longer contributes an Explorer catalog.
 
 The compiled integration retains legacy scene rendering and read-only identity adapters. Old `foxhole.structures` palette references resolve through the active SDK provider; imported legacy toolbelts use `sdk.nixie.foxhole-planner__assets` and canonical `asset.*` IDs. V1-to-V2 conversion canonicalizes historical asset keys and icon folders, retains supported appearance/modification state and model bindings, and preserves the original node snapshot. Unknown identities stay unresolved with their source data preserved.

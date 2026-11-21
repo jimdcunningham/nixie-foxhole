@@ -11,6 +11,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
+    "lint": "node build/manifest-format.mjs",
+    "format:manifest": "node build/manifest-format.mjs --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types ./tests/*.test.ts",
     "pack": "nixie-extension pack . --out artifacts/extension.nxext --force",
