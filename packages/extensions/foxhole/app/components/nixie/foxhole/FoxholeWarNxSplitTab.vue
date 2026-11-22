@@ -14,7 +14,13 @@ const splitSkeletonRows = [0, 1, 2, 3, 4, 5];
 
 <template>
     <div class="foxhole-war-nx-split-tab">
-        <NxSurfaceSection title="Faction Split">
+        <NxEmptyState
+            v-if="breakdownSummaryState && breakdownSummaryState.kind !== 'loading'"
+            icon="ph:columns"
+            :message="breakdownSummaryState.detail"
+        />
+
+        <NxSurfaceSection v-else title="Faction Split">
             <div
                 v-if="breakdownSummaryState?.kind === 'loading'"
                 class="foxhole-war-nx-split-tab__table"
@@ -36,12 +42,6 @@ const splitSkeletonRows = [0, 1, 2, 3, 4, 5];
                     <NxSkeleton width="48%" height="12px" shape="pill" />
                 </div>
             </div>
-
-            <NxEmptyState
-                v-else-if="breakdownSummaryState"
-                icon="ph:columns"
-                :message="breakdownSummaryState.detail"
-            />
 
             <div v-else class="foxhole-war-nx-split-tab__table">
                 <div class="foxhole-war-nx-split-tab__header-row">
