@@ -877,7 +877,10 @@ const mapModVisibilityDisabled = computed(() => (
                 :defaultOpen="true"
             >
                 <p v-if="isSpatialView && standalonePreview" class="text-muted text-sm">Home regions are available as map previews.</p>
-                <p v-else-if="isSpatialView && (!mapSettings.regionKeys.length || (!mapSettings.devMultiRegion3d && mapSettings.regionKeys.length !== 1))" class="text-muted text-sm">
+                <p
+                    v-else-if="isSpatialView && (!mapSettings.regionKeys.length || (!mapSettings.devMultiRegion3d && mapSettings.regionKeys.length !== 1))"
+                    class="foxhole-war-nx-map-tab__region-hint text-muted text-sm"
+                >
                     {{ mapSettings.devMultiRegion3d ? 'Select regions to show the 3D map.' : 'Select one region to show the 3D map.' }}
                 </p>
                 <div class="foxhole-war-nx-map-tab__layer-controls">
@@ -1212,6 +1215,10 @@ const mapModVisibilityDisabled = computed(() => (
 .foxhole-war-nx-map-tab__mod-progress-file,
 .foxhole-war-nx-map-tab__mod-progress-caption {
     color: var(--nx-text-muted);
+}
+
+.foxhole-war-nx-map-tab__region-hint {
+    text-align: center;
 }
 
 .foxhole-war-nx-map-tab__mod-result-status {
