@@ -348,7 +348,14 @@ export function poseFoxholeRailBogies(entity: Entity, assetId: string, context: 
     if (!location) return undefined;
     const chassis = resolveRailChassis(assetId, rails, location, attachment.reversed ? -1 : 1,
         { route: readRailRoute(attachment.route, rails) });
-    return railModelNodeTransforms(bogies, chassis, point => projection.toLocal(entity, point));
+    const toLocal = (point: FoxholeSpatialPoint) => projection.toLocal(entity, point);
+    const [x, y, z] = toLocal(chassis.point);
+    const [aheadX, aheadY] = toLocal([chassis.point[0] + Math.cos(chassis.heading),
+        chassis.point[1] + Math.sin(chassis.heading), chassis.point[2]]);
+    // A gizmo can preview or commit a group transform while retaining old rail stations.
+    // Use the authored rest pose until the saved station and rendered chassis agree.
+    if (Math.hypot(x, y, z) > 1 || Math.abs(Math.atan2(aheadY - y, aheadX - x)) > .01) return undefined;
+    return railModelNodeTransforms(bogies, chassis, toLocal);
 }
 
 function railModelNodeTransforms(bogies: NonNullable<(typeof foxholeRailVehicleBogies)[string]>,

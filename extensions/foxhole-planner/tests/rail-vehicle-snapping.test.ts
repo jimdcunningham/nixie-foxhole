@@ -954,6 +954,31 @@ test('long rolling stock steers the two bogies independently through the spatial
     }
 });
 
+test('bogie poses do not hold moved cars at their old rail station', () => {
+    const rail = track('railtrackspline');
+    Object.assign(rail.components.at(-1)!.data, { endX: 1300, maxLength: 2500 });
+    const proposal = request('trainlrartillery', [rail]);
+    const vehicle = proposal.context.entities[0]!;
+    vehicle.components.push(component('rail-attachment', { rail: 'track', station: 650, reversed: false }));
+    const parked = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'transform', followedEntityId: 'track' }).transform;
+    Object.assign(vehicle.components[1]!.data, { x: parked.x, y: parked.y, rotation: parked.rotation });
+    vehicle.components.push(component('spatial-transform', { elevation: parked.elevation! }, 'nixie.core'));
+    const context = { ...proposal.context, settings: { 'nixie.scene.modelNodeTransforms': true } };
+    const render = () => renderFoxholeSceneV2Entity(vehicle, context).spatial?.modelNodeTransforms;
+    assert.equal(render()?.length, 2);
+
+    // A multi-selection gizmo move preserves the saved station during preview.
+    vehicle.components[1]!.data.y = parked.y + 140;
+    assert.equal(render(), undefined);
+
+    Object.assign(vehicle.components[1]!.data, { y: parked.y, rotation: parked.rotation! + Math.PI / 2 });
+    assert.equal(render(), undefined);
+
+    Object.assign(vehicle.components[1]!.data, { y: parked.y + 140, rotation: parked.rotation });
+    rail.components[0]!.data.y = 140;
+    assert.equal(render()?.length, 2, 'moving the car and its rail together keeps articulation');
+});
+
 test('long cars keep both bogie poses when a secondary rail is reshaped', () => {
     for (const assetId of ['trainhospital', 'trainlrartillery']) {
         const approach = track('railtrackspline', 'approach');
