@@ -21,7 +21,12 @@ export function renderFoxholeSpatialRepeats(data: FoxholeSceneV2SplineConnectorD
     if (path.totalLength <= 1e-6) return undefined;
     const points = path.points.flatMap((point, i) => [point.x, point.y,
         (data.startZ ?? 0) + ((data.endZ ?? 0) - (data.startZ ?? 0)) * path.lengths[i]! / path.totalLength]);
-    const length = Math.hypot(path.totalLength, (data.endZ ?? 0) - (data.startZ ?? 0));
+    // Instance distances are measured along the exact 3D polyline shipped to the host.
+    let length = 0;
+    for (let index = 3; index < points.length; index += 3) {
+        length += Math.hypot(points[index]! - points[index - 3]!, points[index + 1]! - points[index - 2]!,
+            points[index + 2]! - points[index - 1]!);
+    }
     const distance3D = (distance: number) => Math.max(0, Math.min(length, distance / path.totalLength * length));
     const common = { kind: 'model-path' as const, resourceId: asset.model.resourceId, unitsPerMetre: 32, points,
         ...(data.endpointBindings && Object.keys(data.endpointBindings).length ? { endpointBindings: data.endpointBindings } : {}) };

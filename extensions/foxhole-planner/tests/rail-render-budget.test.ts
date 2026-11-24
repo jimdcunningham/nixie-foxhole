@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_VERTICES, NIXIE_EXTENSION_RENDER_PLAN_MAX_MESH_INDICES,
-    parseNixieExtensionRenderPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
+    parseNixieExtensionRenderPlanV1, parseNixieSpatialPlanV1 } from '@nixiejs/extension-sdk/scene-v2';
 import assets from '#foxhole-scene-v2-assets';
 import { renderFoxholeSceneV2SplineConnector } from '../src/scene-v2-spline-connectors.ts';
+import { renderFoxholeSpatialRepeats } from '../src/scene-v2-spatial-repeats.ts';
 import { buildSplineRibbonMeshData } from '../src/spline-ribbon-mesh.ts';
+
+test('a sloped rail can place a sleeper at its exact endpoint', () => {
+    const foxholeKey = 'railtracksplinebiarc';
+    const asset = assets[foxholeKey]!;
+    const plan = renderFoxholeSpatialRepeats({
+        foxholeKey, startX: 0, startY: 0, startRotation: 0, startZ: 0,
+        endX: 192, endY: 10, endRotation: 0.6, endZ: 10,
+        minLength: 48, maxLength: 100000, minRadius: 24, maxRadius: 24, maxBuffer: 0, curveT: 1, blueprint: false,
+    }, { ...asset, connector: { ...asset.connector!, meshConfigs: [{ mode: 'interval', interval: 0, startOffset: 0, endOffset: 0 }] } });
+    assert.ok(plan);
+    const sleepers = parseNixieSpatialPlanV1(plan).nodes.find(node => node.id === 'rail-sleepers');
+    assert.ok(sleepers?.kind === 'model-path' && sleepers.instances?.length === 2);
+});
 
 for (const foxholeKey of ['railtrackspline', 'railtracksplinefoundation', 'smallrailtracksplinebiarc', 'smallrailtracksplinefoundation']) {
     for (const curved of [false, true]) {
