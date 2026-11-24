@@ -733,6 +733,41 @@ test('coupler placement advances from the existing car along a curved rail', () 
     assert.equal(finalizeFoxholeRailVehicleSnap(proposal).transform.elevation, undefined);
 });
 
+test('coupler placement rejects a Tempest with an unsupported axle or an occupied berth', () => {
+    const rail = track('railtrackspline');
+    const spline = rail.components.at(-1)!.data;
+    Object.assign(spline, { endX: 900, maxLength: 2500 });
+    const height = 32 + 36 * .32;
+    const parked = (entityId: string, x: number): NixieComponentEntitySnapshotV1 => ({
+        entityId, revision: 1, components: [
+            component('asset', { assetId: 'trainflatbed', catalogId: 'foxhole.structures' }),
+            component('transform', { x, y: 0, rotation: 0 }, 'nixie.core'),
+            component('spatial-transform', { elevation: height }, 'nixie.core'),
+            component('rail-attachment', { rail: rail.entityId, station: x, reversed: false }),
+        ],
+    });
+    const anchor = parked('anchor', 300);
+    const proposal = request('trainlrartillery', [rail, anchor]);
+    Object.assign(proposal.transform, { x: 850, y: 0, rotation: 0 });
+    const place = (phase: 'preview' | 'commit') => finalizeFoxholeRailVehicleSnap({
+        ...proposal, geometryGesture: { phase, handleId: 'product-placement-port', snappingEnabled: true,
+            worldPoint: { x: 300, y: 0, z: height }, hoveredEntityIds: [anchor.entityId] },
+    });
+    assert.equal(place('preview').transform.elevation, undefined);
+    assert.equal(place('commit').transaction, undefined);
+
+    spline.endX = 1500;
+    assert.equal(place('preview').transform.elevation, height);
+    const valid = place('commit');
+    assert.equal(valid.transform.elevation, height);
+    assert.ok(valid.transaction?.operations.some(operation => operation.op === 'add' && operation.entityId === proposal.entityId
+        && operation.componentId === 'rail-attachment'));
+
+    proposal.context.entities.push(parked('blocker', 900));
+    assert.equal(place('preview').transform.elevation, undefined);
+    assert.equal(place('commit').transaction, undefined);
+});
+
 test('the axle chord keeps both axle centers on a curve at the authored spacing', () => {
     const radius = 180, wheelbase = 163.2;
     const sample = (distance: number): [number, number, number] => [

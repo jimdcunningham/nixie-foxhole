@@ -634,6 +634,36 @@ function railVehicleAt(entity: Entity, rails: RunningRail[]): ParkedRailVehicle 
     return { entity, assetId, location: { ...location, step }, chassis: resolveRailChassis(assetId, rails, location, step) };
 }
 
+function railVehicleFitsAtPort(assetId: string, rails: RunningRail[], location: DirectedRailLocation,
+    entities: readonly Entity[], subjectId: string): boolean {
+    const chassis = resolveRailChassis(assetId, rails, location, location.step);
+    if (!railSimulationFrame(assetId, chassis, 0)) return false;
+    const shape = railVehicleCollider(assetId);
+    if (!shape) return false;
+    const closed = closedRunningLine(rails, location);
+    const line = closed ?? openRunningLine(rails, location);
+    const path: RunningRail = { entityId: '', points: [], stations: [], endpointLinks: ['', ''] };
+    const spans = appendRouteSpans(path, line.spans);
+    const origin = spans.find(span => span.rail === location.rail);
+    if (!origin) return false;
+    const stationOnLine = (at: RailLocation, span: typeof origin) =>
+        span.offset + (span.step > 0 ? at.station : routeLength(span.rail) - at.station);
+    const station = stationOnLine(location, origin);
+    const length = routeLength(path);
+    const centre = shape.center[0] * location.step * origin.step;
+    return !entities.some(entity => {
+        if (entity.entityId === subjectId) return false;
+        const parked = railVehicleAt(entity, rails);
+        const span = parked && spans.find(entry => entry.rail === parked.location.rail);
+        const other = parked && railVehicleCollider(parked.assetId);
+        if (!parked || !span || !other) return false;
+        let gap = stationOnLine(parked.location, span) - station
+            + other.center[0] * parked.location.step * span.step - centre;
+        if (closed) gap = wrapStation(gap + length / 2, length) - length / 2;
+        return Math.abs(gap) < shape.halfExtents[0] + other.halfExtents[0] - 1;
+    });
+}
+
 function packRailFrames(frames: SimulationFrame[]) {
     const first = frames[0]!.distance;
     const nodes = frames[0]!.modelNodeTransforms.map((node, index) => ({ name: node.nodeName, index }))
@@ -1196,6 +1226,8 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const directed = { ...anchorLocation, step: anchorAttachment?.reversed ? -1 : 1 };
         const initial = findCoupledChassis(rails, directed, anchorAsset, {});
         if (!initial || railDistance(initial.location.point, origin) > tolerance) return;
+        if (request.geometryGesture?.handleId === 'product-placement-port'
+            && !railVehicleFitsAtPort(assetId, rails, initial.location, entities, original.entityId)) return;
         const { local: point, angle } = fitBody(initial.location, initial.location.step);
         if (preview) {
             return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle } };
@@ -1263,8 +1295,10 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const result = followRailFromCoupler(rails, [source.x, source.y, railElevation], origin);
         if (!result) return unchanged;
         const step = reversed ? -result.step : result.step;
+        if (!railVehicleFitsAtPort(assetId, rails, { ...result, step }, entities, original.entityId)) return unchanged;
         const { local: point, angle } = fitBody(result, step);
         const transaction = attachTrain(result, step, { portOwnerId: anchor?.entityId });
+        if (!preview && !transaction) return unchanged;
         return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2],
             rotation: angle }, ...(transaction ? { transaction } : {}) };
     }
