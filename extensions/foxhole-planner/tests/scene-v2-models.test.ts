@@ -148,8 +148,9 @@ test('catalog-wide models bind every exportable category and keep unavailable mo
     const selected = bindFoxholeSceneV2Models(structuredClone(assets), fullModelBundle);
     assert.ok(selected.every(model => isFoxholeSceneV2ModelAllowed(model.assetId)));
     for (const asset of catalog.assets) {
-        const catalogAssets = { [asset.id]: structuredClone(assets[asset.id]!) };
-        const metadata = catalogAssets[asset.id]!;
+        const metadata = structuredClone(assets[asset.id]);
+        assert.ok(metadata, `Product catalog is missing ${asset.id} from the asset manifest`);
+        const catalogAssets = { [asset.id]: metadata };
         const models = bindFoxholeSceneV2Models(catalogAssets, { schemaVersion: 1, assets: { [asset.id]: {
             codeName: metadata.codeName, resourceId: `foxhole.model.${asset.id}`, path: `models/${asset.id}.glb`,
             width: 32, height: 32, depth: 32, offsetX: 0, offsetY: 0, offsetZ: 0,
