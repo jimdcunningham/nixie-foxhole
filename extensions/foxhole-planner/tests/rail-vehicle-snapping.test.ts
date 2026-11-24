@@ -120,6 +120,29 @@ function request(assetId: string, tracks: NixieComponentEntitySnapshotV1[]): Nix
     };
 }
 
+test('new cars snap to the nearest compatible rail within two metres', () => {
+    const proposal = request('trainflatbed', [
+        track('railtrackspline', 'farther', -12),
+        track('railtrackspline', 'nearest'),
+        track('smallrailtrackspline', 'wrong-gauge', 60),
+    ]);
+    proposal.transform.y = 60;
+    const preview = finalizeFoxholeRailVehicleSnap({ ...proposal, preview: true });
+    const placed = finalizeFoxholeRailVehicleSnap(proposal);
+    assert.equal(preview.transform.y, 0);
+    assert.equal(placed.transform.y, 0);
+    assert.ok(placed.transaction?.operations.some(operation => operation.op === 'add'
+        && operation.componentId === 'rail-attachment' && operation.data.rail === 'nearest'));
+
+    const moved = finalizeFoxholeRailVehicleSnap({ ...proposal, interaction: 'planar-translation' });
+    assert.equal(moved.transform.y, 60);
+
+    proposal.transform.y = 65;
+    const outside = finalizeFoxholeRailVehicleSnap(proposal);
+    assert.equal(outside.transform.y, 65);
+    assert.equal(outside.transaction, undefined);
+});
+
 for (const [region, count, suffix] of [['westgate', 15, 'foundation_6:end'], ['greatmarch', 10, 'spline3_9:start']] as const) {
     test(`${region} accepts an end extension and large vehicles retain their rail route after a save round trip`, () => {
         const fixed = fixedRailNetwork(region)!;

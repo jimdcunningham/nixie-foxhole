@@ -20,6 +20,7 @@ import type { FoxholeSceneV2SplineConnectorData } from './scene-v2-spline-connec
 import type { FoxholeSceneV2AssetMetadata } from './scene-v2-asset-metadata.ts';
 
 const SNAP_DISTANCE = 20;
+const PLACEMENT_SNAP_DISTANCE = 2 * UNITS_PER_METRE;
 // RailZOffset on the standard and small-gauge RailTrackSpline blueprint CDOs (cm).
 const RAIL_Z_OFFSET_CM = { standard: 36, small: 20 };
 // The crane track blueprint has no RailZOffset. Use the exported railhead
@@ -1312,12 +1313,13 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         }
     }
 
+    const snapDistance = request.interaction === 'placement' && gauge !== 'crane' ? PLACEMENT_SNAP_DISTANCE : SNAP_DISTANCE;
     for (const rail of rails) {
         const { points } = rail;
         for (let index = 1; index < points.length; index++) {
             const start = points[index - 1]!, end = points[index]!;
             const nearest = nearestPointOnSegment({ x: origin[0], y: origin[1] }, { x: start[0], y: start[1] }, { x: end[0], y: end[1] });
-            if (!(nearest.distance <= SNAP_DISTANCE) || (best && nearest.distance > best.distance)) continue;
+            if (!(nearest.distance <= snapDistance) || (best && nearest.distance > best.distance)) continue;
             const height = start[2] + (end[2] - start[2]) * nearest.t;
             const heightDifference = Math.abs(height - origin[2]);
             if (best && nearest.distance === best.distance && heightDifference >= best.heightDifference) continue;
