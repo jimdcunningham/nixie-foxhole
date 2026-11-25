@@ -36,6 +36,8 @@ const CORE_OWNER_ID = 'nixie.core';
 const SOCKET_ATTACHMENTS_COMPONENT_ID = 'socket-attachments';
 const SNAP_DISTANCE = 20;
 const SNAP_RELEASE_DISTANCE = 30;
+const SNAP_CAPTURE_PIXELS = 12;
+const SNAP_CAPTURE_WORLD_CAP = 60;
 const STRAIGHT_SOCKET_ALIGNMENT = Math.cos(Math.PI / 180);
 const MAX_MOVE_SNAP_ROTATION = Math.PI / 4;
 const MAX_FACING_ERROR = 8 * Math.PI / 180;
@@ -904,6 +906,9 @@ function finalizeFoxholeSceneV2TransformCore(
     }));
     const showSnap = request.context.settings?.['nixie.scene.snapFeedback'] === true
         && (request.interaction === 'placement' || request.interaction === 'planar-translation');
+    const renderScale = request.context.viewport?.renderScale;
+    const captureDistance = showSnap && renderScale ? Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * renderScale) : SNAP_DISTANCE;
+    const releaseDistance = Math.max(SNAP_RELEASE_DISTANCE, captureDistance * 1.5);
     let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
     for (const entity of request.interaction === 'exchange' || request.snappingEnabled === false ? [] : entities) {
@@ -926,13 +931,14 @@ function finalizeFoxholeSceneV2TransformCore(
                 }
                 candidates.push({ moving, target, overlap });
                 const distance = Math.hypot(...target.world.map((value, axis) => value - moving.world[axis]!));
-                if (!Number.isFinite(distance) || distance > (showSnap && request.previousSnapId ? SNAP_RELEASE_DISTANCE : SNAP_DISTANCE)) continue;
+                if (!Number.isFinite(distance) || distance > (showSnap && request.previousSnapId ? releaseDistance : captureDistance)) continue;
                 const angle = Math.abs(facingCorrection(moving, target));
                 if (angle > MAX_MOVE_SNAP_ROTATION + 1e-8) continue;
                 const snapId = showSnap ? JSON.stringify([moving.socket.name, target.entityId, target.socket.name]) : undefined;
                 const retained = snapId !== undefined && snapId === request.previousSnapId;
-                if (!retained && distance > SNAP_DISTANCE) continue;
-                const score = distance - overlap * 0.01 + angle * SNAP_DISTANCE / Math.PI;
+                if ((!retained && distance > captureDistance)
+                    || Math.abs(target.world[2] - moving.world[2]) > (retained ? SNAP_RELEASE_DISTANCE : SNAP_DISTANCE)) continue;
+                const score = distance - overlap * 0.01 + angle * captureDistance / Math.PI;
                 if (!best || (retained && !best.retained) || (retained === best.retained && score < best.score)) {
                     best = { moving, target, score, snapId, retained };
                 }

@@ -536,6 +536,25 @@ test('foundation placement holds the acquired edge beyond the capture radius and
     assert.equal(place(336, acquired.snap.id).snap, undefined, 'a removed neighbor cannot be retained');
 });
 
+test('structure capture uses 12 screen pixels and caps world reach in placement and drag', () => {
+    const moving = structure('moving', 0), target = structure('target', 0);
+    for (const entity of [moving, target]) entity.components[1]!.data.assetId = 'foundation012x2t3';
+    for (const interaction of ['placement', 'planar-translation'] as const) {
+        const resolve = (offset: number, renderScale: number) => finalizeFoxholeSceneV2Transform({
+            contractVersion: 1, entityId: moving.entityId, interaction,
+            transform: { x: 320 + offset, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+            context: { contractVersion: 1, entities: [moving, target], viewport: { renderScale },
+                settings: { 'nixie.scene.snapFeedback': true } },
+        }).transform.x;
+        assert.equal(resolve(11, 1), 320);
+        assert.equal(resolve(13, 1), 333);
+        assert.equal(resolve(30, 1 / 0.38), 320);
+        assert.equal(resolve(33, 1 / 0.38), 353);
+        assert.equal(resolve(59, 10), 320);
+        assert.equal(resolve(61, 10), 381);
+    }
+});
+
 test('a foundation connects every aligned neighbor and clears every reciprocal link on detach', () => {
     const moving = structure('moving', 320), left = structure('left', 0), above = structure('above', 320);
     const entities = [moving, left, above];
