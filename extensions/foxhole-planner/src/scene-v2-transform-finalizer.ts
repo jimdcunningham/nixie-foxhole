@@ -902,7 +902,8 @@ function finalizeFoxholeSceneV2TransformCore(
             && movingIds.has(link.targetEntityId)) || (endpoint && movingIds.has(endpoint.targetEntityId))
             ? [`${socket.entityId}:${normalizedName(socket.socket.name)}`] : [];
     }));
-    const showSnap = request.interaction === 'placement' && request.context.settings?.['nixie.scene.snapFeedback'] === true;
+    const showSnap = request.context.settings?.['nixie.scene.snapFeedback'] === true
+        && (request.interaction === 'placement' || request.interaction === 'planar-translation');
     let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
     for (const entity of request.interaction === 'exchange' || request.snappingEnabled === false ? [] : entities) {
