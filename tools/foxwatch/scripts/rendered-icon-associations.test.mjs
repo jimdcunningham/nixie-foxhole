@@ -48,3 +48,18 @@ test('compact shared icons and destroyed/packaged textures are declared only whe
  assert.equal(result.assets[0].packaged.sprite,undefined,'missing texture output is not invented');
  assert.equal(input.shared.modifications['door-123456789abc'].icons,undefined,'source remains unchanged');
 });
+
+test('a default icon recorded as rendered does not hide a published upgrade render', async () => {
+    const root = '/foxhole/assets/types/structures/facilityrefinery1/modifications/forge/forge';
+    const defaultIcon = '/foxhole/assets/icons/facilityforgeicon.webp';
+    const rendered = root + '.icon.rendered.webp';
+    const input = { isUpgrade: true, icons: { default: defaultIcon, rendered: defaultIcon }, previewUrl: defaultIcon,
+        sprite: { source: root + '.texture.webp' } };
+    const normalized = await normalizeRenderedIconAssociations(input, url => [defaultIcon, rendered].includes(url));
+    assert.equal(normalized.icons.rendered, rendered);
+    assert.equal(normalized.previewUrl, rendered);
+
+    const fallback = await normalizeRenderedIconAssociations(input, url => url === defaultIcon);
+    assert.equal(fallback.icons.rendered, undefined);
+    assert.equal(fallback.previewUrl, defaultIcon);
+});

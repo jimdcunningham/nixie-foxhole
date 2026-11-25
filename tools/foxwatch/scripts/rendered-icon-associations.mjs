@@ -40,7 +40,8 @@ export async function normalizeRenderedIconAssociations(manifest, available) {
         const infer = (url, pattern) => typeof url === 'string' && pattern.test(url) ? url.replace(pattern, '.icon.rendered') : null;
         const candidates = [icons?.rendered, value.renderedIconUrl, value.previewIconUrl, value.colors?.[0]?.renderedIconUrl,
             infer(defaultIcon, /\.icon\.default(?=[.-])/i), infer(value.previewUrl, /\.preview(?=[.-])/i),
-        ].filter(candidate => typeof candidate === 'string');
+            value.isUpgrade === true ? infer(value.sprite?.source, /\.texture(?=\.webp$)/i) : null,
+        ].filter(candidate => typeof candidate === 'string' && candidate !== defaultIcon);
         let rendered;
         for (const candidate of new Set(candidates)) if (await available(candidate)) { rendered = candidate; break; }
         if (icons) {

@@ -7806,12 +7806,9 @@ function stripPublishedModificationSlotNoise(
                         ?? variant?.previewUrl
                         ?? sourceModification?.previewUrl
                         ?? null;
-                    const renderedIconUrl = previewUrl
-                        ? (renderEntry?.renderedIconUrl
-                            ?? renderEntry?.iconUrl
-                            ?? variant?.icons?.rendered
-                            ?? defaultIconUrl)
-                        : defaultIconUrl;
+                    const renderedIconUrl = renderEntry?.renderedIconUrl
+                        ?? variant?.icons?.rendered
+                        ?? sourceModification?.icons?.rendered;
                     const spriteSource = renderEntry?.textureUrl
                         ?? variant?.sprite?.source
                         ?? sourceModification?.textureUrl
