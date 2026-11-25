@@ -4,6 +4,7 @@ import { buildFoxholeStatisticsReport } from './statistics-report.ts';
 import { renderFoxholePlanningMap } from './scene-v2-map-renderer.ts';
 import { renderFoxholePlanningGrid } from './scene-v2-map-grid.ts';
 import { connectNixieExtension } from '@nixiejs/extension-sdk';
+import { parseNixieTransformFinalizeResultV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { FOXHOLE_INSPECTOR_SYSTEM_ID, FOXHOLE_CONNECTOR_INSPECTOR_SYSTEM_ID, inspectFoxholeSceneV2Structure, inspectFoxholeSceneV2SplineConnector, inspectFoxholeSceneV2PlanningPath } from './scene-v2-inspector.ts';
 import {
     FOXHOLE_SCENE_V2_ENTITY_RENDERER_SYSTEM_ID,
@@ -17,6 +18,22 @@ import {
     FOXHOLE_SCENE_V2_TRANSFORM_FINALIZER_SYSTEM_ID,
     finalizeFoxholeSceneV2Transform,
 } from './scene-v2-transform-finalizer.ts';
+
+// Standalone builds with an older SDK can still snap on a newer Studio host.
+const supportsSnapFeedback = (() => {
+    try {
+        parseNixieTransformFinalizeResultV1({ contractVersion: 1, transform: { x: 0, y: 0 },
+            snap: { id: 'socket', points: [{ x: 0, y: 0, z: 0 }] } });
+        return true;
+    } catch {
+        return false;
+    }
+})();
+
+const finalizeSocketTransform: typeof finalizeFoxholeSceneV2Transform = request =>
+    finalizeFoxholeSceneV2Transform(supportsSnapFeedback || !request.context.settings?.['nixie.scene.snapFeedback']
+        ? request
+        : { ...request, context: { ...request.context, settings: { ...request.context.settings, 'nixie.scene.snapFeedback': false } } });
 
 const connection = await connectNixieExtension({
     sceneV2: {
@@ -37,9 +54,9 @@ const connection = await connectNixieExtension({
         transformFinalizers: {
             'transforms.surface-placement': finalizeFoxholeSurfacePlacement,
             ...foxholeRailTrackFinalizers,
-            [FOXHOLE_SCENE_V2_TRANSFORM_FINALIZER_SYSTEM_ID]: finalizeFoxholeSceneV2Transform,
-            'transforms.spline-socket-snapping': finalizeFoxholeSceneV2Transform,
-            'transforms.connector-socket-snapping': finalizeFoxholeSceneV2Transform,
+            [FOXHOLE_SCENE_V2_TRANSFORM_FINALIZER_SYSTEM_ID]: finalizeSocketTransform,
+            'transforms.spline-socket-snapping': finalizeSocketTransform,
+            'transforms.connector-socket-snapping': finalizeSocketTransform,
         },
     },
 });

@@ -72,5 +72,11 @@ function catalogPlugin(development: boolean): Plugin {
         async buildEnd(error) {if (error) await unlink(marker).catch(error => {if (error.code !== 'ENOENT') throw error;});},
     };
 }
-export default defineConfig(({mode}) => ({root: extensionRoot, base: './', build: {outDir: '.nixie-build', target: 'esnext',
+const hostSdk = process.env.NIXIE_HOST_ROOT?.trim();
+export default defineConfig(({mode}) => ({root: extensionRoot, base: './',
+    ...(hostSdk ? {resolve: {alias: [
+        {find: /^@nixiejs\/extension-sdk$/, replacement: resolve(hostSdk, 'packages/extension-sdk/dist/index.js')},
+        {find: /^@nixiejs\/extension-sdk\/scene-v2$/, replacement: resolve(hostSdk, 'packages/extension-sdk/dist/scene-v2/index.js')},
+    ]}} : {}),
+    build: {outDir: '.nixie-build', target: 'esnext',
     rollupOptions: {output: {importAttributesKey: 'with'}}}, plugins: [catalogPlugin(mode === 'development')]}));

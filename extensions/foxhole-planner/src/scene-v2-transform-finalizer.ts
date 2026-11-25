@@ -35,6 +35,7 @@ const FOXHOLE_OWNER_ID = 'nixie.foxhole-planner';
 const CORE_OWNER_ID = 'nixie.core';
 const SOCKET_ATTACHMENTS_COMPONENT_ID = 'socket-attachments';
 const SNAP_DISTANCE = 20;
+const SNAP_RELEASE_DISTANCE = 30;
 const STRAIGHT_SOCKET_ALIGNMENT = Math.cos(Math.PI / 180);
 const MAX_MOVE_SNAP_ROTATION = Math.PI / 4;
 const MAX_FACING_ERROR = 8 * Math.PI / 180;
@@ -875,7 +876,7 @@ function finalizeConnector(request: NixieTransformFinalizeRequestV1, moved: Nixi
 }
 
 function finalizeFoxholeSceneV2TransformCore(
-    request: NixieTransformFinalizeRequestV1,
+    request: NixieTransformFinalizeRequestV1 & { previousSnapId?: string; },
 ): NixieTransformFinalizeResultV1 {
     const entities = request.context.entities;
     const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId
@@ -901,9 +902,10 @@ function finalizeFoxholeSceneV2TransformCore(
             && movingIds.has(link.targetEntityId)) || (endpoint && movingIds.has(endpoint.targetEntityId))
             ? [`${socket.entityId}:${normalizedName(socket.socket.name)}`] : [];
     }));
-    let best: { moving: WorldSocket; target: WorldSocket; score: number; } | null = null;
+    const showSnap = request.interaction === 'placement' && request.context.settings?.['nixie.scene.snapFeedback'] === true;
+    let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
-    for (const entity of request.interaction === 'exchange' ? [] : entities) {
+    for (const entity of request.interaction === 'exchange' || request.snappingEnabled === false ? [] : entities) {
         if (movingIds.has(entity.entityId)) {
             continue;
         }
@@ -923,11 +925,16 @@ function finalizeFoxholeSceneV2TransformCore(
                 }
                 candidates.push({ moving, target, overlap });
                 const distance = Math.hypot(...target.world.map((value, axis) => value - moving.world[axis]!));
-                if (!Number.isFinite(distance) || distance > SNAP_DISTANCE) continue;
+                if (!Number.isFinite(distance) || distance > (showSnap && request.previousSnapId ? SNAP_RELEASE_DISTANCE : SNAP_DISTANCE)) continue;
                 const angle = Math.abs(facingCorrection(moving, target));
                 if (angle > MAX_MOVE_SNAP_ROTATION + 1e-8) continue;
+                const snapId = showSnap ? JSON.stringify([moving.socket.name, target.entityId, target.socket.name]) : undefined;
+                const retained = snapId !== undefined && snapId === request.previousSnapId;
+                if (!retained && distance > SNAP_DISTANCE) continue;
                 const score = distance - overlap * 0.01 + angle * SNAP_DISTANCE / Math.PI;
-                if (!best || score < best.score) best = { moving, target, score };
+                if (!best || (retained && !best.retained) || (retained === best.retained && score < best.score)) {
+                    best = { moving, target, score, snapId, retained };
+                }
             }
         }
     }
@@ -954,6 +961,7 @@ function finalizeFoxholeSceneV2TransformCore(
 
     const pose = best && socketSnapPose(request, moved, best.moving, best.target);
     const finalizedTransform = pose?.transform ?? { x: request.transform.x, y: request.transform.y };
+    const snapPoints: Array<{ x: number; y: number; z: number; }> = [];
     if (pose) {
             // One pair determines the pose. Record other pairs only if both position and facing still agree.
             const aligned = candidates.map(candidate => {
@@ -972,6 +980,12 @@ function finalizeFoxholeSceneV2TransformCore(
             if (claimedMoving.has(movingName) || claimedTargets.has(targetKey)) continue;
             claimedMoving.add(movingName);
             claimedTargets.add(targetKey);
+            if (showSnap && snapPoints.length < 8) {
+                const [x, y, z] = match.target.world;
+                if (!snapPoints.some(point => Math.hypot(point.x - x, point.y - y, point.z - z) <= 1)) {
+                    snapPoints.push({ x, y, z });
+                }
+            }
             nextByEntity.get(match.moving.entityId)!.push({
                 localSocketName: match.moving.socket.name,
                 targetEntityId: match.target.entityId,
@@ -1034,6 +1048,7 @@ function finalizeFoxholeSceneV2TransformCore(
     return {
         contractVersion: 1,
         transform: finalizedTransform,
+        ...(best?.snapId && snapPoints.length ? { snap: { id: best.snapId, points: snapPoints } } : {}),
         ...(operations.length
             ? {
                 transaction: {
@@ -1100,7 +1115,7 @@ function reconcileStructureAttachments(request: NixieTransformFinalizeRequestV1)
 }
 
 export function finalizeFoxholeSceneV2Transform(
-    request: NixieTransformFinalizeRequestV1,
+    request: NixieTransformFinalizeRequestV1 & { previousSnapId?: string; },
 ): NixieTransformFinalizeResultV1 {
     const moved = request.context.entities.find(entity => entity.entityId === request.entityId);
     if (!moved || connectorComponent(moved) || !assetMetadata(moved)) {

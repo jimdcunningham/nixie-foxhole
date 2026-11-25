@@ -515,6 +515,27 @@ test('nearby rigid sockets align XYZ while distant vertical candidates stay deta
     assert.deepEqual([moving, target], before, 'only Studio may commit the proposed elevation');
 });
 
+test('foundation placement holds the acquired edge beyond the capture radius and reports both joined sockets', () => {
+    const moving = structure('moving', 0), target = structure('target', 0);
+    for (const entity of [moving, target]) entity.components[1]!.data.assetId = 'foundation012x2t3';
+    const context = { contractVersion: 1 as const, entities: [moving, target], settings: { 'nixie.scene.snapFeedback': true } };
+    const place = (x: number, previousSnapId?: string, snappingEnabled = true) => finalizeFoxholeSceneV2Transform({
+        contractVersion: 1, entityId: moving.entityId, interaction: 'placement',
+        transform: { x, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }, context, previousSnapId, snappingEnabled,
+    }) as ReturnType<typeof finalizeFoxholeSceneV2Transform> & { snap?: { id: string; points: { x: number; y: number; z: number; }[]; }; };
+    const acquired = place(336);
+    assert.equal(acquired.transform.x, 320);
+    assert.equal(acquired.snap?.points.length, 2);
+    assert.ok(acquired.snap);
+    assert.equal(place(345).transform.x, 345, 'the original capture radius still applies');
+    assert.deepEqual(place(345, acquired.snap.id).snap, acquired.snap);
+    assert.equal(place(345, acquired.snap.id).transform.x, 320);
+    assert.equal(place(351, acquired.snap.id).snap, undefined);
+    assert.equal(place(336, acquired.snap.id, false).snap, undefined);
+    context.entities = [moving];
+    assert.equal(place(336, acquired.snap.id).snap, undefined, 'a removed neighbor cannot be retained');
+});
+
 test('a foundation connects every aligned neighbor and clears every reciprocal link on detach', () => {
     const moving = structure('moving', 320), left = structure('left', 0), above = structure('above', 320);
     const entities = [moving, left, above];
