@@ -11,7 +11,7 @@ import { fixedRailNetwork, fixedRailRegionId, nearbyFixedRailRegions, readFixedR
 import { foxholeRailVehicleBogies } from './rail-vehicle-rigs.ts';
 import { fitFoxholeRailWheelbase, foxholeRailWheelbase } from './rail-wheelbase.ts';
 import { sampleFoxholeSceneV2Connector } from './scene-v2-connector-path.ts';
-import { FOXHOLE_BOARD_UNITS_PER_METRE as UNITS_PER_METRE } from './scene-v2-footprints.ts';
+import { FOXHOLE_BOARD_UNITS_PER_METRE as UNITS_PER_METRE, foxholePolygonsOverlap } from './scene-v2-footprints.ts';
 import { withFoxholeSceneV2TransformProposal } from './scene-v2-core-transforms.ts';
 import { resolveFoxholeSpatialSplineAttachments } from './scene-v2-spatial-attachments.ts';
 import { createFoxholeSpatialProjection } from './scene-v2-spatial-transforms.ts';
@@ -431,6 +431,7 @@ const smallEngineId = 'smalltrainengine';
 const cannonId = 'trainlrartillery';
 const drawbarLength = .5 * UNITS_PER_METRE;
 const drawbarSlack = .3 * UNITS_PER_METRE;
+const couplerSnapDistance = 2 * UNITS_PER_METRE;
 
 function railDrive(leader: string, massKg: number, startDistance: number, loop: boolean, passive = false, smallGauge = false) {
     // Yard simulation tuning. Higher brake force keeps the stopping distance at top speed comparable.
@@ -442,27 +443,34 @@ function railDrive(leader: string, massKg: number, startDistance: number, loop: 
 
 /** Solve the coupled centre station on the same running line as the anchor. */
 function findCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, anchorId: PoweredTestVehicle, traversal: RailTraversal) {
-    const offsetDirection = anchorId === cannonId ? 1 : -1;
     const otherId = anchorId === engineId ? cannonId : engineId;
     const engineCoupler = railCouplers(assets[engineId]!, 'standard').find(coupler => coupler.name === 'RearCoupler')!;
     const cannonCoupler = railCouplers(assets[cannonId]!, 'standard').find(coupler => coupler.name === 'FrontCoupler')!;
     const anchorCoupler = anchorId === engineId ? engineCoupler : cannonCoupler;
     const otherCoupler = anchorId === engineId ? cannonCoupler : engineCoupler;
     const fixed = resolveRailChassis(anchorId, rails, anchor, anchor.step, traversal);
-    const fixedPoint = couplerPoint(fixed, anchorCoupler.point);
-    const separation = Math.abs(engineCoupler.point.x) + Math.abs(cannonCoupler.point.x);
+    return fitCoupledChassis(rails, anchor, fixed, anchorCoupler.point, otherId, otherCoupler.point, traversal);
+}
+
+type RailCouplerPoint = ReturnType<typeof railCouplers>[number]['point'];
+
+function fitCoupledChassis(rails: RunningRail[], anchor: DirectedRailLocation, fixed: RailChassis, anchorCoupler: RailCouplerPoint,
+    otherId: string, otherCoupler: RailCouplerPoint, traversal: RailTraversal = {}) {
+    const offsetDirection = Math.sign(anchorCoupler.x);
+    const fixedPoint = couplerPoint(fixed, anchorCoupler);
+    const separation = Math.abs(anchorCoupler.x) + Math.abs(otherCoupler.x);
     const evaluate = (offset: number) => {
         const location = advanceOnRail(rails, anchor, offsetDirection * offset * anchor.step, traversal);
         if (!location) return undefined;
-        const facing = { ...location, step: location.step * offsetDirection };
+        const facing = { ...location, step: -location.step * Math.sign(otherCoupler.x) };
         const chassis = resolveRailChassis(otherId, rails, facing, facing.step, traversal);
-        const point = couplerPoint(chassis, otherCoupler.point);
+        const point = couplerPoint(chassis, otherCoupler);
         const tangentDistance = offsetDirection * ((point[0] - fixedPoint[0]) * Math.cos(fixed.heading)
             + (point[1] - fixedPoint[1]) * Math.sin(fixed.heading));
         const gap = railDistance(point, fixedPoint);
         return { facing, chassis, error: tangentDistance < 0 ? -gap - drawbarLength : gap - drawbarLength };
     };
-    let low = separation - 96;
+    let low = Math.max(0, separation - 96);
     let high = separation + 96;
     let best = evaluate(separation + drawbarLength);
     if (best && Math.abs(best.error) <= .1) return { fixed, coupled: best.chassis, location: best.facing };
@@ -635,34 +643,80 @@ function railVehicleAt(entity: Entity, rails: RunningRail[]): ParkedRailVehicle 
     return { entity, assetId, location: { ...location, step }, chassis: resolveRailChassis(assetId, rails, location, step) };
 }
 
-function railVehicleFitsAtPort(assetId: string, rails: RunningRail[], location: DirectedRailLocation,
-    entities: readonly Entity[], subjectId: string): boolean {
+function railVehiclePlacementVolume(shape: NixieSimulationColliderV1,
+    toWorld: (point: FoxholeSpatialPoint) => FoxholeSpatialPoint) {
+    const [x, y, z] = shape.center;
+    const [halfLength, halfWidth, halfHeight] = shape.halfExtents;
+    // End-to-end couplers can touch within a small placement tolerance.
+    const half = Math.max(0, halfLength - .5);
+    const corners = [[x - half, y - halfWidth], [x + half, y - halfWidth],
+        [x + half, y + halfWidth], [x - half, y + halfWidth]] as const;
+    const footprint = corners.map(([cx, cy]) => {
+        const [worldX, worldY] = toWorld([cx, cy, z]);
+        return { x: worldX, y: worldY };
+    });
+    const heights = corners.flatMap(([cx, cy]) => [toWorld([cx, cy, z - halfHeight])[2], toWorld([cx, cy, z + halfHeight])[2]]);
+    return { footprint, minZ: Math.min(...heights), maxZ: Math.max(...heights) };
+}
+
+function railVehicleFits(assetId: string, rails: RunningRail[], location: DirectedRailLocation,
+    entities: readonly Entity[], subjectId: string, projection: ReturnType<typeof createFoxholeSpatialProjection>): boolean {
     const chassis = resolveRailChassis(assetId, rails, location, location.step);
     if (!railSimulationFrame(assetId, chassis, 0)) return false;
     const shape = railVehicleCollider(assetId);
     if (!shape) return false;
-    const closed = closedRunningLine(rails, location);
-    const line = closed ?? openRunningLine(rails, location);
-    const path: RunningRail = { entityId: '', points: [], stations: [], endpointLinks: ['', ''] };
-    const spans = appendRouteSpans(path, line.spans);
-    const origin = spans.find(span => span.rail === location.rail);
-    if (!origin) return false;
-    const stationOnLine = (at: RailLocation, span: typeof origin) =>
-        span.offset + (span.step > 0 ? at.station : routeLength(span.rail) - at.station);
-    const station = stationOnLine(location, origin);
-    const length = routeLength(path);
-    const centre = shape.center[0] * location.step * origin.step;
+    const [cx, cy, cz] = chassis.point;
+    const cosine = Math.cos(chassis.heading), sine = Math.sin(chassis.heading);
+    const candidate = railVehiclePlacementVolume(shape, ([x, y, z]) =>
+        [cx + x * cosine - y * sine, cy + x * sine + y * cosine, cz + z]);
+    // Attachment stations may lag an authored group move. Occupancy follows the current chassis.
     return !entities.some(entity => {
         if (entity.entityId === subjectId) return false;
-        const parked = railVehicleAt(entity, rails);
-        const span = parked && spans.find(entry => entry.rail === parked.location.rail);
-        const other = parked && railVehicleCollider(parked.assetId);
-        if (!parked || !span || !other) return false;
-        let gap = stationOnLine(parked.location, span) - station
-            + other.center[0] * parked.location.step * span.step - centre;
-        if (closed) gap = wrapStation(gap + length / 2, length) - length / 2;
-        return Math.abs(gap) < shape.halfExtents[0] + other.halfExtents[0] - 1;
+        const other = railVehicleCollider(String(data(entity, 'asset')?.assetId));
+        if (!other) return false;
+        const occupied = railVehiclePlacementVolume(other, point => projection.toWorld(entity, point));
+        return candidate.minZ < occupied.maxZ && occupied.minZ < candidate.maxZ
+            && foxholePolygonsOverlap(candidate.footprint, occupied.footprint);
     });
+}
+
+function findNearbyRailCoupler(assetId: string, gauge: 'small' | 'standard', rails: RunningRail[],
+    proposed: DirectedRailLocation, entities: readonly Entity[], subjectId: string,
+    projection: ReturnType<typeof createFoxholeSpatialProjection>) {
+    const chassis = resolveRailChassis(assetId, rails, proposed, proposed.step);
+    const sockets = railCouplers(assets[assetId]!, gauge).map(({ point }) => ({ point, world: couplerPoint(chassis, point) }));
+    if (!sockets.length) return;
+    const reach = Math.max(...sockets.map(socket => Math.hypot(socket.point.x, socket.point.y, socket.point.z)));
+    const along = (origin: RailChassis, point: FoxholeSpatialPoint) =>
+        (point[0] - origin.point[0]) * Math.cos(origin.heading) + (point[1] - origin.point[1]) * Math.sin(origin.heading);
+    let best: { anchor: ParkedRailVehicle; anchorSocket: RailCouplerPoint; movingSocket: RailCouplerPoint; distance: number } | undefined;
+    for (const entity of entities) {
+        const anchorId = String(data(entity, 'asset')?.assetId);
+        if (entity.entityId === subjectId || vehicleGauge.get(anchorId) !== gauge) continue;
+        const anchorSockets = railCouplers(assets[anchorId]!, gauge);
+        const anchorReach = Math.max(0, ...anchorSockets.map(({ point }) => Math.hypot(point.x, point.y, point.z)));
+        const displayedOrigin = projection.toWorld(entity, [0, 0, 0]);
+        if (railDistance(displayedOrigin, chassis.point) > reach + anchorReach + couplerSnapDistance + SNAP_DISTANCE) continue;
+        const anchor = railVehicleAt(entity, rails);
+        if (!anchor || railDistance(anchor.chassis.point, displayedOrigin) > SNAP_DISTANCE) continue;
+        const side = Math.sign(along(anchor.chassis, chassis.point));
+        const anchorSocket = anchorSockets.find(({ point }) => Math.sign(point.x) === side)?.point;
+        if (!anchorSocket) continue;
+        const worldSocket = couplerPoint(anchor.chassis, anchorSocket);
+        const facing = Math.sign(along(chassis, worldSocket));
+        const movingSocket = sockets.find(socket => Math.sign(socket.point.x) === facing);
+        if (!movingSocket) continue;
+        const distance = railDistance(worldSocket, movingSocket.world);
+        if (distance > couplerSnapDistance || (best && distance >= best.distance)) continue;
+        if (anchor.location.rail !== proposed.rail) {
+            const traversed = new Set<string>();
+            const distanceToBerth = Math.abs(anchorSocket.x) + Math.abs(movingSocket.point.x) + drawbarLength;
+            advanceOnRail(rails, anchor.location, anchor.location.step * side * (distanceToBerth + couplerSnapDistance), { traversed });
+            if (!traversed.has(proposed.rail.entityId)) continue;
+        }
+        best = { anchor, anchorSocket, movingSocket: movingSocket.point, distance };
+    }
+    return best;
 }
 
 function packRailFrames(frames: SimulationFrame[]) {
@@ -1121,6 +1175,9 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     let best: (RailLocation & { distance: number; heightDifference: number; }) | undefined;
 
     const rails = sampleRunningRails(request.context, gauge, projection, assets, origin, request.followedEntityId);
+    const pointer = request.geometryGesture?.handleId === 'object-translation' ? request.geometryGesture : undefined;
+    const hoveredRail = pointer?.snappingEnabled && pointer.hoveredEntityIds
+        .map(id => rails.find(rail => rail.entityId === id)).find(rail => rail !== undefined);
     const poweredAssetId = gauge === 'small' ? smallEngineId : engineId;
     const parkedPlan = (vehicle: ParkedRailVehicle | undefined) =>
         vehicle && buildTrainDrive(vehicle, [], rails, vehicle.entity.entityId, { passive: true })?.[0];
@@ -1228,7 +1285,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const initial = findCoupledChassis(rails, directed, anchorAsset, {});
         if (!initial || railDistance(initial.location.point, origin) > tolerance) return;
         if (request.geometryGesture?.handleId === 'product-placement-port'
-            && !railVehicleFitsAtPort(assetId, rails, initial.location, entities, original.entityId)) return;
+            && !railVehicleFits(assetId, rails, initial.location, entities, original.entityId, projection)) return;
         const { local: point, angle } = fitBody(initial.location, initial.location.step);
         if (preview) {
             return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: angle } };
@@ -1296,7 +1353,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         const result = followRailFromCoupler(rails, [source.x, source.y, railElevation], origin);
         if (!result) return unchanged;
         const step = reversed ? -result.step : result.step;
-        if (!railVehicleFitsAtPort(assetId, rails, { ...result, step }, entities, original.entityId)) return unchanged;
+        if (!railVehicleFits(assetId, rails, { ...result, step }, entities, original.entityId, projection)) return unchanged;
         const { local: point, angle } = fitBody(result, step);
         const transaction = attachTrain(result, step, { portOwnerId: anchor?.entityId });
         if (!preview && !transaction) return unchanged;
@@ -1304,7 +1361,7 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
             rotation: angle }, ...(transaction ? { transaction } : {}) };
     }
 
-    if (assetId === engineId && request.interaction === 'planar-translation' && previous?.drive?.leader === original.entityId) {
+    if (!pointer && assetId === engineId && request.interaction === 'planar-translation' && previous?.drive?.leader === original.entityId) {
         const cannon = entities.find(entity => previous.sources.includes(entity.entityId) && data(entity, 'asset')?.assetId === cannonId);
         const cannonPath = cannon && data(cannon, ATTACHMENT_COMPONENT)?.simulationPath as unknown as NixieSimulationPathV1 | undefined;
         if (cannon && cannonPath?.drive?.leader === original.entityId) {
@@ -1313,15 +1370,17 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
         }
     }
 
-    const snapDistance = request.interaction === 'placement' && gauge !== 'crane' ? PLACEMENT_SNAP_DISTANCE : SNAP_DISTANCE;
-    for (const rail of rails) {
+    const snapDistance = hoveredRail ? Infinity
+        : request.interaction === 'placement' && gauge !== 'crane' ? PLACEMENT_SNAP_DISTANCE : SNAP_DISTANCE;
+    const snapPoint = hoveredRail ? pointer!.worldPoint : { x: origin[0], y: origin[1], z: origin[2] };
+    for (const rail of hoveredRail ? [hoveredRail] : rails) {
         const { points } = rail;
         for (let index = 1; index < points.length; index++) {
             const start = points[index - 1]!, end = points[index]!;
-            const nearest = nearestPointOnSegment({ x: origin[0], y: origin[1] }, { x: start[0], y: start[1] }, { x: end[0], y: end[1] });
+            const nearest = nearestPointOnSegment(snapPoint, { x: start[0], y: start[1] }, { x: end[0], y: end[1] });
             if (!(nearest.distance <= snapDistance) || (best && nearest.distance > best.distance)) continue;
             const height = start[2] + (end[2] - start[2]) * nearest.t;
-            const heightDifference = Math.abs(height - origin[2]);
+            const heightDifference = Math.abs(height - (snapPoint.z ?? origin[2]));
             if (best && nearest.distance === best.distance && heightDifference >= best.heightDifference) continue;
             if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 1e-6) continue;
             best = { ...railLocation(rail, index, nearest.t), distance: nearest.distance, heightDifference };
@@ -1331,10 +1390,21 @@ export function finalizeFoxholeRailVehicleSnap(request: Request): Result {
     if (!best) return detach();
     // Either heading fits the track. Keep the vehicle facing the nearer direction.
     const reversed = Math.cos(fitBody(best).angle - rotation) < 0;
-    const { local: point, angle } = fitBody(best, reversed ? -1 : 1);
+    let location: DirectedRailLocation = { ...best, step: reversed ? -1 : 1 };
+    const nearbyCoupler = pointer && gauge !== 'crane'
+        ? findNearbyRailCoupler(assetId, gauge, rails, location, entities, original.entityId, projection) : undefined;
+    if (nearbyCoupler) {
+        const { anchor, anchorSocket, movingSocket } = nearbyCoupler;
+        const fitted = fitCoupledChassis(rails, anchor.location, anchor.chassis, anchorSocket, assetId, movingSocket);
+        if (!fitted) return detach();
+        location = fitted.location;
+    }
+    if (pointer && gauge !== 'crane' && !railVehicleFits(assetId, rails, location, entities, original.entityId, projection)) {
+        return detach();
+    }
+    const { local: point, angle } = fitBody(location, location.step);
     const heading = rotation + Math.atan2(Math.sin(angle - rotation), Math.cos(angle - rotation));
-    const step = reversed ? -1 : 1;
-    const transaction = attachTrain(best, step);
+    const transaction = attachTrain(location, location.step, { portOwnerId: nearbyCoupler?.anchor.entity.entityId });
     return { contractVersion: 1, transform: { x: point[0], y: point[1], elevation: point[2], rotation: heading },
         ...(transaction ? { transaction } : {}) };
 }

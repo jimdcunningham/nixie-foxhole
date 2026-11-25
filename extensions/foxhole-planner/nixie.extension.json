@@ -2239,7 +2239,7 @@
         "previewAware": true,
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures","assetId":"smalltrainengine"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"spline-connector"},"includeReferencedEntities":true},
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},"includeReferencedEntities":true},
         "geometryGestures": true,
         "followReference": {"componentId":"rail-attachment","property":"rail","dependenciesProperty":"route"}
       },
@@ -2294,7 +2294,7 @@
         "previewAware": true,
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures","assetId":"smalltrainmaterial"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"spline-connector"},"includeReferencedEntities":true},
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},"includeReferencedEntities":true},
         "geometryGestures": true,
         "followReference": {"componentId":"rail-attachment","property":"rail","dependenciesProperty":"route"}
       },
@@ -2316,7 +2316,7 @@
         "previewAware": true,
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures","assetId":"smalltrainresource"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"spline-connector"},"includeReferencedEntities":true},
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},"includeReferencedEntities":true},
         "geometryGestures": true,
         "followReference": {"componentId":"rail-attachment","property":"rail","dependenciesProperty":"route"}
       },
@@ -2349,7 +2349,7 @@
         "previewAware": true,
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures","assetId":"smalltrainshipping"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"spline-connector"},"includeReferencedEntities":true},
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},"includeReferencedEntities":true},
         "geometryGestures": true,
         "followReference": {"componentId":"rail-attachment","property":"rail","dependenciesProperty":"route"}
       },
@@ -2360,7 +2360,7 @@
         "previewAware": true,
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures","assetId":"smalltrainliquid"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"spline-connector"},"includeReferencedEntities":true},
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},"includeReferencedEntities":true},
         "geometryGestures": true,
         "followReference": {"componentId":"rail-attachment","property":"rail","dependenciesProperty":"route"}
       },

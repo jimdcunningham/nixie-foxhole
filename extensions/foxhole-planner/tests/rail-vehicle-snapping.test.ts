@@ -143,6 +143,80 @@ test('new cars snap to the nearest compatible rail within two metres', () => {
     assert.equal(outside.transaction, undefined);
 });
 
+test('dragging over a compatible rail previews and commits to the picked rail instead of the closest centreline', () => {
+    const proposal = request('trainflatbed', [
+        track('railtrackspline', 'near-car', 60),
+        track('railtrackspline', 'under-pointer'),
+        track('smallrailtrackspline', 'wrong-gauge', 1),
+    ]);
+    proposal.transform.y = 61;
+    const drag = { ...proposal, interaction: 'planar-translation' as const, geometryGesture: {
+        phase: 'commit' as const, handleId: 'object-translation', snappingEnabled: true,
+        worldPoint: { x: 250, y: 15 }, hoveredEntityIds: ['wrong-gauge', 'under-pointer'],
+    } };
+    const preview = finalizeFoxholeRailVehicleSnap({ ...drag, geometryGesture: { ...drag.geometryGesture, phase: 'preview' } });
+    const dropped = finalizeFoxholeRailVehicleSnap(drag);
+    assert.equal(preview.transform.x, 250);
+    assert.equal(preview.transform.y, 0);
+    assert.equal(preview.transaction, undefined);
+    assert.deepEqual(dropped.transform, preview.transform);
+    assert.ok(dropped.transaction?.operations.some(operation => operation.op === 'add'
+        && operation.componentId === 'rail-attachment' && operation.data.rail === 'under-pointer'));
+    assert.equal(finalizeFoxholeRailVehicleSnap({ ...drag, geometryGesture: {
+        ...drag.geometryGesture, hoveredEntityIds: ['wrong-gauge'],
+    } }).transform.y, 60);
+});
+
+test('dragging a car to a coupler picks the intended end and refuses a blocked or short berth', () => {
+    const rail = track('railtrackspline');
+    const spline = rail.components.at(-1)!.data;
+    Object.assign(spline, { endX: 1500, maxLength: 2500 });
+    const height = 32 + 36 * .32;
+    const parked = (entityId: string, assetId: string, x: number): NixieComponentEntitySnapshotV1 => ({
+        entityId, revision: 1, components: [
+            component('asset', { assetId, catalogId: 'foxhole.structures' }),
+            component('transform', { x, y: 0, rotation: 0 }, 'nixie.core'),
+            component('spatial-transform', { elevation: height }, 'nixie.core'),
+            component('rail-attachment', { rail: rail.entityId, station: x, reversed: false }),
+        ],
+    });
+    const anchorX = 520;
+    const anchor = parked('anchor', 'trainengine', anchorX);
+    const proposal = request('trainflatbed', [rail, anchor]);
+    const ports = (assetId: string, end: string) => railCouplers(assets[assetId]!, 'standard').find(socket => socket.name === end)!.point.x;
+    const coupledX = anchorX + ports('trainengine', 'FrontCoupler') - ports('trainflatbed', 'RearCoupler') + 16;
+    Object.assign(proposal.transform, { x: coupledX - 10, y: 45, rotation: 0 });
+    const drag = (phase: 'preview' | 'commit', x = coupledX - 10) => finalizeFoxholeRailVehicleSnap({
+        ...proposal, interaction: 'planar-translation', geometryGesture: {
+            phase, handleId: 'object-translation', snappingEnabled: true, worldPoint: { x, y: 1, z: height },
+            hoveredEntityIds: [rail.entityId],
+        },
+    });
+    const preview = drag('preview');
+    assert.ok(Math.abs(preview.transform.x - coupledX) < .1, JSON.stringify(preview.transform));
+    assert.equal(preview.transform.y, 0);
+    assert.equal(preview.transform.elevation, height);
+    const dropped = drag('commit');
+    assert.deepEqual(dropped.transform, preview.transform);
+    assert.ok(dropped.transaction?.operations.some(operation => operation.op === 'add'
+        && operation.entityId === proposal.entityId && operation.componentId === 'rail-attachment'
+        && parseNixieSimulationPathV1(operation.data.simulationPath).drive?.leader === anchor.entityId));
+
+    const blocker = parked('blocker', 'trainflatbed', coupledX);
+    proposal.context.entities.push(blocker);
+    for (const phase of ['preview', 'commit'] as const) {
+        const blocked = drag(phase);
+        assert.deepEqual(blocked.transform, { x: proposal.transform.x, y: proposal.transform.y });
+        assert.equal(blocked.transaction, undefined);
+    }
+    proposal.context.entities.pop();
+    spline.endX = coupledX + 20;
+    assert.equal(drag('preview').transform.elevation, undefined);
+    assert.equal(drag('commit').transaction, undefined);
+    spline.endX = 1500;
+    assert.equal(drag('preview', anchorX).transform.elevation, undefined);
+});
+
 for (const [region, count, suffix] of [['westgate', 15, 'foundation_6:end'], ['greatmarch', 10, 'spline3_9:start']] as const) {
     test(`${region} accepts an end extension and large vehicles retain their rail route after a save round trip`, () => {
         const fixed = fixedRailNetwork(region)!;
@@ -265,7 +339,7 @@ test('the live socket setting gates a track-spline finalizer for each rail vehic
         assert.ok(finalizer, id);
         assert.equal(finalizer.previewAware, true);
         assert.equal(finalizer.enabledSettingId, 'foxhole.viewport.socketSnapping');
-        assert.equal(finalizer.candidateQuery.match.componentId, id.startsWith('train') ? 'asset' : 'spline-connector');
+        assert.equal(finalizer.candidateQuery.match.componentId, id === 'largecrane' ? 'spline-connector' : 'asset');
         assert.ok(matchesNixieTransformFinalizerV1(request(id, []).context.entities[0]!, finalizer));
     }
 });
@@ -786,9 +860,18 @@ test('coupler placement rejects a Tempest with an unsupported axle or an occupie
     assert.ok(valid.transaction?.operations.some(operation => operation.op === 'add' && operation.entityId === proposal.entityId
         && operation.componentId === 'rail-attachment'));
 
-    proposal.context.entities.push(parked('blocker', 900));
+    // A group move can leave the old attachment station while the car is displayed elsewhere.
+    anchor.components.at(-1)!.data.station = 900;
+    assert.equal(place('preview').transform.elevation, height);
+
+    const blocker = parked('blocker', 900);
+    blocker.components.at(-1)!.data.station = 1400;
+    proposal.context.entities.push(blocker);
     assert.equal(place('preview').transform.elevation, undefined);
     assert.equal(place('commit').transaction, undefined);
+
+    blocker.components.find(({ componentId }) => componentId === 'spatial-transform')!.data.elevation = height + 200;
+    assert.equal(place('preview').transform.elevation, height);
 });
 
 test('the axle chord keeps both axle centers on a curve at the authored spacing', () => {
