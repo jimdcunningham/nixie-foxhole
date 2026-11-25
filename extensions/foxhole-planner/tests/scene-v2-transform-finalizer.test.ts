@@ -483,6 +483,49 @@ test('rigid sockets at the same map position cannot connect across different ele
     assert.equal(result.transaction, undefined);
 });
 
+test('moving an attached structure clears the original sockets before it can snap back', () => {
+    const moving = structure('moving', 0);
+    const target = structure('target', 160);
+    const transform = { x: 5, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+    const request = { contractVersion: 1 as const, interaction: 'planar-translation' as const,
+        entityId: 'moving', transform, context: { contractVersion: 1 as const, entities: [moving, target],
+            viewport: { renderScale: 1 }, settings: { 'nixie.scene.snapFeedback': true } } };
+    const initial = finalizeFoxholeSceneV2Transform(request);
+    for (const operation of initial.transaction!.operations) {
+        assert.equal(operation.op, 'patch');
+        const entity = operation.entityId === moving.entityId ? moving : target;
+        entity.components[2]!.data.attachments = operation.set!.attachments;
+    }
+    const drag = (travel: number) => finalizeFoxholeSceneV2Transform({ ...request, context: { ...request.context,
+        settings: { ...request.context.settings,
+            'nixie.scene.socketBreakawayTravel': String(travel), 'nixie.scene.socketBreakawayRenderScale': '3' } } });
+
+    const pullingAway = drag(5);
+    assert.deepEqual(pullingAway.transform, { x: 5, y: 0 });
+    assert.equal(pullingAway.snap, undefined);
+    assert.equal(pullingAway.transaction?.operations.length, 2);
+    for (const operation of pullingAway.transaction!.operations) {
+        assert.equal(operation.op, 'patch');
+        assert.deepEqual(operation.set?.attachments, []);
+    }
+    assert.equal(drag(53).snap, undefined);
+    const returning = drag(55);
+    assert.deepEqual(returning.transform, { x: 0, y: 0 });
+    assert.ok(returning.snap);
+
+    const other = structure('other', -160);
+    request.context.entities.push(other);
+    assert.equal(drag(5).snap, undefined, 'a different socket must not restore the original seam');
+
+    other.components[0]!.data.x = -155;
+    const newConnection = drag(5);
+    assert.deepEqual(newConnection.transform, { x: 5, y: 0 });
+    assert.ok(newConnection.snap);
+    const movingUpdate = newConnection.transaction?.operations.find(operation => operation.entityId === moving.entityId);
+    assert.equal(movingUpdate?.op, 'patch');
+    assert.deepEqual((movingUpdate.set?.attachments as Array<{ targetEntityId: string }>).map(link => link.targetEntityId), ['other']);
+});
+
 test('concrete foundations align their authored edge sockets and record a connection', () => {
     for (const assetId of ['foundation012x2t1', 'foundation012x2t3']) {
         const moving = structure('moving-foundation', 0);

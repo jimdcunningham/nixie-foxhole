@@ -909,6 +909,24 @@ function finalizeFoxholeSceneV2TransformCore(
     const renderScale = request.context.viewport?.renderScale;
     const captureDistance = showSnap && renderScale ? Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * renderScale) : SNAP_DISTANCE;
     const releaseDistance = Math.max(SNAP_RELEASE_DISTANCE, captureDistance * 1.5);
+    const travelSetting = request.context.settings?.['nixie.scene.socketBreakawayTravel'];
+    const scaleSetting = request.context.settings?.['nixie.scene.socketBreakawayRenderScale'];
+    const breakawayTravel = typeof travelSetting === 'string' ? Number(travelSetting) : NaN;
+    const breakawayScale = typeof scaleSetting === 'string' ? Number(scaleSetting) : NaN;
+    const breakawayDistance = breakawayScale > 0
+        ? Math.max(SNAP_RELEASE_DISTANCE, Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * breakawayScale) * 1.5)
+        : releaseDistance;
+    const breakingAway = request.interaction === 'planar-translation'
+        && breakawayTravel >= 0 && breakawayTravel <= breakawayDistance;
+    const originalSeams = breakingAway ? movingSockets.flatMap(moving => {
+        const link = attachmentAt(attachmentsByEntity.get(moving.entityId) ?? [], moving.socket.name);
+        if (!link || movingIds.has(link.targetEntityId)) return [];
+        const entity = entitiesById.get(link.targetEntityId);
+        if (!entity || connectorComponent(entity)) return [];
+        const target = sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection)
+            .find(socket => normalizedName(socket.socket.name) === normalizedName(link.targetSocketName));
+        return target ? [{ moving, target }] : [];
+    }) : [];
     let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
     for (const entity of request.interaction === 'exchange' || request.snappingEnabled === false ? [] : entities) {
@@ -925,6 +943,11 @@ function finalizeFoxholeSceneV2TransformCore(
                 if (occupied && occupied.targetEntityId !== moving.entityId) {
                     continue;
                 }
+                if (breakingAway) {
+                    const originalLink = attachmentAt(attachmentsByEntity.get(moving.entityId) ?? [], moving.socket.name);
+                    if (originalLink?.targetEntityId === target.entityId
+                        && normalizedName(originalLink.targetSocketName) === normalizedName(target.socket.name)) continue;
+                }
                 const overlap = compatible(moving, target);
                 if (overlap <= 0) {
                     continue;
@@ -940,6 +963,12 @@ function finalizeFoxholeSceneV2TransformCore(
                     || Math.abs(target.world[2] - moving.world[2]) > (retained ? SNAP_RELEASE_DISTANCE : SNAP_DISTANCE)) continue;
                 const score = distance - overlap * 0.01 + angle * captureDistance / Math.PI;
                 if (!best || (retained && !best.retained) || (retained === best.retained && score < best.score)) {
+                    if (originalSeams.length) {
+                        const pose = socketSnapPose(request, moved, moving, target);
+                        // A different socket can still pull the entire piece back onto the seam it just left.
+                        if (pose && originalSeams.some(seam => Math.hypot(...pose.apply(seam.moving.world)
+                            .map((value, axis) => value - seam.target.world[axis]!)) <= 1)) continue;
+                    }
                     best = { moving, target, score, snapId, retained };
                 }
             }
