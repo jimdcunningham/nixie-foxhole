@@ -29,8 +29,10 @@ export default defineNuxtPlugin({
             ownerId: 'nixie.foxhole-planner',
             aliases: ['foxhole'],
             prepareGeneration: async generation => {
-                const activate = await prepareFoxholeAssetGeneration(generation, assetMode);
-                const activatePreviews = await prepareFoxholePreviewAssets(generation);
+                const [activate, activatePreviews] = await Promise.all([
+                    prepareFoxholeAssetGeneration(generation, assetMode),
+                    prepareFoxholePreviewAssets(generation),
+                ]);
                 return () => {
                     activate();
                     activatePreviews();

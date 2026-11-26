@@ -66,17 +66,18 @@ const prepareGeneration = createFoxholeAssetGenerationSelector(async (generation
     const library = createFoxholeCatalogLibrary(document.baseUrl, JSON.parse(document.text));
     const location = library.files.get('manifest.v1.json');
     if (!location || location.entry.mediaType !== 'application/json') throw new Error('The selected catalog has no Foxhole manifest.');
-    const manifest = await read<unknown>({url: location.url, ...location.entry});
-    foxholeManifestSchema.parse(manifest);
     const mapLocation = library.files.get('maps/map-data.v1.json');
     if (!mapLocation || mapLocation.entry.mediaType !== 'application/json') throw new Error('The selected catalog has no map metadata.');
-    const mapData = parseFoxholePublishedMapData(await read({url:mapLocation.url, ...mapLocation.entry}));
-    const catalogDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document.text));
-    const catalogHash = Array.from(new Uint8Array(catalogDigest), byte => byte.toString(16).padStart(2, '0')).join('');
+    const [manifest, mapSource] = await Promise.all([
+        read<unknown>({url: location.url, ...location.entry}),
+        read({url: mapLocation.url, ...mapLocation.entry}),
+    ]);
+    foxholeManifestSchema.parse(manifest);
+    const mapData = parseFoxholePublishedMapData(mapSource);
     const loadIndex = library.worldIndex ? worldIndexLoader(library.worldIndex) : null;
     // Older pins only advertise available regions in their index.
     const regionIds = library.worldRegionIds ?? Object.keys((await loadIndex?.())?.regions ?? {});
-    return {library, manifest, mapData, catalogHash, loadIndex, regionIds};
+    return {library, manifest, mapData, catalogHash: document.sha256, loadIndex, regionIds};
 }, (prepared, generation) => {
     if (prepared?.local) {
         activateLocalDelivery(prepared.local);
