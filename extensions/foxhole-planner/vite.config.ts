@@ -63,7 +63,8 @@ function catalogPlugin(development: boolean): Plugin {
         },
         shouldTransformCachedModule({id}) {return id === '\0' + ASSETS || id === '\0' + MAPS;},
         resolveId(id) {
-            if (id === '../catalog.v1.json' || /^\.\/catalog-locales\/[a-z]{2}\.js$/.test(id)) return {id, external: true};
+            if (id === '../catalog.v1.json') return {id, external: true, attributes: {type: 'json'}};
+            if (/^\.\/catalog-locales\/[a-z]{2}\.js$/.test(id)) return {id, external: true};
             if (id === ASSETS || id === MAPS) return '\0' + id;
         },
         load(id) {
