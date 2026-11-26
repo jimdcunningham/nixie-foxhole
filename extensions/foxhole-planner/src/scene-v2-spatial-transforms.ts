@@ -70,6 +70,8 @@ export function createFoxholeSpatialProjection(entities: readonly Entity[]) {
         return [point[0], -point[1], point[2]];
     };
     return {
+        entityById: (entityId: string) => byId.get(entityId),
+        frameKey: (subject: Entity) => JSON.stringify(chain(subject)),
         toWorld: (subject: Entity, point: FoxholeSpatialPoint) => project(subject, point, false),
         toLocal: (subject: Entity, point: FoxholeSpatialPoint) => project(subject, point, true),
     };

@@ -17,7 +17,6 @@ const socketName = (value: string) => value.replace(/_GEN_VARIABLE$/iu, '').spli
 export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: FoxholeSceneV2SplineConnectorData,
     context: Context, metadata: Record<string, FoxholeSceneV2AssetMetadata>,
     projection = createFoxholeSpatialProjection(context.entities), visited: ReadonlySet<string> = new Set()) {
-    const entities = new Map(context.entities.map(entity => [entity.entityId, entity]));
     const resolving = new Set(visited).add(entity.entityId);
     const endpointBindings: NixieSpatialEndpointBindingsV1 = {};
     const result = { ...spline, startZ: 0, endZ: 0, endpointBindings };
@@ -32,7 +31,7 @@ export function resolveFoxholeSpatialSplineAttachments(entity: Entity, spline: F
                 [`${prefix}Rotation`]: Math.atan2(facing * (direction[1] - point[1]), facing * (direction[0] - point[0])) });
             continue;
         }
-        const subject = entities.get(String(spline[`${prefix}AttachmentNodeId`] ?? ''));
+        const subject = projection.entityById(String(spline[`${prefix}AttachmentNodeId`] ?? ''));
         if (!subject) continue;
         const subjectSpline = data(subject, 'spline-connector', 'nixie.foxhole-planner');
         const assetId = String(data(subject, 'asset', 'nixie.foxhole-planner')?.assetId ?? subjectSpline?.foxholeKey ?? '');

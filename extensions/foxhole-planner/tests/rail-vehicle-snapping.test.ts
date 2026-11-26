@@ -143,6 +143,19 @@ test('new cars snap to the nearest compatible rail within two metres', () => {
     assert.equal(outside.transaction, undefined);
 });
 
+test('a rail resamples after its parent moves or its endpoints change between previews with identical revisions', () => {
+    const rail = track('railtrackspline');
+    const parent = { entityId: 'group', revision: 1, components: [component('transform', { x: 0, y: 0 }, 'nixie.core')] };
+    rail.components.push(component('hierarchy', { parentId: parent.entityId }, 'nixie.core'));
+    const proposal = request('trainflatbed', [rail, parent]);
+    const project = () => finalizeFoxholeRailVehicleSnap({ ...structuredClone(proposal), preview: true }).transform.y;
+    assert.equal(project(), 0);
+    parent.components[0]!.data.y = 20;
+    assert.equal(project(), 20);
+    Object.assign(rail.components.find(entry => entry.componentId === 'spline-connector')!.data, { startY: 15, endY: 15 });
+    assert.equal(project(), 35);
+});
+
 test('dragging over a compatible rail previews and commits to the picked rail instead of the closest centreline', () => {
     const proposal = request('trainflatbed', [
         track('railtrackspline', 'near-car', 60),

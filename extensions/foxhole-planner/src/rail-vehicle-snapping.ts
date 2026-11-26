@@ -132,6 +132,12 @@ interface RailLocation {
     heading: number;
 }
 
+// Requests contain new snapshots even when the rail did not move. Cache one
+// candidate window of sampled centerlines, keyed by resolved geometry and the
+// complete ancestor pose. Always resolve live attachment endpoints first.
+const sampledRails = new Map<string, { splineKey: string; frameKey: string;
+    asset?: FoxholeSceneV2AssetMetadata; points: FoxholeSpatialPoint[]; stations: number[] }>();
+
 const ATTACHMENT_COMPONENT = 'rail-attachment';
 const ROUTING_COMPONENTS = ['rail-simulation-routing', 'rail-simulation-routing-overflow'] as const;
 const railDistance = (a: FoxholeSpatialPoint, b: FoxholeSpatialPoint) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -270,11 +276,19 @@ function sampleRunningRails(context: Context, gauge: NonNullable<ReturnType<type
             && data(track, 'visibility', 'nixie.core')?.visible === false)) return [];
         const spline = resolveFoxholeSpatialSplineAttachments(track, component as unknown as FoxholeSceneV2SplineConnectorData,
             context, metadata, projection);
-        const points = sampleRailCenterline(spline, metadata[key]).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
+        const splineKey = JSON.stringify(spline), frameKey = projection.frameKey(track), asset = metadata[key];
+        let sampled = sampledRails.get(track.entityId);
+        if (!sampled || sampled.splineKey !== splineKey || sampled.frameKey !== frameKey || sampled.asset !== asset) {
+            const points = sampleRailCenterline(spline, asset).map(point => projection.toWorld(track, [point.x, point.y, point.z]));
+            sampled = { splineKey, frameKey, asset, points, stations: makeStations(points) };
+            if (!sampledRails.has(track.entityId) && sampledRails.size >= 256) sampledRails.delete(sampledRails.keys().next().value!);
+            sampledRails.set(track.entityId, sampled);
+        }
+        const { points, stations } = sampled;
         if (points.length < 2) return [];
         const fixedStart = readFixedRailEndpoint(component.startFixedRailEnd);
         const fixedEnd = readFixedRailEndpoint(component.endFixedRailEnd);
-        return [{ entityId: track.entityId, points, stations: makeStations(points),
+        return [{ entityId: track.entityId, points, stations,
             endpointLinks: [fixedStart?.railId ?? String(component.startAttachmentNodeId ?? ''),
                 fixedEnd?.railId ?? String(component.endAttachmentNodeId ?? '')] as const,
             endpointSockets: [String(component.startAttachmentSocketName ?? ''), String(component.endAttachmentSocketName ?? '')] as const }];
