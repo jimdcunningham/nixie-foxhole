@@ -62,7 +62,7 @@ export function encodeFoxholeCatalogKeys(catalog) {
         key, sharedMetadata(key) ? rewriteKeys(value, names) : value,
     ]));
     data.compactKeys = {version: 1, dictionary: Object.fromEntries([...names].map(([key, alias]) => [alias, key]))};
-    if (data.world) {
+    if (data.world?.contentResources) {
         const contentResources = Object.fromEntries(Object.entries(data.world.contentResources)
             .map(([path, {sha256, byteLength, mediaType}]) => [path, {a: sha256, b: byteLength, c: mediaType}]));
         data.world = {...data.world, contentResources};

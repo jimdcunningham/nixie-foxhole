@@ -6,7 +6,7 @@ import os from 'node:os';
 import {createHash} from 'node:crypto';
 import {brotliCompressSync} from 'node:zlib';
 import {prepareProductCatalog} from './prepare-catalog.mjs';
-import {loadFoxholeCatalogLibrary, readPinnedCatalogJson} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
+import {loadFoxholeCatalogLibrary, readFoxholeWorldOfflineFiles, readPinnedCatalogJson} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const target = {endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'nixie-extension-assets', publicBaseUrl: 'https://assets.example.org/', prefix: 'foxhole-planner'};
 
@@ -29,11 +29,16 @@ test('one canonical catalog includes standalone private files and the existing e
     const prepared = await prepareProductCatalog({assetsRoot, output:path.join(root,'prepared'), target, sources});
     const plan = JSON.parse(await fs.readFile(prepared.planPath)), bytesByUrl = new Map();
     for (const row of plan.objects) bytesByUrl.set(new URL(row.key,target.publicBaseUrl).href, row.contentEncoding ? decoded : await fs.readFile(path.join(prepared.directory,row.file)));
-    const fetcher = async url => new Response(bytesByUrl.get(String(url)));
+    const requested = [];
+    const fetcher = async url => {requested.push(String(url)); return new Response(bytesByUrl.get(String(url)));};
     const library = await loadFoxholeCatalogLibrary(prepared.pin, ref => readPinnedCatalogJson(ref, fetcher));
-    const world = library.files.get(worldPath);
+    assert.deepEqual(requested, [prepared.pin.catalog.url]);
+    assert.equal(library.files.has(worldPath), false);
+    const files = await readFoxholeWorldOfflineFiles(library, ref => readPinnedCatalogJson(ref, fetcher));
+    assert.deepEqual(requested, [prepared.pin.catalog.url, library.worldOfflineInventory.url]);
+    const world = files.get(worldPath);
     assert.equal(world.url, new URL('foxhole-planner/' + worldPath,target.publicBaseUrl).href);
-    assert.equal(library.files.get(emptyPath).entry.byteLength,0,'legitimate empty binary resources remain readable');
+    assert.equal(files.get(emptyPath).entry.byteLength,0,'legitimate empty binary resources remain readable');
     assert.equal(world.entry.sha256,hash(decoded)); assert.equal(world.entry.byteLength,decoded.length);
     assert.equal(library.worldBaseUrl,'https://assets.example.org/foxhole-planner/world/');
     assert.deepEqual(await readPinnedCatalogJson(library.worldIndex,fetcher), {});
@@ -49,15 +54,18 @@ test('one canonical catalog includes standalone private files and the existing e
     await assert.rejects(load(escaping),/escapes/);
     const missing = structuredClone(catalog); missing.data.privateFiles['missing.webp']='missing';
     await assert.rejects(load(missing),/association/);
+    assert.equal(catalog.data.world.contentResources, undefined);
+    const offline = await readPinnedCatalogJson(library.worldOfflineInventory, fetcher);
     const worldKey = worldPath.slice(6);
-    assert.deepEqual(catalog.data.world.contentResources[worldKey], {a: hash(decoded), b: decoded.length, c: 'application/json'});
-    const corrupted = structuredClone(catalog); corrupted.data.world.contentResources[worldKey].a='bad';
-    await assert.rejects(load(corrupted),/receipt/);
+    assert.deepEqual(offline.contentResources[worldKey], {a: hash(decoded), b: decoded.length, c: 'application/json'});
+    const corrupted = structuredClone(offline); corrupted.contentResources[worldKey].a='bad';
+    await assert.rejects(readFoxholeWorldOfflineFiles(library, async () => corrupted), /receipt/);
     const legacy = structuredClone(catalog);
     delete legacy.data.compactKeys;
-    legacy.data.world.contentResources = Object.fromEntries(Object.entries(legacy.data.world.contentResources)
+    delete legacy.data.world.offlineInventoryResourcePath;
+    legacy.data.world.contentResources = Object.fromEntries(Object.entries(offline.contentResources)
         .map(([path,{a,b,c}]) => [path,{sha256:a,byteLength:b,mediaType:c}]));
-    assert.deepEqual((await load(legacy)).files, library.files);
+    assert.deepEqual((await load(legacy)).files, new Map([...library.files, ...files]));
     const oversized = {...prepared.pin.catalog,byteLength:17*1024**2};
     await assert.rejects(readPinnedCatalogJson(oversized,fetcher),/receipt/);
     await assert.rejects(readPinnedCatalogJson({...prepared.pin.catalog,sha256:'0'.repeat(64)},fetcher),/integrity/);

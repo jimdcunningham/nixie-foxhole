@@ -1,4 +1,4 @@
-import {loadFoxholeCatalogLibrary, type FoxholeCatalogPin} from '../shared/catalog-library.mjs';
+import {loadFoxholeCatalogLibrary, readFoxholeWorldOfflineFiles, type FoxholeCatalogPin} from '../shared/catalog-library.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
 import {
@@ -276,7 +276,8 @@ export class PublishedLibrary {
       }
     }
     const files = new Map<string, FileReceipt>(), folded = new Set<string>();
-    for (const [logical, location] of library.files) {
+    const world = scope === 'all' ? await readFoxholeWorldOfflineFiles(library, ref => this.metadata(ref, signal)) : [];
+    for (const [logical, location] of [...library.files, ...world]) {
       if (scope === 'catalog' && logical.startsWith('world/')) continue;
       if (!portable(logical) || folded.has(logical.toLowerCase())) throw new Error('A published path is not portable or unique.');
       folded.add(logical.toLowerCase());

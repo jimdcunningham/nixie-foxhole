@@ -32,7 +32,7 @@ async function setup(t: test.TestContext, aliasedRoot = false) {
     });
     return { url, sha256: hash(body), byteLength: body.length };
   };
-  const makeRelease = (version: string, invalidPath?: string) => {
+  const makeRelease = (version: string, invalidPath?: string, externalWorld = false) => {
     const model = Buffer.from('model ' + version),
       world = Buffer.from('{"region":"Deadlands"}');
     objects.set('/foxhole-planner/objects/' + version + '.glb', {
@@ -46,11 +46,17 @@ async function setup(t: test.TestContext, aliasedRoot = false) {
     const contentPath = 'content/br/' + hash(brotliCompressSync(world)) + '/asset.json';
     objects.set('/foxhole-planner/world/' + contentPath, {body:brotliCompressSync(world), encoding:'br'});
     const worldIndex = metadata({version:1,format:'compact-recipes-v1',regions:{}}, 'world-index.json');
+    const worldInventory = externalWorld ? metadata({version: 1,
+      contentResources: {[contentPath]: {a: hash(world), b: world.length, c: 'application/json'}}}, 'offline-world.json') : null;
     const catalog = metadata({catalogSchemaVersion:1, resourceDefaults:{}, products:[], sharedResources:[
       {id:'model',path:'shared/models/model.glb',sourcePath:'foxhole-planner/objects/' + version + '.glb',sha256:hash(model),byteLength:model.length,mediaType:'model/gltf-binary'},
       {id:'world-index',path:'shared/world-index.json',sourcePath:'foxhole-planner/world-index.json',sha256:worldIndex.sha256,byteLength:worldIndex.byteLength,mediaType:'application/json'},
+      ...(worldInventory ? [{id: 'world-offline', path: 'shared/offline-world.json', sourcePath: 'foxhole-planner/offline-world.json',
+        sha256: worldInventory.sha256, byteLength: worldInventory.byteLength, mediaType: 'application/json'}] : []),
     ], data:{privateFiles:{[invalidPath ?? 'types/structures/factory/factory.glb']:'shared/models/model.glb', 'shared/models/factory.glb':'shared/models/model.glb'},
-      world:{indexResourcePath:'shared/world-index.json',contentRoot:'foxhole-planner/world/',contentResources:{[contentPath]:{sha256:hash(world),byteLength:world.length,mediaType:'application/json'}}}}}, 'catalog-' + version + '.json');
+      world:{indexResourcePath:'shared/world-index.json',contentRoot:'foxhole-planner/world/', ...(worldInventory
+        ? {offlineInventoryResourcePath: 'shared/offline-world.json'}
+        : {contentResources:{[contentPath]:{sha256:hash(world),byteLength:world.length,mediaType:'application/json'}}})}}}, 'catalog-' + version + '.json');
     const release = {schemaVersion:1,baseUrl:'https://assets.example/',catalog};
     const channel = Buffer.from(JSON.stringify({schemaVersion:1,pin:release}));
     objects.set('/foxhole-planner/channels/stable.json',{body:channel});
@@ -96,6 +102,16 @@ async function setup(t: test.TestContext, aliasedRoot = false) {
     signal: new AbortController().signal,
   };
 }
+test('only a full offline check reads the world download inventory', async t => {
+  const f = await setup(t);
+  f.makeRelease('remote-world', undefined, true);
+  const catalog = await f.library.check('catalog', f.signal);
+  assert.equal(catalog.files.length, 2);
+  assert.equal(f.requests.includes('/foxhole-planner/offline-world.json'), false);
+  const full = await f.library.check('all', f.signal);
+  assert.ok(full.files.some(file => file.path.startsWith('world/content/')));
+  assert.equal(f.requests.filter(url => url === '/foxhole-planner/offline-world.json').length, 1);
+});
 test('downloads verified readable paths, restores Brotli files, and reuses shared objects', async (t) => {
   const f = await setup(t),
     plan = await f.library.check('all', f.signal);

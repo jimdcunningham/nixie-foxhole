@@ -1,1 +1,1 @@
-export {loadFoxholeCatalogLibrary, type FoxholeCatalogPin} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
+export {loadFoxholeCatalogLibrary, readFoxholeWorldOfflineFiles, type FoxholeCatalogPin} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';

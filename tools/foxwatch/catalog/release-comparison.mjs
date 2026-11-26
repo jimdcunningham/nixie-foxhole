@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createFoxholeCatalogLibrary, loadFoxholeCatalogLibrary, readPinnedCatalogJson } from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
+import { createFoxholeCatalogLibrary, loadFoxholeCatalogLibrary, readFoxholeWorldOfflineFiles, readPinnedCatalogJson } from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
 
 const extensionId = 'nixie.foxhole-planner';
 const registry = 'https://nixiejs.com/api/nixie/extensions/' + extensionId;
@@ -36,19 +36,22 @@ export async function readPublishedPlannerCatalog({ version, fetcher = fetch } =
         baseUrl: declaration.baseUrl,
         sha256: receipt.sha256,
         library: createFoxholeCatalogLibrary(declaration.baseUrl, document),
+        readWorld: ref => readPinnedCatalogJson(ref, fetcher),
     };
 }
-/** Loads the prepared checkpoint without opening the staged payload files. */
+/** Loads the checkpoint and defers the optional world inventory until comparison. */
 export async function readPreparedPlannerCatalog(directory) {
     const pin = JSON.parse(await readFile(path.join(directory, 'extension-pin.json'), 'utf8'));
-    const library = await loadFoxholeCatalogLibrary(pin, async ({ sha256, byteLength }) => {
-        const bytes = await readFile(path.join(directory, 'catalog.v1.json'));
+    const read = async (file, { sha256, byteLength }) => {
+        const bytes = await readFile(file);
         if (bytes.length !== byteLength || createHash('sha256').update(bytes).digest('hex') !== sha256) {
             throw Error('Prepared Planner catalog integrity mismatch');
         }
         return JSON.parse(bytes.toString('utf8'));
-    });
-    return { baseUrl: pin.baseUrl, sha256: pin.catalog.sha256, library };
+    };
+    const library = await loadFoxholeCatalogLibrary(pin, ref => read(path.join(directory, 'catalog.v1.json'), ref));
+    return { baseUrl: pin.baseUrl, sha256: pin.catalog.sha256, library,
+        readWorld: ref => read(path.join(directory, 'payload', ref.sha256 + '.json'), ref) };
 }
 
 export function comparePlannerCatalogs(before, after) {
@@ -71,5 +74,13 @@ export async function reviewPreparedPlannerCatalog(directory, options) {
         readPublishedPlannerCatalog(options),
         readPreparedPlannerCatalog(directory),
     ]);
+    if (before.sha256 !== after.sha256) {
+        await Promise.all([before, after].map(async side => {
+            for (const [file, row] of await readFoxholeWorldOfflineFiles(side.library, side.readWorld)) {
+                if (side.library.files.has(file)) throw Error('Conflicting world catalog file');
+                side.library.files.set(file, row);
+            }
+        }));
+    }
     return comparePlannerCatalogs(before, after);
 }

@@ -35,6 +35,10 @@ and FoxWatch restore the metadata names at their read boundaries and still
 accept catalogs without the dictionary. Ship the updated readers before
 adopting a compact catalog pin in a release.
 
+The world file inventory for explicit full offline downloads is a separate
+pinned R2 document. Catalog-only downloads and the Studio map loader do not
+request it.
+
 Example delivery keys under the configured `foxhole-planner` prefix:
 
 ```text

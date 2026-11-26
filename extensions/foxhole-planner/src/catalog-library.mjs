@@ -40,6 +40,29 @@ export async function loadFoxholeCatalogLibrary(pin, read = readPinnedCatalogJso
     return createFoxholeCatalogLibrary(pin.baseUrl, await read(pin.catalog));
 }
 
+function worldContentFiles(contentResources, worldBaseUrl, shortKeys) {
+    if (!contentResources || typeof contentResources !== 'object' || Array.isArray(contentResources)
+        || Object.keys(contentResources).length > 65536) throw Error('Invalid world catalog inventory');
+    const files = new Map();
+    for (const [path, encoded] of Object.entries(contentResources)) {
+        const raw = shortKeys ? {sha256: encoded?.a, byteLength: encoded?.b, mediaType: encoded?.c} : encoded;
+        if (!/^content\/(br|raw)\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/.test(path) || typeof raw?.mediaType !== 'string') {
+            throw Error('Invalid world content identity');
+        }
+        const entry = {path: 'world/' + path, ...receipt(raw), mediaType: raw.mediaType};
+        files.set(entry.path, {url: new URL(path, worldBaseUrl).href, entry});
+    }
+    return files;
+}
+
+/** Used only by explicit offline downloads and publication review. */
+export async function readFoxholeWorldOfflineFiles(library, read = readPinnedCatalogJson) {
+    if (!library.worldOfflineInventory) return new Map();
+    const document = await read(library.worldOfflineInventory);
+    if (document?.version !== 1) throw Error('Unsupported world offline inventory');
+    return worldContentFiles(document.contentResources, library.worldBaseUrl, true);
+}
+
 /** The host verifies packaged bytes before passing their parsed document here. */
 export function createFoxholeCatalogLibrary(baseUrl, value) {
     const base = https(baseUrl), namespace = new URL('foxhole-planner/', base);
@@ -62,23 +85,27 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         files.set(path, {url: location(entry.sourcePath ?? entry.path), entry});
     }
     const world = catalog.data?.world;
-    let worldIndex, worldBaseUrl;
+    let worldIndex, worldBaseUrl, worldOfflineInventory;
     if (world) {
-        if (world.contentRoot !== 'foxhole-planner/world/' || !world.contentResources || typeof world.contentResources !== 'object'
-            || Array.isArray(world.contentResources) || Object.keys(world.contentResources).length > 65536) throw Error('Invalid world catalog inventory');
+        if (world.contentRoot !== 'foxhole-planner/world/') throw Error('Invalid world catalog inventory');
         worldBaseUrl = new URL(world.contentRoot, base).href;
         const root = byPath.get(world.indexResourcePath);
         if (!root || root.mediaType !== 'application/json') throw Error('Missing pinned world index');
         worldIndex = {url: location(root.sourcePath ?? root.path), ...receipt(root)};
-        for (const [path, encoded] of Object.entries(world.contentResources)) {
-            const raw = shortWorldKeys ? {sha256: encoded?.a, byteLength: encoded?.b, mediaType: encoded?.c} : encoded;
-            if (!/^content\/(br|raw)\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/.test(path) || typeof raw?.mediaType !== 'string') throw Error('Invalid world content identity');
-            const entry = {path: 'world/' + path, ...receipt(raw), mediaType: raw.mediaType};
-            if (files.has(entry.path)) throw Error('Conflicting world catalog file');
-            files.set(entry.path, {url: location(world.contentRoot + path), entry});
+        if (world.offlineInventoryResourcePath !== undefined) {
+            const offline = byPath.get(world.offlineInventoryResourcePath);
+            if (!offline || offline.mediaType !== 'application/json' || world.contentResources !== undefined) {
+                throw Error('Invalid pinned world offline inventory');
+            }
+            worldOfflineInventory = {url: location(offline.sourcePath ?? offline.path), ...receipt(offline)};
+        } else {
+            for (const [path, row] of worldContentFiles(world.contentResources, worldBaseUrl, shortWorldKeys)) {
+                if (files.has(path)) throw Error('Conflicting world catalog file');
+                files.set(path, row);
+            }
         }
     }
-    return {catalog, files, worldIndex, worldBaseUrl, resolve(path) {
+    return {catalog, files, worldIndex, worldBaseUrl, worldOfflineInventory, resolve(path) {
         const row = files.get(path); if (!row) throw Error('Asset absent from pinned catalog: ' + path);
         return row.url;
     }};

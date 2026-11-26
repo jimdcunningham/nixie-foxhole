@@ -1,1 +1,1 @@
-export {loadFoxholeCatalogLibrary} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';
+export {loadFoxholeCatalogLibrary, readFoxholeWorldOfflineFiles} from '../../../extensions/foxhole-planner/src/catalog-library.mjs';

@@ -148,7 +148,7 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
                 objects.set(key, {key, relativeKey: row.path, file, phase: 'assets', sha256: row.sha256, bytes: row.bytes,
                     mediaType: row.contentType, ...(row.contentEncoding ? {contentEncoding: row.contentEncoding} : {}),
                     decodedSha256: row.decodedSha256, decodedBytes: row.decodedBytes, cacheControl: 'public, max-age=31536000, immutable'});
-                contentResources[row.path.slice('world/'.length)] = {sha256: row.decodedSha256, byteLength: row.decodedBytes, mediaType: row.contentType};
+                contentResources[row.path.slice('world/'.length)] = {a: row.decodedSha256, b: row.decodedBytes, c: row.contentType};
                 sourceFiles++;
             } else if (!privateFiles[row.path]) {
                 const id = 'private.' + hash(Buffer.from(row.path));
@@ -157,7 +157,11 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
         }
         const worldIndex = catalog.sharedResources.find(row => row.path === privateFiles['world/index.json']);
         if (!worldIndex) throw Error('World index was not prepared');
-        catalog.data = {...catalog.data, world: {indexResourcePath: worldIndex.path, contentRoot: target.prefix + '/world/', contentResources}};
+        const offlineInventoryResourcePath = 'shared/world/offline-inventory.json';
+        await shared('world.offline-inventory', offlineInventoryResourcePath,
+            Buffer.from(JSON.stringify({version: 1, contentResources})), 'application/json');
+        catalog.data = {...catalog.data, world: {indexResourcePath: worldIndex.path,
+            contentRoot: target.prefix + '/world/', offlineInventoryResourcePath}};
     }
     catalog.data = {...catalog.data, privateFiles: Object.fromEntries(Object.entries(privateFiles).sort(([a], [b]) => a.localeCompare(b, 'en')))};
     const normalized = parseNixieProductCatalogV1(JSON.parse(JSON.stringify(encodeFoxholeCatalogKeys(catalog))));

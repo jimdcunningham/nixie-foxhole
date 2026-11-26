@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -67,4 +67,40 @@ test('reviews a prepared catalog against the latest published checkpoint without
 
     await writeFile(documentPath, after);
     await assert.rejects(reviewPreparedPlannerCatalog(directory, { fetcher }), /Prepared Planner catalog integrity mismatch/);
+});
+
+test('moving a world receipt out of the catalog does not report the file as deleted', async t => {
+    const index = {id: 'world-index', path: 'shared/world/index.json', sourcePath: 'foxhole-planner/world-index.json',
+        mediaType: 'application/json', ...receipt(bytes({}))};
+    const content = 'content/raw/' + sha256(Buffer.from('map')) + '/asset.bin';
+    const world = {indexResourcePath: index.path, contentRoot: 'foxhole-planner/world/'};
+    const download = bytes({version: 1, contentResources: {[content]: {a: sha256(Buffer.from('map')), b: 3, c: 'application/octet-stream'}}});
+    const inventory = {id: 'world-inventory', path: 'shared/world/offline-inventory.json', mediaType: 'application/json',
+        sourcePath: 'foxhole-planner/objects/' + sha256(download) + '.json', ...receipt(download)};
+    const makeCatalog = (resources, data) => bytes({catalogSchemaVersion: 1, resourceDefaults: {}, products: [],
+        sharedResources: resources, data: {privateFiles: {}, world: {...world, ...data}}});
+    const before = makeCatalog([index], {contentResources: {[content]: {sha256: sha256(Buffer.from('map')), byteLength: 3, mediaType: 'application/octet-stream'}}});
+    const after = makeCatalog([index, inventory], {offlineInventoryResourcePath: inventory.path});
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'foxwatch-world-review-'));
+    const payload = path.join(directory, 'payload');
+    const payloadFile = path.join(payload, sha256(download) + '.json');
+    const catalogFile = path.join(directory, 'catalog.v1.json'), pinFile = path.join(directory, 'extension-pin.json');
+    await mkdir(payload);
+    await Promise.all([writeFile(catalogFile, after), writeFile(payloadFile, download), writeFile(pinFile, bytes({
+        schemaVersion: 1, baseUrl, catalog: {url: baseUrl + 'foxhole-planner/catalog.json', ...receipt(after)},
+    }))]);
+    t.after(async () => {
+        await Promise.all([catalogFile, pinFile, payloadFile].map(file => unlink(file)));
+        await rmdir(payload);
+        await rmdir(directory);
+    });
+    const fetcher = async url => {
+        const pathname = new URL(url).pathname;
+        if (pathname.endsWith('/versions')) return Response.json([{version: '0.6.3', packageSha256: '2'.repeat(64)}]);
+        if (pathname.endsWith('/files/dist/catalog.v1.json')) return new Response(before);
+        return Response.json({manifest: {id: 'nixie.foxhole-planner', version: '0.6.3',
+            contributes: {productCatalogs: [{id: 'foxhole.catalog', baseUrl, document: {path: 'dist/catalog.v1.json', ...receipt(before)}}]}}});
+    };
+    const review = await reviewPreparedPlannerCatalog(directory, {fetcher});
+    assert.deepEqual(review.changes, []);
 });
