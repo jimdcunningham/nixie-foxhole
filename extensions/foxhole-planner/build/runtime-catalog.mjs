@@ -1,10 +1,10 @@
 import {createHash} from 'node:crypto';
 import {decodeFoxholeCatalogMetadata} from '../src/catalog-keys.mjs';
 
-/** Keep the pinned FoxWatch input intact and package translations as independently loadable modules. */
+/** The runtime reads resource IDs. FoxWatch and manifest generation still use the pinned source paths. */
 export function buildRuntimeCatalog(source) {
     const catalog = JSON.parse(source);
-    const {catalogLocalizations, ...data} = catalog.data ?? {};
+    const {catalogLocalizations, privateFiles, ...data} = catalog.data ?? {};
     const localeModules = new Map();
     if (catalogLocalizations) {
         if (catalogLocalizations.en) data.catalogLocalizations = {en: catalogLocalizations.en};
@@ -16,6 +16,7 @@ export function buildRuntimeCatalog(source) {
             localeModules.set(`assets/catalog-locales/${locale}.js`, Buffer.from('export default JSON.parse(' + JSON.stringify(JSON.stringify(messages)) + ');\n'));
         }
     }
-    const bytes = catalogLocalizations === undefined ? source : Buffer.from(JSON.stringify({...catalog, data}));
+    const bytes = catalogLocalizations === undefined && privateFiles === undefined
+        ? source : Buffer.from(JSON.stringify({...catalog, data}));
     return {bytes, localeModules, receipt: {sha256: createHash('sha256').update(bytes).digest('hex'), byteLength: bytes.length}};
 }

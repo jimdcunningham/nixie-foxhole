@@ -14,3 +14,12 @@ test('derives a startup catalog and loadable locale modules from the pinned sour
     const module = await import('data:text/javascript;base64,' + french.toString('base64'));
     assert.deepEqual(module.default, {refineryName: 'Raffinerie'});
 });
+
+test('keeps resource receipts available with the generated-path aliases omitted', () => {
+    const sharedResources = [{id: 'p.0', path: 'foxhole-planner/objects/foundation.webp'}];
+    const privateFiles = {'icons/iconfilterfoundation.webp': sharedResources[0].path};
+    const source = Buffer.from(JSON.stringify({products: [], sharedResources, data: {privateFiles, maps: {}}}));
+    const {bytes} = buildRuntimeCatalog(source);
+    assert.deepEqual(JSON.parse(bytes), {products: [], sharedResources, data: {maps: {}}});
+    assert.deepEqual(JSON.parse(source).data.privateFiles, privateFiles);
+});
