@@ -8,7 +8,30 @@ import {prepareProductCatalog} from './prepare-catalog.mjs';
 import {readPublicationPlan} from '../scripts/asset-pack-publication.mjs';
 import {publishAssetPublication, inspectAssetPublication} from '../scripts/asset-pack-publisher.mjs';
 import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {decodeFoxholeCatalogMetadata, encodeFoxholeCatalogKeys} from '../../../extensions/foxhole-planner/src/catalog-keys.mjs';
 const target = {endpoint: 'https://account.r2.cloudflarestorage.com', bucket: 'nixie-extension-assets', publicBaseUrl: 'https://assets.example.org/', prefix: 'foxhole-planner'};
+
+test('short keys preserve nested Foxhole metadata and literal one-character keys', () => {
+    const entries = [{width: 12, height: 6, a: 'literal'}, {width: 24, height: 12, a: 'also literal'}];
+    const source = {products: [{id: 'foundation', data: {dimensions: entries}, resources: {model: [{sha256: 'digest'}]}}],
+        data: {maps: {dimensions: entries}, privateFiles: {'old.webp': 'path/new.webp'}}};
+    assert.equal(decodeFoxholeCatalogMetadata(source), source);
+    const encoded = encodeFoxholeCatalogKeys(source);
+    assert.equal(encoded.data.compactKeys.version, 1);
+    const fields = new Map(Object.entries(encoded.data.compactKeys.dictionary).map(([alias, original]) => [original, alias]));
+    assert.match(fields.get('width'), /^[a-zA-Z]{1,2}$/);
+    assert.match(fields.get('height'), /^[a-zA-Z]{1,2}$/);
+    assert.notEqual(fields.get('width'), 'a');
+    assert.equal(encoded.products[0].data[fields.get('dimensions')][0][fields.get('width')], 12);
+    assert.deepEqual(encoded.products[0].resources, source.products[0].resources);
+    const decoded = decodeFoxholeCatalogMetadata(JSON.parse(JSON.stringify(encoded)));
+    assert.deepEqual(decoded.products, source.products);
+    assert.deepEqual(decoded.data.maps, source.data.maps);
+    assert.deepEqual(decoded.data.privateFiles, source.data.privateFiles);
+    const ambiguous = structuredClone(encoded);
+    ambiguous.products[0].data[fields.get('dimensions')][0].width = 999;
+    assert.throws(() => decodeFoxholeCatalogMetadata(ambiguous), /Duplicate decoded/);
+});
 
 test('FoxWatch produces one catalog and shared content objects that resumes without overwrites', async t => {
     const root = await fs.mkdtemp(path.join(tmpdir(), 'foxwatch-catalog-'));
@@ -36,6 +59,8 @@ test('FoxWatch produces one catalog and shared content objects that resumes with
     const catalogBytes = await fs.readFile(path.join(prepared.directory, 'catalog.v1.json'));
     assert.equal(createHash('sha256').update(catalogBytes).digest('hex'), prepared.pin.catalog.sha256);
     const catalog = parseNixieProductCatalogV1(JSON.parse(catalogBytes));
+    assert.equal(catalog.data.compactKeys.version, 1);
+    assert.deepEqual(decodeFoxholeCatalogMetadata(catalog).products[0].data, sources.metadata.hospital);
     const resources = resolveNixieProductCatalogResourcesV1(catalog);
     assert.equal(catalog.releaseRoot, undefined);
     assert.equal(catalog.assetRelease, undefined);

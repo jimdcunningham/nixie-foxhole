@@ -1,4 +1,5 @@
 import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
+import {foxholeWorldReceiptsUseShortKeys} from './catalog-keys.mjs';
 
 const MAX_DOCUMENT = 16 * 1024 ** 2;
 const MAX_RESOURCE = 512 * 1024 ** 2;
@@ -49,6 +50,7 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         return url.href;
     };
     const catalog = parseNixieProductCatalogV1(value);
+    const shortWorldKeys = foxholeWorldReceiptsUseShortKeys(catalog);
     if (catalog.releaseRoot) throw Error('Private tools require the canonical shared-content catalog');
     const entries = resolveNixieProductCatalogResourcesV1(catalog).assets;
     const byPath = new Map(entries.map(row => [row.path, row])), files = new Map();
@@ -68,8 +70,9 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         const root = byPath.get(world.indexResourcePath);
         if (!root || root.mediaType !== 'application/json') throw Error('Missing pinned world index');
         worldIndex = {url: location(root.sourcePath ?? root.path), ...receipt(root)};
-        for (const [path, raw] of Object.entries(world.contentResources)) {
-            if (!/^content\/(br|raw)\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/.test(path) || typeof raw.mediaType !== 'string') throw Error('Invalid world content identity');
+        for (const [path, encoded] of Object.entries(world.contentResources)) {
+            const raw = shortWorldKeys ? {sha256: encoded?.a, byteLength: encoded?.b, mediaType: encoded?.c} : encoded;
+            if (!/^content\/(br|raw)\/[a-f0-9]{64}\/asset\.[a-z0-9]+$/.test(path) || typeof raw?.mediaType !== 'string') throw Error('Invalid world content identity');
             const entry = {path: 'world/' + path, ...receipt(raw), mediaType: raw.mediaType};
             if (files.has(entry.path)) throw Error('Conflicting world catalog file');
             files.set(entry.path, {url: location(world.contentRoot + path), entry});

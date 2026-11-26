@@ -49,8 +49,15 @@ test('one canonical catalog includes standalone private files and the existing e
     await assert.rejects(load(escaping),/escapes/);
     const missing = structuredClone(catalog); missing.data.privateFiles['missing.webp']='missing';
     await assert.rejects(load(missing),/association/);
-    const corrupted = structuredClone(catalog); corrupted.data.world.contentResources[worldPath.slice(6)].sha256='bad';
+    const worldKey = worldPath.slice(6);
+    assert.deepEqual(catalog.data.world.contentResources[worldKey], {a: hash(decoded), b: decoded.length, c: 'application/json'});
+    const corrupted = structuredClone(catalog); corrupted.data.world.contentResources[worldKey].a='bad';
     await assert.rejects(load(corrupted),/receipt/);
+    const legacy = structuredClone(catalog);
+    delete legacy.data.compactKeys;
+    legacy.data.world.contentResources = Object.fromEntries(Object.entries(legacy.data.world.contentResources)
+        .map(([path,{a,b,c}]) => [path,{sha256:a,byteLength:b,mediaType:c}]));
+    assert.deepEqual((await load(legacy)).files, library.files);
     const oversized = {...prepared.pin.catalog,byteLength:17*1024**2};
     await assert.rejects(readPinnedCatalogJson(oversized,fetcher),/receipt/);
     await assert.rejects(readPinnedCatalogJson({...prepared.pin.catalog,sha256:'0'.repeat(64)},fetcher),/integrity/);

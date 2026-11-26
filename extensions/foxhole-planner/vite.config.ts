@@ -1,7 +1,7 @@
 import {readFile, writeFile, mkdir, unlink} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {defineConfig, type Plugin} from 'vite';
+import {defineConfig, normalizePath, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
 import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
@@ -13,6 +13,7 @@ const extensionRoot = fileURLToPath(new URL('./', import.meta.url));
 const inputFile = process.env.NIXIE_FOXHOLE_CATALOG_FILE?.trim() || resolve(process.env.NIXIE_FOXHOLE_ASSETS_ROOT?.trim()
     || fileURLToPath(new URL('../../packages/extensions/foxhole/public/foxhole/assets/', import.meta.url)), 'catalog.v1.json');
 const ASSETS = '#foxhole-scene-v2-assets', MAPS = '#foxhole-scene-v2-maps';
+const catalogKeys = normalizePath(fileURLToPath(new URL('./src/catalog-keys.mjs', import.meta.url)));
 function catalogPlugin(development: boolean): Plugin {
     let bytes: Buffer, manifest: string;
     let localFiles: ReadonlyMap<string, Buffer> | undefined;
@@ -47,12 +48,15 @@ function catalogPlugin(development: boolean): Plugin {
         },
         load(id) {
             if (id !== '\0' + ASSETS && id !== '\0' + MAPS) return;
-            const prefix = 'import catalog from "../catalog.v1.json" with {type:"json"};';
-            if (id === '\0' + MAPS) return prefix + 'export default catalog.data.maps;';
+            const prefix = 'import packedCatalog from "../catalog.v1.json" with {type:"json"};'
+                + 'import {decodeFoxholeCatalogMetadata} from ' + JSON.stringify(catalogKeys) + ';'
+                + 'const catalog=decodeFoxholeCatalogMetadata(packedCatalog);';
+            if (id === '\0' + MAPS) return 'export {catalogMaps as default} from ' + JSON.stringify(ASSETS) + ';';
             return prefix + 'export const flagAtlasesByResourceId=catalog.data.flagAtlasesByResourceId;export const modelLightHintsByResourceId=catalog.data.modelLightHintsByResourceId;export const catalogLocalizations=catalog.data.catalogLocalizations;'
                 + 'export const productionOutputsByRecipeId=catalog.data.productionOutputsByRecipeId;'
                 + 'export const productionRecipesById=catalog.data.productionRecipesById;'
                 + 'export const bunkerDestructionWeapons=catalog.data.bunkerDestructionWeapons;'
+                + 'export const catalogMaps=catalog.data.maps;'
                 + 'export default Object.fromEntries(catalog.products.map(product=>[product.id,product.data]));';
         },
         async writeBundle(options) {

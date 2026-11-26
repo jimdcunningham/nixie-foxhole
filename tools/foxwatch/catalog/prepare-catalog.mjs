@@ -7,6 +7,7 @@ import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from 
 import {validateTarget, portablePath, fileHash} from '../scripts/asset-pack-publication.mjs';
 import {createBrowserAtlas} from './browser-atlas-images.ts';
 import {readCatalogSources} from './read-catalog-sources.mjs';
+import {encodeFoxholeCatalogKeys} from '../../../extensions/foxhole-planner/src/catalog-keys.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const receipt = bytes => ({sha256: hash(bytes), byteLength: bytes.length});
 const inside = (root, candidate) => {const relative = path.relative(root, candidate); return !relative || !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep);};
@@ -159,7 +160,7 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
         catalog.data = {...catalog.data, world: {indexResourcePath: worldIndex.path, contentRoot: target.prefix + '/world/', contentResources}};
     }
     catalog.data = {...catalog.data, privateFiles: Object.fromEntries(Object.entries(privateFiles).sort(([a], [b]) => a.localeCompare(b, 'en')))};
-    const normalized = parseNixieProductCatalogV1(JSON.parse(JSON.stringify(catalog)));
+    const normalized = parseNixieProductCatalogV1(JSON.parse(JSON.stringify(encodeFoxholeCatalogKeys(catalog))));
     const decoded = Buffer.from(JSON.stringify(normalized));
     const documentReceipt = await snapshot('catalog.v1.json', decoded, 'application/json', 'indexes');
     const document = {url: new URL(objectPath(documentReceipt, 'application/json'), target.publicBaseUrl).href, ...documentReceipt};

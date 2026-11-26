@@ -29,6 +29,12 @@ existing generated extraction data, and produces:
 - `extension-pin.json`, the catalog and completion-document digests/URLs for a
   future extension release. Preparation does not install this pin into source.
 
+New catalogs use the Foxhole-owned `data.compactKeys` version 1 dictionary for
+repeated metadata keys and one-character keys in world file receipts. Planner
+and FoxWatch restore the metadata names at their read boundaries and still
+accept catalogs without the dictionary. Ship the updated readers before
+adopting a compact catalog pin in a release.
+
 Example delivery keys under the configured `foxhole-planner` prefix:
 
 ```text

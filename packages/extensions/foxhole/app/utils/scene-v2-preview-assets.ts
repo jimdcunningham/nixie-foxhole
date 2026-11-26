@@ -1,4 +1,5 @@
 import { shallowRef } from 'vue';
+import { decodeFoxholeCatalogMetadata } from '../../../../../extensions/foxhole-planner/src/catalog-keys.mjs';
 import type { FoxholeSceneV2AssetMetadata } from '../../../../../extensions/foxhole-planner/src/scene-v2-asset-metadata.ts';
 import type { FoxholeAssetGeneration } from './asset-generation.ts';
 
@@ -8,7 +9,9 @@ export function readFoxholePreviewAsset(id: string): FoxholeSceneV2AssetMetadata
 }
 export async function prepareFoxholePreviewAssets(generation: FoxholeAssetGeneration | null): Promise<() => void> {
     const text = generation ? (await generation.readProductCatalog('foxhole.catalog')).text : null;
-    const document = text ? JSON.parse(text) as { products: Array<{ id: string; data: FoxholeSceneV2AssetMetadata; }>; } : null;
+    const document = text
+        ? decodeFoxholeCatalogMetadata(JSON.parse(text) as { products: Array<{ id: string; data: FoxholeSceneV2AssetMetadata; }>; })
+        : null;
     const prepared = new Map(document?.products.map(product => [product.id, product.data]) ?? []);
     return () => {
         assets.value = prepared;

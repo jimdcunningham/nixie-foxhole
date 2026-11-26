@@ -1,4 +1,5 @@
 import { prepareFoxholePreviewAssets } from '../app/utils/scene-v2-preview-assets.ts';
+import { encodeFoxholeCatalogKeys } from '../../../../extensions/foxhole-planner/src/catalog-keys.mjs';
 import { projectNixieInspectorSubjectV1 } from '@nixiejs/extension-sdk/scene-v2';
 import { inspectFoxholeSceneV2Structure } from '../../../../extensions/foxhole-planner/src/scene-v2-inspector.ts';
 import { setActiveNixieStructureModificationHoverPreview } from '#nixie/plugins/nixie/runtime/shared-state.ts';
@@ -1086,7 +1087,8 @@ test('Inspector upgrade and default hovers use V1 opacity without saving',()=>{
 
 
 test('Inspector preview projection follows hover lifecycle and never changes the placement or saved source',async()=>{
- const activate=await prepareFoxholePreviewAssets({generationHash:'test',readProductCatalog:async()=>({baseUrl:'https://example.com/',sha256:'test',text:JSON.stringify({products:[{id:'fortt3',data:assets.fortt3}]})})});activate();
+ const compact=encodeFoxholeCatalogKeys({products:[{id:'fortt3',data:assets.fortt3}]});
+ const activate=await prepareFoxholePreviewAssets({generationHash:'test',readProductCatalog:async()=>({baseUrl:'https://example.com/',sha256:'test',text:JSON.stringify(compact)})});activate();
  const {host,id}=fixture('foxholeAsset',{foxholeKey:'fortt3'});const original=host.readEntity(id),before=host.exportDocument(),settings={};
  try{
   setActiveNixieStructureModificationHoverPreview({nodeId:id,nodeIds:[id,'other'],slotId:'BackInfraModSlot',variantId:'bunkbed'});
