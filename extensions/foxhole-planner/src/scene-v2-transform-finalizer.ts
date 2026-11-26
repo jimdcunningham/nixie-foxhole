@@ -222,7 +222,8 @@ function connectorEndpoints(entity: NixieComponentEntitySnapshotV1): Array<{ rol
 }
 
 function sockets(entity: NixieComponentEntitySnapshotV1, matrix: Matrix,
-    projection?: ReturnType<typeof createFoxholeSpatialProjection>): WorldSocket[] {
+    projection?: ReturnType<typeof createFoxholeSpatialProjection>,
+    includeSocket?: (socket: FoxholeSceneV2BuildSocketMetadata) => boolean): WorldSocket[] {
     const localSockets = connectorComponent(entity)
         ? connectorEndpoints(entity).map(endpoint => endpoint.socket)
         : resolveFoxholeEntityStructureSockets(entity, assetMetadata(entity));
@@ -246,7 +247,8 @@ function sockets(entity: NixieComponentEntitySnapshotV1, matrix: Matrix,
             }
         }
     }
-    return localSockets.map(socket => worldSocket(entity, socket, matrix, projection));
+    return (includeSocket ? localSockets.filter(includeSocket) : localSockets)
+        .map(socket => worldSocket(entity, socket, matrix, projection));
 }
 
 function worldSocket(entity: NixieComponentEntitySnapshotV1, socket: FoxholeSceneV2BuildSocketMetadata, matrix: Matrix,
@@ -881,8 +883,6 @@ function finalizeFoxholeSceneV2TransformCore(
     request: NixieTransformFinalizeRequestV1 & { previousSnapId?: string; },
 ): NixieTransformFinalizeResultV1 {
     const entities = request.context.entities;
-    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId
-        ? entity : withFoxholeSceneV2TransformProposal(entity, request.transform)));
     const moved = entities.find(entity => entity.entityId === request.entityId);
     if (moved && connectorComponent(moved)) {
         return finalizeConnector(request, moved);
@@ -892,6 +892,12 @@ function finalizeFoxholeSceneV2TransformCore(
     }
     const movingIds = new Set(request.movingEntityIds ?? [moved.entityId]);
     const movers = entities.filter(entity => movingIds.has(entity.entityId));
+    const searchForTargets = request.interaction !== 'exchange' && request.snappingEnabled !== false;
+    if (!searchForTargets && !movers.some(member => readAttachments(member).length)) {
+        return { contractVersion: 1, transform: { x: request.transform.x, y: request.transform.y } };
+    }
+    const projection = createFoxholeSpatialProjection(entities.map(entity => entity.entityId !== request.entityId
+        ? entity : withFoxholeSceneV2TransformProposal(entity, request.transform)));
     const matrices = worldMatrices(entities, moved.entityId, request.transform);
     const movingSockets = movers.flatMap(entity => sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection));
     const attachmentsByEntity = new Map(entities.map(entity => [entity.entityId, readAttachments(entity)]));
@@ -909,6 +915,14 @@ function finalizeFoxholeSceneV2TransformCore(
     const renderScale = request.context.viewport?.renderScale;
     const captureDistance = showSnap && renderScale ? Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * renderScale) : SNAP_DISTANCE;
     const releaseDistance = Math.max(SNAP_RELEASE_DISTANCE, captureDistance * 1.5);
+    const searchDistance = showSnap && request.previousSnapId ? releaseDistance : captureDistance;
+    const firstSocket = movingSockets[0]?.world;
+    const socketSpread = firstSocket ? movingSockets.reduce((radius, { world }) =>
+        Math.max(radius, Math.hypot(world[0] - firstSocket[0], world[1] - firstSocket[1])), 0) : 0;
+    // A second pair can only align if the winning pair's translation and
+    // bounded yaw can move its socket close enough. Twice the radius about
+    // the first socket bounds the distance between any two moving sockets.
+    const alignDistance = searchDistance + 4 * Math.sin((MAX_MOVE_SNAP_ROTATION + 1e-8) / 2) * socketSpread + 1;
     const travelSetting = request.context.settings?.['nixie.scene.socketBreakawayTravel'];
     const scaleSetting = request.context.settings?.['nixie.scene.socketBreakawayRenderScale'];
     const breakawayTravel = typeof travelSetting === 'string' ? Number(travelSetting) : NaN;
@@ -929,13 +943,18 @@ function finalizeFoxholeSceneV2TransformCore(
     }) : [];
     let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
     const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
-    for (const entity of request.interaction === 'exchange' || request.snappingEnabled === false ? [] : entities) {
+    for (const entity of searchForTargets ? entities : []) {
         if (movingIds.has(entity.entityId)) {
             continue;
         }
         const targetAttachments = attachmentsByEntity.get(entity.entityId) ?? [];
-        for (const target of sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection)) {
-            const occupied = attachmentAt(targetAttachments, target.socket.name) ?? endpointAttachmentAt(entity, target.socket.name);
+        const occupiedSocket = (name: string) => attachmentAt(targetAttachments, name) ?? endpointAttachmentAt(entity, name);
+        const targets = sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection, socket => {
+            const occupied = occupiedSocket(socket.name);
+            return !occupied || movingIds.has(occupied.targetEntityId);
+        });
+        for (const target of targets) {
+            const occupied = occupiedSocket(target.socket.name);
             for (const moving of movingSockets) {
                 if (internallyOccupied.has(`${moving.entityId}:${normalizedName(moving.socket.name)}`)) {
                     continue;
@@ -943,6 +962,9 @@ function finalizeFoxholeSceneV2TransformCore(
                 if (occupied && occupied.targetEntityId !== moving.entityId) {
                     continue;
                 }
+                const distance = Math.hypot(target.world[0] - moving.world[0], target.world[1] - moving.world[1],
+                    target.world[2] - moving.world[2]);
+                if (!Number.isFinite(distance) || distance > alignDistance) continue;
                 if (breakingAway) {
                     const originalLink = attachmentAt(attachmentsByEntity.get(moving.entityId) ?? [], moving.socket.name);
                     if (originalLink?.targetEntityId === target.entityId
@@ -953,8 +975,7 @@ function finalizeFoxholeSceneV2TransformCore(
                     continue;
                 }
                 candidates.push({ moving, target, overlap });
-                const distance = Math.hypot(...target.world.map((value, axis) => value - moving.world[axis]!));
-                if (!Number.isFinite(distance) || distance > (showSnap && request.previousSnapId ? releaseDistance : captureDistance)) continue;
+                if (distance > searchDistance) continue;
                 const angle = Math.abs(facingCorrection(moving, target));
                 if (angle > MAX_MOVE_SNAP_ROTATION + 1e-8) continue;
                 const snapId = showSnap ? JSON.stringify([moving.socket.name, target.entityId, target.socket.name]) : undefined;
@@ -1038,33 +1059,41 @@ function finalizeFoxholeSceneV2TransformCore(
     }
 
     const operations: NixieComponentOperationV1[] = [];
-    const finalizedEntities = entities.map(entity => {
-        if (!movingIds.has(entity.entityId)) return entity;
-        const parent = entities.find(candidate => candidate.entityId === parentId(entity));
-        const origin = projection.toWorld(entity, [0, 0, 0]);
-        const desired = pose?.apply(origin) ?? origin;
-        const local = parent ? projection.toLocal(parent, desired) : desired;
-        const current = readFoxholeSceneV2CoreTransform(entity)!;
-        const rotation = pose?.transform.rotation === undefined ? undefined
-            : entity.entityId === moved.entityId ? pose.transform.rotation
-            : pose.localHeading(entity, [current.position.x, current.position.y, current.position.z], origin, current.rotation.z);
-        return withFoxholeSceneV2TransformProposal(entity, { x: local[0], y: local[1], ...(rotation === undefined ? {} : { rotation }) }, local[2]);
-    });
-    const finalizedMatrices = worldMatrices(finalizedEntities, moved.entityId, { ...request.transform, ...finalizedTransform });
-    const finalizedProjection = createFoxholeSpatialProjection(finalizedEntities);
-    const connectorPatches = new Map<string, NixieComponentJsonObjectV1>();
-    for (const member of finalizedEntities.filter(entity => movingIds.has(entity.entityId))) {
-        for (const [id, patch] of carriedConnectorPatches(member, finalizedEntities, finalizedMatrices, sockets(member, finalizedMatrices.get(member.entityId)!, finalizedProjection))) {
-            // Selected connectors already share the rigid movement.
-            if (!movingIds.has(id)) connectorPatches.set(id, { ...connectorPatches.get(id), ...patch });
+    const connectorMovers = movers.filter(member => (attachmentsByEntity.get(member.entityId) ?? []).some(attachment => {
+        const target = entitiesById.get(attachment.targetEntityId);
+        return target && !movingIds.has(target.entityId) && connectorComponent(target);
+    }));
+    if (connectorMovers.length) {
+        const finalizedEntities = entities.map(entity => {
+            if (!movingIds.has(entity.entityId)) return entity;
+            const parent = entitiesById.get(parentId(entity) ?? '');
+            const origin = projection.toWorld(entity, [0, 0, 0]);
+            const desired = pose?.apply(origin) ?? origin;
+            const local = parent ? projection.toLocal(parent, desired) : desired;
+            const current = readFoxholeSceneV2CoreTransform(entity)!;
+            const rotation = pose?.transform.rotation === undefined ? undefined
+                : entity.entityId === moved.entityId ? pose.transform.rotation
+                : pose.localHeading(entity, [current.position.x, current.position.y, current.position.z], origin, current.rotation.z);
+            return withFoxholeSceneV2TransformProposal(entity, { x: local[0], y: local[1], ...(rotation === undefined ? {} : { rotation }) }, local[2]);
+        });
+        const finalizedMatrices = worldMatrices(finalizedEntities, moved.entityId, { ...request.transform, ...finalizedTransform });
+        const finalizedProjection = createFoxholeSpatialProjection(finalizedEntities);
+        const connectorPatches = new Map<string, NixieComponentJsonObjectV1>();
+        const finalizedById = new Map(finalizedEntities.map(entity => [entity.entityId, entity]));
+        for (const { entityId } of connectorMovers) {
+            const member = finalizedById.get(entityId)!;
+            for (const [id, patch] of carriedConnectorPatches(member, finalizedEntities, finalizedMatrices, sockets(member, finalizedMatrices.get(member.entityId)!, finalizedProjection))) {
+                // Selected connectors already share the rigid movement.
+                if (!movingIds.has(id)) connectorPatches.set(id, { ...connectorPatches.get(id), ...patch });
+            }
+        }
+        for (const [entityId, set] of connectorPatches) {
+            const entity = entitiesById.get(entityId)!;
+            operations.push({ op: 'patch', entityId, componentId: connectorComponent(entity)!.componentId, set });
         }
     }
-    for (const [entityId, set] of connectorPatches) {
-        const entity = entities.find(candidate => candidate.entityId === entityId)!;
-        operations.push({ op: 'patch', entityId, componentId: connectorComponent(entity)!.componentId, set });
-    }
     for (const [entityId, next] of nextByEntity) {
-        const entity = entities.find(candidate => candidate.entityId === entityId);
+        const entity = entitiesById.get(entityId);
         if (!entity) {
             continue;
         }

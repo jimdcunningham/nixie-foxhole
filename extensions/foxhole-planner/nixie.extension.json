@@ -2212,14 +2212,14 @@
         "systemId": "transforms.socket-snapping",
         "enabledSettingId": "foxhole.viewport.socketSnapping",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"socket-attachments"},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"includeReferencedEntities":true,"match":{"ownerId":"nixie.foxhole-planner","componentId":"socket-attachments"}}
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"includeReferencedEntities":true,"spatialCoreOnly":true,"match":{"ownerId":"nixie.foxhole-planner","componentId":"socket-attachments"}}
       },
       {
         "contractVersion": 1,
         "id": "surface-placement",
         "systemId": "transforms.surface-placement",
         "match": {"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}},
-        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"includeReferencedEntities":true,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}}}
+        "candidateQuery": {"worldRadius":4096,"maxCandidates":256,"includeReferencedEntities":true,"spatialCoreOnly":true,"match":{"ownerId":"nixie.foxhole-planner","componentId":"asset","data":{"catalogId":"foxhole.structures"}}}
       },
       {
         "contractVersion": 1,

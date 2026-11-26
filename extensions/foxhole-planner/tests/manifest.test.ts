@@ -30,10 +30,12 @@ test('declares real Planner migrations through the public SDK', async () => {
     assert.equal(socketFinalizer?.candidateQuery.worldRadius, 4096);
     assert.equal(socketFinalizer?.match.componentId, 'socket-attachments');
     assert.equal(socketFinalizer?.candidateQuery.maxCandidates, 256);
+    assert.equal(socketFinalizer?.candidateQuery.spatialCoreOnly, true);
     assert.equal(socketFinalizer?.candidateQuery.match.componentId, 'socket-attachments');
     const surfaceFinalizer = manifest.contributes.transformFinalizers?.find(finalizer => finalizer.id === 'surface-placement');
     assert.equal(surfaceFinalizer?.enabledSettingId, undefined);
     assert.equal(surfaceFinalizer?.candidateQuery.match.componentId, 'asset');
+    assert.equal(surfaceFinalizer?.candidateQuery.spatialCoreOnly, true);
     const largestSocketOffset = Math.max(...Object.values(foxholeSceneV2Assets).flatMap(asset => (
         asset.buildSockets.map(socket => Math.hypot(socket.x, socket.y))
     )));
