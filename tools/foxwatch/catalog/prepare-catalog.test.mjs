@@ -40,12 +40,14 @@ test('FoxWatch produces one catalog and shared content objects that resumes with
     for (const name of ['icon.webp','texture.webp','bracket.glb','part.glb','map.webp']) await fs.writeFile(path.join(assetsRoot, name), name);
     await fs.writeFile(path.join(assetsRoot, 'bracket.glb'), 'geometry'.repeat(1024));
     await fs.writeFile(path.join(assetsRoot, 'manifest.v1.json'), '{}');
+    for (const alias of ['legacy-icon.webp', 'legacy-preview.webp']) await fs.writeFile(path.join(assetsRoot, alias), 'shared private image');
     const sources = {assets: [{id: 'hospital', assetGroup: 'structures', icon: 'icon.webp', texture: 'texture.webp'}],
         models: [{id: 'hospital', assetId: 'hospital', path: 'bracket.glb', dependencyIds: ['shared.part']},
             {id: 'shared.part', assetId: 'shared', sharedPart: true, path: 'part.glb'}],
         metadata: {hospital: {name: 'Hospital', model: {resourceId: 'foxhole.model.hospital'}}}, data: {catalogLocalizations: {en: {hospital: 'Hospital'}}},
         buildInputContents: {'manifest.v1.json': JSON.stringify({previewUrl: '/foxhole/assets/types/structures/hospital/hospital.icon.rendered.webp'})},
-        buildInputs: ['manifest.v1.json'], browserImageSources: ['icon.webp'], modifications: [], visuals: [],
+        buildInputs: ['manifest.v1.json'], privateSources: ['legacy-icon.webp', 'legacy-preview.webp'],
+        browserImageSources: ['icon.webp'], modifications: [], visuals: [],
         maps: {metadata: {}, resources: [{id: 'foxhole.map.world-light', sourcePath: 'map.webp'}]}};
     const prepared = await prepareProductCatalog({assetsRoot, output: path.join(root, 'snapshot'), assetRelease: '2026-10-24.1', target, existingInventory: {schemaVersion:1,target,objects:[],capturedAt:'fixture'}, sources, atlas: async () => Buffer.from('atlas')});
     const {plan} = await readPublicationPlan(prepared.planPath);
@@ -66,6 +68,13 @@ test('FoxWatch produces one catalog and shared content objects that resumes with
     assert.equal(catalog.assetRelease, undefined);
     assert.match(resources.assets.find(row => row.path === 'models/hospital.base.glb').sourcePath, /^foxhole-planner\/objects\/[a-f0-9]{64}\.glb$/);
     assert.equal(catalog.data.catalogLocalizations.en.hospital, 'Hospital');
+    const privatePath = catalog.data.privateFiles['legacy-icon.webp'];
+    assert.equal(catalog.data.privateFiles['legacy-preview.webp'], privatePath);
+    assert.match(privatePath, /^foxhole-planner\/objects\/[a-f0-9]{64}\.webp$/);
+    const privateReceipt = catalog.sharedResources.filter(row => row.path === privatePath);
+    assert.equal(privateReceipt.length, 1);
+    assert.match(privateReceipt[0].id, /^p\.[a-z0-9]+$/);
+    assert.equal(privateReceipt[0].sourcePath, undefined);
     const stored = new Map(); let failCatalog = true;
     const transport = {head: async key => stored.get(key), put: async row => {
         if (failCatalog && row.phase === 'indexes') throw Error('Interrupted');

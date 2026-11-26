@@ -36,6 +36,7 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
     }, products: sources.assets.map(asset => ({id: asset.id, assetGroup: asset.assetGroup, resources: {}, data: sources.metadata[asset.id]})), sharedResources: [], data: sources.data};
     const products = new Map(catalog.products.map(product => [product.id, product]));
     const objects = new Map(), privateFiles = {}; let sourceFiles = 0;
+    const privateDeliveries = new Set();
     async function snapshot(logicalPath, source, mediaType, phase = 'assets') {
         portablePath(logicalPath); sourceFiles++;
         let bytes;
@@ -85,6 +86,18 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
         catalog.sharedResources.push({id, path: logicalPath, sourcePath: pinned.sourcePath ?? objectPath(pinned, mediaType), ...pinned, mediaType});
         if (typeof source === 'string') privateFiles[source] = logicalPath;
     }
+    async function privateResource(name, source, mediaType, progressPath = name) {
+        const pinned = await snapshot(progressPath, source, mediaType);
+        const {sourcePath, ...receipt} = pinned;
+        const path = sourcePath ?? objectPath(pinned, mediaType);
+        // Private lookups go through privateFiles, so their SDK path can also be the delivery path.
+        if (!privateDeliveries.has(path)) {
+            catalog.sharedResources.push({id: 'p.' + privateDeliveries.size.toString(36), path, ...receipt, mediaType});
+            privateDeliveries.add(path);
+        }
+        privateFiles[name] = path;
+        return {...pinned, path};
+    }
     for (const asset of sources.assets) {
         const product = products.get(asset.id);
         for (const role of ['icon', 'texture']) {
@@ -121,17 +134,14 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
     for (const name of sources.buildInputs ?? []) {
         portablePath(name);
         const content = sources.buildInputContents?.[name];
-        const pinned = await snapshot('source/' + name, content === undefined ? name : Buffer.from(content), 'application/json');
-        buildInputs[name] = {...pinned, path: pinned.sourcePath ?? objectPath(pinned, 'application/json')};
-        const logical = 'shared/private/' + hash(Buffer.from(name)) + '.json';
-        catalog.sharedResources.push({id: 'input.' + hash(Buffer.from(name)), path: logical, sourcePath: buildInputs[name].path, ...pinned, mediaType: 'application/json'});
-        privateFiles[name] = logical;
+        buildInputs[name] = await privateResource(name, content === undefined ? name : Buffer.from(content),
+            'application/json', 'source/' + name);
     }
     for (const source of sources.privateSources ?? []) {
-        if (privateFiles[source]) continue;
+        if (privateFiles[source] || (source === 'world/index.json' && sources.world)) continue;
         const mediaType = source.endsWith('.webp') ? 'image/webp' : source.endsWith('.glb') ? 'model/gltf-binary' : source.endsWith('.json') ? 'application/json' : null;
         if (!mediaType || /\.preview(?:\.|$)/.test(source)) throw Error('Unsupported private catalog source: ' + source);
-        await shared('private.' + hash(Buffer.from(source)), 'shared/private/' + hash(Buffer.from(source)) + '.' + suffix(mediaType), source, mediaType);
+        await privateResource(source, source, mediaType);
     }
     if (sources.world) {
         if (!sources.world.valid || sources.world.issues?.length) throw Error('World publication graph must be valid');
@@ -175,12 +185,9 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
                 if (copied.sha256 !== row.sha256 || copied.bytes !== row.bytes) throw Error('World resource changed after inventory: ' + row.path);
                 recordWorldFile(row);
             } else if (!privateFiles[row.path]) {
-                const id = 'private.' + hash(Buffer.from(row.path));
-                const logical = 'shared/private/' + hash(Buffer.from(row.path)) + '.' + suffix(row.contentType);
                 const source = row.path === 'world/index.json'
                     ? previewDocuments.size ? Buffer.from(JSON.stringify(worldIndexSource)) : indexBytes : row.path;
-                await shared(id, logical, source, row.contentType);
-                privateFiles[row.path] = logical;
+                await privateResource(row.path, source, row.contentType);
             }
         }
         for (const [resourcePath, bytes] of previewDocuments) {
