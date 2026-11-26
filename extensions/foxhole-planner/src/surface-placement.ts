@@ -18,6 +18,10 @@ export function finalizeFoxholeSurfacePlacement(request: Request, metadata = ass
     if (request.interaction !== 'placement' && request.interaction !== 'planar-translation') return result;
     const original = request.context.entities.find(entity => entity.entityId === request.entityId);
     if (!original) return result;
+    const asset = metadata[String(data(original, 'nixie.foxhole-planner', 'asset')?.assetId)];
+    const foundationSubject = asset && (asset.category === 'foundation' || /^Foundation/i.test(asset.codeName));
+    if (!asset || asset.isItem || ((asset.isVehicle || foundationSubject) && request.groundElevation === undefined) || asset.connector
+        || data(original, 'nixie.foxhole-planner', 'spline-connector') || data(original, 'nixie.foxhole-planner', 'connector')) return result;
     const moving = new Set(request.movingEntityIds ?? [original.entityId]);
     // Internal sockets retain the group's rigid pose. A stationary structure
     // connection owns XYZ; flexible connectors continue following their endpoints.
@@ -31,10 +35,6 @@ export function finalizeFoxholeSurfacePlacement(request: Request, metadata = ass
             return !target || (!targetAsset?.connector && !data(target, 'nixie.foxhole-planner', 'connector') && !data(target, 'nixie.foxhole-planner', 'spline-connector'));
         })) return result;
     }
-    const asset = metadata[String(data(original, 'nixie.foxhole-planner', 'asset')?.assetId)];
-    const foundationSubject = asset && (asset.category === 'foundation' || /^Foundation/i.test(asset.codeName));
-    if (!asset || asset.isItem || ((asset.isVehicle || foundationSubject) && request.groundElevation === undefined) || asset.connector
-        || data(original, 'nixie.foxhole-planner', 'spline-connector') || data(original, 'nixie.foxhole-planner', 'connector')) return result;
     const subject = withFoxholeSceneV2TransformProposal(original, request.transform);
     const entities = request.context.entities.map(entity => entity.entityId === subject.entityId ? subject : entity);
     const projection = createFoxholeSpatialProjection(entities);
@@ -56,11 +56,11 @@ export function finalizeFoxholeSurfacePlacement(request: Request, metadata = ass
         }));
         surface = floatingSurface = origin[2] + correction;
     }
-    for (const member of members) {
-    const memberAsset = metadata[String(data(member, 'nixie.foxhole-planner', 'asset')?.assetId)];
-    if (memberAsset?.category === 'foundation' || /^Foundation/i.test(memberAsset?.codeName ?? '')) continue;
-    const memberOrigin = projection.toWorld(member, [0, 0, 0]);
-    for (const foundation of entities) {
+    const supportedOrigins = members.filter(member => {
+        const memberAsset = metadata[String(data(member, 'nixie.foxhole-planner', 'asset')?.assetId)];
+        return memberAsset?.category !== 'foundation' && !/^Foundation/i.test(memberAsset?.codeName ?? '');
+    }).map(member => projection.toWorld(member, [0, 0, 0]));
+    for (const foundation of supportedOrigins.length ? entities : []) {
         if (moving.has(foundation.entityId)) continue;
         const floor = metadata[String(data(foundation, 'nixie.foxhole-planner', 'asset')?.assetId)];
         if (!floor || !Number.isFinite(floor.foundationSurfaceZ)) continue;
@@ -71,11 +71,15 @@ export function finalizeFoxholeSurfacePlacement(request: Request, metadata = ass
         const v = c.map((value, axis) => value - a[axis]!);
         const normal = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
         if (Math.abs(normal[2]!) < 1e-6) continue;
-        const z = a[2] - (normal[0]! * (memberOrigin[0] - a[0]) + normal[1]! * (memberOrigin[1] - a[1])) / normal[2]!;
-        const local = projection.toLocal(foundation, [memberOrigin[0], memberOrigin[1], z]);
-        const target = origin[2] + z - memberOrigin[2];
-        if (Number.isFinite(target) && target > surface && foxholeFootprintPolygons(floor).some(polygon => foxholePointInPolygon({ x: local[0], y: local[1] }, polygon))) surface = target;
-    }
+        let polygons: ReturnType<typeof foxholeFootprintPolygons> | undefined;
+        for (const memberOrigin of supportedOrigins) {
+            const z = a[2] - (normal[0]! * (memberOrigin[0] - a[0]) + normal[1]! * (memberOrigin[1] - a[1])) / normal[2]!;
+            const target = origin[2] + z - memberOrigin[2];
+            if (!Number.isFinite(target) || target <= surface) continue;
+            const local = projection.toLocal(foundation, [memberOrigin[0], memberOrigin[1], z]);
+            polygons ??= foxholeFootprintPolygons(floor);
+            if (polygons.some(polygon => foxholePointInPolygon({ x: local[0], y: local[1] }, polygon))) surface = target;
+        }
     }
     const parentId = data(subject, 'nixie.core', 'hierarchy')?.parentId;
     const parent = entities.find(entity => entity.entityId === parentId);
