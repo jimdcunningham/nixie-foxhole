@@ -579,6 +579,32 @@ test('foundation placement holds the acquired edge beyond the capture radius and
     assert.equal(place(336, acquired.snap.id).snap, undefined, 'a removed neighbor cannot be retained');
 });
 
+test('large foundation seams report every joined socket to a host that supports it', () => {
+    const row = (prefix: string, x: number) => Array.from({ length: 64 }, (_, index) => {
+        const entity = structure(`${prefix}-${index}`, x);
+        entity.components[0]!.data.y = index * 160;
+        return entity;
+    });
+    const moving = row('moving', 163);
+    const fixed = row('fixed', 0);
+    const request = {
+        contractVersion: 1 as const, interaction: 'planar-translation' as const, entityId: moving[0]!.entityId,
+        movingEntityIds: moving.map(entity => entity.entityId),
+        transform: { x: 163, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+    };
+    const resolve = (all: boolean) => finalizeFoxholeSceneV2Transform({ ...request, context: {
+        contractVersion: 1, entities: [...moving, ...fixed],
+        settings: { 'nixie.scene.snapFeedback': true, 'nixie.scene.snapFeedbackAll': all },
+    } });
+    const legacy = resolve(false);
+    const full = resolve(true);
+    assert.equal(legacy.snap?.points.length, 8);
+    assert.equal(full.snap?.points.length, 64);
+    assert.deepEqual(full.snap?.points.map(point => point.y).sort((a, b) => a - b), fixed.map(entity => entity.components[0]!.data.y));
+    assert.equal(full.transaction?.operations.length, 128);
+    assert.deepEqual(full.transaction?.operations, legacy.transaction?.operations);
+});
+
 test('structure capture uses 12 screen pixels and caps world reach in placement and drag', () => {
     const moving = structure('moving', 0), target = structure('target', 0);
     for (const entity of [moving, target]) entity.components[1]!.data.assetId = 'foundation012x2t3';

@@ -933,6 +933,7 @@ function finalizeFoxholeSceneV2TransformCore(
     });
     const showSnap = request.context.settings?.['nixie.scene.snapFeedback'] === true
         && (request.interaction === 'placement' || request.interaction === 'planar-translation');
+    const showAllSnapPoints = showSnap && request.context.settings?.['nixie.scene.snapFeedbackAll'] === true;
     const renderScale = request.context.viewport?.renderScale;
     const captureDistance = showSnap && renderScale ? Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * renderScale) : SNAP_DISTANCE;
     const releaseDistance = Math.max(SNAP_RELEASE_DISTANCE, captureDistance * 1.5);
@@ -1058,7 +1059,10 @@ function finalizeFoxholeSceneV2TransformCore(
             if (claimedMoving.has(movingName) || claimedTargets.has(targetKey)) continue;
             claimedMoving.add(movingName);
             claimedTargets.add(targetKey);
-            if (showSnap && snapPoints.length < 8) {
+            if (showAllSnapPoints) {
+                const [x, y, z] = match.target.world;
+                snapPoints.push({ x, y, z });
+            } else if (showSnap && snapPoints.length < 8) {
                 const [x, y, z] = match.target.world;
                 if (!snapPoints.some(point => Math.hypot(point.x - x, point.y - y, point.z - z) <= 1)) {
                     snapPoints.push({ x, y, z });

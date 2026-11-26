@@ -21,20 +21,29 @@ import {
 } from './scene-v2-transform-finalizer.ts';
 
 // Standalone builds with an older SDK can still snap on a newer Studio host.
-const supportsSnapFeedback = (() => {
+function supportsSnapPoints(count: number): boolean {
     try {
         parseNixieTransformFinalizeResultV1({ contractVersion: 1, transform: { x: 0, y: 0 },
-            snap: { id: 'socket', points: [{ x: 0, y: 0, z: 0 }] } });
+            snap: { id: 'socket', points: Array.from({ length: count }, (_, x) => ({ x, y: 0, z: 0 })) } });
         return true;
     } catch {
         return false;
     }
-})();
+}
 
-const finalizeSocketTransform: typeof finalizeFoxholeSceneV2Transform = request =>
-    finalizeFoxholeSceneV2Transform(supportsSnapFeedback || !request.context.settings?.['nixie.scene.snapFeedback']
-        ? request
-        : { ...request, context: { ...request.context, settings: { ...request.context.settings, 'nixie.scene.snapFeedback': false } } });
+const supportsAllSnapPoints = supportsSnapPoints(9);
+const supportsSnapFeedback = supportsAllSnapPoints || supportsSnapPoints(1);
+
+const finalizeSocketTransform: typeof finalizeFoxholeSceneV2Transform = request => {
+    const settings = request.context.settings;
+    if (!settings?.['nixie.scene.snapFeedback'] || supportsAllSnapPoints
+        || (supportsSnapFeedback && !settings['nixie.scene.snapFeedbackAll'])) {
+        return finalizeFoxholeSceneV2Transform(request);
+    }
+    return finalizeFoxholeSceneV2Transform({ ...request, context: { ...request.context, settings: {
+        ...settings, 'nixie.scene.snapFeedback': supportsSnapFeedback, 'nixie.scene.snapFeedbackAll': false,
+    } } });
+};
 
 function withCatalogLocale<Request, Result>(provider: (request: Request) => Result, locale: (request: Request) => unknown) {
     return async (request: Request) => {
