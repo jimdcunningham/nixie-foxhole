@@ -264,6 +264,28 @@ function worldSocket(entity: NixieComponentEntitySnapshotV1, socket: FoxholeScen
 }
 
 type SpatialPoint = WorldSocket['world'];
+
+// Search the moving sockets at their current or snapped pose. Keep input order
+// for coincident sockets so ties resolve just as they do for a single entity.
+function nearbyMovingSockets(sockets: readonly WorldSocket[], posedPoint: (socket: WorldSocket) => SpatialPoint) {
+    const ordered = sockets.map((socket, order) => ({ socket, order, point: posedPoint(socket) }))
+        .sort((a, b) => a.point[0] - b.point[0]);
+    return ([x, y, z]: SpatialPoint, radius: number) => {
+        let low = 0, high = ordered.length;
+        while (low < high) {
+            const mid = (low + high) >>> 1;
+            if (ordered[mid]!.point[0] < x - radius) low = mid + 1;
+            else high = mid;
+        }
+        const matches = [];
+        for (let i = low; i < ordered.length; i++) {
+            const entry = ordered[i]!;
+            if (entry.point[0] > x + radius) break;
+            if (Math.abs(entry.point[1] - y) <= radius && Math.abs(entry.point[2] - z) <= radius) matches.push(entry);
+        }
+        return matches.sort((a, b) => a.order - b.order);
+    };
+}
 type SnapTransform = NixieTransformFinalizeResultV1['transform'];
 
 function facingCorrection(moving: WorldSocket, target: WorldSocket): number {
@@ -902,27 +924,20 @@ function finalizeFoxholeSceneV2TransformCore(
     const movingSockets = movers.flatMap(entity => sockets(entity, matrices.get(entity.entityId) ?? localMatrix(entity), projection));
     const attachmentsByEntity = new Map(entities.map(entity => [entity.entityId, readAttachments(entity)]));
     const entitiesById = new Map(entities.map(entity => [entity.entityId, entity]));
-    const internallyOccupied = new Set(movingSockets.flatMap(socket => {
+    const availableSockets = movingSockets.filter(socket => {
         const attachments = attachmentsByEntity.get(socket.entityId) ?? [];
         const entity = entitiesById.get(socket.entityId);
         const endpoint = entity && endpointAttachmentAt(entity, socket.socket.name);
-        return attachments.some(link => normalizedName(link.localSocketName) === normalizedName(socket.socket.name)
-            && movingIds.has(link.targetEntityId)) || (endpoint && movingIds.has(endpoint.targetEntityId))
-            ? [`${socket.entityId}:${normalizedName(socket.socket.name)}`] : [];
-    }));
+        return !attachments.some(link => normalizedName(link.localSocketName) === normalizedName(socket.socket.name)
+            && movingIds.has(link.targetEntityId)) && !(endpoint && movingIds.has(endpoint.targetEntityId));
+    });
     const showSnap = request.context.settings?.['nixie.scene.snapFeedback'] === true
         && (request.interaction === 'placement' || request.interaction === 'planar-translation');
     const renderScale = request.context.viewport?.renderScale;
     const captureDistance = showSnap && renderScale ? Math.min(SNAP_CAPTURE_WORLD_CAP, SNAP_CAPTURE_PIXELS * renderScale) : SNAP_DISTANCE;
     const releaseDistance = Math.max(SNAP_RELEASE_DISTANCE, captureDistance * 1.5);
     const searchDistance = showSnap && request.previousSnapId ? releaseDistance : captureDistance;
-    const firstSocket = movingSockets[0]?.world;
-    const socketSpread = firstSocket ? movingSockets.reduce((radius, { world }) =>
-        Math.max(radius, Math.hypot(world[0] - firstSocket[0], world[1] - firstSocket[1])), 0) : 0;
-    // A second pair can only align if the winning pair's translation and
-    // bounded yaw can move its socket close enough. Twice the radius about
-    // the first socket bounds the distance between any two moving sockets.
-    const alignDistance = searchDistance + 4 * Math.sin((MAX_MOVE_SNAP_ROTATION + 1e-8) / 2) * socketSpread + 1;
+    const nearby = nearbyMovingSockets(availableSockets, socket => socket.world);
     const travelSetting = request.context.settings?.['nixie.scene.socketBreakawayTravel'];
     const scaleSetting = request.context.settings?.['nixie.scene.socketBreakawayRenderScale'];
     const breakawayTravel = typeof travelSetting === 'string' ? Number(travelSetting) : NaN;
@@ -942,7 +957,13 @@ function finalizeFoxholeSceneV2TransformCore(
         return target ? [{ moving, target }] : [];
     }) : [];
     let best: { moving: WorldSocket; target: WorldSocket; score: number; snapId?: string; retained: boolean; } | null = null;
-    const candidates: Array<{ moving: WorldSocket; target: WorldSocket; overlap: number; }> = [];
+    const eligibleTargets: Array<{ target: WorldSocket; occupiedBy?: string }> = [];
+    const isDeparting = (moving: WorldSocket, target: WorldSocket) => {
+        if (!breakingAway) return false;
+        const originalLink = attachmentAt(attachmentsByEntity.get(moving.entityId) ?? [], moving.socket.name);
+        return originalLink?.targetEntityId === target.entityId
+            && normalizedName(originalLink.targetSocketName) === normalizedName(target.socket.name);
+    };
     for (const entity of searchForTargets ? entities : []) {
         if (movingIds.has(entity.entityId)) {
             continue;
@@ -955,27 +976,18 @@ function finalizeFoxholeSceneV2TransformCore(
         });
         for (const target of targets) {
             const occupied = occupiedSocket(target.socket.name);
-            for (const moving of movingSockets) {
-                if (internallyOccupied.has(`${moving.entityId}:${normalizedName(moving.socket.name)}`)) {
-                    continue;
-                }
+            eligibleTargets.push({ target, occupiedBy: occupied?.targetEntityId });
+            for (const { socket: moving } of nearby(target.world, searchDistance)) {
                 if (occupied && occupied.targetEntityId !== moving.entityId) {
                     continue;
                 }
                 const distance = Math.hypot(target.world[0] - moving.world[0], target.world[1] - moving.world[1],
                     target.world[2] - moving.world[2]);
-                if (!Number.isFinite(distance) || distance > alignDistance) continue;
-                if (breakingAway) {
-                    const originalLink = attachmentAt(attachmentsByEntity.get(moving.entityId) ?? [], moving.socket.name);
-                    if (originalLink?.targetEntityId === target.entityId
-                        && normalizedName(originalLink.targetSocketName) === normalizedName(target.socket.name)) continue;
-                }
+                if (!(distance <= searchDistance) || isDeparting(moving, target)) continue;
                 const overlap = compatible(moving, target);
                 if (overlap <= 0) {
                     continue;
                 }
-                candidates.push({ moving, target, overlap });
-                if (distance > searchDistance) continue;
                 const angle = Math.abs(facingCorrection(moving, target));
                 if (angle > MAX_MOVE_SNAP_ROTATION + 1e-8) continue;
                 const snapId = showSnap ? JSON.stringify([moving.socket.name, target.entityId, target.socket.name]) : undefined;
@@ -1020,15 +1032,24 @@ function finalizeFoxholeSceneV2TransformCore(
     const finalizedTransform = pose?.transform ?? { x: request.transform.x, y: request.transform.y };
     const snapPoints: Array<{ x: number; y: number; z: number; }> = [];
     if (pose) {
-            // One pair determines the pose. Record other pairs only if both position and facing still agree.
-            const aligned = candidates.map(candidate => {
-                const point = pose.apply(candidate.moving.world);
-                const direction = pose.rotate(candidate.moving.direction);
-                const facing = -direction.reduce((sum, value, axis) => sum + value * candidate.target.direction[axis]!, 0)
-                    / (Math.hypot(...direction) * Math.hypot(...candidate.target.direction));
-                return { ...candidate, facing, distance: Math.hypot(...candidate.target.world.map((value, axis) => value - point[axis]!)) };
-            }).filter(candidate => candidate.distance <= 1 && candidate.facing >= Math.cos(MAX_FACING_ERROR))
-                .sort((left, right) => left.distance - right.distance || right.overlap - left.overlap);
+        // The winning pair fixes the entire group's pose. Only sockets that
+        // coincide at that pose can form additional reciprocal attachments.
+        const posed = nearbyMovingSockets(availableSockets, socket => pose.apply(socket.world));
+        const aligned = [];
+        for (const { target, occupiedBy } of eligibleTargets) {
+            for (const { socket: moving, point } of posed(target.world, 1)) {
+                if ((occupiedBy && occupiedBy !== moving.entityId) || isDeparting(moving, target)) continue;
+                const distance = Math.hypot(target.world[0] - point[0], target.world[1] - point[1], target.world[2] - point[2]);
+                if (!(distance <= 1)) continue;
+                const direction = pose.rotate(moving.direction);
+                const facing = -direction.reduce((sum, value, axis) => sum + value * target.direction[axis]!, 0)
+                    / (Math.hypot(...direction) * Math.hypot(...target.direction));
+                if (!(facing >= Math.cos(MAX_FACING_ERROR))) continue;
+                const overlap = compatible(moving, target);
+                if (overlap > 0) aligned.push({ moving, target, distance, overlap });
+            }
+        }
+        aligned.sort((left, right) => left.distance - right.distance || right.overlap - left.overlap);
         const claimedMoving = new Set(movers.flatMap(member => (nextByEntity.get(member.entityId) ?? []).map(attachment => member.entityId + ':' + normalizedName(attachment.localSocketName))));
         const claimedTargets = new Set<string>();
         for (const match of aligned) {
@@ -1129,12 +1150,22 @@ function finalizeFoxholeSceneV2TransformCore(
 /** A changed asset/modification can retire sockets while its entity identity remains stable. */
 function reconcileStructureAttachments(request: NixieTransformFinalizeRequestV1) {
     const entities = request.context.entities;
-    const worldSockets = new Map(entities.map(entity => [entity.entityId, sockets(entity, localMatrix(entity))]));
-    const knownMetadata = new Set(entities.filter(entity => assetMetadata(entity) !== null).map(entity => entity.entityId));
+    const entitiesById = new Map(entities.map(entity => [entity.entityId, entity]));
+    const byEntity = new Map<string, WorldSocket[]>();
+    const namedSocket = (entity: NixieComponentEntitySnapshotV1 | undefined, name: string) => {
+        if (!entity) return undefined;
+        let available = byEntity.get(entity.entityId);
+        if (!available) {
+            available = sockets(entity, localMatrix(entity));
+            byEntity.set(entity.entityId, available);
+        }
+        const normalized = normalizedName(name);
+        return available.find(socket => normalizedName(socket.socket.name) === normalized);
+    };
     const valid = (sourceId: string, localName: string, targetId: string, targetName: string) => {
-        const source = worldSockets.get(sourceId)?.find(socket => normalizedName(socket.socket.name) === normalizedName(localName));
-        const target = worldSockets.get(targetId)?.find(socket => normalizedName(socket.socket.name) === normalizedName(targetName));
-        if ((!source && knownMetadata.has(sourceId)) || (!target && knownMetadata.has(targetId))) {
+        const sourceEntity = entitiesById.get(sourceId), targetEntity = entitiesById.get(targetId);
+        const source = namedSocket(sourceEntity, localName), target = namedSocket(targetEntity, targetName);
+        if ((!source && sourceEntity && assetMetadata(sourceEntity)) || (!target && targetEntity && assetMetadata(targetEntity))) {
             return false;
         }
         // Missing context/catalog data cannot prove a relationship invalid.

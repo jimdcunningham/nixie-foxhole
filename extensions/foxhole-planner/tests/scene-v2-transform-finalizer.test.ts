@@ -686,6 +686,27 @@ test('moving foundation pairs ignore internal sockets and connect both stationar
 });
 
 
+test('a distant group member can meet a second socket after the winning snap rotates the selection', () => {
+    const angle = .08, span = 1120;
+    const anchor = structure('anchor', 163), distant = structure('distant', 163 - span * Math.sin(angle));
+    const near = structure('near', 0), far = structure('far', 0);
+    const entities = [anchor, distant, near, far];
+    for (const entity of entities) entity.components[1]!.data.assetId = 'foundation01t1';
+    Object.assign(anchor.components[0]!.data, { rotation: angle });
+    Object.assign(distant.components[0]!.data, { rotation: angle, y: span * Math.cos(angle) });
+    Object.assign(far.components[0]!.data, { y: span });
+    const result = finalizeFoxholeSceneV2Transform({ contractVersion: 1, entityId: anchor.entityId,
+        interaction: 'transform', movingEntityIds: [anchor.entityId, distant.entityId],
+        transform: { x: 163, y: 0, rotation: angle, scaleX: 1, scaleY: 1 }, context: { contractVersion: 1, entities } });
+    assert.ok(Math.abs(result.transform.x - 160) < 1e-6);
+    assert.ok(Math.abs(result.transform.rotation!) < 1e-6);
+    for (const [member, peer] of [[anchor, near], [distant, far]] as const) {
+        const patch = result.transaction?.operations.find(operation => operation.entityId === member.entityId);
+        assert.ok(patch?.op === 'patch');
+        assert.deepEqual(patch.set?.attachments, [{ localSocketName: 'BackSocket', targetEntityId: peer.entityId, targetSocketName: 'FrontSocket' }]);
+    }
+});
+
 test('a foundation group shares height correction and detaches external links without losing internal links', () => {
     const entities = [structure('a', 326), structure('b', 326), structure('left', 0), structure('right', 0)];
     entities.forEach(entity => { entity.components[1].data.assetId = 'foundation012x2t3'; });

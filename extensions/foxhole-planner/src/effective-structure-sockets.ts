@@ -50,6 +50,10 @@ export function resolveFoxholeSelectedSocketVariants(entity: NixieComponentEntit
         : [];
 }
 
+// Unmodified entities of one catalog asset share the same socket geometry.
+// Keep the catalog object as the identity so a catalog replacement invalidates it.
+const baseGeometry = new WeakMap<FoxholeSceneV2AssetMetadata, readonly FoxholeSceneV2BuildSocketMetadata[]>();
+
 /** Same effective sockets as display, projected into the attachment/snapping coordinate basis. */
 export function resolveFoxholeEntityStructureSockets(entity: NixieComponentEntitySnapshotV1,
     asset: FoxholeSceneV2AssetMetadata | null | undefined): FoxholeSceneV2BuildSocketMetadata[] {
@@ -59,7 +63,10 @@ export function resolveFoxholeEntityStructureSockets(entity: NixieComponentEntit
     if (!asset.overlaySockets) {
         return [...asset.buildSockets];
     }
-    return resolveFoxholeEffectiveStructureSocketSources(asset, resolveFoxholeSelectedSocketVariants(entity, asset)).flatMap(socket => {
+    const variants = resolveFoxholeSelectedSocketVariants(entity, asset);
+    const cached = variants.length === 0 ? baseGeometry.get(asset) : undefined;
+    if (cached) return [...cached];
+    const sockets = resolveFoxholeEffectiveStructureSocketSources(asset, variants).flatMap(socket => {
         const x = Number(socket.x ?? 0) / 100 * 32;
         const y = Number(socket.y ?? 0) / 100 * 32;
         const rotation = Number(socket.rotation ?? 0) * Math.PI / 180;
@@ -70,4 +77,6 @@ export function resolveFoxholeEntityStructureSockets(entity: NixieComponentEntit
             breachFace: socket.breachFace === true, integrityBonus: socket.integrityBonus !== false,
             socketTags: socket.socketTags.filter(tag => Number.isSafeInteger(tag.mask) && tag.mask > 0 && Number.isSafeInteger(tag.category) && tag.category > 0) }];
     });
+    if (variants.length === 0) baseGeometry.set(asset, sockets);
+    return [...sockets];
 }
