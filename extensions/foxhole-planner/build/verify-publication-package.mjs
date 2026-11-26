@@ -20,10 +20,10 @@ export async function verifyRemotePublicationPackage(packageFile) {
     const remote = resources.filter(resource => resource.kind !== 'audio');
     if ([...remote, ...templates].some(resource => resource.assetPack !== declaration.id)) throw Error('Planner models and images must resolve through its packaged catalog.');
     const declaredAudio = new Set(audio.map(resource => resource.path));
-    const audioFiles = verified.metadata.files.filter(file => /\.wav$/i.test(file.path));
+    const audioFiles = verified.metadata.files.filter(file => /\.(?:wav|flac)$/i.test(file.path));
     if (audioFiles.length !== declaredAudio.size || audioFiles.some(file =>
-        !declaredAudio.has(file.path) || !/^dist\/audio\/[a-z0-9-]+\.wav$/.test(file.path) || file.bytes > 2 * 1024 * 1024)) {
-        throw Error('Planner WAV files must be bounded and declared under dist/audio.');
+        !declaredAudio.has(file.path) || !/^dist\/audio\/[a-z0-9-]+\.(?:wav|flac)$/.test(file.path) || file.bytes > 2 * 1024 * 1024)) {
+        throw Error('Planner audio files must be bounded and declared under dist/audio.');
     }
     return {packageSha256: verified.packageHash, archiveBytes: verified.archiveBytes, files: verified.metadata.files.length,
         catalogBytes: declaration.document.byteLength, remoteResources: remote.length, remoteTemplates: templates.length, localAudio: audioFiles.length};

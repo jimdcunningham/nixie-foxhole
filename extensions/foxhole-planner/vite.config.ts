@@ -1,9 +1,9 @@
-import {readFile, writeFile, mkdir, unlink} from 'node:fs/promises';
+import {copyFile, readFile, writeFile, mkdir, unlink} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {defineConfig, normalizePath, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1, parseNixieResourceV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
 import {publishCompletedBuild} from './build/completed-build-publisher.ts';
@@ -17,6 +17,7 @@ const catalogKeys = normalizePath(fileURLToPath(new URL('./src/catalog-keys.mjs'
 function catalogPlugin(development: boolean): Plugin {
     let bytes: Buffer, manifest: string;
     let localFiles: ReadonlyMap<string, Buffer> | undefined;
+    let flacAudio: string[] = [];
     const marker = resolve(extensionRoot, '.nixie-building');
     return {
         name: 'foxwatch-packaged-catalog', enforce: 'pre',
@@ -24,6 +25,24 @@ function catalogPlugin(development: boolean): Plugin {
             await writeFile(marker, 'Building extension output\n');
             const pin = await readCatalogPin();
             const authored = parseNixieExtensionManifestV1(JSON.parse(await readFile(new URL('./nixie.extension.json', import.meta.url), 'utf8')));
+            flacAudio = [];
+            const audio = authored.contributes.resources.filter(resource => resource.kind === 'audio' && resource.path.endsWith('.wav'));
+            if (audio.length) {
+                // Independent builds with the older SDK keep using the WAV masters.
+                let supportsFlac = false;
+                try {
+                    parseNixieResourceV1({...audio[0], path: audio[0]!.path.replace(/\.wav$/, '.flac')});
+                    supportsFlac = true;
+                } catch { /* Older SDKs reject the FLAC extension. */ }
+                if (supportsFlac) {
+                    for (const resource of audio) {
+                        const filename = resource.path.split('/').at(-1)!.replace(/\.wav$/, '.flac');
+                        resource.path = 'dist/audio/' + filename;
+                        flacAudio.push(filename);
+                        this.addWatchFile(resolve(extensionRoot, 'audio-flac', filename));
+                    }
+                }
+            }
             const local = development || this.meta.watchMode ? await readLocalAssetCatalog(
                 resolve(extensionRoot, '.tmp/local-asset-catalog'), authored, pin.baseUrl, path => this.addWatchFile(path)) : null;
             localFiles = local?.files;
@@ -65,6 +84,10 @@ function catalogPlugin(development: boolean): Plugin {
             await mkdir(staging, {recursive: true});
             await writeFile(resolve(staging, 'catalog.v1.json'), bytes);
             await writeFile(resolve(staging, 'nixie.extension.json'), manifest);
+            for (const filename of flacAudio) {
+                await copyFile(resolve(extensionRoot, 'audio-flac', filename), resolve(staging, 'audio', filename));
+                await unlink(resolve(staging, 'audio', filename.replace(/\.flac$/, '.wav')));
+            }
             for (const [path, content] of localFiles ?? []) {
                 const file = resolve(staging, path);
                 await mkdir(dirname(file), {recursive: true});
