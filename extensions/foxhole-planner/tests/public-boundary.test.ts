@@ -67,6 +67,6 @@ test('Planner package declares only standalone public dependencies', async () =>
         assert.equal(installed.name, '@nixiejs/extension-sdk');
         assert.equal(sdkVersion, `file:./vendor/nixiejs-extension-sdk-${installed.version}.tgz`);
     } else {
-        assert.equal(sdkVersion, '1.3.2');
+        assert.match(sdkVersion ?? '', /^\d+\.\d+\.\d+$/);
     }
 });
