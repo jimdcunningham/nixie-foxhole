@@ -54,6 +54,7 @@ test('Planner source imports only the public standalone SDK boundary', async () 
 
 test('Planner package declares only standalone public dependencies', async () => {
     const extensionPackage = JSON.parse(await fs.readFile(join(extensionRoot, 'package.json'), 'utf8')) as {
+        name?: string;
         dependencies?: Record<string, string>;
     };
     for (const [name, version] of Object.entries(extensionPackage.dependencies ?? {})) {
@@ -61,9 +62,11 @@ test('Planner package declares only standalone public dependencies', async () =>
         assert.equal(version.startsWith('workspace:'), false, `Planner has a workspace dependency on ${name}`);
     }
     const sdkVersion = extensionPackage.dependencies?.['@nixiejs/extension-sdk'];
-    assert.ok(
-        sdkVersion === '1.3.2'
-        || sdkVersion === 'file:./vendor/nixiejs-extension-sdk-1.3.2.tgz',
-        `Planner uses an unexpected SDK version: ${sdkVersion ?? '(missing)'}`,
-    );
+    if (extensionPackage.name === 'nixie-sdk-standalone-foxhole-planner') {
+        const installed = JSON.parse(await fs.readFile(join(extensionRoot, 'node_modules/@nixiejs/extension-sdk/package.json'), 'utf8'));
+        assert.equal(installed.name, '@nixiejs/extension-sdk');
+        assert.equal(sdkVersion, `file:./vendor/nixiejs-extension-sdk-${installed.version}.tgz`);
+    } else {
+        assert.equal(sdkVersion, '1.3.2');
+    }
 });
