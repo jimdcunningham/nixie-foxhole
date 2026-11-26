@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {buildRuntimeCatalog} from './runtime-catalog.mjs';
+import {createFoxholeCatalogLibrary} from '../src/catalog-library.mjs';
 
 test('derives a startup catalog and loadable locale modules from the pinned source', async () => {
     const source = Buffer.from(JSON.stringify({products: [{id: 'refinery', data: {a: 'Refinery'}}],
@@ -15,11 +16,19 @@ test('derives a startup catalog and loadable locale modules from the pinned sour
     assert.deepEqual(module.default, {refineryName: 'Raffinerie'});
 });
 
-test('keeps resource receipts available with the generated-path aliases omitted', () => {
-    const sharedResources = [{id: 'p.0', path: 'foxhole-planner/objects/foundation.webp'}];
-    const privateFiles = {'icons/iconfilterfoundation.webp': sharedResources[0].path};
-    const source = Buffer.from(JSON.stringify({products: [], sharedResources, data: {privateFiles, maps: {}}}));
+test('the packaged catalog can open the manifest and map data through the Studio library', () => {
+    const names = ['manifest.v1.json', 'maps/map-data.v1.json'];
+    const sharedResources = names.map((name, index) => ({id: `p.${index}`, path: `foxhole-planner/${name}`,
+        mediaType: 'application/json', byteLength: 12, sha256: String(index + 1).repeat(64)}));
+    const privateFiles = Object.fromEntries(names.map((name, index) => [name, sharedResources[index].path]));
+    const source = Buffer.from(JSON.stringify({catalogSchemaVersion: 1,
+        resourceDefaults: {icon: {pathTemplate: 'foxhole-planner/icons/{id}.webp', variant: 'default', mediaType: 'image/webp'}},
+        products: [{id: 'sample', assetGroup: 'test', resources: {icon: [{sha256: 'a'.repeat(64), byteLength: 10}]}}],
+        sharedResources, data: {privateFiles, catalogLocalizations: {fr: {name: 'Exemple'}}}}));
     const {bytes} = buildRuntimeCatalog(source);
-    assert.deepEqual(JSON.parse(bytes), {products: [], sharedResources, data: {maps: {}}});
-    assert.deepEqual(JSON.parse(source).data.privateFiles, privateFiles);
+    const library = createFoxholeCatalogLibrary('https://assets.nixiejs.com/', JSON.parse(bytes));
+    for (const [index, name] of names.entries()) {
+        assert.equal(library.files.get(name)?.entry.sha256, sharedResources[index].sha256);
+        assert.equal(library.resolve(name), `https://assets.nixiejs.com/foxhole-planner/${name}`);
+    }
 });
