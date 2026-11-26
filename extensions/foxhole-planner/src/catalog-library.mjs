@@ -63,8 +63,8 @@ export async function readFoxholeWorldOfflineFiles(library, read = readPinnedCat
     return worldContentFiles(document.contentResources, library.worldBaseUrl, true);
 }
 
-/** The host verifies packaged bytes before passing their parsed document here. */
-export function createFoxholeCatalogLibrary(baseUrl, value) {
+/** When supplied, verifiedEntries must come from the host that verified this exact document. */
+export function createFoxholeCatalogLibrary(baseUrl, value, verifiedEntries) {
     const base = https(baseUrl), namespace = new URL('foxhole-planner/', base);
     const location = source => {
         if (!portable(source)) throw Error('Invalid catalog source path');
@@ -72,11 +72,11 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         if (url.origin !== namespace.origin || !url.pathname.startsWith(namespace.pathname)) throw Error('Catalog source escapes Foxhole namespace');
         return url.href;
     };
-    const catalog = parseNixieProductCatalogV1(value);
+    const catalog = verifiedEntries ? value : parseNixieProductCatalogV1(value);
     const shortWorldKeys = foxholeWorldReceiptsUseShortKeys(catalog);
     if (catalog.releaseRoot) throw Error('Private tools require the canonical shared-content catalog');
-    const entries = resolveNixieProductCatalogResourcesV1(catalog).assets;
-    const byPath = new Map(entries.map(row => [row.path, row])), files = new Map();
+    const byPath = verifiedEntries ?? new Map(resolveNixieProductCatalogResourcesV1(catalog).assets.map(row => [row.path, row]));
+    const files = new Map();
     const aliases = catalog.data?.privateFiles;
     if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases) || Object.keys(aliases).length > 65536) throw Error('Missing private catalog file associations');
     for (const [path, logical] of Object.entries(aliases)) {

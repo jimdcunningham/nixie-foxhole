@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {parseNixieProductCatalogV1, resolveNixieProductCatalogResourcesV1} from '@nixiejs/extension-sdk/scene-v2';
 import {buildRuntimeCatalog} from './runtime-catalog.mjs';
 import {createFoxholeCatalogLibrary} from '../src/catalog-library.mjs';
 
@@ -26,7 +27,12 @@ test('the packaged catalog can open the manifest and map data through the Studio
         products: [{id: 'sample', assetGroup: 'test', resources: {icon: [{sha256: 'a'.repeat(64), byteLength: 10}]}}],
         sharedResources, data: {privateFiles, catalogLocalizations: {fr: {name: 'Exemple'}}}}));
     const {bytes} = buildRuntimeCatalog(source);
-    const library = createFoxholeCatalogLibrary('https://assets.nixiejs.com/', JSON.parse(bytes));
+    const catalog = JSON.parse(bytes);
+    const library = createFoxholeCatalogLibrary('https://assets.nixiejs.com/', catalog);
+    const verified = resolveNixieProductCatalogResourcesV1(parseNixieProductCatalogV1(catalog));
+    const entries = new Map(verified.assets.map(entry => [entry.path, entry]));
+    const studio = createFoxholeCatalogLibrary('https://assets.nixiejs.com/', catalog, entries);
+    assert.deepEqual(studio.files, library.files);
     for (const [index, name] of names.entries()) {
         assert.equal(library.files.get(name)?.entry.sha256, sharedResources[index].sha256);
         assert.equal(library.resolve(name), `https://assets.nixiejs.com/foxhole-planner/${name}`);

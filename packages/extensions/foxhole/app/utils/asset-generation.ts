@@ -1,8 +1,37 @@
+import type { NixieExperimentalAssetPackEntryV1, NixieExperimentalProductCatalogV1 } from '@nixiejs/extension-sdk';
+
 /** Async preparation cannot replace the active catalog until the host accepts its state. */
 export interface FoxholeAssetGeneration {
     generationHash: string;
     distribution?: 'development' | 'published' | 'workspace';
-    readProductCatalog(id: string): Promise<{baseUrl: string; sha256: string; text: string}>;
+    readProductCatalog(id: string): Promise<{
+        baseUrl: string;
+        sha256: string;
+        text: string;
+        entries?: ReadonlyMap<string, Readonly<NixieExperimentalAssetPackEntryV1>>;
+    }>;
+}
+
+interface PreparedProductCatalog {
+    baseUrl: string;
+    sha256: string;
+    catalog: NixieExperimentalProductCatalogV1;
+    entries?: ReadonlyMap<string, Readonly<NixieExperimentalAssetPackEntryV1>>;
+}
+
+// Asset delivery and previews prepare together. Share the decode without keeping a second
+// catalog cache or reusing a document across generation readers.
+const pendingCatalogs = new WeakMap<FoxholeAssetGeneration['readProductCatalog'], Promise<PreparedProductCatalog>>();
+
+export function readFoxholeProductCatalog(generation: FoxholeAssetGeneration): Promise<PreparedProductCatalog> {
+    const reader = generation.readProductCatalog;
+    const existing = pendingCatalogs.get(reader);
+    if (existing) return existing;
+    const pending = generation.readProductCatalog('foxhole.catalog').then(({baseUrl, sha256, text, entries}) => ({
+        baseUrl, sha256, catalog: JSON.parse(text) as NixieExperimentalProductCatalogV1, entries,
+    })).finally(() => pendingCatalogs.delete(reader));
+    pendingCatalogs.set(reader, pending);
+    return pending;
 }
 export function createFoxholeAssetGenerationSelector<T, Generation extends FoxholeAssetGeneration>(prepare: (generation: Generation) => Promise<T>,
     activate: (value: T | null, generation: Generation | null) => void) {

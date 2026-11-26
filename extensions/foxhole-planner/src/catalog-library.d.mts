@@ -13,5 +13,7 @@ export interface FoxholeCatalogLibrary {
 export function readPinnedCatalogJson<T>(receipt: CatalogReceipt, fetcher?: typeof fetch): Promise<T>;
 export function loadFoxholeCatalogLibrary(pin: FoxholeCatalogPin, read?: <T>(receipt: CatalogReceipt) => Promise<T>): Promise<FoxholeCatalogLibrary>;
 export function createFoxholeCatalogLibrary(baseUrl: string, value: unknown): FoxholeCatalogLibrary;
+export function createFoxholeCatalogLibrary(baseUrl: string, value: NixieExperimentalProductCatalogV1,
+    verifiedEntries: ReadonlyMap<string, Readonly<NixieExperimentalAssetPackEntryV1>> | undefined): FoxholeCatalogLibrary;
 export function readFoxholeWorldOfflineFiles(library: FoxholeCatalogLibrary,
     read?: (receipt: CatalogReceipt) => Promise<unknown>): Promise<FoxholeCatalogLibrary['files']>;

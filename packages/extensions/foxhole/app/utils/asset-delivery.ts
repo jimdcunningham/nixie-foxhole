@@ -7,7 +7,7 @@ import { configureWorldAssetLocations } from '@nixiejs/foxhole-world/asset-locat
 import { installFoxholeAssetLocations } from '../plugins/foxhole/nixie/asset-locations.ts';
 import { installFoxholeManifest, foxholeManifestSchema } from '../plugins/foxhole/nixie/manifest.ts';
 import { createLocalFoxholeAssetDelivery } from './local-asset-delivery.ts';
-import { createFoxholeAssetGenerationSelector, type FoxholeAssetGeneration } from './asset-generation.ts';
+import { createFoxholeAssetGenerationSelector, readFoxholeProductCatalog, type FoxholeAssetGeneration } from './asset-generation.ts';
 let localDelivery: ReturnType<typeof createLocalFoxholeAssetDelivery> | null = null;
 let publishedLibrary: FoxholeCatalogLibrary | null = null;
 let publishedCatalogHash: string | undefined;
@@ -62,8 +62,8 @@ const prepareGeneration = createFoxholeAssetGenerationSelector(async (generation
     if (generation.useLocal) {
         return { local: createLocalFoxholeAssetDelivery(new URL('/foxhole/assets/', window.location.href).href) } as const;
     }
-    const document = await generation.readProductCatalog('foxhole.catalog');
-    const library = createFoxholeCatalogLibrary(document.baseUrl, JSON.parse(document.text));
+    const document = await readFoxholeProductCatalog(generation);
+    const library = createFoxholeCatalogLibrary(document.baseUrl, document.catalog, document.entries);
     const location = library.files.get('manifest.v1.json');
     if (!location || location.entry.mediaType !== 'application/json') throw new Error('The selected catalog has no Foxhole manifest.');
     const mapLocation = library.files.get('maps/map-data.v1.json');

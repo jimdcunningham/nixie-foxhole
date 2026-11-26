@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
-import {createFoxholeAssetGenerationSelector} from '../app/utils/asset-generation.ts';
+import {createFoxholeAssetGenerationSelector, readFoxholeProductCatalog} from '../app/utils/asset-generation.ts';
 const generation = (generationHash: string) => ({generationHash, readProductCatalog: async () => ({baseUrl: 'https://assets.example/', sha256: generationHash, text: '{}'})});
 test('selected generation stages immutable data, reuses prepared versions, and clears on disable', async () => {
     const prepared: string[] = [], installed: (string | null)[] = [];
@@ -29,6 +29,23 @@ test('a failed generation can retry without changing the installed version', asy
     assert.equal(installed, null);
     (await select(generation('broken')))();
     assert.equal(installed, 'broken'); assert.equal(attempts, 2);
+});
+
+test('concurrent preparation shares one catalog read and can retry a rejected generation', async () => {
+    const entries = new Map();
+    let reads = 0;
+    const selected = {generationHash: 'selected', readProductCatalog: async () => {
+        if (++reads === 1) throw Error('Catalog unavailable');
+        return {baseUrl: 'https://assets.example/', sha256: 'selected', text: '{"products":[]}', entries};
+    }};
+    const failing = readFoxholeProductCatalog(selected);
+    assert.equal(readFoxholeProductCatalog({...selected}), failing);
+    await assert.rejects(failing, /unavailable/);
+    const [delivery, previews] = await Promise.all([readFoxholeProductCatalog({...selected}), readFoxholeProductCatalog(selected)]);
+    assert.equal(delivery, previews);
+    assert.equal(delivery.entries, entries);
+    assert.deepEqual(previews.catalog.products, []);
+    assert.equal(reads, 2);
 });
 
 test('Studio can discover installed regions without fetching world metadata until the map loads', async () => {
@@ -57,7 +74,7 @@ test('Studio can discover installed regions without fetching world metadata unti
     const delivery = runInNewContext(stripTypeScriptTypes(source) + '\n({prepareFoxholeAssetGeneration, hasSelectedFoxholeSpatialRegion, foxholeWorldAssetDelivery})', {
         shallowRef: (value: unknown) => ({value}), NixiePersistentExtensionResourceCache: Cache,
         NixieExtensionResourceUsage: class {}, TextEncoder, TextDecoder, crypto,
-        createFoxholeAssetGenerationSelector, createFoxholeCatalogLibrary: () => library,
+        createFoxholeAssetGenerationSelector, readFoxholeProductCatalog, createFoxholeCatalogLibrary: () => library,
         configureWorldAssetLocations() {}, installFoxholeAssetLocations() {}, installFoxholeMapData() {}, installFoxholeManifest() {},
         foxholeManifestSchema: {parse() {}}, parseFoxholePublishedMapData: () => ({}),
     });
