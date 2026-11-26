@@ -1,6 +1,7 @@
 import { finalizeFoxholeSurfacePlacement } from './surface-placement.ts';
 import { foxholeRailTrackFinalizers } from './rail-vehicle-snapping.ts';
 import { buildFoxholeStatisticsReport } from './statistics-report.ts';
+import { prepareFoxholeCatalogLocale } from './catalog-localization.ts';
 import { renderFoxholePlanningMap } from './scene-v2-map-renderer.ts';
 import { renderFoxholePlanningGrid } from './scene-v2-map-grid.ts';
 import { connectNixieExtension } from '@nixiejs/extension-sdk';
@@ -35,12 +36,19 @@ const finalizeSocketTransform: typeof finalizeFoxholeSceneV2Transform = request 
         ? request
         : { ...request, context: { ...request.context, settings: { ...request.context.settings, 'nixie.scene.snapFeedback': false } } });
 
+function withCatalogLocale<Request, Result>(provider: (request: Request) => Result, locale: (request: Request) => unknown) {
+    return async (request: Request) => {
+        await prepareFoxholeCatalogLocale(locale(request));
+        return provider(request);
+    };
+}
+
 const connection = await connectNixieExtension({
     sceneV2: {
         documentRenderers: { 'render.planning-map': renderFoxholePlanningMap, 'render.planning-grid': renderFoxholePlanningGrid },
-        panelReportProviders: { 'reports.statistics': buildFoxholeStatisticsReport },
-        inspectorProviders: { [FOXHOLE_INSPECTOR_SYSTEM_ID]: inspectFoxholeSceneV2Structure,
-            [FOXHOLE_CONNECTOR_INSPECTOR_SYSTEM_ID]: inspectFoxholeSceneV2SplineConnector,
+        panelReportProviders: { 'reports.statistics': withCatalogLocale(buildFoxholeStatisticsReport, request => request.scene.panelContext?.locale) },
+        inspectorProviders: { [FOXHOLE_INSPECTOR_SYSTEM_ID]: withCatalogLocale(inspectFoxholeSceneV2Structure, request => request.locale),
+            [FOXHOLE_CONNECTOR_INSPECTOR_SYSTEM_ID]: withCatalogLocale(inspectFoxholeSceneV2SplineConnector, request => request.locale),
             'inspect.range': inspectFoxholeSceneV2PlanningPath,
             'inspect.binocular-line': inspectFoxholeSceneV2PlanningPath,
             'inspect.tactical-line': inspectFoxholeSceneV2PlanningPath,
@@ -49,7 +57,7 @@ const connection = await connectNixieExtension({
             [FOXHOLE_SCENE_V2_ENTITY_RENDERER_SYSTEM_ID]: renderFoxholeSceneV2Entity,
         },
         productProviders: {
-            [FOXHOLE_SCENE_V2_PRODUCT_PROVIDER_SYSTEM_ID]: listFoxholeSceneV2Products,
+            [FOXHOLE_SCENE_V2_PRODUCT_PROVIDER_SYSTEM_ID]: withCatalogLocale(listFoxholeSceneV2Products, request => request.locale ?? request.settings?.['foxhole.locale']),
         },
         transformFinalizers: {
             'transforms.surface-placement': finalizeFoxholeSurfacePlacement,

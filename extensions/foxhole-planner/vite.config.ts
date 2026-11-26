@@ -4,18 +4,18 @@ import {fileURLToPath} from 'node:url';
 import {defineConfig, normalizePath, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
 import {parseNixieProductCatalogV1, parseNixieResourceV1} from '@nixiejs/extension-sdk/scene-v2';
-import {verifyCatalogInput, readCatalogPin, catalogPinPath} from './build/prepare-catalog-input.mjs';
+import {verifyCatalogInput, readCatalogPin, catalogInputPath, catalogPinPath} from './build/prepare-catalog-input.mjs';
+import {buildRuntimeCatalog} from './build/runtime-catalog.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
 import {publishCompletedBuild} from './build/completed-build-publisher.ts';
 import {readLocalAssetCatalog} from './build/local-asset-catalog.ts';
 
 const extensionRoot = fileURLToPath(new URL('./', import.meta.url));
-const inputFile = process.env.NIXIE_FOXHOLE_CATALOG_FILE?.trim() || resolve(process.env.NIXIE_FOXHOLE_ASSETS_ROOT?.trim()
-    || fileURLToPath(new URL('../../packages/extensions/foxhole/public/foxhole/assets/', import.meta.url)), 'catalog.v1.json');
+const inputFile = catalogInputPath();
 const ASSETS = '#foxhole-scene-v2-assets', MAPS = '#foxhole-scene-v2-maps';
 const catalogKeys = normalizePath(fileURLToPath(new URL('./src/catalog-keys.mjs', import.meta.url)));
 function catalogPlugin(development: boolean): Plugin {
-    let bytes: Buffer, manifest: string;
+    let runtime: ReturnType<typeof buildRuntimeCatalog>, manifest: string;
     let localFiles: ReadonlyMap<string, Buffer> | undefined;
     let flacAudio: string[] = [];
     const marker = resolve(extensionRoot, '.nixie-building');
@@ -46,23 +46,24 @@ function catalogPlugin(development: boolean): Plugin {
             const local = development || this.meta.watchMode ? await readLocalAssetCatalog(
                 resolve(extensionRoot, '.tmp/local-asset-catalog'), authored, pin.baseUrl, path => this.addWatchFile(path)) : null;
             localFiles = local?.files;
-            if (local) {
-                bytes = local.bytes;
-                manifest = JSON.stringify(parseNixieExtensionManifestV1(local.manifest)) + '\n';
-            } else {
-                bytes = await readFile(inputFile);
-                verifyCatalogInput(bytes, pin.catalog);
-                const catalog = parseNixieProductCatalogV1(JSON.parse(bytes.toString('utf8')));
+            let generated = local?.manifest;
+            const raw = local?.bytes ?? await readFile(inputFile);
+            if (!local) verifyCatalogInput(raw, pin.catalog);
+            runtime = buildRuntimeCatalog(raw);
+            if (!generated) {
+                const catalog = parseNixieProductCatalogV1(JSON.parse(raw.toString('utf8')));
                 if (catalog.releaseRoot && new URL(catalog.releaseRoot + 'catalog.v1.json', pin.baseUrl).href !== pin.catalog.url) throw new Error('Catalog differs from its pinned asset release.');
-                manifest = JSON.stringify(parseNixieExtensionManifestV1(createCatalogRuntimeManifest(authored, catalog, pin))) + '\n';
+                generated = createCatalogRuntimeManifest(authored, catalog, {...pin, catalog: runtime.receipt});
                 this.addWatchFile(inputFile);
             }
+            Object.assign(generated.contributes.productCatalogs![0]!.document, runtime.receipt);
+            manifest = JSON.stringify(parseNixieExtensionManifestV1(generated)) + '\n';
             this.addWatchFile(fileURLToPath(new URL('./nixie.extension.json', import.meta.url)));
             this.addWatchFile(catalogPinPath());
         },
         shouldTransformCachedModule({id}) {return id === '\0' + ASSETS || id === '\0' + MAPS;},
         resolveId(id) {
-            if (id === '../catalog.v1.json') return {id, external: true};
+            if (id === '../catalog.v1.json' || /^\.\/catalog-locales\/[a-z]{2}\.js$/.test(id)) return {id, external: true};
             if (id === ASSETS || id === MAPS) return '\0' + id;
         },
         load(id) {
@@ -71,7 +72,12 @@ function catalogPlugin(development: boolean): Plugin {
                 + 'import {decodeFoxholeCatalogMetadata} from ' + JSON.stringify(catalogKeys) + ';'
                 + 'const catalog=decodeFoxholeCatalogMetadata(packedCatalog);';
             if (id === '\0' + MAPS) return 'export {catalogMaps as default} from ' + JSON.stringify(ASSETS) + ';';
-            return prefix + 'export const flagAtlasesByResourceId=catalog.data.flagAtlasesByResourceId;export const modelLightHintsByResourceId=catalog.data.modelLightHintsByResourceId;export const catalogLocalizations=catalog.data.catalogLocalizations;'
+            const localeImports = [...runtime.localeModules.keys()].map(path => {
+                const locale = path.split('/').at(-1)!.slice(0,-3);
+                return `${JSON.stringify(locale)}:()=>import(${JSON.stringify('./catalog-locales/' + locale + '.js')})`;
+            });
+            return prefix + 'export const flagAtlasesByResourceId=catalog.data.flagAtlasesByResourceId;export const modelLightHintsByResourceId=catalog.data.modelLightHintsByResourceId;export const catalogLocalizations=catalog.data.catalogLocalizations??{};'
+                + 'const localeModules={' + localeImports.join(',') + '};export async function readCatalogLocale(locale){return (await localeModules[locale]?.())?.default;}'
                 + 'export const productionOutputsByRecipeId=catalog.data.productionOutputsByRecipeId;'
                 + 'export const productionRecipesById=catalog.data.productionRecipesById;'
                 + 'export const bunkerDestructionWeapons=catalog.data.bunkerDestructionWeapons;'
@@ -82,13 +88,13 @@ function catalogPlugin(development: boolean): Plugin {
             const staging = resolve(String(options.dir)), published = resolve(extensionRoot, 'dist'), previous = resolve(extensionRoot, '.nixie-previous');
             if (staging !== resolve(extensionRoot, '.nixie-build') || dirname(staging) !== resolve(extensionRoot)) throw new Error('Unexpected Planner output directory');
             await mkdir(staging, {recursive: true});
-            await writeFile(resolve(staging, 'catalog.v1.json'), bytes);
+            await writeFile(resolve(staging, 'catalog.v1.json'), runtime.bytes);
             await writeFile(resolve(staging, 'nixie.extension.json'), manifest);
             for (const filename of flacAudio) {
                 await copyFile(resolve(extensionRoot, 'audio-flac', filename), resolve(staging, 'audio', filename));
                 await unlink(resolve(staging, 'audio', filename.replace(/\.flac$/, '.wav')));
             }
-            for (const [path, content] of localFiles ?? []) {
+            for (const [path, content] of [...runtime.localeModules, ...(localFiles ?? [])]) {
                 const file = resolve(staging, path);
                 await mkdir(dirname(file), {recursive: true});
                 await writeFile(file, content);

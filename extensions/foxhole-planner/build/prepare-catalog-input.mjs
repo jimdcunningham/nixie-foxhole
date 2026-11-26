@@ -6,6 +6,8 @@ import {parseArgs} from 'node:util';
 import {parseNixieProductCatalogV1} from '@nixiejs/extension-sdk/scene-v2';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export const catalogPinPath = () => path.resolve(process.env.NIXIE_FOXHOLE_CATALOG_PIN_FILE?.trim() || fileURLToPath(new URL('../src/catalog-release-pin.json', import.meta.url)));
+export const catalogInputPath = () => process.env.NIXIE_FOXHOLE_CATALOG_FILE?.trim() || path.resolve(process.env.NIXIE_FOXHOLE_ASSETS_ROOT?.trim()
+    || fileURLToPath(new URL('../../../packages/extensions/foxhole/public/foxhole/assets/', import.meta.url)), 'catalog.v1.json');
 export const readCatalogPin = async () => JSON.parse(await fs.readFile(catalogPinPath(), 'utf8'));
 export async function readCatalogReceipt(receipt, fetcher = fetch, maxBytes = 16 * 1024 ** 2) {
     const url = new URL(receipt.url);

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {prepareAuthoringConsumer} from './prepare-authoring-consumer.mjs';
+import {buildRuntimeCatalog} from './runtime-catalog.mjs';
 
 export async function prepareStandalone({extensionSource, fixtureRoot, foxholeAssetsRoot = path.join(extensionSource, '../../packages/extensions/foxhole/public/foxhole/assets')}) {
     await prepareAuthoringConsumer({extensionSource, fixtureRoot});
@@ -29,7 +30,7 @@ export async function verifyStandalone({fixtureRoot, packageVerification}) {
     const result = await verifyRemotePublicationPackage(packageVerification.packagePath);
     const catalogFile = path.join(fixtureRoot,'dist/catalog.v1.json');
     const source = await fs.readFile(process.env.NIXIE_FOXHOLE_CATALOG_FILE), built = await fs.readFile(catalogFile);
-    if (!source.equals(built)) throw Error('Standalone build changed FoxWatch catalog bytes');
+    if (!buildRuntimeCatalog(source).bytes.equals(built)) throw Error('Standalone build changed FoxWatch catalog bytes outside the runtime projection');
     const files = await fs.readdir(path.join(fixtureRoot,'dist/assets'));
     for (const name of files.filter(name => name.endsWith('.js'))) {
         const code = await fs.readFile(path.join(fixtureRoot,'dist/assets',name),'utf8');
