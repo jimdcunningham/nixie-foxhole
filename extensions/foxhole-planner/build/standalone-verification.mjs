@@ -32,10 +32,13 @@ export async function verifyStandalone({fixtureRoot, packageVerification}) {
     const source = await fs.readFile(process.env.NIXIE_FOXHOLE_CATALOG_FILE), built = await fs.readFile(catalogFile);
     if (!buildRuntimeCatalog(source).bytes.equals(built)) throw Error('Standalone build changed FoxWatch catalog bytes outside the runtime projection');
     const files = await fs.readdir(path.join(fixtureRoot,'dist/assets'));
+    let catalogImports = 0;
     for (const name of files.filter(name => name.endsWith('.js'))) {
         const code = await fs.readFile(path.join(fixtureRoot,'dist/assets',name),'utf8');
-        if (!/catalog\.v1\.json["']\s*with\s*\{\s*type\s*:\s*["']json["']/.test(code)) throw Error('Planner must load its single packaged JSON module');
+        if (/from\s*["']\.\.\/catalog\.v1\.json["']/.test(code)) throw Error('Planner must defer the packaged catalog fallback');
+        catalogImports += [...code.matchAll(/["']\.\.\/catalog\.v1\.json["']/g)].length;
         if (code.includes('catalogSchemaVersion')) throw Error('Planner JavaScript duplicates its catalog');
     }
+    if (catalogImports !== 1) throw Error('Planner must load its single packaged JSON module');
     console.log(JSON.stringify({standaloneCatalog: result}));
 }

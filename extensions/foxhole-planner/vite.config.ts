@@ -14,6 +14,7 @@ const extensionRoot = fileURLToPath(new URL('./', import.meta.url));
 const inputFile = catalogInputPath();
 const ASSETS = '#foxhole-scene-v2-assets', MAPS = '#foxhole-scene-v2-maps';
 const catalogKeys = normalizePath(fileURLToPath(new URL('./src/catalog-keys.mjs', import.meta.url)));
+const catalogSource = normalizePath(fileURLToPath(new URL('./src/runtime-catalog-source.ts', import.meta.url)));
 function catalogPlugin(development: boolean): Plugin {
     let runtime: ReturnType<typeof buildRuntimeCatalog>, manifest: string;
     let localFiles: ReadonlyMap<string, Buffer> | undefined;
@@ -71,14 +72,16 @@ function catalogPlugin(development: boolean): Plugin {
         },
         shouldTransformCachedModule({id}) {return id === '\0' + ASSETS || id === '\0' + MAPS;},
         resolveId(id) {
-            if (id === '../catalog.v1.json') return {id, external: true, attributes: {type: 'json'}};
             if (/^\.\/catalog-locales\/[a-z]{2}\.js$/.test(id)) return {id, external: true};
             if (id === ASSETS || id === MAPS) return '\0' + id;
         },
         load(id) {
             if (id !== '\0' + ASSETS && id !== '\0' + MAPS) return;
-            const prefix = 'import packedCatalog from "../catalog.v1.json" with {type:"json"};'
+            const prefix = 'import {takePlannerCatalogText} from ' + JSON.stringify(catalogSource) + ';'
                 + 'import {decodeFoxholeCatalogMetadata} from ' + JSON.stringify(catalogKeys) + ';'
+                + 'const text=takePlannerCatalogText();'
+                + 'const fallback="../catalog.v1.json";'
+                + 'const packedCatalog=text===undefined?(await import(/* @vite-ignore */ fallback,{with:{type:"json"}})).default:JSON.parse(text);'
                 + 'const catalog=decodeFoxholeCatalogMetadata(packedCatalog);';
             if (id === '\0' + MAPS) return 'export {catalogMaps as default} from ' + JSON.stringify(ASSETS) + ';';
             const localeImports = [...runtime.localeModules.keys()].map(path => {

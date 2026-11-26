@@ -63,7 +63,7 @@ test('standalone verification delegates archive checks and rejects changed or du
     await write(path.join(fixtureRoot, 'build/verify-publication-package.mjs'), 'export async function verifyRemotePublicationPackage(file) { if (!file.endsWith(".nxext")) throw Error("invalid archive"); return {verified:true}; }');
     const builtCatalog = path.join(fixtureRoot, 'dist/catalog.v1.json'), runtime = path.join(fixtureRoot, 'dist/assets/index.js');
     await write(builtCatalog, await fs.readFile(catalogFile));
-    const validRuntime = 'import catalog from "../catalog.v1.json" with {type:"json"}; export default catalog;';
+    const validRuntime = 'export const catalog = () => import("../catalog.v1.json", {with:{type:"json"}});';
     await write(runtime, validRuntime);
     const args = {fixtureRoot, packageVerification: {packagePath: path.join(fixtureRoot, 'extension.nxext')}};
     await verifyStandalone(args);
@@ -73,6 +73,8 @@ test('standalone verification delegates archive checks and rejects changed or du
     await fs.writeFile(builtCatalog, await fs.readFile(catalogFile));
     await fs.writeFile(runtime, 'export default {};');
     await assert.rejects(verifyStandalone(args), /single packaged JSON module/);
+    await fs.writeFile(runtime, 'import catalog from "../catalog.v1.json" with {type:"json"};');
+    await assert.rejects(verifyStandalone(args), /defer the packaged catalog fallback/);
     await fs.writeFile(runtime, validRuntime + 'const duplicated = {catalogSchemaVersion:1};');
     await assert.rejects(verifyStandalone(args), /duplicates its catalog/);
 });
