@@ -60,19 +60,19 @@ test('stale catalog receipts fail publication, refresh preserves map objects, an
     await fs.unlink(path.join(f.root, modelPath)); assert.ok((await f.inventory()).issues.some(e => e.code === 'missing-file' && e.path === modelPath));
 });
 
-test('world inventory validates terrain previews referenced only by the index', async t => {
+for (const separate of [false, true]) test(`world inventory validates ${separate ? 'separate' : 'inline'} terrain preview receipts`, async t => {
     const f = await fixture(t);
     await f.region('homeregionc', []);
     const preview = await f.content(Buffer.from('glTFpreview'), '.glb', true);
     const geometry = await f.content(Buffer.from('geometry'), '.bin', true);
-    Object.assign(f.index.regions.homeregionc, {
-        terrainPreview: preview,
-        terrainPreviewResources: {'homeregionc/terrain.bin': {resource: geometry, codec: 'brotli'}},
-    });
+    const resources = {'homeregionc/terrain.bin': {resource: geometry, codec: 'brotli'}};
+    const directory = separate ? await f.content(json({version: 1, region: 'homeregionc', resources}), '.json') : null;
+    Object.assign(f.index.regions.homeregionc, {terrainPreview: preview,
+        ...(directory ? {terrainPreviewResourcesRef: directory} : {terrainPreviewResources: resources})});
     await f.write('world/index.json', json(f.index));
     const inventory = await f.inventory({worldOnly: true});
     assert.equal(inventory.valid, true);
-    for (const ref of [preview, geometry]) {
+    for (const ref of [preview, geometry, ...(directory ? [directory] : [])]) {
         const row = inventory.objects.find(item => item.path === 'world/' + ref.path);
         assert.deepEqual(row.groups, ['region:homeregionc']);
         assert.equal(row.decodedSha256, ref.decodedHash);

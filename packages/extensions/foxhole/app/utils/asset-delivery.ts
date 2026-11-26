@@ -13,7 +13,8 @@ let publishedLibrary: FoxholeCatalogLibrary | null = null;
 let publishedCatalogHash: string | undefined;
 const revision = shallowRef(0);
 type FoxholeWorldIndex = {regions?: Record<string, unknown>};
-let publishedWorldIndex: FoxholeWorldIndex | null = null;
+type WorldIndexLoader = (signal?: AbortSignal) => Promise<FoxholeWorldIndex>;
+let loadPublishedWorldIndex: WorldIndexLoader | null = null;
 const selectedSpatialRegions = shallowRef<ReadonlySet<string>>(new Set());
 const cache = new NixiePersistentExtensionResourceCache();
 const residentUsage = new NixieExtensionResourceUsage(async (_owner, _generation, hashes) => {await cache.markUsed(hashes);});
@@ -24,12 +25,25 @@ const metadataCache = new NixiePersistentExtensionResourceCache(
 async function read<T>(receipt: CatalogReceipt): Promise<T> {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await metadataCache.loadVerified(receipt.url, receipt, 16 * 1024 * 1024))) as T;
 }
+function worldIndexLoader(receipt: CatalogReceipt): WorldIndexLoader {
+    let pending: Promise<FoxholeWorldIndex> | undefined;
+    return async signal => {
+        signal?.throwIfAborted();
+        pending ??= read<FoxholeWorldIndex>(receipt).catch(error => {
+            pending = undefined;
+            throw error;
+        });
+        const index = await pending;
+        signal?.throwIfAborted();
+        return index;
+    };
+}
 function activateLocalDelivery(delivery: NonNullable<typeof localDelivery>): void {
     if (localDelivery === delivery) return;
     localDelivery = delivery;
     publishedLibrary = null;
     publishedCatalogHash = undefined;
-    publishedWorldIndex = null;
+    loadPublishedWorldIndex = null;
     selectedSpatialRegions.value = new Set();
     installFoxholeManifest(null);
     installFoxholeMapData(null);
@@ -59,8 +73,10 @@ const prepareGeneration = createFoxholeAssetGenerationSelector(async (generation
     const mapData = parseFoxholePublishedMapData(await read({url:mapLocation.url, ...mapLocation.entry}));
     const catalogDigest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document.text));
     const catalogHash = Array.from(new Uint8Array(catalogDigest), byte => byte.toString(16).padStart(2, '0')).join('');
-    const worldIndex = library.worldIndex ? await read<FoxholeWorldIndex>(library.worldIndex) : null;
-    return {library, manifest, mapData, catalogHash, worldIndex};
+    const loadIndex = library.worldIndex ? worldIndexLoader(library.worldIndex) : null;
+    // Older pins only advertise available regions in their index.
+    const regionIds = library.worldRegionIds ?? Object.keys((await loadIndex?.())?.regions ?? {});
+    return {library, manifest, mapData, catalogHash, loadIndex, regionIds};
 }, (prepared, generation) => {
     if (prepared?.local) {
         activateLocalDelivery(prepared.local);
@@ -69,8 +85,8 @@ const prepareGeneration = createFoxholeAssetGenerationSelector(async (generation
     localDelivery = null;
     publishedLibrary = prepared?.library ?? null;
     publishedCatalogHash = prepared?.catalogHash;
-    publishedWorldIndex = prepared?.worldIndex ?? null;
-    selectedSpatialRegions.value = new Set(Object.keys(publishedWorldIndex?.regions ?? {}));
+    loadPublishedWorldIndex = prepared?.loadIndex ?? null;
+    selectedSpatialRegions.value = new Set(prepared?.regionIds ?? []);
     const library = prepared?.library;
     installFoxholeAssetLocations(library ? path => library.resolve(path) : null);
     installFoxholeManifest(prepared?.manifest ?? null);
@@ -104,7 +120,6 @@ export function foxholeWorldAssetDelivery() {
     void revision.value;
     if (localDelivery) return { ...localDelivery.world, revision: revision.value, catalogHash: undefined };
     const library = publishedLibrary;
-    const index = publishedWorldIndex;
-    if (!library?.worldBaseUrl || !index) return null;
-    return {baseUrl: library.worldBaseUrl, revision: revision.value, catalogHash: publishedCatalogHash, loadIndex: async () => index};
+    if (!library?.worldBaseUrl || !loadPublishedWorldIndex) return null;
+    return {baseUrl: library.worldBaseUrl, revision: revision.value, catalogHash: publishedCatalogHash, loadIndex: loadPublishedWorldIndex};
 }

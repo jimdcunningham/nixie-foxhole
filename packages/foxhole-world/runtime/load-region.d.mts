@@ -4,7 +4,16 @@ import type { Container3D, Pass3D } from '@pixi/3d';
 export type TerrainTransferObservation = { id: string; kind: 'observed'; bytes: number; } | { id: string; kind: 'http-cache'; bytes: 0; } | { id: string; kind: 'unknown'; };
 export interface TerrainTransferMetrics { events: TerrainTransferObservation[]; bytes: number; observed: number; unknown: number; cached: number; }
 export interface BakedResource { path: string; hash: string; bytes: number; }
-export interface BakedRegionEntry { id: string; key?: string; manifest: BakedResource; terrainPreview?: BakedResource; terrainPreviewResources?: Record<string, { resource: BakedResource; codec: string }>; resources?: BakedResource[]; downloadBytes: number; }
+export interface BakedRegionEntry {
+    id: string;
+    key?: string;
+    manifest: BakedResource;
+    terrainPreview?: BakedResource;
+    terrainPreviewResources?: Record<string, { resource: BakedResource; codec: string }>;
+    terrainPreviewResourcesRef?: BakedResource;
+    resources?: BakedResource[];
+    downloadBytes: number;
+}
 export interface BakedRegion {
     root: Container3D;
     refineTerrain?(): Promise<void>;

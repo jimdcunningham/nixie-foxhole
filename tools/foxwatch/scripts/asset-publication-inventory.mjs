@@ -133,7 +133,17 @@ export async function buildAssetPublicationInventory({assetsRoot, runtimeRoots =
                 const doc = await readJSON(file, ref);
                 if (doc.region !== id || doc.version !== 1 || doc.format !== index.format) throw new Error('Region manifest identity mismatch');
                 const previews = entry.terrainPreview ? [entry.terrainPreview] : [];
-                for (const {resource} of Object.values(entry.terrainPreviewResources ?? {})) previews.push(resource);
+                let previewResources = entry.terrainPreviewResources;
+                if (entry.terrainPreviewResourcesRef) {
+                    const previewRef = entry.terrainPreviewResourcesRef;
+                    if (previewResources || !contentPath.test(previewRef.path || '')) throw new Error('Invalid terrain preview reference');
+                    const preview = await readJSON('world/' + previewRef.path, previewRef);
+                    if (preview.version !== 1 || preview.region !== id || !preview.resources
+                        || typeof preview.resources !== 'object' || Array.isArray(preview.resources)) throw new Error('Invalid terrain preview identity');
+                    previews.push(previewRef);
+                    previewResources = preview.resources;
+                }
+                for (const {resource} of Object.values(previewResources ?? {})) previews.push(resource);
                 for (const r of [...doc.physicalResources, ref, ...previews]) {
                     const match = contentPath.exec(r.path || '');
                     if (!match || r.hash !== match[2] || (match[1] === 'br' ? r.encoding !== 'br' : !!r.encoding)) throw new Error('Invalid content receipt or encoding');

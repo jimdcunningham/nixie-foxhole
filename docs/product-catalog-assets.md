@@ -37,7 +37,10 @@ adopting a compact catalog pin in a release.
 
 The world file inventory for explicit full offline downloads is a separate
 pinned R2 document. Catalog-only downloads and the Studio map loader do not
-request it.
+request it. The packaged catalog advertises available region IDs, and Studio
+reads the pinned world directory when a spatial map needs it. Each directory
+entry points to its own full manifest and its optional terrain preview
+receipts. Studio fetches those documents only for requested regions.
 
 Example delivery keys under the configured `foxhole-planner` prefix:
 

@@ -85,13 +85,19 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
         files.set(path, {url: location(entry.sourcePath ?? entry.path), entry});
     }
     const world = catalog.data?.world;
-    let worldIndex, worldBaseUrl, worldOfflineInventory;
+    let worldIndex, worldBaseUrl, worldOfflineInventory, worldRegionIds;
     if (world) {
         if (world.contentRoot !== 'foxhole-planner/world/') throw Error('Invalid world catalog inventory');
         worldBaseUrl = new URL(world.contentRoot, base).href;
         const root = byPath.get(world.indexResourcePath);
         if (!root || root.mediaType !== 'application/json') throw Error('Missing pinned world index');
         worldIndex = {url: location(root.sourcePath ?? root.path), ...receipt(root)};
+        if (world.regionIds !== undefined) {
+            const ids = world.regionIds;
+            if (!Array.isArray(ids) || ids.length > 256 || new Set(ids).size !== ids.length
+                || ids.some(id => typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id))) throw Error('Invalid world region list');
+            worldRegionIds = ids;
+        }
         if (world.offlineInventoryResourcePath !== undefined) {
             const offline = byPath.get(world.offlineInventoryResourcePath);
             if (!offline || offline.mediaType !== 'application/json' || world.contentResources !== undefined) {
@@ -105,7 +111,7 @@ export function createFoxholeCatalogLibrary(baseUrl, value) {
             }
         }
     }
-    return {catalog, files, worldIndex, worldBaseUrl, worldOfflineInventory, resolve(path) {
+    return {catalog, files, worldIndex, worldBaseUrl, worldOfflineInventory, worldRegionIds, resolve(path) {
         const row = files.get(path); if (!row) throw Error('Asset absent from pinned catalog: ' + path);
         return row.url;
     }};

@@ -136,24 +136,62 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
     if (sources.world) {
         if (!sources.world.valid || sources.world.issues?.length) throw Error('World publication graph must be valid');
         const contentResources = {};
+        const worldIndexFile = await fs.realpath(path.join(root, 'world/index.json'));
+        if (!inside(root, worldIndexFile)) throw Error('World index escapes generated assets');
+        const indexBytes = await fs.readFile(worldIndexFile);
+        const indexRow = sources.world.objects.find(row => row.path === 'world/index.json');
+        if (hash(indexBytes) !== indexRow?.sha256 || indexBytes.length !== indexRow.bytes) {
+            throw Error('World index changed after inventory');
+        }
+        const worldIndexSource = JSON.parse(indexBytes);
+        const regionIds = Object.keys(worldIndexSource.regions).sort();
+        const previewDocuments = new Map();
+        for (const id of regionIds) {
+            const {terrainPreviewResources, ...entry} = worldIndexSource.regions[id];
+            if (!terrainPreviewResources) continue;
+            const bytes = Buffer.from(JSON.stringify({version: 1, region: id, resources: terrainPreviewResources}));
+            const digest = hash(bytes);
+            const resourcePath = 'content/raw/' + digest + '/asset.json';
+            previewDocuments.set(resourcePath, bytes);
+            worldIndexSource.regions[id] = {...entry,
+                terrainPreviewResourcesRef: {path: resourcePath, hash: digest, decodedHash: digest, bytes: bytes.length}};
+        }
+        function recordWorldFile(row) {
+            const key = target.prefix + '/' + row.path, file = 'payload/' + row.path;
+            objects.set(key, {key, relativeKey: row.path, file, phase: 'assets', sha256: row.sha256, bytes: row.bytes,
+                mediaType: row.contentType, ...(row.contentEncoding ? {contentEncoding: row.contentEncoding} : {}),
+                decodedSha256: row.decodedSha256, decodedBytes: row.decodedBytes, cacheControl: 'public, max-age=31536000, immutable'});
+            contentResources[row.path.slice('world/'.length)] = {a: row.decodedSha256, b: row.decodedBytes, c: row.contentType};
+            sourceFiles++;
+        }
         for (const row of sources.world.objects) {
             if (row.path.startsWith('world/content/')) {
                 const actual = await fs.realpath(path.join(root, row.path));
                 if (!inside(root, actual)) throw Error('World source escapes generated assets');
-                const key = target.prefix + '/' + row.path, file = 'payload/' + row.path;
+                const file = 'payload/' + row.path;
                 await fs.mkdir(path.dirname(path.join(directory, file)), {recursive: true});
                 await fs.copyFile(actual, path.join(directory, file));
                 const copied = await fileHash(path.join(directory, file));
                 if (copied.sha256 !== row.sha256 || copied.bytes !== row.bytes) throw Error('World resource changed after inventory: ' + row.path);
-                objects.set(key, {key, relativeKey: row.path, file, phase: 'assets', sha256: row.sha256, bytes: row.bytes,
-                    mediaType: row.contentType, ...(row.contentEncoding ? {contentEncoding: row.contentEncoding} : {}),
-                    decodedSha256: row.decodedSha256, decodedBytes: row.decodedBytes, cacheControl: 'public, max-age=31536000, immutable'});
-                contentResources[row.path.slice('world/'.length)] = {a: row.decodedSha256, b: row.decodedBytes, c: row.contentType};
-                sourceFiles++;
+                recordWorldFile(row);
             } else if (!privateFiles[row.path]) {
                 const id = 'private.' + hash(Buffer.from(row.path));
-                await shared(id, 'shared/private/' + hash(Buffer.from(row.path)) + '.' + suffix(row.contentType), row.path, row.contentType);
+                const logical = 'shared/private/' + hash(Buffer.from(row.path)) + '.' + suffix(row.contentType);
+                const source = row.path === 'world/index.json'
+                    ? previewDocuments.size ? Buffer.from(JSON.stringify(worldIndexSource)) : indexBytes : row.path;
+                await shared(id, logical, source, row.contentType);
+                privateFiles[row.path] = logical;
             }
+        }
+        for (const [resourcePath, bytes] of previewDocuments) {
+            const relative = 'world/' + resourcePath;
+            if (objects.has(target.prefix + '/' + relative)) continue;
+            const file = path.join(directory, 'payload', relative);
+            await fs.mkdir(path.dirname(file), {recursive: true});
+            await fs.writeFile(file, bytes, {flag: 'wx'});
+            const digest = hash(bytes);
+            recordWorldFile({path: relative, sha256: digest, bytes: bytes.length, decodedSha256: digest,
+                decodedBytes: bytes.length, contentType: 'application/json'});
         }
         const worldIndex = catalog.sharedResources.find(row => row.path === privateFiles['world/index.json']);
         if (!worldIndex) throw Error('World index was not prepared');
@@ -161,7 +199,7 @@ export async function prepareProductCatalog({assetsRoot, output, target: rawTarg
         await shared('world.offline-inventory', offlineInventoryResourcePath,
             Buffer.from(JSON.stringify({version: 1, contentResources})), 'application/json');
         catalog.data = {...catalog.data, world: {indexResourcePath: worldIndex.path,
-            contentRoot: target.prefix + '/world/', offlineInventoryResourcePath}};
+            contentRoot: target.prefix + '/world/', offlineInventoryResourcePath, regionIds}};
     }
     catalog.data = {...catalog.data, privateFiles: Object.fromEntries(Object.entries(privateFiles).sort(([a], [b]) => a.localeCompare(b, 'en')))};
     const normalized = parseNixieProductCatalogV1(JSON.parse(JSON.stringify(encodeFoxholeCatalogKeys(catalog))));

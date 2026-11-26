@@ -36,8 +36,15 @@ export async function createCompactProvider({baseUrl,entry,solidMap=false,signal
  async function measure(name,fn){const begin=performance.now();try{return await fn();}finally{const end=performance.now();stages[name]=end-begin;performance.measure('foxhole:'+entry.id+':'+name,{start:begin,end});}}
  function stage(name){const now=performance.now();stages[stageName]=(stages[stageName]||0)+now-stageStart;performance.measure('foxhole:'+entry.id+':'+stageName,{start:stageStart,end:now});stageName=name;stageStart=now;}
 
- const previewResources=deferTerrainDetail&&entry.terrainPreview?entry.terrainPreviewResources:null;
- let manifest;try{manifest=previewResources
+ const previewEnabled=deferTerrainDetail&&entry.terrainPreview;
+ let previewResources=previewEnabled?entry.terrainPreviewResources:null;
+ let manifest;try{
+ if(previewEnabled&&entry.terrainPreviewResourcesRef){
+  const preview=JSON.parse(new TextDecoder().decode(await read(entry.terrainPreviewResourcesRef)));
+  if(preview?.version!==1||preview.region!==entry.id||!preview.resources||typeof preview.resources!=='object'||Array.isArray(preview.resources))throw Error('Invalid compact terrain preview for '+entry.id);
+  previewResources=preview.resources;
+ }
+ manifest=previewResources
   ? {version:1,format:'compact-recipes-v1',region:entry.id,resources:previewResources,physicalResources:Object.values(previewResources).map(entry=>entry.resource)}
   : JSON.parse(new TextDecoder().decode(await read(entry.manifest)));
  if(manifest.version!==1||manifest.format!=='compact-recipes-v1'||manifest.region!==entry.id)throw Error('Unsupported compact region');

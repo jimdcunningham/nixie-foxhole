@@ -18,12 +18,17 @@ test('one canonical catalog includes standalone private files and the existing e
     const worldPath = 'world/content/br/' + hash(encoded) + '/asset.json';
     const write = async (name, bytes) => {await fs.mkdir(path.dirname(path.join(assetsRoot,name)), {recursive:true}); await fs.writeFile(path.join(assetsRoot,name),bytes);};
     const emptyEncoded = brotliCompressSync(Buffer.alloc(0)), emptyPath = 'world/content/br/' + hash(emptyEncoded) + '/asset.bin';
-    await write(emptyPath, emptyEncoded); await write(worldPath, encoded); await write('world/index.json', '{}'); await write('rendered.webp', 'rendered pixels'); await write('manifest.v1.json', '{}');
+    const worldRef = {path: worldPath.slice(6), hash: hash(encoded), decodedHash: hash(decoded), bytes: encoded.length, encoding: 'br'};
+    const previewResources = {'fixture/terrain.json': {resource: worldRef}};
+    const sourceIndex = Buffer.from(JSON.stringify({version: 1, format: 'compact-recipes-v1', regions: {
+        fixture: {id: 'fixture', manifest: worldRef, terrainPreview: worldRef, terrainPreviewResources: previewResources},
+    }}));
+    await write(emptyPath, emptyEncoded); await write(worldPath, encoded); await write('world/index.json', sourceIndex); await write('rendered.webp', 'rendered pixels'); await write('manifest.v1.json', '{}');
     const sources = {assets: [], models: [], browserImageSources: [], modifications: [], visuals: [], maps: {resources: []}, metadata: {}, data: {},
         privateSources: ['rendered.webp'], buildInputs: ['manifest.v1.json'],
         world: {valid: true, issues: [], objects: [
             {path: worldPath, sha256: hash(encoded), bytes: encoded.length, decodedSha256: hash(decoded), decodedBytes: decoded.length, contentEncoding: 'br', contentType: 'application/json'},
-            {path: 'world/index.json', contentType: 'application/json'},
+            {path: 'world/index.json', sha256: hash(sourceIndex), bytes: sourceIndex.length, contentType: 'application/json'},
             {path:emptyPath,sha256:hash(emptyEncoded),bytes:emptyEncoded.length,decodedSha256:hash(Buffer.alloc(0)),decodedBytes:0,contentEncoding:'br',contentType:'application/octet-stream'},
         ]}};
     const prepared = await prepareProductCatalog({assetsRoot, output:path.join(root,'prepared'), target, sources});
@@ -41,7 +46,17 @@ test('one canonical catalog includes standalone private files and the existing e
     assert.equal(files.get(emptyPath).entry.byteLength,0,'legitimate empty binary resources remain readable');
     assert.equal(world.entry.sha256,hash(decoded)); assert.equal(world.entry.byteLength,decoded.length);
     assert.equal(library.worldBaseUrl,'https://assets.example.org/foxhole-planner/world/');
-    assert.deepEqual(await readPinnedCatalogJson(library.worldIndex,fetcher), {});
+    assert.deepEqual(library.worldRegionIds, ['fixture']);
+    const directory = await readPinnedCatalogJson(library.worldIndex,fetcher);
+    const entry = directory.regions.fixture;
+    assert.deepEqual(entry.manifest, worldRef);
+    assert.equal(entry.terrainPreviewResources, undefined);
+    const preview = files.get('world/' + entry.terrainPreviewResourcesRef.path);
+    assert.equal(preview.entry.sha256, entry.terrainPreviewResourcesRef.decodedHash);
+    assert.deepEqual(await readPinnedCatalogJson({url: preview.url, ...preview.entry}, fetcher), {
+        version: 1, region: 'fixture', resources: previewResources,
+    });
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(assetsRoot, 'world/index.json'))).regions.fixture.terrainPreviewResources, previewResources);
     assert.match(library.resolve('rendered.webp'), /foxhole-planner\/objects\/[a-f0-9]{64}\.webp$/);
     assert.match(library.resolve('manifest.v1.json'), /foxhole-planner\/objects\/[a-f0-9]{64}\.json$/);
     const object = plan.objects.find(row => row.key.endsWith(worldPath));

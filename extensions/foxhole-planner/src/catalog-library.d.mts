@@ -7,6 +7,7 @@ export interface FoxholeCatalogLibrary {
     worldIndex?: CatalogReceipt;
     worldBaseUrl?: string;
     worldOfflineInventory?: CatalogReceipt;
+    worldRegionIds?: readonly string[];
     resolve(path: string): string;
 }
 export function readPinnedCatalogJson<T>(receipt: CatalogReceipt, fetcher?: typeof fetch): Promise<T>;
