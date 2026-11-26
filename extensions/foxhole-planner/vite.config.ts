@@ -3,7 +3,7 @@ import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {defineConfig, normalizePath, type Plugin} from 'vite';
 import {parseNixieExtensionManifestV1} from '@nixiejs/extension-sdk';
-import {parseNixieProductCatalogV1, parseNixieResourceV1} from '@nixiejs/extension-sdk/scene-v2';
+import {parseNixieProductCatalogV1, parseNixieProductProviderV1, parseNixieResourceV1} from '@nixiejs/extension-sdk/scene-v2';
 import {verifyCatalogInput, readCatalogPin, catalogInputPath, catalogPinPath} from './build/prepare-catalog-input.mjs';
 import {buildRuntimeCatalog} from './build/runtime-catalog.mjs';
 import {createCatalogRuntimeManifest} from './build/catalog-runtime-manifest.ts';
@@ -57,6 +57,14 @@ function catalogPlugin(development: boolean): Plugin {
                 this.addWatchFile(inputFile);
             }
             Object.assign(generated.contributes.productCatalogs![0]!.document, runtime.receipt);
+            const providers = generated.contributes.productProviders;
+            const assetProvider = providers?.findIndex(provider => provider.id === 'assets') ?? -1;
+            if (providers && assetProvider !== -1) {
+                const scopedProvider = { ...providers[assetProvider], categoryBrowsing: true };
+                try {
+                    providers[assetProvider] = parseNixieProductProviderV1(scopedProvider);
+                } catch { /* Older SDKs keep legacy catalog browsing. */ }
+            }
             manifest = JSON.stringify(parseNixieExtensionManifestV1(generated)) + '\n';
             this.addWatchFile(fileURLToPath(new URL('./nixie.extension.json', import.meta.url)));
             this.addWatchFile(catalogPinPath());

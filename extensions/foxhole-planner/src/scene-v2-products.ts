@@ -158,18 +158,35 @@ export function matchesFoxholeSceneV2ProductFilters(metadata: FoxholeSceneV2Asse
         && !(metadata.isItem && !enabled('category.items', true));
 }
 
-export function listFoxholeSceneV2Products(
-    query: NixieProductQueryV1,
-): NixieProductResultV1 {
+// Optional category fields also compile against the older standalone SDK.
+type CatalogQuery = NixieProductQueryV1 & {
+    scope?: { kind: 'categories'; } | { kind: 'category'; name: string | null; } | { kind: 'product'; id: string; };
+};
+type CatalogResult = NixieProductResultV1 & { categories?: { name: string | null; order?: number; }[]; };
+
+export function listFoxholeSceneV2Products(query: CatalogQuery): CatalogResult {
     const { assets, upgrades, dictionary } = catalogForQuery(query.settings, query.locale);
-    const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
+    const scope = query.scope;
     const needle = query.query.toLocaleLowerCase();
     const candidates = query.settings?.['foxhole.assets.filter.upgrades'] === true ? [...assets, ...upgrades] : assets;
     const filtered = candidates.filter(({ metadata }) => !query.settings || matchesFoxholeSceneV2ProductFilters(metadata, query.settings))
+        .filter(({ metadata }) => scope?.kind !== 'category' || (metadata.categoryLabel ?? metadata.category) === scope.name)
+        .filter(({ assetId, productId }) => scope?.kind !== 'product' || (productId ?? `asset.${assetId}`) === scope.id)
         .filter(({ assetId, metadata }) => !needle || (
             [metadata.label, metadata.category, metadata.categoryLabel ?? '', assetId, ...metadata.keywords]
                 .some(value => value.toLocaleLowerCase().includes(needle))
-        )).sort((left, right) => left.metadata.label.localeCompare(right.metadata.label));
+        ));
+    if (scope?.kind === 'categories') {
+        const categories = new Map<string, number>();
+        for (const { metadata } of filtered) {
+            const name = metadata.categoryLabel ?? metadata.category;
+            const order = metadata.categoryOrder ?? 0;
+            if (!categories.has(name) || order < categories.get(name)!) categories.set(name, order);
+        }
+        return { contractVersion: 1, total: 0, items: [], categories: [...categories].map(([name, order]) => ({ name, order })) };
+    }
+    filtered.sort((left, right) => left.metadata.label.localeCompare(right.metadata.label));
+    const resourcesByCode = new Map(Object.values(dictionary).map(asset => [asset.codeName.toLowerCase(), asset]));
     return {
         contractVersion: 1,
         total: filtered.length,

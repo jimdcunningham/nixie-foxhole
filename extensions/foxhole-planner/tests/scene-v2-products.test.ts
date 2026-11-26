@@ -35,6 +35,20 @@ test('searches the full published Foxhole asset catalog through a bounded provid
     assert.ok(ammoFactories.items.some(item => item.label === 'Ammunition Factory' && item.category === 'Facilities'));
 });
 
+test('browse requests list category labels without constructing asset products', () => {
+    const query = { contractVersion: 1 as const, query: '', offset: 0, limit: 10 };
+    const directory = listFoxholeSceneV2Products({ ...query, scope: { kind: 'categories' } });
+    assert.deepEqual(directory.items, []);
+    assert.ok(directory.categories?.some(category => category.name === 'Foundations'));
+    const foundations = listFoxholeSceneV2Products({ ...query, scope: { kind: 'category', name: 'Foundations' } });
+    assert.ok(foundations.total > 0 && foundations.items.every(item => item.category === 'Foundations'));
+    const asset = foundations.items[0]!;
+    const lookup = listFoxholeSceneV2Products({ ...query, scope: { kind: 'product', id: asset.product.id } });
+    assert.deepEqual(lookup.items, [asset]);
+    const search = listFoxholeSceneV2Products({ ...query, query: 'facility factory ammo' });
+    assert.ok(search.items.some(item => item.category === 'Facilities'));
+});
+
 test('catalog spline products use published geometry and socket defaults instead of structure-only templates', () => {
     for (const [assetId, expected] of [
         ['wallsplinet1', { minLength: 96, maxLength: 320, minRadius: 1, maxRadius: 1, maxBuffer: 0.32, endX: 96 }],
